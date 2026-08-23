@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Eye, EyeOff, Mail, Phone, Lock, Ticket, Check } from 'lucide-react';
+import { readGuestPublicId } from '../hooks/useAuth';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -59,7 +60,8 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
       {/* Form card */}
       <div className="flex-1 flex items-start justify-center px-4 relative z-10">
-        <div className="w-full max-w-sm bg-white dark:bg-ink-800 rounded-2xl shadow-2xl shadow-black/30 overflow-hidden animate-slide-up">
+        <div className="w-full max-w-sm">
+        <div className="bg-white dark:bg-ink-800 rounded-2xl shadow-2xl shadow-black/30 overflow-hidden animate-slide-up">
           {/* Tabs */}
           <div className="flex border-b border-ink-100 dark:border-ink-700">
             <button
@@ -125,6 +127,14 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
               />
             )}
           </div>
+        </div>
+        <button
+          type="button"
+          onClick={onAuthSuccess}
+          className="mt-3 w-full rounded-xl bg-white/10 py-3 text-sm font-bold text-white ring-1 ring-white/15 active:scale-[0.98]"
+        >
+          Продолжить как гость #{readGuestPublicId()}
+        </button>
         </div>
       </div>
 

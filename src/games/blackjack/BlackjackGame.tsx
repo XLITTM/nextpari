@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
+import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { Card } from './Card';
 import { calculateHandScore, freshShuffledDeck, isBust, isGoldenOchko } from './deck';
 import {
@@ -420,8 +421,11 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
           </button>
           <p className="text-[11px] font-black tracking-[0.22em] text-[#f5e6a8]">NEXTPARI · 21</p>
           <div className="bj-glass min-w-[4.75rem] rounded-full px-3 py-1 text-right">
-            <p className="text-[8px] font-semibold uppercase tracking-wide text-[#f5e6a8]/70">Баланс</p>
-            <p className="text-[11px] font-black tabular-nums text-white">{formatStake(balance)}</p>
+            <GameWalletBadge
+              format={formatStake}
+              labelClassName="text-[8px] font-semibold uppercase tracking-wide text-[#f5e6a8]/70"
+              valueClassName="text-[11px] font-black tabular-nums text-white"
+            />
           </div>
         </header>
         <section className="flex flex-col items-center px-2 pb-1">

@@ -40,14 +40,13 @@ import { AviatorGame } from './games/aviator/AviatorGame';
 import { ApplesGame } from './games/apples/ApplesGame';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
+import { bootstrapGuestSession, signInSession, signOutSession } from './hooks/useAuth';
 
 const GAMES_PATH = '/games';
 const BLACKJACK_PATH = '/games/blackjack';
 const AVIATOR_PATH = '/games/aviator';
 const APPLES_PATH = '/games/apples';
 const CRYSTAL_PATH = '/games/crystal';
-const AUTH_KEY = 'nextpari-auth';
-
 function currentPath(): string {
   return window.location.pathname.replace(/\/+$/, '') || '/';
 }
@@ -101,7 +100,7 @@ function navActive(name: Screen['name']): Screen['name'] {
 }
 
 function AppContent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => sessionStorage.getItem(AUTH_KEY) === '1');
+  const [isAuthenticated, setIsAuthenticated] = useState(() => bootstrapGuestSession());
   const [screen, setScreenState] = useState<Screen>(screenFromPath);
   const [searchOpen, setSearchOpen] = useState(false);
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -119,13 +118,13 @@ function AppContent() {
   }, []);
 
   const handleAuthSuccess = () => {
-    sessionStorage.setItem(AUTH_KEY, '1');
+    signInSession();
     setIsAuthenticated(true);
     setScreen(screenFromPath());
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem(AUTH_KEY);
+    signOutSession();
     setIsAuthenticated(false);
   };
 

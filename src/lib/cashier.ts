@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { notifyWalletSync } from './playerProfile';
 
 export interface CashierSession {
   id: string;
@@ -326,11 +327,13 @@ export async function cashierDepositToPlayer(params: {
       createdAt: new Date().toISOString(),
     });
     saveDemoStore(store);
+    notifyWalletSync();
     const receipt = demoReceipt('deposit', params.playerId, params.amount, store.floatBalance, receiptCode);
     saveCashierSession({ ...DEMO_CASHIER, floatBalance: store.floatBalance });
     return receipt;
   }
   if (error) throw new Error(rpcMessage(error));
+  notifyWalletSync();
   return parseReceipt(asRecord(data));
 }
 

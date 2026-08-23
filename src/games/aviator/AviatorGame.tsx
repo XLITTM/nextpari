@@ -3,6 +3,7 @@ import { ChevronLeft, History, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { AviatorCanvas, WAITING_TIME, type FlightPhase } from './AviatorCanvas';
 import {
   formatMultiplier,
@@ -423,9 +424,11 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
         >
           <History className="h-4 w-4" />
         </button>
-        <div className="min-w-[4.5rem] rounded-full bg-white/5 px-2.5 py-1 text-right ring-1 ring-rose-400/20">
-          <p className="text-[8px] font-semibold uppercase tracking-wide text-rose-200/70">Баланс</p>
-          <p className="text-[11px] font-black tabular-nums">{balance.toFixed(2)}</p>
+        <div className="min-w-[4.75rem] rounded-full bg-white/5 px-2.5 py-1 text-right ring-1 ring-rose-400/20">
+          <GameWalletBadge
+            labelClassName="text-[8px] font-semibold uppercase tracking-wide text-rose-200/70"
+            valueClassName="text-[11px] font-black tabular-nums"
+          />
         </div>
       </header>
 

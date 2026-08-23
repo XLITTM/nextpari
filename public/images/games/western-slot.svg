@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="ws-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f97316"/>
+      <stop offset="42%" stop-color="#ea580c"/>
+      <stop offset="100%" stop-color="#431407"/>
+    </linearGradient>
+    <linearGradient id="ws-sun" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="100%" stop-color="#f59e0b"/>
+    </linearGradient>
+    <linearGradient id="ws-metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#d6d3d1"/>
+      <stop offset="100%" stop-color="#44403c"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="400" fill="url(#ws-sky)"/>
+  <circle cx="520" cy="118" r="62" fill="url(#ws-sun)" opacity="0.95"/>
+  <path d="M0 250 L90 210 L170 248 L260 188 L360 250 L470 200 L640 260 L640 400 L0 400 Z" fill="#78350f"/>
+  <path d="M0 300 L120 270 L220 310 L340 255 L480 305 L640 280 L640 400 L0 400 Z" fill="#44403c"/>
+  <path d="M78 318 v-72 h14 v32 h18 v-48 h14 v88 z" fill="#166534"/>
+  <circle cx="85" cy="238" r="16" fill="#15803d"/>
+  <circle cx="123" cy="262" r="14" fill="#16a34a"/>
+  <path d="M560 330 v-80 h12 v36 h20 v-54 h12 v98 z" fill="#14532d"/>
+  <circle cx="566" cy="242" r="14" fill="#15803d"/>
+  <circle cx="604" cy="268" r="12" fill="#16a34a"/>
+  <g transform="translate(210,96)">
+    <rect x="18" y="46" width="184" height="196" rx="18" fill="#1c1917"/>
+    <rect x="0" y="28" width="220" height="28" rx="8" fill="#b45309"/>
+    <rect x="70" y="0" width="80" height="36" rx="8" fill="#92400e"/>
+    <circle cx="110" cy="10" r="16" fill="#fbbf24"/>
+    <rect x="34" y="70" width="152" height="108" rx="10" fill="#0c0a09"/>
+    <rect x="42" y="78" width="42" height="92" rx="6" fill="#7f1d1d"/>
+    <rect x="89" y="78" width="42" height="92" rx="6" fill="#14532d"/>
+    <rect x="136" y="78" width="42" height="92" rx="6" fill="#1e3a8a"/>
+    <text x="63" y="136" text-anchor="middle" font-size="28" font-weight="800" fill="#fef3c7">7</text>
+    <text x="110" y="136" text-anchor="middle" font-size="28" font-weight="800" fill="#fef3c7">7</text>
+    <text x="157" y="136" text-anchor="middle" font-size="28" font-weight="800" fill="#fef3c7">7</text>
+    <rect x="48" y="190" width="124" height="32" rx="16" fill="#b45309"/>
+    <text x="110" y="212" text-anchor="middle" font-size="13" font-weight="800" fill="#fff7ed">WESTERN</text>
+  </g>
+  <path d="M132 168c18-6 38 10 32 28-22 8-40-6-32-28z" fill="#78350f"/>
+  <ellipse cx="148" cy="158" rx="46" ry="10" fill="#44403c"/>
+  <path d="M120 158 q28 -40 56 0" fill="#1c1917"/>
+</svg>

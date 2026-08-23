@@ -3,6 +3,7 @@ import { ChevronLeft, Settings, Zap, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { CrystalBoard } from './CrystalBoard';
 import { CRYSTAL_BG } from './crystalAssets';
 import { createBoard, PAYTABLE, resolveSpin, CELL_COUNT, type CrystalCell } from './crystalMath';
@@ -212,8 +213,10 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
           CRYSTAL
         </h1>
         <div className="shrink-0 rounded-full bg-black/40 px-2.5 py-1 text-right ring-1 ring-amber-300/25">
-          <p className="text-[8px] font-semibold uppercase tracking-wide text-amber-200/70">Баланс</p>
-          <p className="text-[11px] font-black tabular-nums">{balance.toFixed(2)}</p>
+          <GameWalletBadge
+            labelClassName="text-[8px] font-semibold uppercase tracking-wide text-amber-200/70"
+            valueClassName="text-[11px] font-black tabular-nums"
+          />
         </div>
       </header>
 

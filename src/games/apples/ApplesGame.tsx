@@ -3,6 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { APPLE_CLOVER_PNG, APPLE_RED_PNG } from './appleAssets';
 import { APPLE_LEVELS } from './appleConfig';
 import { buildBoard, formatMult, revealBoard } from './board';
@@ -179,8 +180,10 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
         </button>
         <div className="min-w-0 flex-1" />
         <div className="shrink-0 rounded-full bg-black/40 px-2.5 py-1 text-right ring-1 ring-lime-300/20">
-          <p className="text-[8px] font-semibold uppercase tracking-wide text-lime-200/70">Баланс</p>
-          <p className="text-[11px] font-black tabular-nums">{balance.toFixed(2)}</p>
+          <GameWalletBadge
+            labelClassName="text-[8px] font-semibold uppercase tracking-wide text-lime-200/70"
+            valueClassName="text-[11px] font-black tabular-nums"
+          />
         </div>
       </header>
 

@@ -1,9 +1,12 @@
-import { supabase } from '@/lib/supabase';
+import { ensureLocalGuest, persistLocalBalance, notifyWalletSync } from '../../lib/playerProfile';
+import { supabase } from '../../lib/supabase';
 
 export async function persistWalletBalance(next: number): Promise<{ ok: true; balance: number } | { ok: false }> {
   const amount = Number(Math.max(0, next).toFixed(2));
   const saved = await writeWalletsBalance(amount);
   if (!saved) return { ok: false };
+  persistLocalBalance(amount);
+  notifyWalletSync();
   await syncProfilesBalance(amount);
   return { ok: true, balance: amount };
 }
@@ -42,7 +45,12 @@ async function writeWalletsBalance(amount: number): Promise<boolean> {
 
   const inserted = await supabase
     .from('wallets')
-    .insert({ balance: amount, currency: 'TMTM', updated_at: stamp })
+    .insert({
+      balance: amount,
+      currency: 'TMTM',
+      public_id: ensureLocalGuest().publicId,
+      updated_at: stamp,
+    })
     .select('id, balance')
     .maybeSingle();
   if (!inserted.error && inserted.data?.id) return true;
