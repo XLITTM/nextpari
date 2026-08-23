@@ -6,6 +6,7 @@ interface BetSlipContextValue {
   addSelection: (selection: BetSelection) => void;
   removeSelection: (matchId: string, outcome: string) => void;
   clearAll: () => void;
+  applyOddsUpdates: (updates: { id: string; odds: number }[]) => void;
   isSelectionActive: (matchId: string, outcome: string, market?: string) => boolean;
   count: number;
 }
@@ -32,6 +33,17 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
 
   const clearAll = useCallback(() => setSelections([]), []);
 
+  const applyOddsUpdates = useCallback((updates: { id: string; odds: number }[]) => {
+    if (!updates.length) return;
+    const byId = new Map(updates.map((row) => [row.id, row.odds]));
+    setSelections((prev) =>
+      prev.map((row) => {
+        const nextOdds = byId.get(row.id);
+        return nextOdds != null ? { ...row, odds: nextOdds } : row;
+      }),
+    );
+  }, []);
+
   const isSelectionActive = useCallback(
     (matchId: string, outcome: string, market?: string) =>
       selections.some(
@@ -45,7 +57,7 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
 
   return (
     <BetSlipContext.Provider
-      value={{ selections, addSelection, removeSelection, clearAll, isSelectionActive, count: selections.length }}
+      value={{ selections, addSelection, removeSelection, clearAll, applyOddsUpdates, isSelectionActive, count: selections.length }}
     >
       {children}
     </BetSlipContext.Provider>

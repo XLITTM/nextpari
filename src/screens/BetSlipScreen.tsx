@@ -2,13 +2,15 @@ import { useState, useEffect } from 'react';
 import {
   X, Trash2, ChevronDown, CheckCircle, Plus,
   Search, Layers, SlidersHorizontal, Upload, MoreVertical,
-  Download, Copy, Check,
+  Download, Copy, Check, Loader2,
 } from 'lucide-react';
 import { useBetSlip } from '../BetSlipContext';
 import { useBetHistory } from '../BetHistoryContext';
 import { useWallet } from '../WalletContext';
 import { useToast } from '../ToastContext';
 import { placeBet } from '../lib/bets';
+import type { OddsUpdate } from '../lib/liveBetGuard';
+import { couponHasLive, LIVE_BET_DELAY_MS, waitLiveBetDelay } from '../lib/liveBetGuard';
 import { buildPlacedBet } from '../betslipLogic';
 import { SportIcon } from '../components/SportIcon';
 import type { BetSelection, Screen } from '../types';
@@ -88,7 +90,7 @@ function SelectionMeta({ s }: { s: BetSelection }) {
 }
 
 export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: BetSlipScreenProps) {
-  const { selections, removeSelection, clearAll, addSelection } = useBetSlip();
+  const { selections, removeSelection, clearAll, addSelection, applyOddsUpdates } = useBetSlip();
   const { addBet, refresh: refreshHistory } = useBetHistory();
   const { applyBalance } = useWallet();
   const { showToast } = useToast();
@@ -101,6 +103,8 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
   const [sheetAnim, setSheetAnim] = useState(false);
   const [confirmAnim, setConfirmAnim] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [liveAcceptMs, setLiveAcceptMs] = useState<number | null>(null);
+  const [oddsPrompt, setOddsPrompt] = useState<OddsUpdate[] | null>(null);
 
   // Action sheet (three-dot menu)
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
@@ -135,32 +139,61 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
     }
   }, [showSuccess]);
 
-  const handleConfirmBet = async () => {
+  const submitCoupon = async (skipDelay = false, overrideSelections?: BetSelection[]) => {
     if (submitting) return;
+    const slip = overrideSelections ?? selections;
     setSubmitting(true);
-    const result = await placeBet({ selections, stake, mode });
-    if (!result.ok) {
-      showToast(result.error);
-      setSubmitting(false);
-      return;
-    }
+    setOddsPrompt(null);
+    try {
+      if (!skipDelay && couponHasLive(slip)) {
+        await waitLiveBetDelay(LIVE_BET_DELAY_MS, setLiveAcceptMs);
+        setLiveAcceptMs(null);
+      }
+      const result = await placeBet({ selections: slip, stake, mode });
+      if (!result.ok) {
+        if (result.reason === 'odds_changed' && result.updates?.length) {
+          setOddsPrompt(result.updates);
+          showToast(result.error);
+          return;
+        }
+        showToast(result.error);
+        return;
+      }
 
-    applyBalance(result.newBalance);
-    void refreshHistory();
-    const entry = buildPlacedBet({
-      type: mode,
-      selections,
-      stake,
-      totalOdds,
-      potentialWin,
+      applyBalance(result.newBalance);
+      void refreshHistory();
+      const entry = buildPlacedBet({
+        type: mode,
+        selections: slip,
+        stake,
+        totalOdds,
+        potentialWin,
+      });
+      addBet(entry);
+      setSuccessSummary({ count: slip.length, odds: totalOdds, win: potentialWin });
+      setPlacedTicketCode(entry.ticketCode ?? null);
+      clearAll();
+      setShowSuccess(true);
+      showToast('Ставка принята!');
+    } finally {
+      setLiveAcceptMs(null);
+      setSubmitting(false);
+    }
+  };
+
+  const handleConfirmBet = () => {
+    void submitCoupon(false);
+  };
+
+  const acceptNewOdds = () => {
+    if (!oddsPrompt) return;
+    const next = selections.map((row) => {
+      const update = oddsPrompt.find((item) => item.id === row.id);
+      return update ? { ...row, odds: update.odds } : row;
     });
-    addBet(entry);
-    setSuccessSummary({ count: selections.length, odds: totalOdds, win: potentialWin });
-    setPlacedTicketCode(entry.ticketCode ?? null);
-    clearAll();
-    setShowSuccess(true);
-    showToast('Ставка принята!');
-    setSubmitting(false);
+    applyOddsUpdates(oddsPrompt.map((row) => ({ id: row.id, odds: row.odds })));
+    setOddsPrompt(null);
+    void submitCoupon(true, next);
   };
 
   const handleSuccessDone = () => {
@@ -469,9 +502,59 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
             disabled={submitting}
             className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold text-base py-4 rounded-xl active:scale-[0.98] transition-transform shadow-lg disabled:opacity-60"
           >
-            {submitting ? 'Оформление...' : 'Сделать ставку'}
+            {liveAcceptMs != null ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Приём ставки... {Math.max(1, Math.ceil(liveAcceptMs / 1000))}
+              </span>
+            ) : submitting ? (
+              <span className="inline-flex items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin" />
+                Проверка котировок...
+              </span>
+            ) : (
+              'Сделать ставку'
+            )}
           </button>
         </div>
+
+        {oddsPrompt && (
+          <div className="fixed inset-0 z-[140] max-w-lg mx-auto flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setOddsPrompt(null)} />
+            <div className="relative m-4 w-full rounded-2xl bg-white dark:bg-[#1e293b] p-4 shadow-2xl">
+              <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
+                Коэффициент изменился. Принять новые условия?
+              </h3>
+              <ul className="mt-3 space-y-2">
+                {oddsPrompt.map((row) => (
+                  <li key={row.id} className="rounded-xl bg-gray-50 dark:bg-[#0f172a] px-3 py-2 text-sm">
+                    <p className="font-bold text-gray-900 dark:text-white truncate">{row.matchLabel}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{row.outcome}</p>
+                    <p className="mt-1 font-extrabold tabular-nums text-amber-600">
+                      {row.previousOdds.toFixed(2)} → {row.odds.toFixed(2)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOddsPrompt(null)}
+                  className="rounded-xl border border-gray-200 dark:border-gray-600 py-3 text-sm font-bold text-gray-700 dark:text-gray-200"
+                >
+                  Отклонить
+                </button>
+                <button
+                  type="button"
+                  onClick={acceptNewOdds}
+                  className="rounded-xl bg-brand-600 py-3 text-sm font-bold text-white"
+                >
+                  Принять
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Action sheet (three-dot menu) */}
         {actionSheetOpen && (

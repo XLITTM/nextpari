@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     const body = await response.text();
     res.status(response.status);
     res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
-    res.setHeader('Cache-Control', 'public, max-age=3');
+    res.setHeader('Cache-Control', 'public, max-age=3, s-maxage=3');
     res.send(body);
   } catch (error) {
     res.status(502).json({ success: 0, error: error instanceof Error ? error.message : 'BetsAPI proxy failed' });

@@ -3,6 +3,7 @@ import { generateTicketCode } from '../betslipLogic';
 import { tournamentLine } from './betTicket';
 import { persistWalletBalance } from '../games/blackjack/wallet';
 import { useUserStore } from '../stores/userStore';
+import { checkLiveQuotes, type OddsUpdate } from './liveBetGuard';
 import type { BetEvent, BetHistoryEntry, BetSelection, BetStatus, SportId } from '../types';
 
 export interface WalletRow {
@@ -64,11 +65,15 @@ function dbMatchId(matchId?: string): string | undefined {
   return matchId;
 }
 
+export type PlaceBetResult =
+  | { ok: true; newBalance: number }
+  | { ok: false; error: string; reason?: 'odds_changed' | 'suspended' | 'generic'; updates?: OddsUpdate[] };
+
 export async function placeBet(params: {
   selections: BetSelection[];
   stake: number;
   mode: 'single' | 'express';
-}): Promise<{ ok: true; newBalance: number } | { ok: false; error: string }> {
+}): Promise<PlaceBetResult> {
   const { selections, stake, mode } = params;
   if (!selections.length) return { ok: false, error: 'Купон пуст' };
   if (!Number.isFinite(stake) || stake <= 0) return { ok: false, error: 'Введите сумму ставки' };
@@ -86,6 +91,22 @@ export async function placeBet(params: {
 
   const store = useUserStore.getState();
   if (totalStake > store.balance) return { ok: false, error: 'Недостаточно средств' };
+
+  if (selections.some((row) => row.isLive)) {
+    const check = await checkLiveQuotes(selections);
+    if (check.status === 'suspended') {
+      return { ok: false, error: check.error, reason: 'suspended' };
+    }
+    if (check.status === 'odds_changed') {
+      return {
+        ok: false,
+        error: check.error,
+        reason: 'odds_changed',
+        updates: check.updates,
+      };
+    }
+  }
+
   if (!store.debit(totalStake)) return { ok: false, error: 'Недостаточно средств' };
   const newBalance = useUserStore.getState().balance;
   void persistWalletBalance(newBalance);

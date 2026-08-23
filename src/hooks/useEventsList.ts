@@ -100,7 +100,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
     void loadLine();
     const liveTimer = window.setInterval(() => {
       void loadLive();
-    }, 20_000);
+    }, 3_000);
     const lineTimer = window.setInterval(() => {
       void loadLine();
     }, 30_000);
