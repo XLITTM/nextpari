@@ -1,9 +1,10 @@
-const CACHE_NAME = 'nextpari-static-v4';
+const CACHE_NAME = 'nextpari-static-v5';
 const PRECACHE = [
   '/',
   '/index.html',
   '/manifest.json',
   '/favicon.svg',
+  '/25534.png',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/apple-touch-icon.png',

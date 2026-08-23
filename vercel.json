@@ -5,7 +5,7 @@
       "destination": "/api/betsapi/:path*"
     },
     {
-      "source": "/((?!images/|icons/|favicon\\.svg|manifest\\.json|sw\\.js|apple-touch-icon\\.png).*)",
+      "source": "/((?!images/|icons/|favicon\\.svg|manifest\\.json|sw\\.js|apple-touch-icon\\.png|25534\\.png).*)",
       "destination": "/index.html"
     }
   ]
