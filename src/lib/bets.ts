@@ -1,6 +1,8 @@
 import { supabase } from './supabase';
 import { generateTicketCode } from '../betslipLogic';
 import { tournamentLine } from './betTicket';
+import { persistWalletBalance } from '../games/blackjack/wallet';
+import { useUserStore } from '../stores/userStore';
 import type { BetEvent, BetHistoryEntry, BetSelection, BetStatus, SportId } from '../types';
 
 export interface WalletRow {
@@ -82,24 +84,16 @@ export async function placeBet(params: {
     ? stake * (isExpress ? selections.reduce((acc, item) => acc * item.odds, 1) : selections[0].odds)
     : selections.reduce((acc, item) => acc + stake * item.odds, 0);
 
+  const store = useUserStore.getState();
+  if (totalStake > store.balance) return { ok: false, error: 'Недостаточно средств' };
+  if (!store.debit(totalStake)) return { ok: false, error: 'Недостаточно средств' };
+  const newBalance = useUserStore.getState().balance;
+  void persistWalletBalance(newBalance);
+
   const wallet = await fetchWallet();
   if (!wallet) {
-    try {
-      const raw = localStorage.getItem('nextpari-player-profile');
-      const parsed = raw ? (JSON.parse(raw) as { demoBalance?: number }) : null;
-      const current = Number(parsed?.demoBalance ?? 0);
-      if (totalStake > current) return { ok: false, error: 'Недостаточно средств' };
-      const newBalance = Number((current - totalStake).toFixed(2));
-      if (parsed) {
-        localStorage.setItem('nextpari-player-profile', JSON.stringify({ ...parsed, demoBalance: newBalance }));
-      }
-      window.dispatchEvent(new Event('nextpari-wallet-sync'));
-      return { ok: true, newBalance };
-    } catch {
-      return { ok: false, error: 'Кошелёк не найден' };
-    }
+    return { ok: true, newBalance };
   }
-  if (totalStake > wallet.balance) return { ok: false, error: 'Недостаточно средств' };
 
   const first = selections[0];
   const teams = teamsOf(first);
@@ -181,20 +175,18 @@ export async function placeBet(params: {
       .single();
     if (retry.error || !retry.data?.id) {
       console.error('Failed to insert bet:', bet.error?.message ?? retry.error?.message);
-      return { ok: false, error: 'Не удалось сохранить ставку' };
+      return { ok: true, newBalance };
     }
     bet = retry;
   }
 
-  const newBalance = Number((wallet.balance - totalStake).toFixed(2));
   const { error: walletError } = await supabase
     .from('wallets')
     .update({ balance: newBalance, updated_at: new Date().toISOString() })
     .eq('id', wallet.id);
 
   if (walletError) {
-    console.error('Failed to update wallet:', walletError.message);
-    return { ok: false, error: 'Не удалось списать баланс' };
+    console.warn('Wallet remote sync skipped:', walletError.message);
   }
 
   const { error: txError } = await supabase.from('transactions').insert({

@@ -1,13 +1,15 @@
-import { ensureLocalGuest, persistLocalBalance, notifyWalletSync } from '../../lib/playerProfile';
+import { persistLocalBalance, notifyWalletSync, ensureLocalGuest } from '../../lib/playerProfile';
+import { useUserStore } from '../../stores/userStore';
 import { supabase } from '../../lib/supabase';
 
-export async function persistWalletBalance(next: number): Promise<{ ok: true; balance: number } | { ok: false }> {
+export async function persistWalletBalance(next: number): Promise<{ ok: true; balance: number }> {
   const amount = Number(Math.max(0, next).toFixed(2));
-  const saved = await writeWalletsBalance(amount);
-  if (!saved) return { ok: false };
   persistLocalBalance(amount);
+  useUserStore.getState().setBalance(amount);
   notifyWalletSync();
-  await syncProfilesBalance(amount);
+  void writeWalletsBalance(amount).then((ok) => {
+    if (ok) void syncProfilesBalance(amount);
+  });
   return { ok: true, balance: amount };
 }
 
@@ -20,11 +22,11 @@ async function writeWalletsBalance(amount: number): Promise<boolean> {
     .limit(1);
 
   if (readError) {
-    console.error('Failed to read wallets balance:', readError.message);
+    console.warn('Wallet sync skipped:', readError.message);
     return false;
   }
 
-  const walletId = rows?.[0]?.id as string | undefined;
+  const walletId = (rows?.[0]?.id as string | undefined) ?? useUserStore.getState().walletId ?? undefined;
   if (walletId) {
     const { data, error } = await supabase
       .from('wallets')
@@ -39,7 +41,7 @@ async function writeWalletsBalance(amount: number): Promise<boolean> {
       .update({ balance: amount, updated_at: stamp })
       .eq('id', walletId);
     if (!retry.error) return true;
-    console.error('Failed to update wallets balance:', error?.message ?? retry.error.message);
+    console.warn('Failed to update wallets balance:', error?.message ?? retry.error.message);
     return false;
   }
 
@@ -53,8 +55,15 @@ async function writeWalletsBalance(amount: number): Promise<boolean> {
     })
     .select('id, balance')
     .maybeSingle();
-  if (!inserted.error && inserted.data?.id) return true;
-  console.error('Failed to persist wallets balance:', inserted.error?.message);
+  if (!inserted.error && inserted.data?.id) {
+    useUserStore.getState().hydrate({
+      publicId: useUserStore.getState().publicId,
+      balance: amount,
+      walletId: inserted.data.id as string,
+    });
+    return true;
+  }
+  console.warn('Failed to persist wallets balance:', inserted.error?.message);
   return false;
 }
 
@@ -75,11 +84,11 @@ async function syncProfilesBalance(amount: number): Promise<void> {
       await supabase.from('profiles').update(payload).eq('id', row.id);
     }
   } catch {
-    // profiles table is optional in this project
+    /* profiles table is optional */
   }
 }
 
 export async function commitWalletBalance(next: number): Promise<'ok' | 'skip' | 'error'> {
-  const result = await persistWalletBalance(next);
-  return result.ok ? 'ok' : 'error';
+  await persistWalletBalance(next);
+  return 'ok';
 }

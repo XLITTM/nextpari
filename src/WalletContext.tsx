@@ -41,14 +41,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const applySnapshot = useCallback(
     (next: { publicId: string; balance: number; walletId: string | null }) => {
+      const local = useUserStore.getState();
+      const keepLocal = Date.now() - local.lastWriteAt < 12_000 && local.balance !== next.balance;
+      const balance = keepLocal
+        ? local.balance
+        : next.balance >= 0 && (next.balance > 0 || local.balance <= 0)
+          ? next.balance
+          : local.balance > 0
+            ? local.balance
+            : 1000;
       setPublicId(next.publicId || DEMO_PUBLIC_ID);
-      setBalance((prev) => (next.balance > 0 ? next.balance : prev > 0 ? prev : 1000));
+      setBalance(balance);
       setWalletId(next.walletId);
       walletIdRef.current = next.walletId;
-      persistLocalBalance(next.balance > 0 ? next.balance : useUserStore.getState().balance || 1000);
+      persistLocalBalance(balance);
       hydrate({
         publicId: next.publicId || DEMO_PUBLIC_ID,
-        balance: next.balance > 0 ? next.balance : useUserStore.getState().balance || 1000,
+        balance,
         walletId: next.walletId,
       });
     },

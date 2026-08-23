@@ -7,7 +7,7 @@ import { useSportsStore } from '@/stores/sportsStore';
 export type EventTab = 'live' | 'line';
 
 export function useEventsList(tab: EventTab, sportId = '1') {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!USE_MOCK);
   const [error, setError] = useState<string | null>(null);
   const eventsMap = useSportsStore((s) => s.events);
   const setLiveEvents = useSportsStore((s) => s.setLiveEvents);
@@ -38,17 +38,12 @@ export function useEventsList(tab: EventTab, sportId = '1') {
         if (signal.aborted) return;
         live.push(...(await fetchInplay(id, 1, signal)));
       }
-      if (!signal.aborted) {
-        if (live.length) {
-          setLiveEvents(live);
-          void hydrateCatalogOdds(pickCatalogIds(), signal);
-        } else {
-          seedMockSportsStore();
-        }
+      if (!signal.aborted && live.length) {
+        setLiveEvents(live);
+        void hydrateCatalogOdds(pickCatalogIds(), signal);
       }
     } catch (e) {
       if (signal.aborted) return;
-      seedMockSportsStore();
       setError(e instanceof Error ? e.message : 'Не удалось загрузить live');
     } finally {
       liveAbort.current = null;
@@ -70,17 +65,12 @@ export function useEventsList(tab: EventTab, sportId = '1') {
         if (signal.aborted) return;
         upcoming.push(...(await fetchUpcoming(id, 1, 48, signal)));
       }
-      if (!signal.aborted) {
-        if (upcoming.length) {
-          setUpcomingEvents(upcoming);
-          void hydrateCatalogOdds(pickCatalogIds(), signal);
-        } else {
-          seedMockSportsStore();
-        }
+      if (!signal.aborted && upcoming.length) {
+        setUpcomingEvents(upcoming);
+        void hydrateCatalogOdds(pickCatalogIds(), signal);
       }
     } catch (e) {
       if (signal.aborted) return;
-      seedMockSportsStore();
       setError(e instanceof Error ? e.message : 'Не удалось загрузить линию');
     } finally {
       lineAbort.current = null;
@@ -99,8 +89,8 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   }, [loadLine, loadLive]);
 
   useEffect(() => {
-    seedMockSportsStore();
     if (USE_MOCK) {
+      seedMockSportsStore();
       setLoading(false);
       return;
     }

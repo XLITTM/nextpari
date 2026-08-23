@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="ap-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#14532d"/>
+      <stop offset="100%" stop-color="#052e16"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="400" fill="url(#ap-bg)"/>
+  <circle cx="520" cy="90" r="70" fill="#166534" opacity="0.5"/>
+  <g transform="translate(210,70)">
+    <ellipse cx="110" cy="150" rx="92" ry="100" fill="#dc2626"/>
+    <ellipse cx="78" cy="118" rx="22" ry="16" fill="#fecaca" opacity="0.55"/>
+    <path d="M110 58 C110 20 150 8 168 40 C140 48 128 70 110 58Z" fill="#16a34a"/>
+    <rect x="104" y="48" width="12" height="28" rx="6" fill="#365314"/>
+  </g>
+  <text x="36" y="64" font-size="34" font-weight="900" fill="#fff">APPLE OF</text>
+  <text x="36" y="104" font-size="34" font-weight="900" fill="#86efac">FORTUNE</text>
+</svg>

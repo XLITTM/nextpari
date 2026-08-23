@@ -383,7 +383,8 @@ async function runTick(): Promise<void> {
           }
         }
         if (!memoryLive.length && !usingRealFeed) {
-          applyLive(generateMockFeed().map((row) => normalizeProviderMatch(row)));
+          notify();
+          return;
         }
         notify();
         return;
@@ -401,7 +402,6 @@ async function runTick(): Promise<void> {
       return;
     }
 
-    applyLive(generateMockFeed().map((row) => normalizeProviderMatch(row)));
     notify();
   } catch (err) {
     console.error('Sports feed tick failed:', err);

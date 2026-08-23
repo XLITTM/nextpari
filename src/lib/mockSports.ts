@@ -2,7 +2,7 @@ import type { BetsEvent, NormalizedMatch, NormalizedOdds } from './betsapi';
 import type { ParsedMarket } from './odds-parser';
 import { useSportsStore } from '../stores/sportsStore';
 
-export const USE_MOCK = true;
+export const USE_MOCK = false;
 
 export interface MockSportMatch {
   id: string;
@@ -270,6 +270,3 @@ export function seedMockSportsStore(): void {
   }
 }
 
-if (typeof window !== 'undefined') {
-  seedMockSportsStore();
-}

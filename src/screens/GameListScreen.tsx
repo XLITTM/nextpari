@@ -4,7 +4,6 @@ import type { MatchEvent, BetSelection } from '../types';
 import { OddButton } from '../components/OddButton';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';
-import { extraMarketRows, buildCardSelection } from '../lib/cardOdds';
 
 interface GameListScreenProps {
   mode: 'live' | 'line';
@@ -43,7 +42,6 @@ function MatchRowCard({
 }) {
   const outcomeButtons = getOutcomeButtons(match);
   const columnsCount = outcomeButtons.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
-  const extraRows = extraMarketRows(match);
 
   const buildSelection = (outcome: string, odds: number): BetSelection => ({
     id: `${match.id}-${outcome}`,
@@ -140,22 +138,6 @@ function MatchRowCard({
             />
           ))}
         </div>
-        {extraRows.map((row) => (
-          <div key={row.name} className="mt-2">
-            <div className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-1.5">{row.name}</div>
-            <div className="grid grid-cols-2 gap-2">
-              {row.outcomes.map((outcome) => (
-                <OddButton
-                  key={`${row.name}-${outcome.label}`}
-                  label={outcome.label}
-                  odds={outcome.odds}
-                  selection={buildCardSelection(match, outcome.label, outcome.odds, row.name)}
-                  size="sm"
-                />
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
