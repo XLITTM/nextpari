@@ -7,6 +7,9 @@ import { isBackofficePath } from './lib/backoffice';
 import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
 import { ManagerDashboardScreen } from './screens/ManagerDashboardScreen';
 import { ThemeProvider } from './ThemeContext';
+import { initPwa } from './lib/pwa';
+
+initPwa();
 
 const root = createRoot(document.getElementById('root')!);
 

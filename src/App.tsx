@@ -39,6 +39,7 @@ import { BlackjackGame } from './games/blackjack/BlackjackGame';
 import { AviatorGame } from './games/aviator/AviatorGame';
 import { ApplesGame } from './games/apples/ApplesGame';
 import { BetHistoryProvider } from './BetHistoryContext';
+import { InstallPwaPrompt } from './components/InstallPwaPrompt';
 
 const GAMES_PATH = '/games';
 const BLACKJACK_PATH = '/games/blackjack';
@@ -319,6 +320,7 @@ export default function App() {
                   <BetHistoryProvider>
                     <AppContent />
                     <QuickBetSheet />
+                    <InstallPwaPrompt />
                   </BetHistoryProvider>
                 </LiveMatchesProvider>
               </WalletProvider>
