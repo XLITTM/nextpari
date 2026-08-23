@@ -38,6 +38,7 @@ import { PromoUnbeatableScreen } from './screens/PromoUnbeatableScreen';
 import { BlackjackGame } from './games/blackjack/BlackjackGame';
 import { AviatorGame } from './games/aviator/AviatorGame';
 import { ApplesGame } from './games/apples/ApplesGame';
+import { DiceGame } from './games/dice/DiceGame';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -48,6 +49,7 @@ const BLACKJACK_PATH = '/games/blackjack';
 const AVIATOR_PATH = '/games/aviator';
 const APPLES_PATH = '/games/apples';
 const CRYSTAL_PATH = '/games/crystal';
+const DICE_PATH = '/games/dice';
 function currentPath(): string {
   return window.location.pathname.replace(/\/+$/, '') || '/';
 }
@@ -58,6 +60,7 @@ function screenFromPath(): Screen {
   if (path === AVIATOR_PATH) return { name: 'aviator' };
   if (path === APPLES_PATH) return { name: 'apples' };
   if (path === CRYSTAL_PATH) return { name: 'crystal' };
+  if (path === DICE_PATH) return { name: 'dice' };
   if (path === GAMES_PATH) return { name: 'games' };
   return { name: 'home' };
 }
@@ -67,6 +70,7 @@ function pathForScreen(screen: Screen): string {
   if (screen.name === 'aviator') return AVIATOR_PATH;
   if (screen.name === 'apples') return APPLES_PATH;
   if (screen.name === 'crystal') return CRYSTAL_PATH;
+  if (screen.name === 'dice') return DICE_PATH;
   if (screen.name === 'games') return GAMES_PATH;
   return '/';
 }
@@ -90,6 +94,7 @@ function navActive(name: Screen['name']): Screen['name'] {
     name === 'aviator' ||
     name === 'apples' ||
     name === 'crystal' ||
+    name === 'dice' ||
     name === 'promo-details' ||
     name === 'promo-marathon' ||
     name === 'promo-welcome' ||
@@ -146,7 +151,8 @@ function AppContent() {
     screen.name === 'blackjack' ||
     screen.name === 'aviator' ||
     screen.name === 'apples' ||
-    screen.name === 'crystal';
+    screen.name === 'crystal' ||
+    screen.name === 'dice';
   const isGamesHub = screen.name === 'games';
 
   const renderScreen = () => {
@@ -232,6 +238,8 @@ function AppContent() {
         return <GamesScreen onBack={goHome} onNavigate={setScreen} />;
       case 'crystal':
         return <CrystalGame onBack={() => setScreen({ name: 'games' })} />;
+      case 'dice':
+        return <DiceGame onBack={() => setScreen({ name: 'games' })} />;
       case 'promo-details':
         return <PromoDetailsScreen onBack={() => setScreen({ name: 'home' })} onNavigate={setScreen} />;
       case 'promo-marathon':
@@ -281,7 +289,7 @@ function AppContent() {
       ? `relative h-[100dvh] overflow-hidden ${
           screen.name === 'aviator'
             ? 'bg-[#14021f]'
-            : screen.name === 'apples' || screen.name === 'crystal'
+            : screen.name === 'apples' || screen.name === 'crystal' || screen.name === 'dice'
               ? 'bg-[#07140c]'
               : 'bg-[#031c1a]'
         }`

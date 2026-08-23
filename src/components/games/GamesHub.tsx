@@ -95,6 +95,16 @@ const GAMES: HubGame[] = [
     categories: ['all', 'best', 'lottery'],
   },
   {
+    id: 'dice',
+    name: 'Dice',
+    badge: 'HOT',
+    winLabel: 'x2',
+    cover: '/images/26164.png',
+    gradient: 'from-emerald-800 via-lime-700 to-green-950',
+    route: { name: 'dice' },
+    categories: ['all', 'foryou', 'best', 'crash'],
+  },
+  {
     id: 'western-slot',
     name: 'Western Slot',
     badge: 'HOT',

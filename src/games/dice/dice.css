@@ -1,0 +1,17 @@
+@keyframes dice-tumble {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  15% { transform: translate3d(-10px, -16px, 0) rotate(-28deg) scale(1.08); }
+  30% { transform: translate3d(12px, -8px, 0) rotate(22deg) scale(0.94); }
+  45% { transform: translate3d(-8px, -20px, 0) rotate(-18deg) scale(1.06); }
+  60% { transform: translate3d(10px, -6px, 0) rotate(30deg) scale(0.96); }
+  75% { transform: translate3d(-6px, -14px, 0) rotate(-12deg) scale(1.04); }
+  100% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+}
+
+.dice-cube {
+  animation: none;
+}
+
+.dice-cube.is-rolling {
+  animation: dice-tumble 0.28s linear infinite;
+}

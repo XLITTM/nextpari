@@ -10,6 +10,7 @@ const GAME_ASSET_URLS = [
   '/images/games/apple_banner.png',
   '/images/games/aviator.png',
   '/images/games/crystal_banner.png',
+  '/images/26164.png',
 ];
 
 let started = false;

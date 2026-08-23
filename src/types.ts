@@ -245,4 +245,5 @@ export type Screen =
   | { name: 'blackjack' }
   | { name: 'aviator' }
   | { name: 'apples' }
-  | { name: 'crystal' };
+  | { name: 'crystal' }
+  | { name: 'dice' };

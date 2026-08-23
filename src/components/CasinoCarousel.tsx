@@ -10,6 +10,7 @@ interface CasinoCarouselProps {
 function openCasinoGame(game: CasinoGame, onNavigate?: (screen: Screen) => void) {
   if (game.id === 'apples') onNavigate?.({ name: 'apples' });
   if (game.id === 'crystal') onNavigate?.({ name: 'crystal' });
+  if (game.id === 'dice') onNavigate?.({ name: 'dice' });
   if (game.id === 'c4') onNavigate?.({ name: 'aviator' });
 }
 

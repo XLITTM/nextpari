@@ -980,6 +980,7 @@ export const casinoGames: CasinoGame[] = [
   { id: 'c4', name: 'Aviator', provider: 'Nextpari Originals', category: 'Crash', rtp: '97.0%', hot: true, color: '#A855F7', cover: '/images/25910.png' },
   { id: 'apples', name: 'Apple of Fortune', provider: 'Nextpari Originals', category: 'Originals', rtp: '96.0%', hot: true, color: '#22C55E', cover: '/images/25924.png' },
   { id: 'crystal', name: 'Crystal', provider: 'Nextpari Originals', category: 'Originals', rtp: '96.0%', hot: true, color: '#22D3EE', cover: '/images/25953.png' },
+  { id: 'dice', name: 'Dice', provider: 'Nextpari Originals', category: 'Originals', rtp: '97.0%', hot: true, color: '#32CD32', cover: '/images/26164.png' },
   { id: 'c5', name: 'Big Bass Bonanza', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.7%', color: '#0EA5E9', cover: CASINO_COVERS.c5 },
   { id: 'c6', name: 'Mega Moolah', provider: 'Microgaming', category: 'Jackpot', rtp: '88.1%', color: '#EAB308', cover: CASINO_COVERS.c6 },
   { id: 'c7', name: 'Lightning Roulette', provider: 'Evolution', category: 'Live', rtp: '97.3%', color: '#F97316', cover: CASINO_COVERS.c7 },

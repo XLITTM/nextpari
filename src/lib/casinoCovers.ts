@@ -6,6 +6,7 @@ export const CASINO_COVERS: Record<string, string> = {
   aviator: '/images/25910.png',
   apples: '/images/25924.png',
   crystal: '/images/25953.png',
+  dice: '/images/26164.png',
   blackjack: '/images/25901.png',
   c5: '/images/games/burning-hot.svg',
   c6: '/images/games/western-slot.svg',
