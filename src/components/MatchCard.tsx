@@ -65,20 +65,22 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
   // УМНАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ МАРКЕТОВ ПО ВИДУ СПОРТА
   const getOutcomeButtons = () => {
     // Список видов спорта, где в основной линии обычно нет ничьей
-    const isTwoWaySport = ['basketball', 'tennis', 'volleyball', 'esports'].includes(match.sport.toLowerCase());
+    const isTwoWaySport = ['basketball', 'tennis', 'volleyball', 'esports'].includes((match.sport ?? '').toLowerCase());
 
-    if (isTwoWaySport || !match.markets.x) {
+    const markets = match.markets ?? { '1': 0, x: 0, '2': 0 };
+
+    if (isTwoWaySport || !markets.x) {
       return [
-        { key: 'П1', odds: match.markets['1'] },
-        { key: 'П2', odds: match.markets['2'] },
+        { key: 'П1', odds: markets['1'] },
+        { key: 'П2', odds: markets['2'] },
       ].filter((m) => m.odds !== undefined && m.odds > 0);
     }
 
     // По умолчанию (для футбола, хоккея) возвращаем 3 исхода
     return [
-      { key: 'П1', odds: match.markets['1'] },
-      { key: 'X', odds: match.markets.x },
-      { key: 'П2', odds: match.markets['2'] },
+      { key: 'П1', odds: markets['1'] },
+      { key: 'X', odds: markets.x },
+      { key: 'П2', odds: markets['2'] },
     ].filter((m) => m.odds !== undefined && m.odds > 0);
   };
 

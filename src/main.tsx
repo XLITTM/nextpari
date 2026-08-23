@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { isAgentTerminalPath } from './lib/cashier';
 import { isBackofficePath } from './lib/backoffice';
 import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
@@ -27,14 +28,16 @@ const root = createRoot(document.getElementById('root')!);
 
 root.render(
   <StrictMode>
-    {isAgentTerminalPath() ? (
-      <ThemeProvider>
-        <MobcashAgentScreen />
-      </ThemeProvider>
-    ) : isBackofficePath() ? (
-      <ManagerDashboardScreen />
-    ) : (
-      <App />
-    )}
+    <ErrorBoundary>
+      {isAgentTerminalPath() ? (
+        <ThemeProvider>
+          <MobcashAgentScreen />
+        </ThemeProvider>
+      ) : isBackofficePath() ? (
+        <ManagerDashboardScreen />
+      ) : (
+        <App />
+      )}
+    </ErrorBoundary>
   </StrictMode>
 );

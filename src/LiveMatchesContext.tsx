@@ -22,18 +22,34 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const eventsMap = useSportsStore((s) => s.events);
 
   const liveMatches = useMemo(() => {
-    const rows = Object.values(eventsMap)
-      .filter((row) => isLive(row.event))
-      .map(matchEventFromStore);
-    if (rows.length) return rows;
-    return getLiveCatalog().live.map(matchEventFromNormalized);
+    try {
+      const rows = Object.values(eventsMap ?? {}).flatMap((row) => {
+        try {
+          return row?.event && isLive(row.event) ? [matchEventFromStore(row)] : [];
+        } catch {
+          return [];
+        }
+      });
+      if (rows.length) return rows;
+      return getLiveCatalog().live.map(matchEventFromNormalized);
+    } catch {
+      return [];
+    }
   }, [eventsMap]);
   const upcomingMatches = useMemo(() => {
-    const rows = Object.values(eventsMap)
-      .filter((row) => row.event.time_status === '0')
-      .map(matchEventFromStore);
-    if (rows.length) return rows;
-    return getLiveCatalog().upcoming.map(matchEventFromNormalized);
+    try {
+      const rows = Object.values(eventsMap ?? {}).flatMap((row) => {
+        try {
+          return row?.event?.time_status === '0' ? [matchEventFromStore(row)] : [];
+        } catch {
+          return [];
+        }
+      });
+      if (rows.length) return rows;
+      return getLiveCatalog().upcoming.map(matchEventFromNormalized);
+    } catch {
+      return [];
+    }
   }, [eventsMap]);
 
   useEffect(() => {

@@ -1,10 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BETSAPI_SPORTS, fetchInplay, fetchUpcoming } from '@/lib/betsapi';
 import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
 import { seedMockSportsStore, USE_MOCK } from '@/lib/mockSports';
+import { fetchEventsForSports } from '@/services/sportsApi';
 import { useSportsStore } from '@/stores/sportsStore';
+import type { BetsEvent } from '@/lib/betsapi';
 
 export type EventTab = 'live' | 'line';
+
+function safeEvents(tab: EventTab, eventsMap: Record<string, { event: BetsEvent }>): BetsEvent[] {
+  try {
+    return Object.values(eventsMap ?? {}).reduce<BetsEvent[]>((acc, row) => {
+      const event = row?.event;
+      if (!event) return acc;
+      const live = event.time_status === '1' || event.our_events === '1';
+      if (tab === 'live' ? live : event.time_status === '0') acc.push(event);
+      return acc;
+    }, []);
+  } catch {
+    return [];
+  }
+}
 
 export function useEventsList(tab: EventTab, sportId = '1') {
   const [loading, setLoading] = useState(!USE_MOCK);
@@ -15,13 +30,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   const liveAbort = useRef<AbortController | null>(null);
   const lineAbort = useRef<AbortController | null>(null);
 
-  const events = useMemo(() => {
-    const rows = Object.values(eventsMap);
-    if (tab === 'live') {
-      return rows.filter((s) => s.event.time_status === '1' || s.event.our_events === '1').map((s) => s.event);
-    }
-    return rows.filter((s) => s.event.time_status === '0').map((s) => s.event);
-  }, [eventsMap, tab]);
+  const events = useMemo(() => safeEvents(tab, eventsMap), [eventsMap, tab]);
 
   const loadLive = useCallback(async () => {
     if (USE_MOCK) {
@@ -31,20 +40,15 @@ export function useEventsList(tab: EventTab, sportId = '1') {
     if (liveAbort.current) return;
     liveAbort.current = new AbortController();
     const { signal } = liveAbort.current;
-    const ids = sportId === 'all' ? BETSAPI_SPORTS.map((row) => String(row.sportId)) : [sportId];
     try {
-      const live = [];
-      for (const id of ids) {
-        if (signal.aborted) return;
-        live.push(...(await fetchInplay(id, 1, signal)));
-      }
-      if (!signal.aborted && live.length) {
-        setLiveEvents(live);
-        void hydrateCatalogOdds(pickCatalogIds(), signal);
-      }
+      const live = await fetchEventsForSports('live', sportId, signal);
+      if (signal.aborted) return;
+      setLiveEvents(live);
+      if (live.length) void hydrateCatalogOdds(pickCatalogIds(), signal).catch(() => undefined);
     } catch (e) {
       if (signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось загрузить live');
+      setLiveEvents([]);
     } finally {
       liveAbort.current = null;
     }
@@ -58,20 +62,15 @@ export function useEventsList(tab: EventTab, sportId = '1') {
     if (lineAbort.current) return;
     lineAbort.current = new AbortController();
     const { signal } = lineAbort.current;
-    const ids = sportId === 'all' ? BETSAPI_SPORTS.map((row) => String(row.sportId)) : [sportId];
     try {
-      const upcoming = [];
-      for (const id of ids) {
-        if (signal.aborted) return;
-        upcoming.push(...(await fetchUpcoming(id, 1, 48, signal)));
-      }
-      if (!signal.aborted && upcoming.length) {
-        setUpcomingEvents(upcoming);
-        void hydrateCatalogOdds(pickCatalogIds(), signal);
-      }
+      const upcoming = await fetchEventsForSports('line', sportId, signal);
+      if (signal.aborted) return;
+      setUpcomingEvents(upcoming);
+      if (upcoming.length) void hydrateCatalogOdds(pickCatalogIds(), signal).catch(() => undefined);
     } catch (e) {
       if (signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось загрузить линию');
+      setUpcomingEvents([]);
     } finally {
       lineAbort.current = null;
     }
@@ -83,6 +82,8 @@ export function useEventsList(tab: EventTab, sportId = '1') {
     try {
       await loadLive();
       await loadLine();
+    } catch {
+      setError('Не удалось загрузить события');
     } finally {
       setLoading(false);
     }

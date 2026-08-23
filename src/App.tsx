@@ -40,6 +40,7 @@ import { AviatorGame } from './games/aviator/AviatorGame';
 import { ApplesGame } from './games/apples/ApplesGame';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { bootstrapGuestSession, signInSession, signOutSession } from './hooks/useAuth';
 
 const GAMES_PATH = '/games';
@@ -291,7 +292,9 @@ function AppContent() {
       )}
 
       <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>
-        {renderScreen()}
+        <ErrorBoundary resetKey={screen.name}>
+          {renderScreen()}
+        </ErrorBoundary>
       </div>
 
       {!isArcade && !isGamesHub && (
@@ -317,9 +320,11 @@ export default function App() {
               <WalletProvider>
                 <LiveMatchesProvider>
                   <BetHistoryProvider>
-                    <AppContent />
-                    <QuickBetSheet />
-                    <InstallPwaPrompt />
+                    <ErrorBoundary>
+                      <AppContent />
+                      <QuickBetSheet />
+                      <InstallPwaPrompt />
+                    </ErrorBoundary>
                   </BetHistoryProvider>
                 </LiveMatchesProvider>
               </WalletProvider>
