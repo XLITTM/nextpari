@@ -1,5 +1,4 @@
 import { supabase } from './supabase';
-import { fetchWallet } from './bets';
 
 export const PLAYER_PROFILE_KEY = 'nextpari-player-profile';
 export const WALLET_SYNC_EVENT = 'nextpari-wallet-sync';
@@ -81,6 +80,7 @@ export async function syncPlayerWallet(): Promise<{
   walletId: string | null;
 }> {
   const local = ensureLocalGuest();
+  const { fetchWallet } = await import('./bets');
   const remote = await fetchWallet();
 
   if (remote?.id) {

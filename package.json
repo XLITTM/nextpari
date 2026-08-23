@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
-    "worker": "tsx --env-file=.env scripts/run-sports-worker.ts"
+    "worker": "tsx --env-file=.env --tsconfig tsconfig.app.json scripts/run-sports-worker.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
