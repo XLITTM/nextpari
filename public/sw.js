@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nextpari-static-v2';
+const CACHE_NAME = 'nextpari-static-v4';
 const PRECACHE = [
   '/',
   '/index.html',
@@ -7,8 +7,17 @@ const PRECACHE = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/apple-touch-icon.png',
+  '/images/25953.png',
+  '/images/25924.png',
+  '/images/25910.png',
+  '/images/25901.png',
+  '/images/games/apple-fortune.svg',
+  '/images/games/aviator.svg',
+  '/images/games/blackjack.svg',
+  '/images/games/crystal.svg',
   '/images/games/western-slot.svg',
   '/images/games/burning-hot.svg',
+  '/images/games/indian-poker.svg',
 ];
 
 const STATIC_EXT = /\.(?:png|jpe?g|gif|webp|svg|ico|avif|woff2?|ttf|otf|eot)$/i;

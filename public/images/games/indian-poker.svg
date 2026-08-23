@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="ip-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9a3412"/>
+      <stop offset="55%" stop-color="#7c2d12"/>
+      <stop offset="100%" stop-color="#1c1917"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="400" fill="url(#ip-bg)"/>
+  <g transform="rotate(-18 200 210)">
+    <rect x="120" y="90" width="150" height="210" rx="16" fill="#fff7ed"/>
+    <text x="195" y="170" text-anchor="middle" font-size="54" font-weight="900" fill="#b91c1c">A</text>
+    <text x="195" y="230" text-anchor="middle" font-size="48" fill="#b91c1c">H</text>
+  </g>
+  <g transform="rotate(12 390 200)">
+    <rect x="315" y="80" width="150" height="210" rx="16" fill="#111827"/>
+    <text x="390" y="165" text-anchor="middle" font-size="48" font-weight="900" fill="#f8fafc">?</text>
+    <rect x="348" y="190" width="84" height="54" rx="10" fill="#f59e0b"/>
+  </g>
+  <text x="32" y="372" font-size="22" font-weight="900" fill="#fdba74">INDIAN POKER</text>
+</svg>

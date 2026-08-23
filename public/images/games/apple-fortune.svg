@@ -13,6 +13,5 @@
     <path d="M110 58 C110 20 150 8 168 40 C140 48 128 70 110 58Z" fill="#16a34a"/>
     <rect x="104" y="48" width="12" height="28" rx="6" fill="#365314"/>
   </g>
-  <text x="36" y="64" font-size="34" font-weight="900" fill="#fff">APPLE OF</text>
-  <text x="36" y="104" font-size="34" font-weight="900" fill="#86efac">FORTUNE</text>
+  <text x="28" y="368" font-size="22" font-weight="900" fill="#bbf7d0">APPLE OF FORTUNE</text>
 </svg>

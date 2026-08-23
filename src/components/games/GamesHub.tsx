@@ -59,7 +59,7 @@ const GAMES: HubGame[] = [
     name: 'Apple of Fortune',
     badge: 'HOT',
     winLabel: 'x349',
-    cover: CASINO_COVERS.apples,
+    cover: '/images/25924.png',
     gradient: 'from-emerald-700 to-lime-900',
     route: { name: 'apples' },
     categories: ['all', 'foryou', 'best', 'crash'],
@@ -69,7 +69,7 @@ const GAMES: HubGame[] = [
     name: 'Aviator',
     badge: 'BEST',
     winLabel: 'x100+',
-    cover: CASINO_COVERS.aviator,
+    cover: '/images/25910.png',
     gradient: 'from-violet-700 to-orange-700',
     route: { name: 'aviator' },
     categories: ['all', 'foryou', 'best', 'crash'],
@@ -79,7 +79,7 @@ const GAMES: HubGame[] = [
     name: '21 / Очко',
     badge: 'HOT',
     winLabel: 'x2',
-    cover: CASINO_COVERS.blackjack,
+    cover: '/images/25901.png',
     gradient: 'from-teal-800 to-emerald-950',
     route: { name: 'blackjack' },
     categories: ['all', 'foryou', 'cards'],
@@ -89,7 +89,7 @@ const GAMES: HubGame[] = [
     name: 'Crystal',
     badge: 'BEST',
     winLabel: 'x500',
-    cover: CASINO_COVERS.crystal,
+    cover: '/images/25953.png',
     gradient: 'from-cyan-500 via-fuchsia-600 to-indigo-900',
     route: { name: 'crystal' },
     categories: ['all', 'best', 'lottery'],
@@ -117,6 +117,7 @@ const GAMES: HubGame[] = [
     name: 'Indian Poker',
     badge: 'HOT',
     winLabel: 'x50',
+    cover: CASINO_COVERS['indian-poker'],
     gradient: 'from-purple-700 via-amber-700 to-rose-900',
     categories: ['all', 'cards'],
   },
@@ -377,7 +378,9 @@ function GameCard({
   onOpen: () => void;
   onToggleLike: () => void;
 }) {
+  const [coverFailed, setCoverFailed] = useState(false);
   const isCrystal = game.id === 'crystal';
+  const showCover = Boolean(game.cover) && !coverFailed;
   return (
     <div className="min-w-0">
       <button
@@ -389,10 +392,11 @@ function GameCard({
             : 'border border-white/5'
         }`}
       >
-        {game.cover ? (
+        {showCover ? (
           <img
             src={game.cover}
             alt=""
+            onError={() => setCoverFailed(true)}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
           />
         ) : (
