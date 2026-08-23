@@ -1,4 +1,5 @@
 import type { Sport, MatchEvent, CasinoGame, Transaction, MarketGroup, MatchStat, H2HGame, Championship, CasinoCategory, EsportsDiscipline, BetHistoryEntry } from './types';
+import { CASINO_COVERS } from './lib/casinoCovers';
 
 const now = Date.now();
 
@@ -973,20 +974,20 @@ export function getMatchById(id: string): MatchEvent | undefined {
 }
 
 export const casinoGames: CasinoGame[] = [
-  { id: 'c1', name: 'Sweet Bonanza', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.5%', hot: true, color: '#EC4899' },
-  { id: 'c2', name: 'Gates of Olympus', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.5%', hot: true, color: '#8B5CF6' },
-  { id: 'c3', name: 'Crazy Time', provider: 'Evolution', category: 'Live', rtp: '95.4%', hot: true, color: '#EF4444' },
-  { id: 'c4', name: 'Aviator', provider: 'Nextpari Originals', category: 'Crash', rtp: '97.0%', hot: true, color: '#A855F7', cover: '/images/games/aviator.png' },
-  { id: 'apples', name: 'Apple of Fortune', provider: 'Nextpari Originals', category: 'Originals', rtp: '96.0%', hot: true, color: '#22C55E', cover: '/images/games/apple_banner.png' },
-  { id: 'crystal', name: 'Crystal', provider: 'Nextpari Originals', category: 'Originals', rtp: '96.0%', hot: true, color: '#22D3EE', cover: '/images/games/crystal_banner.png' },
-  { id: 'c5', name: 'Big Bass Bonanza', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.7%', color: '#0EA5E9' },
-  { id: 'c6', name: 'Mega Moolah', provider: 'Microgaming', category: 'Jackpot', rtp: '88.1%', color: '#EAB308' },
-  { id: 'c7', name: 'Lightning Roulette', provider: 'Evolution', category: 'Live', rtp: '97.3%', color: '#F97316' },
-  { id: 'c8', name: 'JetX', provider: 'SmartSoft', category: 'Crash', rtp: '97.0%', new: true, color: '#3B82F6' },
-  { id: 'c9', name: 'Wolf Gold', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.0%', color: '#D97706' },
-  { id: 'c10', name: 'Book of Dead', provider: "Play'n GO", category: 'Слоты', rtp: '96.2%', color: '#7C3AED' },
-  { id: 'c11', name: 'Plinko', provider: 'Spribe', category: 'Mini', rtp: '97.0%', new: true, color: '#14B8A6' },
-  { id: 'c12', name: 'Monopoly Live', provider: 'Evolution', category: 'Live', rtp: '96.2%', color: '#0891B2' },
+  { id: 'c1', name: 'Sweet Bonanza', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.5%', hot: true, color: '#EC4899', cover: CASINO_COVERS.c1 },
+  { id: 'c2', name: 'Gates of Olympus', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.5%', hot: true, color: '#8B5CF6', cover: CASINO_COVERS.c2 },
+  { id: 'c3', name: 'Crazy Time', provider: 'Evolution', category: 'Live', rtp: '95.4%', hot: true, color: '#EF4444', cover: CASINO_COVERS.c3 },
+  { id: 'c4', name: 'Aviator', provider: 'Nextpari Originals', category: 'Crash', rtp: '97.0%', hot: true, color: '#A855F7', cover: CASINO_COVERS.c4 },
+  { id: 'apples', name: 'Apple of Fortune', provider: 'Nextpari Originals', category: 'Originals', rtp: '96.0%', hot: true, color: '#22C55E', cover: CASINO_COVERS.apples },
+  { id: 'crystal', name: 'Crystal', provider: 'Nextpari Originals', category: 'Originals', rtp: '96.0%', hot: true, color: '#22D3EE', cover: CASINO_COVERS.crystal },
+  { id: 'c5', name: 'Big Bass Bonanza', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.7%', color: '#0EA5E9', cover: CASINO_COVERS.c5 },
+  { id: 'c6', name: 'Mega Moolah', provider: 'Microgaming', category: 'Jackpot', rtp: '88.1%', color: '#EAB308', cover: CASINO_COVERS.c6 },
+  { id: 'c7', name: 'Lightning Roulette', provider: 'Evolution', category: 'Live', rtp: '97.3%', color: '#F97316', cover: CASINO_COVERS.c7 },
+  { id: 'c8', name: 'JetX', provider: 'SmartSoft', category: 'Crash', rtp: '97.0%', new: true, color: '#3B82F6', cover: CASINO_COVERS.c8 },
+  { id: 'c9', name: 'Wolf Gold', provider: 'Pragmatic Play', category: 'Слоты', rtp: '96.0%', color: '#D97706', cover: CASINO_COVERS.c9 },
+  { id: 'c10', name: 'Book of Dead', provider: "Play'n GO", category: 'Слоты', rtp: '96.2%', color: '#7C3AED', cover: CASINO_COVERS.c10 },
+  { id: 'c11', name: 'Plinko', provider: 'Spribe', category: 'Mini', rtp: '97.0%', new: true, color: '#14B8A6', cover: CASINO_COVERS.c11 },
+  { id: 'c12', name: 'Monopoly Live', provider: 'Evolution', category: 'Live', rtp: '96.2%', color: '#0891B2', cover: CASINO_COVERS.c12 },
 ];
 
 export const transactions: Transaction[] = [

@@ -1,5 +1,6 @@
 import { SectionHeader } from './SectionHeader';
 import { casinoGames } from '../data';
+import { coverForGame } from '../lib/casinoCovers';
 import type { CasinoGame, Screen } from '../types';
 
 interface CasinoCarouselProps {
@@ -20,6 +21,7 @@ export function CasinoCarousel({ onNavigate }: CasinoCarouselProps) {
         {casinoGames.map((game) => {
           const isApples = game.id === 'apples';
           const isCrystal = game.id === 'crystal';
+          const cover = coverForGame(game.id, game.cover);
           return (
             <button
               key={game.id}
@@ -35,13 +37,16 @@ export function CasinoCarousel({ onNavigate }: CasinoCarouselProps) {
             >
               <div
                 className="relative flex aspect-[3/4] flex-col items-center justify-center overflow-hidden p-2"
-                style={game.cover ? undefined : { background: `linear-gradient(135deg, ${game.color}, ${game.color}99)` }}
+                style={{ background: `linear-gradient(135deg, ${game.color}, ${game.color}99)` }}
               >
-                {game.cover && (
+                {cover && (
                   <img
-                    src={game.cover}
+                    src={cover}
                     alt=""
                     className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
                   />
                 )}
                 {game.hot && (
@@ -62,10 +67,10 @@ export function CasinoCarousel({ onNavigate }: CasinoCarouselProps) {
                     NEW
                   </span>
                 )}
-                {!game.cover && (
+                {!cover && (
                   <>
-                    <div className="absolute -right-6 -bottom-6 h-20 w-20 rounded-full bg-[#1e3a5f]" />
-                    <span className="text-center text-xs font-extrabold leading-tight text-white drop-shadow">
+                    <div className="absolute -right-6 -bottom-6 h-20 w-20 rounded-full bg-white/20" />
+                    <span className="relative z-10 text-center text-xs font-extrabold leading-tight text-white drop-shadow">
                       {game.name}
                     </span>
                     <span className="relative z-10 mt-1 text-[9px] font-bold text-white">{game.rtp}</span>

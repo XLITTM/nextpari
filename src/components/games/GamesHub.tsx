@@ -19,6 +19,7 @@ import { useWallet } from '../../WalletContext';
 import type { Screen } from '../../types';
 import { DepositModal } from './DepositModal';
 import { preloadGameAssets } from '../../lib/preloadGameAssets';
+import { CASINO_COVERS } from '../../lib/casinoCovers';
 
 interface GamesHubProps {
   onBack: () => void;
@@ -58,7 +59,7 @@ const GAMES: HubGame[] = [
     name: 'Apple of Fortune',
     badge: 'HOT',
     winLabel: 'x349',
-    cover: '/images/games/apple_banner.png',
+    cover: CASINO_COVERS.apples,
     gradient: 'from-emerald-700 to-lime-900',
     route: { name: 'apples' },
     categories: ['all', 'foryou', 'best', 'crash'],
@@ -68,7 +69,7 @@ const GAMES: HubGame[] = [
     name: 'Aviator',
     badge: 'BEST',
     winLabel: 'x100+',
-    cover: '/images/games/aviator.png',
+    cover: CASINO_COVERS.aviator,
     gradient: 'from-violet-700 to-orange-700',
     route: { name: 'aviator' },
     categories: ['all', 'foryou', 'best', 'crash'],
@@ -88,7 +89,7 @@ const GAMES: HubGame[] = [
     name: 'Crystal',
     badge: 'BEST',
     winLabel: 'x500',
-    cover: '/images/games/crystal_banner.png',
+    cover: CASINO_COVERS.crystal,
     gradient: 'from-cyan-500 via-fuchsia-600 to-indigo-900',
     route: { name: 'crystal' },
     categories: ['all', 'best', 'lottery'],

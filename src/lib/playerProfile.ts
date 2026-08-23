@@ -4,6 +4,7 @@ import { fetchWallet } from './bets';
 export const PLAYER_PROFILE_KEY = 'nextpari-player-profile';
 export const WALLET_SYNC_EVENT = 'nextpari-wallet-sync';
 export const DEMO_BALANCE = 1000;
+export const DEMO_PUBLIC_ID = '729767';
 
 export interface PlayerProfile {
   publicId: string;
@@ -17,7 +18,7 @@ function digitsId(value: string | null | undefined): string | null {
 }
 
 export function generatePublicId(): string {
-  return String(100000 + Math.floor(Math.random() * 900000));
+  return DEMO_PUBLIC_ID;
 }
 
 export function readLocalProfile(): PlayerProfile | null {
@@ -43,9 +44,19 @@ export function writeLocalProfile(profile: PlayerProfile) {
 
 export function ensureLocalGuest(): PlayerProfile {
   const existing = readLocalProfile();
-  if (existing) return existing;
+  if (existing) {
+    const next: PlayerProfile = {
+      ...existing,
+      publicId: existing.walletId ? existing.publicId : DEMO_PUBLIC_ID,
+      demoBalance: existing.demoBalance > 0 ? existing.demoBalance : DEMO_BALANCE,
+    };
+    if (next.publicId !== existing.publicId || next.demoBalance !== existing.demoBalance) {
+      writeLocalProfile(next);
+    }
+    return next;
+  }
   const created: PlayerProfile = {
-    publicId: generatePublicId(),
+    publicId: DEMO_PUBLIC_ID,
     walletId: null,
     demoBalance: DEMO_BALANCE,
   };
@@ -73,13 +84,15 @@ export async function syncPlayerWallet(): Promise<{
   const remote = await fetchWallet();
 
   if (remote?.id) {
-    const publicId = digitsId(remote.publicId) ?? local.publicId;
+    const publicId = digitsId(remote.publicId) ?? local.publicId ?? DEMO_PUBLIC_ID;
     if (!digitsId(remote.publicId)) {
       await supabase.from('wallets').update({ public_id: publicId }).eq('id', remote.id);
     }
-    const next = { publicId, walletId: remote.id, demoBalance: remote.balance };
+    const remoteBalance = Number(remote.balance);
+    const balance = remoteBalance > 0 ? remoteBalance : local.demoBalance > 0 ? local.demoBalance : DEMO_BALANCE;
+    const next = { publicId, walletId: remote.id, demoBalance: balance };
     writeLocalProfile(next);
-    return { publicId, balance: remote.balance, walletId: remote.id };
+    return { publicId, balance, walletId: remote.id };
   }
 
   const inserted = await supabase
@@ -95,7 +108,8 @@ export async function syncPlayerWallet(): Promise<{
 
   if (!inserted.error && inserted.data?.id) {
     const publicId = digitsId(inserted.data.public_id as string) ?? local.publicId;
-    const balance = Number(inserted.data.balance ?? local.demoBalance);
+    const remoteBalance = Number(inserted.data.balance ?? local.demoBalance);
+    const balance = remoteBalance > 0 ? remoteBalance : local.demoBalance > 0 ? local.demoBalance : DEMO_BALANCE;
     writeLocalProfile({ publicId, walletId: inserted.data.id as string, demoBalance: balance });
     return { publicId, balance, walletId: inserted.data.id as string };
   }

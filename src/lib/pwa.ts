@@ -27,13 +27,6 @@ export function initPwa() {
     notify();
   });
 
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(() => {
-        /* ignore registration failures in unsupported contexts */
-      });
-    });
-  }
 }
 
 export function subscribePwaPrompt(listener: PromptListener) {

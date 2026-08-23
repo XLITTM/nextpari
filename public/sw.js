@@ -1,4 +1,4 @@
-const CACHE_NAME = 'nextpari-pwa-v1';
+const CACHE_NAME = 'nextpari-static-v2';
 const PRECACHE = [
   '/',
   '/index.html',
@@ -7,7 +7,16 @@ const PRECACHE = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/apple-touch-icon.png',
+  '/images/games/western-slot.svg',
+  '/images/games/burning-hot.svg',
 ];
+
+const STATIC_EXT = /\.(?:png|jpe?g|gif|webp|svg|ico|avif|woff2?|ttf|otf|eot)$/i;
+const STATIC_PATH = /^\/(?:images|icons|fonts|assets|games)\//;
+
+function isStaticAsset(url) {
+  return STATIC_EXT.test(url.pathname) || STATIC_PATH.test(url.pathname);
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -34,6 +43,23 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   if (url.pathname.startsWith('/api/')) return;
+
+  if (isStaticAsset(url)) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(request);
+        if (cached) return cached;
+        try {
+          const response = await fetch(request);
+          if (response.ok) cache.put(request, response.clone());
+          return response;
+        } catch {
+          return cached || Response.error();
+        }
+      })
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(request)

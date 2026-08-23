@@ -9,6 +9,7 @@ import {
   type NormalizedOdds,
 } from '../lib/betsapi';
 import { settleOpenBets } from '../lib/settlement';
+import { MOCK_SPORT_MATCHES, mockToNormalized, USE_MOCK } from '../lib/mockSports';
 
 export const MOCK_PROVIDER_NAME = 'mock';
 export type { NormalizedMatch, NormalizedOdds };
@@ -340,7 +341,17 @@ function applyEnded(rows: NormalizedMatch[]): void {
   memoryLive = dropFinished(memoryLive, finished);
 }
 
+function seedMockCatalog(): void {
+  applyLive(MOCK_SPORT_MATCHES.filter((match) => match.live).map(mockToNormalized));
+  applyUpcoming(MOCK_SPORT_MATCHES.filter((match) => !match.live).map(mockToNormalized));
+}
+
 async function runTick(): Promise<void> {
+  if (USE_MOCK) {
+    seedMockCatalog();
+    notify();
+    return;
+  }
   if (ticking) return;
   if (betsApiPauseRemaining() > 0) return;
   ticking = true;
@@ -400,6 +411,14 @@ async function runTick(): Promise<void> {
 }
 
 export function startSportsFeed(intervalMs = 15_000, onSynced?: SyncListener): () => void {
+  if (USE_MOCK) {
+    seedMockCatalog();
+    notify();
+    if (onSynced) listeners.add(onSynced);
+    return () => {
+      if (onSynced) listeners.delete(onSynced);
+    };
+  }
   if (onSynced) listeners.add(onSynced);
   if (!intervalId) {
     void runTick();

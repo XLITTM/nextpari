@@ -1,5 +1,6 @@
 import { SectionHeader } from './SectionHeader';
 import { casinoGames } from '../data';
+import { coverForGame } from '../lib/casinoCovers';
 import type { CasinoGame, Screen } from '../types';
 
 interface CasinoGridProps {
@@ -20,6 +21,7 @@ export function CasinoGrid({ onNavigate }: CasinoGridProps) {
         {casinoGames.map((game) => {
           const isApples = game.id === 'apples';
           const isCrystal = game.id === 'crystal';
+          const cover = coverForGame(game.id, game.cover);
           return (
             <button
               key={game.id}
@@ -37,13 +39,16 @@ export function CasinoGrid({ onNavigate }: CasinoGridProps) {
                 className={`relative flex flex-col items-center justify-center overflow-hidden p-2 ${
                   isApples ? 'aspect-[4/3] sm:aspect-square' : 'aspect-square'
                 }`}
-                style={game.cover ? undefined : { background: `linear-gradient(135deg, ${game.color}, ${game.color}dd)` }}
+                style={{ background: `linear-gradient(135deg, ${game.color}, ${game.color}cc)` }}
               >
-                {game.cover && (
+                {cover && (
                   <img
-                    src={game.cover}
+                    src={cover}
                     alt=""
                     className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
                   />
                 )}
                 {game.hot && (
@@ -64,8 +69,8 @@ export function CasinoGrid({ onNavigate }: CasinoGridProps) {
                     NEW
                   </span>
                 )}
-                {!game.cover && (
-                  <span className="text-center text-xs font-extrabold leading-tight text-white drop-shadow">
+                {!cover && (
+                  <span className="relative z-10 text-center text-xs font-extrabold leading-tight text-white drop-shadow">
                     {game.name}
                   </span>
                 )}

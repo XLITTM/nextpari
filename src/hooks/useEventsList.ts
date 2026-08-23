@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BETSAPI_SPORTS, fetchInplay, fetchUpcoming } from '@/lib/betsapi';
 import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
+import { seedMockSportsStore, USE_MOCK } from '@/lib/mockSports';
 import { useSportsStore } from '@/stores/sportsStore';
 
 export type EventTab = 'live' | 'line';
@@ -23,6 +24,10 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   }, [eventsMap, tab]);
 
   const loadLive = useCallback(async () => {
+    if (USE_MOCK) {
+      seedMockSportsStore();
+      return;
+    }
     if (liveAbort.current) return;
     liveAbort.current = new AbortController();
     const { signal } = liveAbort.current;
@@ -34,11 +39,16 @@ export function useEventsList(tab: EventTab, sportId = '1') {
         live.push(...(await fetchInplay(id, 1, signal)));
       }
       if (!signal.aborted) {
-        setLiveEvents(live);
-        void hydrateCatalogOdds(pickCatalogIds(), signal);
+        if (live.length) {
+          setLiveEvents(live);
+          void hydrateCatalogOdds(pickCatalogIds(), signal);
+        } else {
+          seedMockSportsStore();
+        }
       }
     } catch (e) {
       if (signal.aborted) return;
+      seedMockSportsStore();
       setError(e instanceof Error ? e.message : 'Не удалось загрузить live');
     } finally {
       liveAbort.current = null;
@@ -46,6 +56,10 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   }, [setLiveEvents, sportId]);
 
   const loadLine = useCallback(async () => {
+    if (USE_MOCK) {
+      seedMockSportsStore();
+      return;
+    }
     if (lineAbort.current) return;
     lineAbort.current = new AbortController();
     const { signal } = lineAbort.current;
@@ -57,11 +71,16 @@ export function useEventsList(tab: EventTab, sportId = '1') {
         upcoming.push(...(await fetchUpcoming(id, 1, 48, signal)));
       }
       if (!signal.aborted) {
-        setUpcomingEvents(upcoming);
-        void hydrateCatalogOdds(pickCatalogIds(), signal);
+        if (upcoming.length) {
+          setUpcomingEvents(upcoming);
+          void hydrateCatalogOdds(pickCatalogIds(), signal);
+        } else {
+          seedMockSportsStore();
+        }
       }
     } catch (e) {
       if (signal.aborted) return;
+      seedMockSportsStore();
       setError(e instanceof Error ? e.message : 'Не удалось загрузить линию');
     } finally {
       lineAbort.current = null;
@@ -80,6 +99,11 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   }, [loadLine, loadLive]);
 
   useEffect(() => {
+    seedMockSportsStore();
+    if (USE_MOCK) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     void loadLive().finally(() => setLoading(false));
     void loadLine();

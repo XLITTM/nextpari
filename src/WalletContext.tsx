@@ -5,6 +5,7 @@ import {
   syncPlayerWallet,
   WALLET_SYNC_EVENT,
   ensureLocalGuest,
+  DEMO_PUBLIC_ID,
 } from './lib/playerProfile';
 import { useUserStore } from './stores/userStore';
 
@@ -40,12 +41,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const applySnapshot = useCallback(
     (next: { publicId: string; balance: number; walletId: string | null }) => {
-      setPublicId(next.publicId);
-      setBalance(next.balance);
+      setPublicId(next.publicId || DEMO_PUBLIC_ID);
+      setBalance((prev) => (next.balance > 0 ? next.balance : prev > 0 ? prev : 1000));
       setWalletId(next.walletId);
       walletIdRef.current = next.walletId;
-      persistLocalBalance(next.balance);
-      hydrate(next);
+      persistLocalBalance(next.balance > 0 ? next.balance : useUserStore.getState().balance || 1000);
+      hydrate({
+        publicId: next.publicId || DEMO_PUBLIC_ID,
+        balance: next.balance > 0 ? next.balance : useUserStore.getState().balance || 1000,
+        walletId: next.walletId,
+      });
     },
     [hydrate],
   );
@@ -105,7 +110,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           const row = (payload.new ?? payload.old) as { id?: string; balance?: number; public_id?: string } | undefined;
           if (!row) return;
           if (walletIdRef.current && row.id && row.id !== walletIdRef.current) return;
-          if (typeof row.balance === 'number') {
+          if (typeof row.balance === 'number' && row.balance > 0) {
             setBalance(row.balance);
             persistLocalBalance(row.balance);
             setStoreBalance(row.balance);

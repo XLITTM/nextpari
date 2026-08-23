@@ -1,6 +1,7 @@
 import { createContext, useContext, useMemo, useEffect, useCallback, type ReactNode } from 'react';
 import { isLive } from './lib/betsapi';
 import { matchEventFromNormalized, matchEventFromStore } from './lib/liveMatches';
+import { USE_MOCK } from './lib/mockSports';
 import { useEventsList } from './hooks/useEventsList';
 import { getLiveCatalog, startSportsFeed } from './services/sportsWorker';
 import { useSportsStore } from './stores/sportsStore';
@@ -35,7 +36,10 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
     return getLiveCatalog().upcoming.map(matchEventFromNormalized);
   }, [eventsMap]);
 
-  useEffect(() => startSportsFeed(30_000), []);
+  useEffect(() => {
+    if (USE_MOCK) return;
+    return startSportsFeed(30_000);
+  }, []);
 
   const findMatch = useCallback(
     (id: string) => liveMatches.find((match) => match.id === id) ?? upcomingMatches.find((match) => match.id === id),
