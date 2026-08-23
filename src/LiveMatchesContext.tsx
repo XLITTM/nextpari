@@ -1,8 +1,8 @@
 import { createContext, useContext, useMemo, useEffect, useCallback, type ReactNode } from 'react';
 import { isLive } from './lib/betsapi';
-import { matchEventFromStore } from './lib/liveMatches';
+import { matchEventFromNormalized, matchEventFromStore } from './lib/liveMatches';
 import { useEventsList } from './hooks/useEventsList';
-import { startSportsFeed } from './services/sportsWorker';
+import { getLiveCatalog, startSportsFeed } from './services/sportsWorker';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
@@ -20,22 +20,22 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const { loading, refresh } = useEventsList('live', 'all');
   const eventsMap = useSportsStore((s) => s.events);
 
-  const liveMatches = useMemo(
-    () =>
-      Object.values(eventsMap)
-        .filter((row) => isLive(row.event))
-        .map(matchEventFromStore),
-    [eventsMap],
-  );
-  const upcomingMatches = useMemo(
-    () =>
-      Object.values(eventsMap)
-        .filter((row) => row.event.time_status === '0')
-        .map(matchEventFromStore),
-    [eventsMap],
-  );
+  const liveMatches = useMemo(() => {
+    const rows = Object.values(eventsMap)
+      .filter((row) => isLive(row.event))
+      .map(matchEventFromStore);
+    if (rows.length) return rows;
+    return getLiveCatalog().live.map(matchEventFromNormalized);
+  }, [eventsMap]);
+  const upcomingMatches = useMemo(() => {
+    const rows = Object.values(eventsMap)
+      .filter((row) => row.event.time_status === '0')
+      .map(matchEventFromStore);
+    if (rows.length) return rows;
+    return getLiveCatalog().upcoming.map(matchEventFromNormalized);
+  }, [eventsMap]);
 
-  useEffect(() => startSportsFeed(120_000), []);
+  useEffect(() => startSportsFeed(30_000), []);
 
   const findMatch = useCallback(
     (id: string) => liveMatches.find((match) => match.id === id) ?? upcomingMatches.find((match) => match.id === id),

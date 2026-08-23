@@ -83,7 +83,22 @@ export async function placeBet(params: {
     : selections.reduce((acc, item) => acc + stake * item.odds, 0);
 
   const wallet = await fetchWallet();
-  if (!wallet) return { ok: false, error: 'Кошелёк не найден' };
+  if (!wallet) {
+    try {
+      const raw = localStorage.getItem('nextpari-player-profile');
+      const parsed = raw ? (JSON.parse(raw) as { demoBalance?: number }) : null;
+      const current = Number(parsed?.demoBalance ?? 0);
+      if (totalStake > current) return { ok: false, error: 'Недостаточно средств' };
+      const newBalance = Number((current - totalStake).toFixed(2));
+      if (parsed) {
+        localStorage.setItem('nextpari-player-profile', JSON.stringify({ ...parsed, demoBalance: newBalance }));
+      }
+      window.dispatchEvent(new Event('nextpari-wallet-sync'));
+      return { ok: true, newBalance };
+    } catch {
+      return { ok: false, error: 'Кошелёк не найден' };
+    }
+  }
   if (totalStake > wallet.balance) return { ok: false, error: 'Недостаточно средств' };
 
   const first = selections[0];

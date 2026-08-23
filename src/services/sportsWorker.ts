@@ -2,6 +2,8 @@ import {
   BetsApiRateLimitError,
   betsApiPauseRemaining,
   fetchBetsApiEndedFeed,
+  fetchBetsApiLiveFeed,
+  fetchBetsApiUpcomingFeed,
   getBetsApiToken,
   type NormalizedMatch,
   type NormalizedOdds,
@@ -115,6 +117,20 @@ const MOCK_SEED: MockLiveState[] = [
     liveStatus: '2-й период, 12:18',
     elapsed: 32,
     odds: { p1: 2.4, x: 3.3, p2: 2.9, tb25: 1.85, tm25: 1.95 },
+  },
+  {
+    externalId: 'mock-cs-navi-vit',
+    sport: 'esports',
+    league: 'BLAST Premier',
+    country: 'Киберспорт',
+    homeTeam: 'Natus Vincere',
+    awayTeam: 'Vitality',
+    status: 'live',
+    homeScore: 1,
+    awayScore: 0,
+    liveStatus: 'Map 2, 12:8',
+    elapsed: 22,
+    odds: { p1: 1.62, x: 0, p2: 2.28, tb25: 1.88, tm25: 1.92, handicapHome: 1.85, handicapAway: 1.95, handicapLine: -1.5 },
   },
 ];
 
@@ -340,7 +356,25 @@ async function runTick(): Promise<void> {
           const settled = await settleOpenBets(memoryEnded);
           if (settled) console.info(`[settlement] closed ${settled} bets`);
         }
-        for (const listener of listeners) listener();
+        try {
+          const live = await fetchBetsApiLiveFeed();
+          if (live.length) {
+            applyLive(live);
+            usingRealFeed = true;
+          }
+          const upcoming = await fetchBetsApiUpcomingFeed();
+          if (upcoming.length) applyUpcoming(upcoming);
+        } catch (feedErr) {
+          if (feedErr instanceof BetsApiRateLimitError) {
+            console.warn(`[betsapi] ${feedErr.message}`);
+          } else {
+            console.error('BetsAPI live feed failed:', feedErr);
+          }
+        }
+        if (!memoryLive.length && !usingRealFeed) {
+          applyLive(generateMockFeed().map((row) => normalizeProviderMatch(row)));
+        }
+        notify();
         return;
       } catch (err) {
         if (err instanceof BetsApiRateLimitError) {

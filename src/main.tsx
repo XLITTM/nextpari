@@ -8,8 +8,10 @@ import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
 import { ManagerDashboardScreen } from './screens/ManagerDashboardScreen';
 import { ThemeProvider } from './ThemeContext';
 import { initPwa } from './lib/pwa';
+import { preloadGameAssets } from './lib/preloadGameAssets';
 
 initPwa();
+preloadGameAssets();
 
 const root = createRoot(document.getElementById('root')!);
 

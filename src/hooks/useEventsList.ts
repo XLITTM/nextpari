@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BETSAPI_SPORTS, fetchInplay, fetchUpcoming } from '@/lib/betsapi';
+import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
 import { useSportsStore } from '@/stores/sportsStore';
 
 export type EventTab = 'live' | 'line';
@@ -32,7 +33,10 @@ export function useEventsList(tab: EventTab, sportId = '1') {
         if (signal.aborted) return;
         live.push(...(await fetchInplay(id, 1, signal)));
       }
-      if (!signal.aborted) setLiveEvents(live);
+      if (!signal.aborted) {
+        setLiveEvents(live);
+        void hydrateCatalogOdds(pickCatalogIds(), signal);
+      }
     } catch (e) {
       if (signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось загрузить live');
@@ -52,7 +56,10 @@ export function useEventsList(tab: EventTab, sportId = '1') {
         if (signal.aborted) return;
         upcoming.push(...(await fetchUpcoming(id, 1, 48, signal)));
       }
-      if (!signal.aborted) setUpcomingEvents(upcoming);
+      if (!signal.aborted) {
+        setUpcomingEvents(upcoming);
+        void hydrateCatalogOdds(pickCatalogIds(), signal);
+      }
     } catch (e) {
       if (signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось загрузить линию');
@@ -78,7 +85,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
     void loadLine();
     const liveTimer = window.setInterval(() => {
       void loadLive();
-    }, 10_000);
+    }, 20_000);
     const lineTimer = window.setInterval(() => {
       void loadLine();
     }, 30_000);

@@ -1,6 +1,8 @@
 import { sports } from '../data';
 import type { SportId } from '../types';
 import { SportIcon } from './SportIcon';
+import { useLiveMatches } from '../LiveMatchesContext';
+import { FEATURED_SPORT_IDS } from '../lib/featuredSports';
 
 interface SportsScrollProps {
   selected: SportId;
@@ -8,16 +10,31 @@ interface SportsScrollProps {
 }
 
 export function SportsScroll({ selected, onSelect }: SportsScrollProps) {
+  const { liveMatches } = useLiveMatches();
+  const counts = liveMatches.reduce<Partial<Record<SportId, number>>>((acc, match) => {
+    acc[match.sport] = (acc[match.sport] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const ordered = [...sports].sort((a, b) => {
+    const ai = FEATURED_SPORT_IDS.indexOf(a.id);
+    const bi = FEATURED_SPORT_IDS.indexOf(b.id);
+    const ap = ai === -1 ? 100 + sports.findIndex((row) => row.id === a.id) : ai;
+    const bp = bi === -1 ? 100 + sports.findIndex((row) => row.id === b.id) : bi;
+    return ap - bp;
+  });
+
   return (
     <div className="flex overflow-x-auto gap-2 scrollbar-hide px-4 pb-2">
-      {sports.map((sport) => {
+      {ordered.map((sport) => {
         const isActive = selected === sport.id;
+        const count = sport.id === 'all' ? liveMatches.length : counts[sport.id] ?? 0;
         return (
           <button
             key={sport.id}
             type="button"
             onClick={() => onSelect(sport.id)}
-            className={`min-w-[56px] h-[56px] p-1 rounded-xl shadow-sm flex flex-col items-center justify-center gap-1 shrink-0 cursor-pointer ${
+            className={`min-w-[56px] h-[56px] p-1 rounded-xl shadow-sm flex flex-col items-center justify-center gap-0.5 shrink-0 cursor-pointer ${
               isActive ? 'bg-green-50' : 'bg-white'
             }`}
           >
@@ -25,6 +42,9 @@ export function SportsScroll({ selected, onSelect }: SportsScrollProps) {
             <span className="text-[9px] text-gray-700 font-medium text-center leading-tight line-clamp-2">
               {sport.name}
             </span>
+            {count > 0 && sport.id !== 'all' ? (
+              <span className="text-[8px] font-bold text-brand-600 tabular-nums">{count}</span>
+            ) : null}
           </button>
         );
       })}

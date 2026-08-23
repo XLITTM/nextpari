@@ -18,6 +18,7 @@ import { useToast } from '../../ToastContext';
 import { useWallet } from '../../WalletContext';
 import type { Screen } from '../../types';
 import { DepositModal } from './DepositModal';
+import { preloadGameAssets } from '../../lib/preloadGameAssets';
 
 interface GamesHubProps {
   onBack: () => void;
@@ -148,6 +149,10 @@ export function GamesHub({ onBack, onNavigate }: GamesHubProps) {
   const [depositOpen, setDepositOpen] = useState(false);
   const [walletMenu, setWalletMenu] = useState(false);
   const [sortAz, setSortAz] = useState(false);
+
+  useEffect(() => {
+    preloadGameAssets();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));

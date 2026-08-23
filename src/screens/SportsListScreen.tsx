@@ -35,7 +35,19 @@ export function SportsListScreen({ initialMode = 'live', onBack, onNavigate }: S
     .map((sport) => ({
       ...sport,
       count: pool.filter((match) => match.sport === sport.id).length,
-    }));
+    }))
+    .sort((a, b) => {
+      const featured = ['football', 'tennis', 'basketball', 'hockey', 'esports'];
+      const ai = featured.indexOf(a.id);
+      const bi = featured.indexOf(b.id);
+      if (ai !== -1 || bi !== -1) {
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      }
+      return b.count - a.count;
+    })
+    .filter((sport) => sport.count > 0 || ['football', 'tennis', 'basketball', 'hockey', 'esports'].includes(sport.id));
 
   return (
     <div className="min-h-full flex flex-col bg-gray-100 dark:bg-gray-900">

@@ -4,6 +4,7 @@ import {
   persistLocalBalance,
   syncPlayerWallet,
   WALLET_SYNC_EVENT,
+  ensureLocalGuest,
 } from './lib/playerProfile';
 import { useUserStore } from './stores/userStore';
 
@@ -17,14 +18,25 @@ interface WalletContextValue {
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
+function readCachedWallet() {
+  const guest = ensureLocalGuest();
+  const stored = useUserStore.getState();
+  return {
+    publicId: stored.publicId || guest.publicId,
+    balance: stored.balance || guest.demoBalance,
+    walletId: stored.walletId || guest.walletId,
+  };
+}
+
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const [balance, setBalance] = useState(0);
-  const [publicId, setPublicId] = useState<string | null>(null);
-  const [walletId, setWalletId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cached = readCachedWallet();
+  const [balance, setBalance] = useState(cached.balance);
+  const [publicId, setPublicId] = useState<string | null>(cached.publicId);
+  const [walletId, setWalletId] = useState<string | null>(cached.walletId);
+  const [loading, setLoading] = useState(false);
   const hydrate = useUserStore((state) => state.hydrate);
   const setStoreBalance = useUserStore((state) => state.setBalance);
-  const walletIdRef = useRef<string | null>(null);
+  const walletIdRef = useRef<string | null>(cached.walletId);
 
   const applySnapshot = useCallback(
     (next: { publicId: string; balance: number; walletId: string | null }) => {

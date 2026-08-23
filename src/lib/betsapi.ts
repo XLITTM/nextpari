@@ -41,7 +41,7 @@ export const BETSAPI_SPORTS = [
   { sportId: 13, sport: 'tennis' },
   { sportId: 17, sport: 'hockey' },
   { sportId: 18, sport: 'basketball' },
-  { sportId: 151, sport: 'esports' },
+  { sportId: 91, sport: 'esports' },
 ] as const;
 
 export type BetsApiSport = (typeof BETSAPI_SPORTS)[number]['sport'];
