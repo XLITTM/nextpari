@@ -76,6 +76,8 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
     market: '1X2',
     outcome,
     odds,
+    marketKey: '1x2',
+    selectionKey: outcome === 'П1' ? 'p1' : outcome === 'П2' ? 'p2' : 'draw',
     homeTeam: match.team1,
     awayTeam: match.team2,
     sport: match.sport,

@@ -1,4 +1,5 @@
 import type { BetSelection, MarketGroup, MatchEvent } from '../types';
+import { inferMarketKey, inferSelection } from './liveMarketCheck';
 
 export function isTwoWaySport(sport: string): boolean {
   return ['basketball', 'tennis', 'volleyball', 'esports'].includes(sport.toLowerCase());
@@ -55,6 +56,8 @@ export function buildCardSelection(
     market,
     outcome,
     odds,
+    marketKey: inferMarketKey(market),
+    selectionKey: inferSelection(outcome),
     homeTeam: match.team1,
     awayTeam: match.team2,
     sport: match.sport,

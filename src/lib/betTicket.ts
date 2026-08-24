@@ -30,6 +30,7 @@ export function couponNumber(betId: string, ticketCode?: string): string {
 export function betStatusLabel(status: BetStatus): string {
   if (status === 'lost') return 'Проиграла';
   if (status === 'won') return 'Выиграла';
+  if (status === 'pending') return 'В расчёте';
   return 'Принята';
 }
 

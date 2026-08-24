@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   X, Trash2, ChevronDown, CheckCircle, Plus,
   Search, Layers, SlidersHorizontal, Upload, MoreVertical,
@@ -9,8 +9,16 @@ import { useBetHistory } from '../BetHistoryContext';
 import { useWallet } from '../WalletContext';
 import { useToast } from '../ToastContext';
 import { placeBet } from '../lib/bets';
-import type { OddsUpdate } from '../lib/liveBetGuard';
-import { couponHasLive, LIVE_BET_DELAY_MS, waitLiveBetDelay } from '../lib/liveBetGuard';
+import type { OddsUpdate, BetPlacementSnapshot } from '../lib/liveBetGuard';
+import {
+  couponHasLive,
+  LIVE_BET_DELAY_MS,
+  waitLiveBetDelay,
+  snapshotCoupon,
+  validateLiveSnapshots,
+  applySnapshotOdds,
+} from '../lib/liveBetGuard';
+import { matchSoundService } from '../services/matchSoundService';
 import { buildPlacedBet } from '../betslipLogic';
 import { SportIcon } from '../components/SportIcon';
 import type { BetSelection, Screen } from '../types';
@@ -73,7 +81,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
   const { selections, removeSelection, clearAll, addSelection, applyOddsUpdates } = useBetSlip();
   const { addBet, refresh: refreshHistory } = useBetHistory();
   const { applyBalance } = useWallet();
-  const { showToast } = useToast();
+  const { toast } = useToast();
   const [mode, setMode] = useState<'express' | 'single'>('express');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -82,9 +90,10 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
   const [stake, setStake] = useState<number>(10);
   const [sheetAnim, setSheetAnim] = useState(false);
   const [confirmAnim, setConfirmAnim] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [isPlacing, setIsPlacing] = useState(false);
   const [liveAcceptMs, setLiveAcceptMs] = useState<number | null>(null);
   const [oddsPrompt, setOddsPrompt] = useState<OddsUpdate[] | null>(null);
+  const snapshotsRef = useRef<BetPlacementSnapshot[] | null>(null);
 
   // Action sheet (three-dot menu)
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
@@ -120,23 +129,50 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
   }, [showSuccess]);
 
   const submitCoupon = async (skipDelay = false, overrideSelections?: BetSelection[]) => {
-    if (submitting) return;
+    if (isPlacing) return;
     const slip = overrideSelections ?? selections;
-    setSubmitting(true);
+    setIsPlacing(true);
     setOddsPrompt(null);
     try {
+      if (!skipDelay) {
+        snapshotsRef.current = snapshotCoupon(slip);
+      }
+      const snapshots = snapshotsRef.current ?? snapshotCoupon(slip);
       if (!skipDelay && couponHasLive(slip)) {
         await waitLiveBetDelay(LIVE_BET_DELAY_MS, setLiveAcceptMs);
         setLiveAcceptMs(null);
       }
-      const result = await placeBet({ selections: slip, stake, mode });
+
+      const check = validateLiveSnapshots(snapshots);
+      if (check.status === 'suspended') {
+        toast.error(check.error);
+        return;
+      }
+      if (check.status === 'odds_changed') {
+        applyOddsUpdates(check.updates.map((row) => ({ id: row.id, odds: row.odds })));
+        snapshotsRef.current = applySnapshotOdds(snapshots, check.updates);
+        setOddsPrompt(check.updates);
+        toast.warning(check.error);
+        return;
+      }
+      if (check.updates?.length) {
+        applyOddsUpdates(check.updates.map((row) => ({ id: row.id, odds: row.odds })));
+        snapshotsRef.current = applySnapshotOdds(snapshots, check.updates);
+      }
+
+      const pricedSlip = (overrideSelections ?? selections).map((row) => {
+        const update = check.updates?.find((item) => item.id === row.id);
+        return update ? { ...row, odds: update.odds } : row;
+      });
+
+      const result = await placeBet({ selections: pricedSlip, stake, mode, skipLiveCheck: true });
       if (!result.ok) {
         if (result.reason === 'odds_changed' && result.updates?.length) {
           setOddsPrompt(result.updates);
-          showToast(result.error);
+          toast.warning(result.error);
           return;
         }
-        showToast(result.error);
+        toast.error(result.error);
         return;
       }
 
@@ -144,20 +180,24 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
       void refreshHistory();
       const entry = buildPlacedBet({
         type: mode,
-        selections: slip,
+        selections: pricedSlip,
         stake,
         totalOdds,
         potentialWin,
       });
       addBet(entry);
-      setSuccessSummary({ count: slip.length, odds: totalOdds, win: potentialWin });
+      setSuccessSummary({ count: pricedSlip.length, odds: totalOdds, win: potentialWin });
       setPlacedTicketCode(entry.ticketCode ?? null);
       clearAll();
+      snapshotsRef.current = null;
       setShowSuccess(true);
-      showToast('Ставка принята!');
+      toast.success('Ставка успешно принята!');
+      matchSoundService.playBetAcceptedSound();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Не удалось принять ставку');
     } finally {
       setLiveAcceptMs(null);
-      setSubmitting(false);
+      setIsPlacing(false);
     }
   };
 
@@ -471,18 +511,18 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
           </div>
           <button
             onClick={() => void handleConfirmBet()}
-            disabled={submitting}
+            disabled={isPlacing}
             className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold text-base py-4 rounded-xl active:scale-[0.98] transition-transform shadow-lg disabled:opacity-60"
           >
             {liveAcceptMs != null ? (
-              <span className="inline-flex items-center justify-center gap-2">
+              <span className="inline-flex items-center justify-center gap-2 tabular-nums">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 Приём ставки... {Math.max(1, Math.ceil(liveAcceptMs / 1000))}
               </span>
-            ) : submitting ? (
+            ) : isPlacing ? (
               <span className="inline-flex items-center justify-center gap-2">
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Проверка котировок...
+                Проверка рынка...
               </span>
             ) : (
               'Сделать ставку'

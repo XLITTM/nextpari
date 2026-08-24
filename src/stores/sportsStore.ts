@@ -27,6 +27,7 @@ interface SportsStore {
   getMarkets: (id: string) => ParsedMarket[];
   getLiveEvents: () => BetsEvent[];
   getUpcomingEvents: () => BetsEvent[];
+  liveMatches: () => EventState[];
   removeEvent: (id: string) => void;
 }
 
@@ -163,6 +164,7 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
   },
   getLiveEvents: () => Object.values(get().events).filter((s) => isLive(s.event)).map((s) => s.event),
   getUpcomingEvents: () => Object.values(get().events).filter((s) => isUpcoming(s.event)).map((s) => s.event),
+  liveMatches: () => Object.values(get().events).filter((s) => isLive(s.event)),
   removeEvent: (id) => {
     const next = { ...get().events };
     delete next[id];

@@ -141,6 +141,8 @@ export interface BetSelection {
   market: string;
   outcome: string;
   odds: number;
+  marketKey?: string;
+  selectionKey?: string;
   homeTeam?: string;
   awayTeam?: string;
   sport?: SportId;
@@ -161,7 +163,7 @@ export interface Transaction {
   status: 'completed' | 'processing' | 'failed';
 }
 
-export type BetStatus = 'won' | 'lost' | 'in_progress';
+export type BetStatus = 'won' | 'lost' | 'in_progress' | 'pending';
 
 export interface BetEvent {
   matchId?: string;

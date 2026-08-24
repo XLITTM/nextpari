@@ -45,7 +45,7 @@ export function buildPlacedBet(params: {
     amount: params.stake,
     payout: Math.round(params.potentialWin),
     cashout: isExpress ? Math.round(params.stake * 0.72) : undefined,
-    status: 'in_progress',
+    status: 'pending',
     date: new Date().toLocaleString('ru-RU', {
       day: 'numeric',
       month: 'short',

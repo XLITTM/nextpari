@@ -69,6 +69,11 @@ export const matchSoundService = {
   playWhistleSound() {
     tone(2100, 0.22, 'sawtooth', 0.06, 2600);
   },
+  playBetAcceptedSound() {
+    tone(660, 0.08, 'square', 0.08);
+    window.setTimeout(() => tone(880, 0.1, 'square', 0.09), 70);
+    window.setTimeout(() => tone(1174, 0.16, 'triangle', 0.11), 150);
+  },
   notify(kind: MatchSoundKind, match: FavoriteableEvent & { team1?: string; team2?: string; home?: { name?: string }; away?: { name?: string } }) {
     const isFav = isEventFavorite(match);
     if (muted || !isFav) return;

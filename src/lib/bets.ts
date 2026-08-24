@@ -73,8 +73,9 @@ export async function placeBet(params: {
   selections: BetSelection[];
   stake: number;
   mode: 'single' | 'express';
+  skipLiveCheck?: boolean;
 }): Promise<PlaceBetResult> {
-  const { selections, stake, mode } = params;
+  const { selections, stake, mode, skipLiveCheck } = params;
   if (!selections.length) return { ok: false, error: 'Купон пуст' };
   if (!Number.isFinite(stake) || stake <= 0) return { ok: false, error: 'Введите сумму ставки' };
 
@@ -92,7 +93,7 @@ export async function placeBet(params: {
   const store = useUserStore.getState();
   if (totalStake > store.balance) return { ok: false, error: 'Недостаточно средств' };
 
-  if (selections.some((row) => row.isLive)) {
+  if (!skipLiveCheck && selections.some((row) => row.isLive)) {
     const check = await checkLiveQuotes(selections);
     if (check.status === 'suspended') {
       return { ok: false, error: check.error, reason: 'suspended' };

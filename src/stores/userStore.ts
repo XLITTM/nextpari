@@ -10,6 +10,7 @@ interface UserStore {
   hydrate: (payload: { publicId: string; balance: number; walletId: string | null }) => void;
   setBalance: (balance: number) => void;
   debit: (amount: number) => boolean;
+  deductBalance: (amount: number) => boolean;
   credit: (amount: number) => void;
 }
 
@@ -72,6 +73,7 @@ export const useUserStore = create<UserStore>()(
         set({ balance: next, lastWriteAt: Date.now() });
         return true;
       },
+      deductBalance: (amount) => get().debit(amount),
       credit: (amount) => {
         const value = Number(amount);
         if (!Number.isFinite(value) || value <= 0) return;

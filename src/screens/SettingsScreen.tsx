@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import type { Screen } from '../types';
 import { useToast } from '../ToastContext';
+import { useSettingsStore } from '../stores/settingsStore';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -68,8 +69,8 @@ const ODDS_POLICIES: { id: OddsPolicy; label: string; hint: string }[] = [
 export function SettingsScreen({ onBack, onNavigate, onLogout }: SettingsScreenProps) {
   const { showToast } = useToast();
   const [view, setView] = useState<SettingsView>('root');
-
-  const [oddsPolicy, setOddsPolicy] = useState<OddsPolicy>('increase');
+  const oddsPolicy = useSettingsStore((s) => s.oddsChangePolicy);
+  const setOddsPolicy = useSettingsStore((s) => s.setOddsChangePolicy);
   const [betPush, setBetPush] = useState(true);
   const [clearCoupon, setClearCoupon] = useState(true);
   const [quickAmounts, setQuickAmounts] = useState(['10', '50', '100', '200', '500', '1000']);

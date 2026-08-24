@@ -25,7 +25,7 @@ export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
   const [saleOnly, setSaleOnly] = useState(false);
 
   const visible = saleOnly
-    ? entries.filter((b) => b.status === 'in_progress' && b.cashout)
+    ? entries.filter((b) => (b.status === 'in_progress' || b.status === 'pending') && b.cashout)
     : entries;
 
   const periodSum = visible.reduce((sum, b) => sum + b.amount, 0);
@@ -125,7 +125,7 @@ function HistoryItem({ bet, onOpen }: { bet: BetHistoryEntry; onOpen: () => void
   const typeLabel = isExpress ? `Экспресс (${eventCount} событий)` : 'Одинар';
   const receipt = couponNumber(bet.id, bet.ticketCode);
   const possibleWin = bet.payout || bet.amount * bet.totalOdds;
-  const isLive = bet.status === 'in_progress' && bet.events.some((event) => event.isLive);
+  const isLive = (bet.status === 'in_progress' || bet.status === 'pending') && bet.events.some((event) => event.isLive);
 
   return (
     <article
