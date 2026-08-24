@@ -61,7 +61,7 @@ export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites,
       <PromoScroll onNavigate={onNavigate} />
 
       <div className="space-y-1 pt-2">
-        {filteredLive.length > 0 && (
+        {(loading || filteredLive.length > 0) && (
           <section>
             <SectionHeader
               title="Популярное LIVE"
@@ -69,29 +69,33 @@ export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites,
               onFilterClick={() => onOpenGameList('live')}
               onSeeAll={() => onOpenGameList('live')}
             />
-            <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
-              {filteredLive.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  onOpenMatch={onOpenMatch}
-                  carousel
-                  isFavorite={favorites.includes(match.id)}
-                  onToggleFavorite={() => onToggleFavorite(match.id)}
-                />
-              ))}
-            </div>
+            {filteredLive.length > 0 ? (
+              <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
+                {filteredLive.map((match) => (
+                  <MatchCard
+                    key={match.id}
+                    match={match}
+                    onOpenMatch={onOpenMatch}
+                    carousel
+                    isFavorite={favorites.includes(match.id)}
+                    onToggleFavorite={() => onToggleFavorite(match.id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <SkeletonLoader count={2} variant="carousel" />
+            )}
           </section>
         )}
 
-        {filteredUpcoming.length > 0 && (
-          <section className="mt-4">
-            <SectionHeader
-              title="Популярное Линия"
-              filterLabel="Спорт"
-              onFilterClick={() => onOpenGameList('line')}
-              onSeeAll={() => onOpenGameList('line')}
-            />
+        <section className="mt-4">
+          <SectionHeader
+            title="Популярное Линия"
+            filterLabel="Спорт"
+            onFilterClick={() => onOpenGameList('line')}
+            onSeeAll={() => onOpenGameList('line')}
+          />
+          {filteredUpcoming.length > 0 ? (
             <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
               {filteredUpcoming.map((match) => (
                 <MatchCard
@@ -104,14 +108,16 @@ export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites,
                 />
               ))}
             </div>
-          </section>
-        )}
+          ) : loading ? (
+            <SkeletonLoader count={2} variant="carousel" />
+          ) : (
+            <p className="px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">Матчи появятся скоро</p>
+          )}
+        </section>
 
-        {filteredUpcoming.length > 0 && (
-          <section className="mt-4">
-            <CasinoCarousel onNavigate={onNavigate} />
-          </section>
-        )}
+        <section className="mt-4">
+          <CasinoCarousel onNavigate={onNavigate} />
+        </section>
 
         {/* Casino Categories */}
         <section className="mt-4">
@@ -176,9 +182,6 @@ export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites,
           </section>
         )}
 
-        {loading || (filteredLive.length === 0 && filteredUpcoming.length === 0) ? (
-          <SkeletonLoader count={4} />
-        ) : null}
       </div>
     </div>
   );

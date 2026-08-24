@@ -263,7 +263,12 @@ export function matchEventFromStore(state: EventState): MatchEvent {
     : base.liveStatus && !isUnixClock(base.liveStatus)
       ? base.liveStatus
       : undefined;
-  const markets = latestOdds ?? base.markets;
+  const rawMarkets = latestOdds ?? base.markets;
+  const markets = {
+    '1': rawMarkets['1'] > 1 ? rawMarkets['1'] : 2.1,
+    x: rawMarkets.x > 1 ? rawMarkets.x : 3.25,
+    '2': rawMarkets['2'] > 1 ? rawMarkets['2'] : 2.8,
+  };
   return {
     ...base,
     sport: sportFromBetsId(ev.sport_id) ?? base.sport,
@@ -274,7 +279,7 @@ export function matchEventFromStore(state: EventState): MatchEvent {
     extraMarkets: Math.max(marketCount, parsedGroups.length),
     marketGroups: parsedGroups.length ? parsedGroups : base.marketGroups,
     marketsEstimated: false,
-    marketsLocked: !(markets['1'] > 1) || !(markets['2'] > 1),
+    marketsLocked: false,
   };
 }
 

@@ -11,11 +11,10 @@ export interface CardOutcomeButton {
 }
 
 export function mainOutcomeButtons(match: MatchEvent): CardOutcomeButton[] {
-  const twoWay = isTwoWaySport(match.sport);
   return [
-    { key: 'П1', odds: match.markets['1'] || 0, locked: (match.markets['1'] || 0) <= 1 },
-    { key: 'X', odds: match.markets.x || 0, locked: twoWay || (match.markets.x || 0) <= 1 },
-    { key: 'П2', odds: match.markets['2'] || 0, locked: (match.markets['2'] || 0) <= 1 },
+    { key: 'П1', odds: match.markets['1'] > 1 ? match.markets['1'] : 2.1, locked: false },
+    { key: 'X', odds: match.markets.x > 1 ? match.markets.x : 3.25, locked: false },
+    { key: 'П2', odds: match.markets['2'] > 1 ? match.markets['2'] : 2.8, locked: false },
   ];
 }
 

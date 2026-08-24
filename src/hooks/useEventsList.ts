@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchInplay } from '@/services/sports';
-import { fetchEventsForSports } from '@/services/sportsApi';
+import { fetchSportsFeed } from '@/services/sports';
 import { useSportsStore } from '@/stores/sportsStore';
 import { isLineEvent, isLive, type BetsEvent } from '@/lib/betsapi';
 import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
+import type { ParsedMarket } from '@/lib/odds-parser';
 
 export type EventTab = 'live' | 'line';
 
@@ -20,11 +20,20 @@ function safeEvents(tab: EventTab, eventsMap: Record<string, { event: BetsEvent 
   }
 }
 
-export function useEventsList(tab: EventTab, sportId = '1') {
+function marketsById(rows: Array<{ event: BetsEvent; markets: ParsedMarket[] }>): Record<string, ParsedMarket[]> {
+  const next: Record<string, ParsedMarket[]> = {};
+  for (const row of rows) {
+    if (row.markets.length) next[row.event.id] = row.markets;
+  }
+  return next;
+}
+
+export function useEventsList(tab: EventTab, _sportId = '1') {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const eventsMap = useSportsStore((s) => s.events);
   const applyInplay = useSportsStore((s) => s.applyInplay);
+  const applyUpcoming = useSportsStore((s) => s.applyUpcoming);
   const setLiveEvents = useSportsStore((s) => s.setLiveEvents);
   const setUpcomingEvents = useSportsStore((s) => s.setUpcomingEvents);
   const liveAbort = useRef<AbortController | null>(null);
@@ -37,13 +46,9 @@ export function useEventsList(tab: EventTab, sportId = '1') {
     liveAbort.current = new AbortController();
     const { signal } = liveAbort.current;
     try {
-      const rows = await fetchInplay(signal);
+      const rows = await fetchSportsFeed('inplay', signal);
       if (signal.aborted) return;
-      const marketsById: Record<string, typeof rows[number]['markets']> = {};
-      for (const row of rows) {
-        if (row.markets.length) marketsById[row.event.id] = row.markets;
-      }
-      applyInplay(rows.map((row) => row.event), marketsById);
+      applyInplay(rows.map((row) => row.event), marketsById(rows));
       void hydrateCatalogOdds(pickCatalogIds());
     } catch (e) {
       if (signal.aborted) return;
@@ -55,29 +60,28 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   }, [applyInplay, setLiveEvents]);
 
   const loadLine = useCallback(async () => {
-    if (lineAbort.current) return;
+    if (lineAbort.current) lineAbort.current.abort();
     lineAbort.current = new AbortController();
     const { signal } = lineAbort.current;
     try {
-      const upcoming = await fetchEventsForSports('line', sportId, signal);
+      const rows = await fetchSportsFeed('upcoming', signal);
       if (signal.aborted) return;
-      setUpcomingEvents(upcoming);
+      applyUpcoming(rows.map((row) => row.event), marketsById(rows));
       void hydrateCatalogOdds(pickCatalogIds());
     } catch (e) {
       if (signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось загрузить линию');
       setUpcomingEvents([]);
     } finally {
-      lineAbort.current = null;
+      if (lineAbort.current?.signal === signal) lineAbort.current = null;
     }
-  }, [setUpcomingEvents, sportId]);
+  }, [applyUpcoming, setUpcomingEvents]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      await loadLive();
-      await loadLine();
+      await Promise.all([loadLive(), loadLine()]);
     } catch {
       setError('Не удалось загрузить события');
     } finally {
@@ -87,8 +91,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
 
   useEffect(() => {
     setLoading(true);
-    void loadLive().finally(() => setLoading(false));
-    void loadLine();
+    void Promise.all([loadLive(), loadLine()]).finally(() => setLoading(false));
     const liveTimer = window.setInterval(() => {
       void loadLive();
     }, 3_000);

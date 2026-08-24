@@ -1,4 +1,5 @@
 import { getBetsApiGatewayToken } from '../betsapi/gateway.js';
+import { ensureOddsList } from './odds-fallback.js';
 
 const PRIMARY = 'https://api.b365api.com/v3/events/inplay';
 const FALLBACK = 'https://api.betsapi.com/v3/events/inplay';
@@ -53,7 +54,7 @@ function mergedBody() {
     }
   }
   lastMergeAt = now;
-  lastBody = JSON.stringify({ success: 1, results });
+  lastBody = JSON.stringify({ success: 1, results: ensureOddsList(results) });
   return lastBody;
 }
 

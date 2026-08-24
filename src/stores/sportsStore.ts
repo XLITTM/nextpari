@@ -19,6 +19,7 @@ interface SportsStore {
   setEvents: (events: BetsEvent[]) => void;
   setOdds: (eventId: string, markets: ParsedMarket[], sinceTime?: number) => void;
   applyInplay: (events: BetsEvent[], marketsById: Record<string, ParsedMarket[]>) => void;
+  applyUpcoming: (events: BetsEvent[], marketsById: Record<string, ParsedMarket[]>) => void;
   setScore: (eventId: string, score: string, time?: string) => void;
   upsertEvent: (event: BetsEvent) => void;
   getEvent: (id: string) => EventState | undefined;
@@ -84,6 +85,14 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
 
   applyInplay: (events, marketsById) => {
     get().setLiveEvents(events);
+    const ts = Date.now() / 1000;
+    for (const [id, markets] of Object.entries(marketsById)) {
+      if (markets.length) get().setOdds(id, markets, ts);
+    }
+  },
+
+  applyUpcoming: (events, marketsById) => {
+    get().setUpcomingEvents(events);
     const ts = Date.now() / 1000;
     for (const [id, markets] of Object.entries(marketsById)) {
       if (markets.length) get().setOdds(id, markets, ts);

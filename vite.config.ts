@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import { betsapiGatewayPlugin } from './plugins/betsapi-gateway';
 import { betsapiLiveWsPlugin } from './plugins/betsapi-live-ws';
+import { sportsCatalogPlugin } from './plugins/sports-catalog';
 import { sportsInplayPlugin } from './plugins/sports-inplay';
 
 function betsApiToken(env: Record<string, string>): string {
@@ -19,7 +20,7 @@ export default defineConfig(({ mode }) => {
   process.env.VITE_BETSAPI_TOKEN ??= env.VITE_BETSAPI_TOKEN || env.VITE_BETSAPI_KEY || '';
 
   return {
-    plugins: [react(), sportsInplayPlugin(), betsapiGatewayPlugin(), betsapiLiveWsPlugin(token)],
+    plugins: [react(), sportsCatalogPlugin(), sportsInplayPlugin(), betsapiGatewayPlugin(), betsapiLiveWsPlugin(token)],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

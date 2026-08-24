@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Search, Monitor, Link as LinkIcon, Bell, Star } from 'lucide-react';
 import type { MatchEvent, BetSelection } from '../types';
-import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
+import { mainOutcomeButtons } from '../lib/cardOdds';
 import { OddButton } from '../components/OddButton';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';

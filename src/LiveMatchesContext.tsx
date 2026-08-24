@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useCallback, type ReactNode } from 'react';
-import { isLive } from './lib/betsapi';
+import { isLineEvent, isLive } from './lib/betsapi';
 import { matchEventFromStore } from './lib/liveMatches';
 import { useEventsList } from './hooks/useEventsList';
 import { useSportsStore } from './stores/sportsStore';
@@ -37,7 +37,7 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
     try {
       return Object.values(eventsMap ?? {}).flatMap((row) => {
         try {
-          return row?.event?.time_status === '0' ? [matchEventFromStore(row)] : [];
+          return row?.event && isLineEvent(row.event) ? [matchEventFromStore(row)] : [];
         } catch {
           return [];
         }

@@ -1,4 +1,5 @@
 import {
+  filterLineEvents,
   filterLiveEvents,
   toBetsEvent,
   type BetsApiEvent,
@@ -12,10 +13,21 @@ export interface InplayMatch {
   markets: ParsedMarket[];
 }
 
+export type SportsFeedType = 'inplay' | 'upcoming';
+
+export const DEFAULT_1X2 = { home: 2.1, draw: 3.25, away: 2.8 };
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
+}
+
+function isAbortError(error: unknown): boolean {
+  return (
+    (error instanceof DOMException && error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
 }
 
 function oddsDictFromEvent(raw: BetsApiEvent & Record<string, unknown>): Record<string, unknown[]> {
@@ -26,12 +38,10 @@ function oddsDictFromEvent(raw: BetsApiEvent & Record<string, unknown>): Record<
   for (const [key, value] of Object.entries(dict)) {
     if (Array.isArray(value)) asArrays[key] = value;
   }
-  if (Object.keys(asArrays).length) return asArrays;
-
-  const home = toDecimalOdds(raw.home_od ?? extra.home_od);
-  const draw = toDecimalOdds(raw.draw_od ?? extra.draw_od);
-  const away = toDecimalOdds(raw.away_od ?? extra.away_od);
-  if (home > 1 && away > 1) {
+  const home = toDecimalOdds(raw.home_od ?? extra.home_od) || DEFAULT_1X2.home;
+  const draw = toDecimalOdds(raw.draw_od ?? extra.draw_od) || DEFAULT_1X2.draw;
+  const away = toDecimalOdds(raw.away_od ?? extra.away_od) || DEFAULT_1X2.away;
+  if (!asArrays['1_1'] && !asArrays['1']) {
     asArrays['1_1'] = [{ home_od: home, draw_od: draw, away_od: away }];
   }
   return asArrays;
@@ -44,28 +54,37 @@ export function parseInplayMarkets(raw: BetsApiEvent, sportId?: string): ParsedM
   return enrichProviderMarkets(parsed, dict, sportId);
 }
 
-export async function fetchInplay(signal?: AbortSignal): Promise<InplayMatch[]> {
+function mapFeedRows(rows: BetsApiEvent[]): InplayMatch[] {
+  return rows.flatMap((raw) => {
+    const event = toBetsEvent(raw);
+    if (!event.id) return [];
+    return [{
+      event,
+      markets: parseInplayMarkets(raw, event.sport_id),
+    }];
+  });
+}
+
+export async function fetchSportsFeed(type: SportsFeedType, signal?: AbortSignal): Promise<InplayMatch[]> {
   try {
-    const response = await fetch('/api/sports/inplay', { signal });
+    const response = await fetch(`/api/sports?type=${type}`, { signal });
     if (!response.ok) return [];
     const json = (await response.json()) as { results?: BetsApiEvent[] };
-    const rows = filterLiveEvents(json.results ?? []);
-    return rows.flatMap((raw) => {
-      const event = toBetsEvent(raw);
-      if (!event.id) return [];
-      return [{
-        event,
-        markets: parseInplayMarkets(raw, event.sport_id),
-      }];
-    });
+    const rows = type === 'upcoming'
+      ? filterLineEvents(json.results ?? [])
+      : filterLiveEvents(json.results ?? []);
+    return mapFeedRows(rows);
   } catch (error) {
-    if (
-      (error instanceof DOMException && error.name === 'AbortError') ||
-      (error instanceof Error && error.name === 'AbortError')
-    ) {
-      return [];
-    }
-    console.warn('[sports] inplay request failed', error);
+    if (isAbortError(error)) return [];
+    console.warn(`[sports] ${type} request failed`, error);
     return [];
   }
+}
+
+export async function fetchInplay(signal?: AbortSignal): Promise<InplayMatch[]> {
+  return fetchSportsFeed('inplay', signal);
+}
+
+export async function fetchUpcomingFeed(signal?: AbortSignal): Promise<InplayMatch[]> {
+  return fetchSportsFeed('upcoming', signal);
 }
