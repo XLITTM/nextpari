@@ -2,6 +2,7 @@ import { Star } from 'lucide-react';
 import { SectionHeader } from '../components/SectionHeader';
 import { MatchCard } from '../components/MatchCard';
 import { useLiveMatches } from '../LiveMatchesContext';
+import { isEventFavorite } from '../stores/favoritesStore';
 
 interface FavoritesScreenProps {
   favorites: string[];
@@ -9,10 +10,10 @@ interface FavoritesScreenProps {
   onOpenMatch: (matchId: string) => void;
 }
 
-export function FavoritesScreen({ favorites, onToggleFavorite, onOpenMatch }: FavoritesScreenProps) {
+export function FavoritesScreen({ onToggleFavorite, onOpenMatch }: FavoritesScreenProps) {
   const { liveMatches, upcomingMatches } = useLiveMatches();
   const favoriteMatches = [...liveMatches, ...upcomingMatches]
-    .filter((match, index, all) => favorites.includes(match.id) && all.findIndex((item) => item.id === match.id) === index);
+    .filter((match, index, all) => isEventFavorite(match) && all.findIndex((item) => item.id === match.id) === index);
 
   return (
     <div className="pt-2 pb-4">

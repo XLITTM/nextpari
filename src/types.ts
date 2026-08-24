@@ -78,6 +78,7 @@ export interface MatchEvent {
   id: string;
   sport: SportId;
   league: string;
+  leagueId?: string;
   country: string;
   team1: string;
   team2: string;

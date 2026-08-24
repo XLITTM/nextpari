@@ -1,6 +1,7 @@
 import { Star } from 'lucide-react';
 import { SectionHeader } from './SectionHeader';
 import { useLiveMatches } from '../LiveMatchesContext';
+import { useFavoritesStore } from '../stores/favoritesStore';
 
 function colorFromName(name: string): string {
   let hash = 0;
@@ -11,6 +12,8 @@ function colorFromName(name: string): string {
 
 export function ChampionshipsList() {
   const { liveMatches } = useLiveMatches();
+  const favoriteLeagueIds = useFavoritesStore((s) => s.favoriteLeagueIds);
+  const toggleLeagueFavorite = useFavoritesStore((s) => s.toggleLeagueFavorite);
   const fromLive = Object.values(
     liveMatches.reduce<Record<string, { name: string; country: string; count: number; color: string }>>((acc, match) => {
       const key = `${match.country}|${match.league}`;
@@ -60,8 +63,16 @@ export function ChampionshipsList() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm font-bold text-brand-600 tabular-nums">{ch.count}</span>
-              <button className="w-7 h-7 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-colors">
-                <Star className="w-4 h-4" />
+              <button
+                type="button"
+                className="w-7 h-7 flex items-center justify-center text-gray-600 dark:text-gray-300 hover:text-brand-600 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleLeagueFavorite(ch.name);
+                }}
+                aria-label="Добавить чемпионат в избранное"
+              >
+                <Star className={`w-4 h-4 ${favoriteLeagueIds.includes(ch.name) ? 'fill-brand-600 text-brand-600' : ''}`} />
               </button>
             </div>
           </div>

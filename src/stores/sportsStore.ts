@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { BetsEvent } from '@/lib/betsapi';
 import { isClosedTimeStatus, isLineEvent, isLive, isUnixClock, laterClock } from '@/lib/betsapi';
 import type { ParsedMarket } from '@/lib/odds-parser';
+import { detectMatchSoundEvents } from '@/services/matchSoundService';
 
 export interface EventState {
   event: BetsEvent;
@@ -60,7 +61,9 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
     }
     for (const ev of list) {
       if (!isLive(ev) || isClosedTimeStatus(ev.time_status)) continue;
-      next[ev.id] = freshState(ev, prev[ev.id]);
+      const nextState = freshState(ev, prev[ev.id]);
+      detectMatchSoundEvents(prev[ev.id], nextState.event, nextState.score);
+      next[ev.id] = nextState;
     }
     set({ events: next });
   },
@@ -126,10 +129,7 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
       : time && !isUnixClock(time)
         ? time
         : st.matchTime;
-    set({
-      events: {
-        ...get().events,
-        [eventId]: {
+    const nextState = {
           ...st,
           score: score || st.score,
           matchTime: nextTime,
@@ -139,14 +139,21 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
             clock_running: ht ? false : st.event.clock_running,
             period: ht ? 'HT' : st.event.period,
           },
-        },
+        };
+    detectMatchSoundEvents(st, nextState.event, nextState.score);
+    set({
+      events: {
+        ...get().events,
+        [eventId]: nextState,
       },
     });
   },
 
   upsertEvent: (ev) => {
     const prev = get().events[ev.id];
-    set({ events: { ...get().events, [ev.id]: freshState(ev, prev) } });
+    const nextState = freshState(ev, prev);
+    detectMatchSoundEvents(prev, nextState.event, nextState.score);
+    set({ events: { ...get().events, [ev.id]: nextState } });
   },
 
   getEvent: (id) => get().events[id],

@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ChevronLeft, Search, Globe, Tv } from 'lucide-react';
+import { ChevronLeft, Search, Globe, Tv, Star } from 'lucide-react';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';
+import { useFavoritesStore } from '../stores/favoritesStore';
 import type { Screen, SportId } from '../types';
 
 interface SportsListScreenProps {
@@ -29,6 +30,8 @@ const SPORTS_DATA: { id: SportId; name: string; count: number }[] = [
 export function SportsListScreen({ initialMode = 'live', onBack, onNavigate }: SportsListScreenProps) {
   const [activeTab, setActiveTab] = useState<'live' | 'line' | 'cybers'>(initialMode);
   const { liveMatches, upcomingMatches } = useLiveMatches();
+  const favoriteSportIds = useFavoritesStore((s) => s.favoriteSportIds);
+  const toggleSportFavorite = useFavoritesStore((s) => s.toggleSportFavorite);
   const pool = activeTab === 'line' ? upcomingMatches : liveMatches;
   const sports = SPORTS_DATA
     .filter((sport) => (activeTab === 'cybers' ? sport.id === 'esports' : true))
@@ -123,8 +126,21 @@ export function SportsListScreen({ initialMode = 'live', onBack, onNavigate }: S
                   {sport.name}
                 </span>
               </div>
-              <div className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px] text-center">
-                {sport.count}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-600"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSportFavorite(sport.id);
+                  }}
+                  aria-label="Добавить вид спорта в избранное"
+                >
+                  <Star className={`w-4 h-4 ${favoriteSportIds.includes(sport.id) ? 'fill-brand-600 text-brand-600' : ''}`} />
+                </button>
+                <div className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full text-xs font-medium min-w-[28px] text-center">
+                  {sport.count}
+                </div>
               </div>
             </div>
           ))}

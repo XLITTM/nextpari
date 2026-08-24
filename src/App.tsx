@@ -43,6 +43,9 @@ import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { bootstrapGuestSession, signInSession, signOutSession } from './hooks/useAuth';
+import { useFavoritesStore } from './stores/favoritesStore';
+import { subscribeMatchSoundToast } from './services/matchSoundService';
+import { useToast } from './ToastContext';
 
 const GAMES_PATH = '/games';
 const BLACKJACK_PATH = '/games/blackjack';
@@ -109,7 +112,9 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => bootstrapGuestSession());
   const [screen, setScreenState] = useState<Screen>(screenFromPath);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [favorites, setFavorites] = useState<string[]>([]);
+  const favoriteMatchIds = useFavoritesStore((s) => s.favoriteMatchIds);
+  const toggleMatchFavorite = useFavoritesStore((s) => s.toggleMatchFavorite);
+  const { showToast } = useToast();
   const { count } = useBetSlip();
 
   const setScreen = useCallback((next: Screen) => {
@@ -136,10 +141,14 @@ function AppContent() {
 
   const { balance } = useWallet();
 
+  useEffect(() => {
+    return subscribeMatchSoundToast(({ title, body }) => {
+      showToast(`${title} ${body}`);
+    });
+  }, [showToast]);
+
   const toggleFavorite = (matchId: string) => {
-    setFavorites((prev) =>
-      prev.includes(matchId) ? prev.filter((id) => id !== matchId) : [...prev, matchId]
-    );
+    toggleMatchFavorite(matchId);
   };
 
   const openMatch = (matchId: string) => setScreen({ name: 'match', matchId });
@@ -163,14 +172,14 @@ function AppContent() {
             onOpenMatch={openMatch}
             onOpenGameList={openGameList}
             onNavigate={setScreen}
-            favorites={favorites}
+            favorites={favoriteMatchIds}
             onToggleFavorite={toggleFavorite}
           />
         );
       case 'favorites':
         return (
           <FavoritesScreen
-            favorites={favorites}
+            favorites={favoriteMatchIds}
             onToggleFavorite={toggleFavorite}
             onOpenMatch={openMatch}
           />
@@ -209,7 +218,7 @@ function AppContent() {
             onBack={goHome}
             onSearchClick={() => setSearchOpen(true)}
             onOpenMatch={openMatch}
-            favorites={favorites}
+            favorites={favoriteMatchIds}
             onToggleFavorite={toggleFavorite}
           />
         );

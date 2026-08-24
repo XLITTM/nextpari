@@ -180,6 +180,7 @@ export function matchEventFromNormalized(match: NormalizedMatch): MatchEvent {
     id: match.externalId,
     sport: toSportId(match.sport),
     league: match.league,
+    leagueId: match.leagueId,
     country: match.country || '',
     team1: match.homeTeam,
     team2: match.awayTeam,
@@ -243,6 +244,7 @@ export function matchEventFromStore(state: EventState): MatchEvent {
     id: ev.id,
     sport: toSportId('football'),
     league: ev.league?.name ?? '',
+    leagueId: ev.league?.id,
     country: ev.league?.cc || '',
     team1: ev.home?.name ?? '',
     team2: ev.away?.name ?? '',
@@ -272,6 +274,7 @@ export function matchEventFromStore(state: EventState): MatchEvent {
   return {
     ...base,
     sport: sportFromBetsId(ev.sport_id) ?? base.sport,
+    leagueId: ev.league?.id || base.leagueId,
     isLive: ev.time_status === '1',
     liveStatus: status,
     liveScore: score ? { team1: score.home, team2: score.away } : base.liveScore,

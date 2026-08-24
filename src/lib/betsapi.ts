@@ -21,6 +21,7 @@ export interface NormalizedMatch {
   externalId: string;
   sport: string;
   league: string;
+  leagueId?: string;
   homeTeam: string;
   awayTeam: string;
   status: 'live' | 'upcoming' | 'finished';
@@ -137,7 +138,9 @@ export interface BetsApiEvent {
 export interface BetsEvent {
   id: string;
   sport_id?: string;
-  league: { name: string; cc?: string };
+  league: { id?: string; name: string; cc?: string };
+  red_cards?: number;
+  has_penalty?: boolean;
   home: { name: string; id?: string };
   away: { name: string; id?: string };
   ss?: string;
@@ -332,12 +335,28 @@ export function pickClockFromOdds(
   return best;
 }
 
+function extraNumber(extra: Record<string, unknown> | undefined, keys: string[]): number {
+  if (!extra) return 0;
+  for (const key of keys) {
+    const n = Number(extra[key]);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
 export function toBetsEvent(raw: BetsApiEvent): BetsEvent {
   const clock = resolveEventClock(raw);
+  const extra = raw.extra && typeof raw.extra === 'object' ? raw.extra : undefined;
+  const redCards =
+    extraNumber(extra, ['redcards', 'red_cards', 'home_red', 'away_red']) ||
+    extraNumber(extra, ['home_redcards']) + extraNumber(extra, ['away_redcards']);
+  const hasPenalty = Boolean(
+    extra && (extra.penalty === 1 || extra.penalty === true || extra.inplay_period === 'PEN' || extra.period === 'PEN'),
+  );
   return {
     id: String(raw.id ?? ''),
     sport_id: raw.sport_id != null ? String(raw.sport_id) : undefined,
-    league: { name: raw.league?.name || 'League', cc: raw.league?.cc },
+    league: { id: raw.league?.id ? String(raw.league.id) : undefined, name: raw.league?.name || 'League', cc: raw.league?.cc },
     home: { name: raw.home?.name || 'Home', id: raw.home?.id },
     away: { name: raw.away?.name || 'Away', id: raw.away?.id },
     ss: raw.ss || undefined,
@@ -349,6 +368,8 @@ export function toBetsEvent(raw: BetsApiEvent): BetsEvent {
     our_events: raw.our_events != null ? String(raw.our_events) : raw.our_event_id != null ? String(raw.our_event_id) : undefined,
     start_time: String(raw.time ?? ''),
     bet365_id: raw.bet365_id,
+    red_cards: redCards || undefined,
+    has_penalty: hasPenalty || undefined,
   };
 }
 
@@ -1360,6 +1381,7 @@ export function mapBetsApiEvent(
     externalId: id,
     sport,
     league,
+    leagueId: event.league?.id ? String(event.league.id) : undefined,
     country: countryOf(event),
     homeTeam: home,
     awayTeam: away,
