@@ -1,6 +1,5 @@
 import type { BetSelection } from '../types';
 import { fetchEventOdds, fetchEventView } from './betsapi';
-import { USE_MOCK } from './mockSports';
 import { outcomeLabel, parseOdds, type ParsedMarket } from './odds-parser';
 import { useSportsStore } from '../stores/sportsStore';
 
@@ -117,7 +116,6 @@ async function loadFreshMarkets(matchId: string): Promise<{
 export async function checkLiveQuotes(selections: BetSelection[]): Promise<LiveQuoteCheck> {
   const liveRows = selections.filter((row) => row.isLive);
   if (!liveRows.length) return { status: 'ok' };
-  if (USE_MOCK) return { status: 'ok' };
 
   const updates: OddsUpdate[] = [];
   const uniqueIds = [...new Set(liveRows.map((row) => row.matchId).filter(canQueryEvent))];

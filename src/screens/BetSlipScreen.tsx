@@ -43,27 +43,6 @@ function generateCode(): string {
   return code;
 }
 
-const MOCK_SELECTIONS: Omit<BetSelection, 'id'>[] = [
-  {
-    matchId: 'mock-1',
-    matchLabel: 'Реал Мадрид — Барселона',
-    market: 'Исход',
-    outcome: 'П1',
-    odds: 2.15,
-    sport: 'football',
-    startTime: Date.now() + 3600000,
-  },
-  {
-    matchId: 'mock-2',
-    matchLabel: 'Манчестер Сити — Ливерпуль',
-    market: 'Тотал',
-    outcome: 'ТБ 2.5',
-    odds: 1.85,
-    sport: 'football',
-    startTime: Date.now() + 7200000,
-  },
-];
-
 function SelectionMeta({ s }: { s: BetSelection }) {
   return (
     <div className="flex items-center text-xs text-gray-400 dark:text-gray-200 mt-1 ml-[30px]">
@@ -228,12 +207,8 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
       setLoadError('Введите код купона');
       return;
     }
-    setLoadError('');
-    setLoadModalOpen(false);
-    setLoadCode('');
-    MOCK_SELECTIONS.forEach((sel) => {
-      addSelection({ ...sel, id: `${sel.matchId}-${sel.outcome}-${Date.now()}` });
-    });
+    setLoadError('Купон не найден');
+    return;
   };
 
   // Success screen
@@ -317,11 +292,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
             <EmptyCard
               icon={<SlidersHorizontal className="w-5 h-5" />}
               title="Генерация купона"
-              onClick={() => {
-                MOCK_SELECTIONS.forEach((sel) => {
-                  addSelection({ ...sel, id: `${sel.matchId}-${sel.outcome}-${Date.now()}` });
-                });
-              }}
+              onClick={onNavigateHome}
             />
             <EmptyCard
               icon={<Upload className="w-5 h-5" />}
@@ -596,10 +567,6 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
                   label="Генерация купона"
                   onClick={() => {
                     setActionSheetOpen(false);
-                    clearAll();
-                    MOCK_SELECTIONS.forEach((sel) => {
-                      addSelection({ ...sel, id: `${sel.matchId}-${sel.outcome}-${Date.now()}` });
-                    });
                   }}
                 />
               </div>

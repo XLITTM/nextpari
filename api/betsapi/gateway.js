@@ -45,6 +45,34 @@ function isRetryableStatus(status) {
   return status >= 500 && status <= 599;
 }
 
+const CLOSED_TIME_STATUSES = new Set(['3', '4', '5', '8']);
+
+function timeStatusOf(value) {
+  return String(value ?? '').trim();
+}
+
+function filterEventRows(path, results) {
+  if (!Array.isArray(results)) return results;
+  if (String(path).includes('events/inplay')) {
+    return results.filter((row) => timeStatusOf(row?.time_status) === '1');
+  }
+  if (String(path).includes('events/upcoming')) {
+    return results.filter((row) => timeStatusOf(row?.time_status) === '0' && !CLOSED_TIME_STATUSES.has(timeStatusOf(row?.time_status)));
+  }
+  return results;
+}
+
+function filterListBody(path, body) {
+  try {
+    const json = JSON.parse(body);
+    if (!json || !Array.isArray(json.results)) return body;
+    json.results = filterEventRows(path, json.results);
+    return JSON.stringify(json);
+  } catch {
+    return body;
+  }
+}
+
 async function scheduledFetch(url, signal) {
   const run = networkChain.then(async () => {
     const wait = Math.max(0, Math.max(nextNetworkAt, backoffUntil) - Date.now());
@@ -109,7 +137,7 @@ export async function fetchBetsApi(path, search = {}, signal) {
   const key = cacheKey(suffix, params);
   const hit = cache.get(key);
   if (hit && hit.expires > now) {
-    return { ...hit.response, cached: true };
+    return { ...hit.response, body: filterListBody(suffix, hit.response.body), cached: true };
   }
 
   const hosts = [PRIMARY_HOST, FALLBACK_HOST];
@@ -139,9 +167,10 @@ export async function fetchBetsApi(path, search = {}, signal) {
         lastError = `HTTP ${response.status}`;
         continue;
       }
+      const filteredBody = response.ok ? filterListBody(suffix, body) : body;
       const result = {
         status: response.status,
-        body,
+        body: filteredBody,
         contentType: response.headers.get('content-type') || 'application/json',
         cached: false,
       };

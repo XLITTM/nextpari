@@ -7,6 +7,7 @@ import { OddsFlashValue } from './OddButton';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks/useOddsFlash';
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
+import { extraMarketRows, buildCardSelection } from '../lib/cardOdds';
 
 interface MatchCardProps {
   match: MatchEvent;
@@ -87,7 +88,8 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
   const outcomeButtons = getOutcomeButtons();
   const columnsCount = outcomeButtons.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
   const liveMinute = formatCardMinute(match.liveStatus);
-  const extraCount = Number(match.extraMarkets) || 0;
+  const extraRows = extraMarketRows(match);
+  const extraCount = Number(match.extraMarkets) || extraRows.length;
 
   const buildSelection = (outcome: string, odds: number): BetSelection => ({
     id: `${match.id}-${outcome}`,
@@ -206,6 +208,22 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             />
           ))}
         </div>
+        {extraRows.map((row) => (
+          <div key={row.name} className="mt-1.5">
+            <div className="mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">{row.name}</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {row.outcomes.map((item) => (
+                <MatchOddButton
+                  key={`${row.name}-${item.label}`}
+                  selection={buildCardSelection(match, item.label, item.odds, row.name)}
+                  label={item.label}
+                  odds={item.odds}
+                  isActive={isSelectionActive(match.id, item.label)}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
         {extraCount > 0 && (
           <button
             className="w-full flex items-center justify-between mt-2 text-xs text-gray-700 dark:text-gray-200 px-1 hover:text-brand-600 transition-colors font-bold"

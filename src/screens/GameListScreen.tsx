@@ -4,6 +4,7 @@ import type { MatchEvent, BetSelection } from '../types';
 import { OddButton } from '../components/OddButton';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 
 interface GameListScreenProps {
   mode: 'live' | 'line';
@@ -202,10 +203,8 @@ export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favor
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-24">
-        {matches.length === 0 ? (
-          <div className="text-center py-20 text-gray-700 dark:text-gray-200 text-sm font-bold">
-            {tab === 'live' && loading ? 'Загрузка...' : 'Нет матчей'}
-          </div>
+        {loading || matches.length === 0 ? (
+          <SkeletonLoader count={6} />
         ) : (
           matches.map((match) => (
             <MatchRowCard

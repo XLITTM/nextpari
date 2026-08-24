@@ -4,7 +4,6 @@ import { TeamLogo } from '@/components/TeamLogo';
 import { MarketsGrid } from '@/components/MarketsGrid';
 import { SportIcon } from '@/components/SportIcon';
 import { useBetSlip } from '../BetSlipContext';
-import { getMatchById } from '../data';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useLiveOdds } from '../hooks/useLiveOdds';
 import { laterClock, parseClockSeconds, parseLiveClock } from '../lib/betsapi';
@@ -49,7 +48,7 @@ function tennisSurface(league: string): 'hard' | 'clay' | 'grass' {
 
 export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetailsScreenProps) {
   const { findMatch } = useLiveMatches();
-  const catalogMatch = findMatch(matchId) ?? getMatchById(matchId);
+  const catalogMatch = findMatch(matchId);
   const storeState = useSportsStore((s) => s.events[matchId]);
   const upsertEvent = useSportsStore((s) => s.upsertEvent);
   const isLive = storeState?.event.time_status === '1' || Boolean(catalogMatch?.isLive);

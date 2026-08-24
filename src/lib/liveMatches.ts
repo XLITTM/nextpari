@@ -265,7 +265,7 @@ export function matchEventFromStore(state: EventState): MatchEvent {
   return {
     ...base,
     sport: sportFromBetsId(ev.sport_id) ?? base.sport,
-    isLive: ev.time_status === '1' || ev.our_events === '1',
+    isLive: ev.time_status === '1',
     liveStatus: status,
     liveScore: score ? { team1: score.home, team2: score.away } : base.liveScore,
     markets: latestOdds ?? base.markets,

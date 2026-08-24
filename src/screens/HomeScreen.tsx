@@ -8,6 +8,7 @@ import { CasinoGrid } from '../components/CasinoGrid';
 import { CasinoCarousel } from '../components/CasinoCarousel';
 import { ChampionshipsList } from '../components/ChampionshipsList';
 import { CasinoCategoriesScroll } from '../components/CasinoCategoriesScroll';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 import { EsportsDisciplinesScroll } from '../components/EsportsDisciplinesScroll';
 import { useLiveMatches } from '../LiveMatchesContext';
 import type { MainTab, Screen, SportId } from '../types';
@@ -23,7 +24,7 @@ interface HomeScreenProps {
 export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites, onToggleFavorite }: HomeScreenProps) {
   const [mainTab, setMainTab] = useState<MainTab>('top');
   const [selectedSport, setSelectedSport] = useState<SportId>('all');
-  const { liveMatches, upcomingMatches } = useLiveMatches();
+  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
 
   const filteredLive = useMemo(() => {
     const bySport = selectedSport === 'all' ? liveMatches : liveMatches.filter((match) => match.sport === selectedSport);
@@ -175,11 +176,9 @@ export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites,
           </section>
         )}
 
-        {filteredLive.length === 0 && filteredUpcoming.length === 0 && (
-          <div className="text-center py-20 text-gray-600 dark:text-gray-200 text-sm font-bold">
-            Нет матчей в этом виде спорта
-          </div>
-        )}
+        {loading || (filteredLive.length === 0 && filteredUpcoming.length === 0) ? (
+          <SkeletonLoader count={4} />
+        ) : null}
       </div>
     </div>
   );

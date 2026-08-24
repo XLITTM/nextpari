@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { BetsEvent } from '@/lib/betsapi';
-import { isLive, isUnixClock, laterClock } from '@/lib/betsapi';
+import { isClosedTimeStatus, isLineEvent, isLive, isUnixClock, laterClock } from '@/lib/betsapi';
 import type { ParsedMarket } from '@/lib/odds-parser';
 
 export interface EventState {
@@ -18,6 +18,7 @@ interface SportsStore {
   setUpcomingEvents: (events: BetsEvent[]) => void;
   setEvents: (events: BetsEvent[]) => void;
   setOdds: (eventId: string, markets: ParsedMarket[], sinceTime?: number) => void;
+  applyInplay: (events: BetsEvent[], marketsById: Record<string, ParsedMarket[]>) => void;
   setScore: (eventId: string, score: string, time?: string) => void;
   upsertEvent: (event: BetsEvent) => void;
   getEvent: (id: string) => EventState | undefined;
@@ -44,7 +45,7 @@ function freshState(ev: BetsEvent, prev?: EventState): EventState {
 }
 
 function isUpcoming(ev: BetsEvent): boolean {
-  return ev.time_status === '0';
+  return isLineEvent(ev) && !isClosedTimeStatus(ev.time_status);
 }
 
 export const useSportsStore = create<SportsStore>((set, get) => ({
@@ -54,10 +55,10 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
     const prev = get().events;
     const next: Record<string, EventState> = {};
     for (const [id, st] of Object.entries(prev)) {
-      if (isUpcoming(st.event) && !isLive(st.event)) next[id] = st;
+      if (isUpcoming(st.event) && !isLive(st.event) && !isClosedTimeStatus(st.event.time_status)) next[id] = st;
     }
     for (const ev of list) {
-      if (!isLive(ev)) continue;
+      if (!isLive(ev) || isClosedTimeStatus(ev.time_status)) continue;
       next[ev.id] = freshState(ev, prev[ev.id]);
     }
     set({ events: next });
@@ -79,6 +80,14 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
   setEvents: (list) => {
     get().setLiveEvents(list.filter(isLive));
     get().setUpcomingEvents(list.filter(isUpcoming));
+  },
+
+  applyInplay: (events, marketsById) => {
+    get().setLiveEvents(events);
+    const ts = Date.now() / 1000;
+    for (const [id, markets] of Object.entries(marketsById)) {
+      if (markets.length) get().setOdds(id, markets, ts);
+    }
   },
 
   setOdds: (eventId, markets, sinceTime) => {

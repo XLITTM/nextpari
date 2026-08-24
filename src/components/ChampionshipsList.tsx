@@ -1,7 +1,6 @@
 import { Star } from 'lucide-react';
 import { SectionHeader } from './SectionHeader';
 import { useLiveMatches } from '../LiveMatchesContext';
-import { championships } from '../data';
 
 function colorFromName(name: string): string {
   let hash = 0;
@@ -29,14 +28,8 @@ export function ChampionshipsList() {
     .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
-  const leagues = fromLive.length
-    ? fromLive
-    : championships.map((ch) => ({
-        name: ch.name,
-        country: ch.country,
-        count: ch.matchCount,
-        color: ch.flagColor,
-      }));
+  const leagues = fromLive;
+  if (!leagues.length) return null;
 
   return (
     <div>

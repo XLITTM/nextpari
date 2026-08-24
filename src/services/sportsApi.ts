@@ -1,4 +1,5 @@
-import { BETSAPI_SPORTS, fetchInplay, fetchUpcoming, type BetsEvent } from '@/lib/betsapi';
+import { fetchLineMatches, fetchLiveMatches, fetchMatchesForSports } from '@/services/betsApi';
+import type { BetsEvent } from '@/lib/betsapi';
 
 function isAbortError(error: unknown): boolean {
   return (
@@ -7,13 +8,9 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-function asEventList(value: unknown): BetsEvent[] {
-  return Array.isArray(value) ? value.filter((row): row is BetsEvent => Boolean(row && typeof row === 'object' && 'id' in row)) : [];
-}
-
 export async function fetchLiveEvents(sportId = '1', signal?: AbortSignal): Promise<BetsEvent[]> {
   try {
-    return asEventList(await fetchInplay(sportId, 1, signal));
+    return await fetchLiveMatches(sportId, signal);
   } catch (error) {
     if (isAbortError(error) || signal?.aborted) return [];
     console.warn('[sportsApi] live request failed', error);
@@ -23,7 +20,7 @@ export async function fetchLiveEvents(sportId = '1', signal?: AbortSignal): Prom
 
 export async function fetchLineEvents(sportId = '1', signal?: AbortSignal): Promise<BetsEvent[]> {
   try {
-    return asEventList(await fetchUpcoming(sportId, 1, 48, signal));
+    return await fetchLineMatches(sportId, signal);
   } catch (error) {
     if (isAbortError(error) || signal?.aborted) return [];
     console.warn('[sportsApi] line request failed', error);
@@ -36,12 +33,11 @@ export async function fetchEventsForSports(
   sportId: string,
   signal?: AbortSignal,
 ): Promise<BetsEvent[]> {
-  const ids = sportId === 'all' ? BETSAPI_SPORTS.map((row) => String(row.sportId)) : [sportId || '1'];
-  const events: BetsEvent[] = [];
-  for (const id of ids) {
-    if (signal?.aborted) return events;
-    const chunk = tab === 'live' ? await fetchLiveEvents(id, signal) : await fetchLineEvents(id, signal);
-    events.push(...chunk);
+  try {
+    return await fetchMatchesForSports(tab, sportId, signal);
+  } catch (error) {
+    if (isAbortError(error) || signal?.aborted) return [];
+    console.warn('[sportsApi] events request failed', error);
+    return [];
   }
-  return events;
 }

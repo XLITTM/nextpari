@@ -140,8 +140,34 @@ export interface BetsEvent {
 
 export type BetsApiOddsRaw = Record<string, Array<Record<string, unknown>>>;
 
-export function isLive(ev: BetsEvent): boolean {
-  return ev.time_status === '1' || ev.our_events === '1';
+export const CLOSED_TIME_STATUSES = new Set(['3', '4', '5', '8']);
+
+export function timeStatusOf(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+export function isLiveTimeStatus(value: unknown): boolean {
+  return timeStatusOf(value) === '1';
+}
+
+export function isClosedTimeStatus(value: unknown): boolean {
+  return CLOSED_TIME_STATUSES.has(timeStatusOf(value));
+}
+
+export function isLive(ev: { time_status?: string | number }): boolean {
+  return isLiveTimeStatus(ev.time_status);
+}
+
+export function isLineEvent(ev: { time_status?: string | number }): boolean {
+  return timeStatusOf(ev.time_status) === '0';
+}
+
+export function filterLiveEvents<T extends { time_status?: string | number }>(events: T[]): T[] {
+  return events.filter((event) => isLiveTimeStatus(event.time_status) && !isClosedTimeStatus(event.time_status));
+}
+
+export function filterLineEvents<T extends { time_status?: string | number }>(events: T[]): T[] {
+  return events.filter((event) => isLineEvent(event) && !isClosedTimeStatus(event.time_status));
 }
 
 export function isUnixClock(value?: string | number | null): boolean {
@@ -853,8 +879,8 @@ export function isTopTournament(league: string | undefined, sport = 'football'):
 }
 
 export async function fetchInplayEvents(sportId: number): Promise<BetsApiEvent[]> {
-  const json = await betsapiGet<{ results?: BetsApiEvent[] }>('/v3/events/inplay', { sport_id: sportId });
-  return json.results ?? [];
+  const json = await betsapiGet<{ results?: BetsApiEvent[] }>('/v1/events/inplay', { sport_id: sportId });
+  return filterLiveEvents(json.results ?? []);
 }
 
 export async function fetchUpcomingEvents(sportId: number, page = 1): Promise<BetsApiEvent[]> {
@@ -862,16 +888,16 @@ export async function fetchUpcomingEvents(sportId: number, page = 1): Promise<Be
     sport_id: sportId,
     page,
   });
-  return json.results ?? [];
+  return filterLineEvents(json.results ?? []);
 }
 
 export async function fetchInplay(sportId = '1', _page = 1, signal?: AbortSignal): Promise<BetsEvent[]> {
   const json = await betsapiGet<{ results?: BetsApiEvent[] }>(
-    '/v3/events/inplay',
+    '/v1/events/inplay',
     { sport_id: sportId },
     signal,
   );
-  return (json.results ?? []).map(toBetsEvent).filter((ev) => ev.time_status === '1' || ev.our_events === '1');
+  return filterLiveEvents((json.results ?? []).map(toBetsEvent));
 }
 
 export async function fetchUpcoming(sportId = '1', page = 1, _hours = 48, signal?: AbortSignal): Promise<BetsEvent[]> {
@@ -880,7 +906,7 @@ export async function fetchUpcoming(sportId = '1', page = 1, _hours = 48, signal
     { sport_id: sportId, page },
     signal,
   );
-  return (json.results ?? []).map(toBetsEvent).filter((ev) => ev.time_status === '0');
+  return filterLineEvents((json.results ?? []).map(toBetsEvent));
 }
 
 export async function fetchEventOdds(
@@ -1261,11 +1287,8 @@ export function parseLiveClock(status?: string | null): { period: string; clock:
 }
 
 function statusFromTime(timeStatus: string | number | undefined): NormalizedMatch['status'] {
-  const value = Number(timeStatus);
-  if (value === 1) return 'live';
-  if (value === 3 || value === 4 || value === 5 || value === 6 || value === 8 || value === 9 || value === 99) {
-    return 'finished';
-  }
+  if (isLiveTimeStatus(timeStatus)) return 'live';
+  if (isClosedTimeStatus(timeStatus) || [6, 9, 99].includes(Number(timeStatus))) return 'finished';
   return 'upcoming';
 }
 
@@ -1347,28 +1370,28 @@ let liveSportCursor = 0;
 let upcomingSportCursor = 0;
 let endedSportCursor = 0;
 
-export async function fetchBetsApiLiveFeed(): Promise<NormalizedMatch[]> {
+export async function fetchBetsApiLiveFeed(): Promise<{ sport: string; matches: NormalizedMatch[] }> {
   const row = BETSAPI_SPORTS[liveSportCursor % BETSAPI_SPORTS.length];
   liveSportCursor += 1;
   const events = await fetchInplayEvents(row.sportId);
   const mapped = events
     .map((event) => mapBetsApiEvent(event))
-    .filter((match): match is NormalizedMatch => Boolean(match));
+    .filter((match): match is NormalizedMatch => match != null && match.status === 'live');
   await enrichMatchOdds(mapped, row.sportId);
-  return mapped;
+  return { sport: row.sport, matches: mapped };
 }
 
-export async function fetchBetsApiUpcomingFeed(perSport = 24): Promise<NormalizedMatch[]> {
+export async function fetchBetsApiUpcomingFeed(perSport = 24): Promise<{ sport: string; matches: NormalizedMatch[] }> {
   const row = BETSAPI_SPORTS[upcomingSportCursor % BETSAPI_SPORTS.length];
   upcomingSportCursor += 1;
-  const events = (await fetchUpcomingEvents(row.sportId, 1))
+  const events = filterLineEvents(await fetchUpcomingEvents(row.sportId, 1))
     .sort((a, b) => tournamentPriority(b.league?.name, row.sport) - tournamentPriority(a.league?.name, row.sport))
     .slice(0, perSport);
   const mapped = events
     .map((event) => mapBetsApiEvent(event))
-    .filter((match): match is NormalizedMatch => Boolean(match));
+    .filter((match): match is NormalizedMatch => match != null && match.status === 'upcoming');
   await enrichMatchOdds(mapped, row.sportId);
-  return mapped;
+  return { sport: row.sport, matches: mapped };
 }
 
 export async function fetchBetsApiEndedFeed(): Promise<NormalizedMatch[]> {

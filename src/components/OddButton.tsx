@@ -1,4 +1,3 @@
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { BetSelection } from '../types';
 import { useBetSlip } from '../BetSlipContext';
 import { useOddInteraction } from '../hooks/useOddInteraction';
@@ -15,8 +14,8 @@ export function OddsFlashValue({
 }) {
   return (
     <span className={`inline-flex items-center gap-0.5 tabular-nums ${className}`}>
-      {flash === 'up' && <ChevronUp className="w-3 h-3 shrink-0" strokeWidth={3} />}
-      {flash === 'down' && <ChevronDown className="w-3 h-3 shrink-0" strokeWidth={3} />}
+      {flash === 'up' && <span className="text-[10px] font-black leading-none">▲</span>}
+      {flash === 'down' && <span className="text-[10px] font-black leading-none">▼</span>}
       {odds.toFixed(2)}
     </span>
   );
