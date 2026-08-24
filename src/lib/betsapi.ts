@@ -1,3 +1,5 @@
+import { doubleChanceFrom1x2, toDecimalOdds } from './matchOdds';
+
 export interface NormalizedOdds {
   p1: number;
   x: number;
@@ -119,6 +121,17 @@ export interface BetsApiEvent {
   our_event_id?: string | number;
   our_events?: string | number;
   bet365_id?: string;
+  odds?: unknown;
+  main?: unknown;
+  markets?: unknown;
+  sp?: unknown;
+  home_od?: string | number;
+  draw_od?: string | number;
+  away_od?: string | number;
+  over_od?: string | number;
+  under_od?: string | number;
+  total?: string | number;
+  handicap?: string | number;
 }
 
 export interface BetsEvent {
@@ -405,17 +418,7 @@ function asText(value: unknown): string {
 }
 
 function asOddValue(value: unknown): number {
-  if (typeof value === 'number') return Number.isFinite(value) && value > 1 ? value : 0;
-  const text = asText(value).replace(',', '.');
-  if (!text) return 0;
-  if (text.includes('/')) {
-    const [left, right] = text.split('/');
-    const num = Number(left);
-    const den = Number(right);
-    if (den) return Math.round((1 + num / den) * 100) / 100;
-  }
-  const n = Number(text);
-  return Number.isFinite(n) && n > 1 ? n : 0;
+  return toDecimalOdds(value);
 }
 
 function formatLine(value: unknown): string {
@@ -512,6 +515,28 @@ function outcomesFromRow(row: Record<string, unknown>): Record<string, number> {
   if (row.under_od != null) {
     add(line ? `ТМ ${line.replace(/^[+-]/, '')}` : named || 'ТМ', row.under_od);
     used.add('under_od');
+  }
+  if (row['1x_od'] != null || row.one_x_od != null) {
+    add('1X', row['1x_od'] ?? row.one_x_od);
+    used.add('1x_od');
+    used.add('one_x_od');
+  }
+  if (row['12_od'] != null || row.one_two_od != null) {
+    add('12', row['12_od'] ?? row.one_two_od);
+    used.add('12_od');
+    used.add('one_two_od');
+  }
+  if (row.x2_od != null) {
+    add('X2', row.x2_od);
+    used.add('x2_od');
+  }
+  if (row.yes_od != null) {
+    add('Да', row.yes_od);
+    used.add('yes_od');
+  }
+  if (row.no_od != null) {
+    add('Нет', row.no_od);
+    used.add('no_od');
   }
 
   for (const [key, value] of Object.entries(row)) {
@@ -1001,16 +1026,9 @@ function rememberOdds(eventId: string, odds: NormalizedOdds, extra: ExtraMarket[
 }
 
 function dcFrom1x2(odds: NormalizedOdds): ExtraMarket | null {
-  if (!odds.p1 || !odds.x || !odds.p2) return null;
-  const combo = (a: number, b: number) => {
-    const implied = 1 / a + 1 / b;
-    return implied > 0 ? Math.round((1 / implied) * 100) / 100 : 0;
-  };
-  const oneX = combo(odds.p1, odds.x);
-  const twelve = combo(odds.p1, odds.p2);
-  const x2 = combo(odds.x, odds.p2);
-  if (!oneX || !twelve || !x2) return null;
-  return { name: 'Двойной шанс', outcomes: { '1X': oneX, '12': twelve, X2: x2 } };
+  const dc = doubleChanceFrom1x2(odds.p1, odds.x, odds.p2);
+  if (!dc) return null;
+  return { name: 'Двойной шанс', outcomes: { '1X': dc.oneX, '12': dc.twelve, X2: dc.x2 } };
 }
 
 async function enrichMatchOdds(matches: NormalizedMatch[], sportId: number): Promise<void> {
@@ -1196,11 +1214,11 @@ export function parseOdds(odds: Record<string, OddsRow[] | undefined>, sportId: 
   const handicap = pickHandicap(marketRows(odds, sportId, 2));
   const totalLine = toNum(totals?.handicap) || (sport === 'football' ? 2.5 : 0);
   return {
-    p1: toNum(moneyline?.home_od),
-    x: toNum(moneyline?.draw_od),
-    p2: toNum(moneyline?.away_od),
-    tb25: toNum(totals?.over_od),
-    tm25: toNum(totals?.under_od),
+    p1: toDecimalOdds(moneyline?.home_od),
+    x: toDecimalOdds(moneyline?.draw_od),
+    p2: toDecimalOdds(moneyline?.away_od),
+    tb25: toDecimalOdds(totals?.over_od),
+    tm25: toDecimalOdds(totals?.under_od),
     totalLine,
     handicapLine: handicap ? toNum(handicap.handicap) : undefined,
     handicapHome: handicap ? toNum(handicap.home_od) : undefined,

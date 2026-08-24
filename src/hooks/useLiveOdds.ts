@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { fetchEventOdds, pickClockFromOdds } from '@/lib/betsapi';
 import { parseDelta, parseOdds } from '@/lib/odds-parser';
+import { enrichProviderMarkets } from '@/lib/matchOdds';
 import { useSportsStore } from '@/stores/sportsStore';
 
 function toSinceTime(value: number): number | undefined {
@@ -34,7 +35,7 @@ export function useLiveOdds(eventId: string | undefined, isLive = true) {
       console.log('[useLiveOdds] results.odds keys', Object.keys(odds), { eventId, fullLoad, since, clock });
       if (signal.aborted || !Object.keys(odds).length) return;
       const sportId = state?.event.sport_id;
-      let markets = parseOdds(odds, { sportId });
+      let markets = enrichProviderMarkets(parseOdds(odds, { sportId }), odds, sportId);
       if (fullLoad) {
         const mainCount = markets.filter((row) => row.category === 'main').length;
         console.log('[useLiveOdds] parsed', {
@@ -63,7 +64,7 @@ export function useLiveOdds(eventId: string | undefined, isLive = true) {
           if (ss || time) setScore(eventId, ss || state?.score || '-', time);
           return;
         }
-        markets = delta.markets;
+        markets = enrichProviderMarkets(delta.markets, odds, sportId);
       }
       if (ss || time) setScore(eventId, ss || state?.score || '-', time);
       const updateTs = Number(

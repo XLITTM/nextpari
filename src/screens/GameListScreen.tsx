@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowLeft, Search, Monitor, Link as LinkIcon, Bell, Star } from 'lucide-react';
 import type { MatchEvent, BetSelection } from '../types';
+import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
 import { OddButton } from '../components/OddButton';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';
@@ -16,18 +17,7 @@ interface GameListScreenProps {
 }
 
 function getOutcomeButtons(match: MatchEvent) {
-  const isTwoWaySport = ['basketball', 'tennis', 'volleyball', 'esports'].includes(match.sport.toLowerCase());
-  if (isTwoWaySport || !match.markets.x) {
-    return [
-      { key: 'П1', odds: match.markets['1'] },
-      { key: 'П2', odds: match.markets['2'] },
-    ].filter((item) => item.odds !== undefined && item.odds > 0);
-  }
-  return [
-    { key: 'П1', odds: match.markets['1'] },
-    { key: 'X', odds: match.markets.x },
-    { key: 'П2', odds: match.markets['2'] },
-  ].filter((item) => item.odds !== undefined && item.odds > 0);
+  return mainOutcomeButtons(match);
 }
 
 function MatchRowCard({
@@ -125,10 +115,8 @@ function MatchRowCard({
       </div>
 
       <div className="px-3 pb-3">
-        <div className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-1.5">
-          {outcomeButtons.length === 3 ? '1X2' : 'Победитель'}
-        </div>
-        <div className={`grid ${columnsCount} gap-2`}>
+        <div className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-1.5">1X2</div>
+        <div className="grid grid-cols-3 gap-2">
           {outcomeButtons.map((outcome) => (
             <OddButton
               key={outcome.key}

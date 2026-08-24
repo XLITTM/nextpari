@@ -53,7 +53,7 @@ function DieFace({
   const pips = PIP_MAP[value] ?? PIP_MAP[1];
   return (
     <div
-      className={`dice-cube grid h-[4.4rem] w-[4.4rem] grid-cols-3 grid-rows-3 gap-[3px] rounded-[0.85rem] p-[0.55rem] shadow-[0_10px_18px_rgba(0,0,0,0.55)] ring-2 ${
+      className={`dice-cube grid h-14 w-14 grid-cols-3 grid-rows-3 gap-[3px] rounded-xl p-[0.42rem] shadow-[0_10px_18px_rgba(0,0,0,0.55)] ring-2 ${
         rolling ? 'is-rolling' : ''
       } ${
         tone === 'red'
@@ -63,8 +63,8 @@ function DieFace({
       style={{
         filter:
           tone === 'black'
-            ? 'drop-shadow(0 0 10px rgba(50,205,50,0.35))'
-            : 'drop-shadow(0 0 10px rgba(225,29,72,0.45))',
+            ? 'drop-shadow(0 0 10px rgba(50,205,50,0.45))'
+            : 'drop-shadow(0 0 10px rgba(225,29,72,0.5))',
       }}
     >
       {Array.from({ length: 9 }, (_, i) => (
@@ -94,6 +94,9 @@ export function DiceGame({ onBack }: DiceGameProps) {
 
   const maxStake = useMemo(() => roundMoney(balance), [balance]);
   const locked = outcome === 'rolling';
+  const playerSum = playerDice[0] + playerDice[1];
+  const rivalSum = rivalDice[0] + rivalDice[1];
+  const stakeValue = parseStake(stakeInput) || DEFAULT_STAKE;
 
   useEffect(() => {
     return () => {
@@ -148,15 +151,15 @@ export function DiceGame({ onBack }: DiceGameProps) {
       const black: [number, number] = [rollDie(), rollDie()];
       setPlayerDice(red);
       setRivalDice(black);
-      const playerSum = red[0] + red[1];
-      const rivalSum = black[0] + black[1];
+      const nextPlayer = red[0] + red[1];
+      const nextRival = black[0] + black[1];
 
-      if (playerSum > rivalSum) {
+      if (nextPlayer > nextRival) {
         credit(roundMoney(stake * 2));
         syncWallet();
         setOutcome('win');
         setStatus('Вы победили!');
-      } else if (playerSum === rivalSum) {
+      } else if (nextPlayer === nextRival) {
         credit(roundMoney(stake));
         syncWallet();
         setOutcome('draw');
@@ -170,22 +173,18 @@ export function DiceGame({ onBack }: DiceGameProps) {
   };
 
   return (
-    <div
-      className="relative mx-auto flex h-[100dvh] min-h-screen w-full max-w-md flex-col overflow-hidden bg-cover bg-[center_top] bg-no-repeat text-white max-md:max-w-none"
-      style={{
-        backgroundImage: `url('${DICE_BG}')`,
-        backgroundColor: '#062c1e',
-        backgroundPosition: 'center 4.5rem',
-      }}
-    >
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/25" />
+    <div className="relative h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-transparent text-white">
+      <div className="pointer-events-none fixed inset-0 z-0 h-full w-full overflow-hidden">
+        <img src={DICE_BG} alt="" className="fixed inset-0 h-full w-full object-cover object-top" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/25 to-transparent" />
+      </div>
 
-      <header className="relative z-20 flex items-start justify-between gap-2 px-2 pt-[max(0.4rem,env(safe-area-inset-top))]">
-        <div className="flex shrink-0 items-center gap-1.5 pt-1">
+      <div className="relative z-10 flex h-[100dvh] max-h-[100dvh] w-full flex-col justify-between overflow-hidden pb-[calc(env(safe-area-inset-bottom)+10px)]">
+        <header className="flex shrink-0 items-center gap-2 px-3 pt-[env(safe-area-inset-top)]">
           <button
             type="button"
             onClick={onBack}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-black/45 ring-1 ring-lime-400/40 active:scale-90"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/45 ring-1 ring-white/20 active:scale-90"
             aria-label="Назад"
           >
             <ChevronLeft className="h-5 w-5" />
@@ -193,48 +192,29 @@ export function DiceGame({ onBack }: DiceGameProps) {
           <button
             type="button"
             onClick={() => setRulesOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#14532d] text-lime-300 ring-2 ring-lime-400/80 active:scale-90"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/45 text-lime-300 ring-1 ring-white/20 active:scale-90"
             aria-label="Правила"
           >
             <Info className="h-4 w-4" />
           </button>
-        </div>
-        <div className="min-w-0 flex-1 px-0.5">
-          <div
-            className="relative overflow-hidden rounded-md px-2 py-2 text-center"
-            style={{
-              background: 'linear-gradient(180deg, #6b4423 0%, #3f2a14 55%, #2a1b0c 100%)',
-              boxShadow: 'inset 0 1px 0 rgba(255,220,160,0.25), 0 4px 0 #1a0f0a',
-            }}
-          >
-            <span className="absolute left-4 top-0 h-2.5 w-[2px] bg-lime-400/80" />
-            <span className="absolute right-4 top-0 h-2.5 w-[2px] bg-lime-400/80" />
-            <p className="text-[12px] font-semibold leading-snug text-amber-50">{status}</p>
-            {outcome !== 'idle' && outcome !== 'rolling' ? (
-              <p className="mt-0.5 text-[10px] font-bold text-lime-300">
-                Вы {playerDice[0] + playerDice[1]} : {rivalDice[0] + rivalDice[1]} соперник
-              </p>
-            ) : null}
+          <div className="min-w-0 flex-1 rounded-xl bg-black/55 px-2 py-1.5 text-center backdrop-blur-sm ring-1 ring-white/10">
+            <p className="truncate text-[11px] font-semibold leading-snug text-white/95">{status}</p>
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5 pt-1">
-          <div className="rounded-full bg-black/50 px-2.5 py-1 text-right ring-1 ring-lime-400/25">
-            <p className="text-[8px] font-semibold uppercase tracking-wide text-lime-200/70">Баланс</p>
+          <div className="shrink-0 rounded-full bg-black/55 px-2.5 py-1 text-right ring-1 ring-white/10">
+            <p className="text-[8px] font-semibold uppercase tracking-wide text-white/55">Баланс</p>
             <p className="text-[11px] font-black tabular-nums text-lime-300">{balance.toFixed(2)}</p>
           </div>
           <button
             type="button"
             onClick={() => setMuted((value) => !value)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-[#14532d] text-lime-300 ring-2 ring-lime-400/80 active:scale-90"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-black/45 text-lime-300 ring-1 ring-white/20 active:scale-90"
             aria-label={muted ? 'Звук выключен' : 'Звук'}
           >
             {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </button>
-        </div>
-      </header>
+        </header>
 
-      <div className="relative z-20 mt-auto flex flex-col items-center px-3 pb-[max(0.35rem,env(safe-area-inset-bottom))]">
-        <div className="mb-1.5 flex w-full items-end justify-between px-5">
+        <div className="flex min-h-0 flex-1 items-center justify-between gap-3 px-1">
           <div className="flex gap-2">
             <DieFace value={playerDice[0]} tone="red" rolling={locked} />
             <DieFace value={playerDice[1]} tone="red" rolling={locked} />
@@ -245,63 +225,76 @@ export function DiceGame({ onBack }: DiceGameProps) {
           </div>
         </div>
 
-        <div className="w-full max-w-[22rem]">
-          <div className="mb-1 flex h-8 items-center justify-center rounded-lg bg-black/40 ring-1 ring-lime-400/50">
-            <input
-              inputMode="decimal"
-              disabled={locked}
-              value={stakeInput}
-              onChange={(event) => setStakeInput(event.target.value)}
-              onBlur={() => setStakeValue(parseStake(stakeInput) || MIN_STAKE)}
-              className="w-full bg-transparent text-center text-[15px] font-black tracking-wide text-lime-400 outline-none disabled:opacity-60"
-              aria-label="Ставка"
-            />
+        <div className="z-20 flex w-full flex-col gap-2 bg-transparent p-3">
+          <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-wide">
+            <p className="text-rose-100 drop-shadow-md">
+              Вы <span className="tabular-nums text-white">{playerSum}</span>
+            </p>
+            <p className="text-lime-100 drop-shadow-md">
+              Соперник <span className="tabular-nums text-white">{rivalSum}</span>
+            </p>
           </div>
-          <p className="mb-1 text-center text-[10px] font-semibold uppercase tracking-[0.16em] text-lime-200 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-            {(parseStake(stakeInput) || DEFAULT_STAKE).toFixed(2)} TMTM
-          </p>
 
-          <div className="mb-1.5 grid grid-cols-4 gap-1.5">
-            <button type="button" disabled={locked} onClick={() => setStakeValue(MIN_STAKE)} className="h-8 rounded-md border border-lime-400/80 bg-black/40 text-[11px] font-black tracking-wide text-lime-300 active:scale-95 disabled:opacity-40">
+          <div className="grid grid-cols-4 gap-1.5">
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => setStakeValue(MIN_STAKE)}
+              className="rounded-xl border border-white/15 bg-black/40 py-2 text-[11px] font-bold text-white shadow-md backdrop-blur-sm active:scale-95 disabled:opacity-40"
+            >
               MIN
             </button>
-            <button type="button" disabled={locked} onClick={() => setStakeValue((parseStake(stakeInput) || DEFAULT_STAKE) * 2)} className="h-8 rounded-md border border-lime-400/80 bg-black/40 text-[11px] font-black tracking-wide text-lime-300 active:scale-95 disabled:opacity-40">
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => setStakeValue(stakeValue * 2)}
+              className="rounded-xl border border-white/15 bg-black/40 py-2 text-[11px] font-bold text-white shadow-md backdrop-blur-sm active:scale-95 disabled:opacity-40"
+            >
               X2
             </button>
-            <button type="button" disabled={locked} onClick={() => setStakeValue((parseStake(stakeInput) || DEFAULT_STAKE) / 2)} className="h-8 rounded-md border border-lime-400/80 bg-black/40 text-[11px] font-black tracking-wide text-lime-300 active:scale-95 disabled:opacity-40">
+            <button
+              type="button"
+              disabled={locked}
+              onClick={() => setStakeValue(stakeValue / 2)}
+              className="rounded-xl border border-white/15 bg-black/40 py-2 text-[11px] font-bold text-white shadow-md backdrop-blur-sm active:scale-95 disabled:opacity-40"
+            >
               X/2
             </button>
-            <button type="button" disabled={locked || maxStake < MIN_STAKE} onClick={() => setStakeValue(maxStake)} className="h-8 rounded-md border border-lime-400/80 bg-black/40 text-[11px] font-black tracking-wide text-lime-300 active:scale-95 disabled:opacity-40">
+            <button
+              type="button"
+              disabled={locked || maxStake < MIN_STAKE}
+              onClick={() => setStakeValue(maxStake)}
+              className="rounded-xl border border-white/15 bg-black/40 py-2 text-[11px] font-bold text-white shadow-md backdrop-blur-sm active:scale-95 disabled:opacity-40"
+            >
               MAX
             </button>
           </div>
 
-          <div className="flex items-center justify-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 ring-1 ring-lime-400/50">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gradient-to-b from-yellow-300 to-amber-600 text-[9px] font-black text-amber-950 shadow-inner">
-                N
-              </span>
-            </div>
-            <button
-              type="button"
-              disabled={locked}
-              onClick={play}
-              className="flex h-12 w-12 items-center justify-center rounded-full bg-black/40 ring-[3px] ring-lime-400 shadow-[0_0_16px_rgba(74,222,128,0.45)] active:scale-95 disabled:opacity-50"
-              aria-label="Play"
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-lime-500 text-black">
-                <Play className="h-5 w-5 fill-current" />
-              </span>
-            </button>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 ring-1 ring-lime-400/50">
-              <svg viewBox="0 0 24 24" className="h-4 w-4 text-lime-400" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M4 12a8 8 0 0 1 13.2-6.1M20 12a8 8 0 0 1-13.2 6.1" />
-                <path d="M17 3v4h-4M7 21v-4h4" />
-              </svg>
-            </div>
-          </div>
+          <input
+            inputMode="decimal"
+            disabled={locked}
+            value={stakeInput}
+            onChange={(event) => setStakeInput(event.target.value)}
+            onBlur={() => setStakeValue(parseStake(stakeInput) || MIN_STAKE)}
+            className="w-full rounded-xl border border-white/15 bg-black/40 py-2 text-center text-[16px] font-bold text-white shadow-md outline-none backdrop-blur-sm disabled:opacity-60"
+            aria-label="Сумма ставки"
+          />
+
+          <button
+            type="button"
+            disabled={locked}
+            onClick={play}
+            aria-label="Сделать ставку"
+            className="w-full rounded-xl bg-green-500 py-3.5 text-base font-bold text-white shadow-lg hover:bg-green-600 active:scale-95 disabled:opacity-50"
+          >
+            <span className="inline-flex items-center justify-center gap-2">
+              <Play className="h-5 w-5 fill-current" />
+              {locked ? 'Идёт бросок...' : 'Play'}
+            </span>
+          </button>
         </div>
       </div>
+
       {rulesOpen ? (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 px-5" onClick={() => setRulesOpen(false)}>
           <div

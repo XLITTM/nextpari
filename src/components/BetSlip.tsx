@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Trash2, Plus, Minus, TrendingUp } from 'lucide-react';
 import type { BetSelection } from '../types';
+import { formatOdds } from '../lib/matchOdds';
 
 interface BetSlipProps {
   selections: BetSelection[];
@@ -89,7 +90,7 @@ export function BetSlip({ selections, onRemove, onClear, onClose }: BetSlipProps
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{s.odds.toFixed(2)}</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums">{formatOdds(s.odds)}</span>
                     <button
                       onClick={() => onRemove(s.matchId, s.outcome)}
                       className="w-6 h-6 flex items-center justify-center text-gray-500 dark:text-gray-200 hover:text-red-400 transition-colors"
@@ -107,7 +108,7 @@ export function BetSlip({ selections, onRemove, onClear, onClose }: BetSlipProps
             {mode === 'express' && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-700 dark:text-gray-200 font-bold">Общий коэффициент</span>
-                <span className="font-extrabold text-brand-600 text-lg tabular-nums">{totalOdds.toFixed(2)}</span>
+                <span className="font-extrabold text-brand-600 text-lg tabular-nums">{formatOdds(totalOdds)}</span>
               </div>
             )}
 

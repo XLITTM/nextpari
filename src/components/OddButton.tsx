@@ -1,4 +1,5 @@
 import type { BetSelection } from '../types';
+import { formatOdds } from '../lib/matchOdds';
 import { useBetSlip } from '../BetSlipContext';
 import { useOddInteraction } from '../hooks/useOddInteraction';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash, type OddsFlash } from '../hooks/useOddsFlash';
@@ -16,7 +17,7 @@ export function OddsFlashValue({
     <span className={`inline-flex items-center gap-0.5 tabular-nums ${className}`}>
       {flash === 'up' && <span className="text-[10px] font-black leading-none">▲</span>}
       {flash === 'down' && <span className="text-[10px] font-black leading-none">▼</span>}
-      {odds.toFixed(2)}
+      {formatOdds(odds)}
     </span>
   );
 }

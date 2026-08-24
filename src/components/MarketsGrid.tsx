@@ -3,20 +3,18 @@ import { ChevronDown, ChevronRight, Pin } from 'lucide-react';
 import { useBetSlip } from '@/BetSlipContext';
 import { useOddInteraction } from '@/hooks/useOddInteraction';
 import { useOddsFlash } from '@/hooks/useOddsFlash';
+import { formatOdds } from '@/lib/matchOdds';
 import { outcomeLabel, type ParsedMarket, type ParsedMarketEntry } from '@/lib/odds-parser';
 import { useSportsStore } from '@/stores/sportsStore';
 import type { BetSelection, MatchEvent, SportId } from '@/types';
 
-type MarketTab = 'all' | 'main' | 'totals' | 'handicaps' | 'corners' | '1st-half' | '2nd-half' | 'sets' | 'games' | 'quarters' | 'halves';
+type MarketTab = 'all' | 'main' | 'totals' | 'handicaps' | 'goals' | 'corners' | '1st-half' | '2nd-half' | 'sets' | 'games' | 'quarters' | 'halves';
 
 const FOOTBALL_TABS: { id: MarketTab; label: string }[] = [
-  { id: 'all', label: 'Все рынки' },
-  { id: 'main', label: 'Основная игра' },
+  { id: 'main', label: 'Основные' },
   { id: 'totals', label: 'Тоталы' },
   { id: 'handicaps', label: 'Форы' },
-  { id: 'corners', label: 'Угловые' },
-  { id: '1st-half', label: '1-й тайм' },
-  { id: '2nd-half', label: '2-й тайм' },
+  { id: 'goals', label: 'Голы' },
 ];
 
 const TENNIS_TABS: { id: MarketTab; label: string }[] = [
@@ -190,8 +188,9 @@ function toDisplayMarket(market: ParsedMarket): DisplayMarket | null {
 function matchesTab(market: ParsedMarket, tab: MarketTab): boolean {
   const name = market.name.toLowerCase();
   if (tab === 'all') return true;
-  if (tab === 'totals') return /тотал/.test(name) || market.marketId === '3' || market.marketId === '6' || market.marketId === '9';
+  if (tab === 'totals') return /тотал/.test(name) && !/гол|забьют|точный/i.test(name) || market.marketId === '3' || market.marketId === '6' || market.marketId === '9';
   if (tab === 'handicaps') return /фора/.test(name) || market.marketId === '2' || market.marketId === '5';
+  if (tab === 'goals') return /голы|забьют|точный счёт|btts|both teams|индивидуальный тотал|team total/i.test(name) || market.marketId === 'btts';
   if (tab === 'corners') return market.category === 'corners' || /угл/.test(name);
   if (tab === '1st-half') return (market.category === 'half' || /1-й тайм|1st/.test(name)) && !/2-й|2nd/.test(name);
   if (tab === '2nd-half') return /2-й тайм|2nd/.test(name);
@@ -215,14 +214,14 @@ function gridClass(market: DisplayMarket): string {
 export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchEvent }) {
   const state = useSportsStore((s) => s.events[eventId]);
   const tabs = tabsForSport(match.sport);
-  const [tab, setTab] = useState<MarketTab>('all');
+  const [tab, setTab] = useState<MarketTab>(() => tabsForSport(match.sport)[0]?.id ?? 'main');
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
   const [pinned, setPinned] = useState<Set<string>>(() => new Set());
   const bootstrappedTab = useRef<MarketTab | null>(null);
 
   useEffect(() => {
     const allowed = tabsForSport(match.sport).some((item) => item.id === tab);
-    if (!allowed) setTab('all');
+    if (!allowed) setTab(tabsForSport(match.sport)[0]?.id ?? 'main');
   }, [match.sport, tab]);
 
   const markets = useMemo(() => {
@@ -460,7 +459,7 @@ function OutcomeButton({
       >
         {label}
       </span>
-      <span className={`shrink-0 text-lg font-extrabold tabular-nums ${oddsColor}`}>{odds.toFixed(2)}</span>
+      <span className={`shrink-0 text-lg font-extrabold tabular-nums ${oddsColor}`}>{formatOdds(odds)}</span>
     </button>
   );
 }

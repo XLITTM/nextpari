@@ -3,6 +3,7 @@ import { tournamentLine } from './betTicket';
 import { isUnixClock, liveMinuteLabel, mapBetsApiEvent, parseSsScore, tournamentPriority, type LiveEventSnapshot, type NormalizedMatch } from './betsapi';
 import { groupsFromLiveOdds, orderPriorityMarkets } from './marketOrder';
 import { groupsFromParsedMarkets, type ParsedMarket } from './odds-parser';
+import { isFullTime1x2 } from './matchOdds';
 import type { EventState } from '../stores/sportsStore';
 import type { MarketCategory, MarketGroup, MatchEvent, SportId } from '../types';
 
@@ -262,30 +263,34 @@ export function matchEventFromStore(state: EventState): MatchEvent {
     : base.liveStatus && !isUnixClock(base.liveStatus)
       ? base.liveStatus
       : undefined;
+  const markets = latestOdds ?? base.markets;
   return {
     ...base,
     sport: sportFromBetsId(ev.sport_id) ?? base.sport,
     isLive: ev.time_status === '1',
     liveStatus: status,
     liveScore: score ? { team1: score.home, team2: score.away } : base.liveScore,
-    markets: latestOdds ?? base.markets,
-    extraMarkets: marketCount,
+    markets,
+    extraMarkets: Math.max(marketCount, parsedGroups.length),
     marketGroups: parsedGroups.length ? parsedGroups : base.marketGroups,
+    marketsEstimated: false,
+    marketsLocked: !(markets['1'] > 1) || !(markets['2'] > 1),
   };
 }
 
 function latestMainOdds(markets: Record<string, ParsedMarket>): MatchEvent['markets'] | null {
-  const main = Object.values(markets).find(
-    (market) => market.marketId === '1' || /^1x2$|^победитель$/i.test(market.name),
-  );
+  const list = Object.values(markets);
+  const main = list.find((market) => market.key === '1_1')
+    ?? list.find((market) => isFullTime1x2(market))
+    ?? list.find((market) => market.marketId === '1' || /^1x2$|^победитель$/i.test(market.name));
   if (!main?.entries.length) return null;
   const entry = [...main.entries].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? main.entries[0];
   const odds = { '1': 0, x: 0, '2': 0 };
   for (const row of entry.outcomes) {
     const key = row.key.toLowerCase();
-    if (key === 'home' || key === '1') odds['1'] = row.odds;
-    else if (key === 'draw' || key === 'x') odds.x = row.odds;
-    else if (key === 'away' || key === '2') odds['2'] = row.odds;
+    if (key === 'home' || key === '1' || key === 'p1' || key === 'w1') odds['1'] = row.odds;
+    else if (key === 'draw' || key === 'x' || key === 'tie') odds.x = row.odds;
+    else if (key === 'away' || key === '2' || key === 'p2' || key === 'w2') odds['2'] = row.odds;
   }
   if (!odds['1'] && !odds['2']) return null;
   return odds;

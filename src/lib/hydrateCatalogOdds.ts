@@ -1,5 +1,6 @@
 import { fetchEventOdds, pickClockFromOdds, tournamentPriority } from '@/lib/betsapi';
 import { parseOdds } from '@/lib/odds-parser';
+import { enrichProviderMarkets } from '@/lib/matchOdds';
 import { useSportsStore } from '@/stores/sportsStore';
 
 const MAX_LIVE = 16;
@@ -49,7 +50,11 @@ export async function hydrateCatalogOdds(eventIds: string[], signal?: AbortSigna
       const { odds, stats, clock } = await fetchEventOdds(id, undefined, signal);
       if (signal?.aborted || !Object.keys(odds).length) continue;
 
-      const markets = parseOdds(odds, { sportId: state.event.sport_id });
+      const markets = enrichProviderMarkets(
+        parseOdds(odds, { sportId: state.event.sport_id }),
+        odds,
+        state.event.sport_id,
+      );
       if (!markets.length) continue;
 
       const first = Object.values(odds)[0]?.[0];

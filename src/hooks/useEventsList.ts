@@ -3,6 +3,7 @@ import { fetchInplay } from '@/services/sports';
 import { fetchEventsForSports } from '@/services/sportsApi';
 import { useSportsStore } from '@/stores/sportsStore';
 import { isLineEvent, isLive, type BetsEvent } from '@/lib/betsapi';
+import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
 
 export type EventTab = 'live' | 'line';
 
@@ -43,6 +44,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
         if (row.markets.length) marketsById[row.event.id] = row.markets;
       }
       applyInplay(rows.map((row) => row.event), marketsById);
+      void hydrateCatalogOdds(pickCatalogIds());
     } catch (e) {
       if (signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось загрузить live');
@@ -60,6 +62,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
       const upcoming = await fetchEventsForSports('line', sportId, signal);
       if (signal.aborted) return;
       setUpcomingEvents(upcoming);
+      void hydrateCatalogOdds(pickCatalogIds());
     } catch (e) {
       if (signal.aborted) return;
       setError(e instanceof Error ? e.message : 'Не удалось загрузить линию');

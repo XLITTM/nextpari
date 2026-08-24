@@ -3,6 +3,7 @@ import { X, Plus, Minus } from 'lucide-react';
 import { useQuickBet } from '../QuickBetContext';
 import { useBetSlip } from '../BetSlipContext';
 import { useToast } from '../ToastContext';
+import { formatOdds } from '../lib/matchOdds';
 
 const QUICK_AMOUNTS = [4, 40, 100];
 
@@ -28,7 +29,7 @@ export function QuickBetSheet() {
 
   const handlePlaceBet = () => {
     addSelection(pendingSelection);
-    showToast(`Событие добавлено! Коэффициент: ${pendingSelection.odds.toFixed(2)}`);
+    showToast(`Событие добавлено! Коэффициент: ${formatOdds(pendingSelection.odds)}`);
     closeQuickBet();
   };
 
@@ -64,7 +65,7 @@ export function QuickBetSheet() {
               </span>
             </div>
             <p className="text-3xl font-extrabold text-gray-900 dark:text-white tabular-nums mt-1">
-              {pendingSelection.odds.toFixed(2)}
+              {formatOdds(pendingSelection.odds)}
             </p>
             <p className="text-xs text-gray-600 dark:text-gray-200 mt-1 truncate">
               {pendingSelection.matchLabel}

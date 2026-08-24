@@ -14,6 +14,7 @@ import { couponHasLive, LIVE_BET_DELAY_MS, waitLiveBetDelay } from '../lib/liveB
 import { buildPlacedBet } from '../betslipLogic';
 import { SportIcon } from '../components/SportIcon';
 import type { BetSelection, Screen } from '../types';
+import { formatOdds } from '../lib/matchOdds';
 
 interface BetSlipScreenProps {
   balance: number;
@@ -224,7 +225,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
           <p className="text-xl font-extrabold text-gray-900 dark:text-white mb-1">Ставка принята!</p>
           <p className="text-sm text-gray-400 dark:text-gray-200 text-center mb-1">
             {successSummary?.count ?? 0} {(successSummary?.count ?? 0) === 1 ? 'событие' : 'событий'} · коэф.{' '}
-            {(successSummary?.odds ?? 0).toFixed(2)}
+            {formatOdds(successSummary?.odds ?? 0)}
           </p>
           <p className="text-sm font-bold text-green-600 mb-2">
             Возможный выигрыш: {Math.round(successSummary?.win ?? 0)} TMTM
@@ -411,7 +412,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
                   <span className="text-sm font-bold text-brand-600 dark:text-brand-400 truncate">{s.outcome}</span>
                 </div>
                 <span className="text-lg font-extrabold text-gray-900 dark:text-white tabular-nums shrink-0">
-                  {s.odds.toFixed(2)}
+                  {formatOdds(s.odds)}
                 </span>
               </div>
             </div>
@@ -502,7 +503,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
                     <p className="font-bold text-gray-900 dark:text-white truncate">{row.matchLabel}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{row.outcome}</p>
                     <p className="mt-1 font-extrabold tabular-nums text-amber-600">
-                      {row.previousOdds.toFixed(2)} → {row.odds.toFixed(2)}
+                      {formatOdds(row.previousOdds)} → {formatOdds(row.odds)}
                     </p>
                   </li>
                 ))}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, Star, ChevronRight, Play } from 'lucide-react';
+import { Bell, Star, ChevronRight, Play, Lock } from 'lucide-react';
 import type { MatchEvent, BetSelection } from '../types';
 import { useBetSlip } from '../BetSlipContext';
 import { useOddInteraction } from '../hooks/useOddInteraction';
@@ -7,7 +7,7 @@ import { OddsFlashValue } from './OddButton';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks/useOddsFlash';
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
-import { extraMarketRows, buildCardSelection } from '../lib/cardOdds';
+import { extraMarketRows, buildCardSelection, mainOutcomeButtons } from '../lib/cardOdds';
 
 interface MatchCardProps {
   match: MatchEvent;
@@ -30,6 +30,7 @@ function formatCardMinute(status?: string): string {
 export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, onToggleFavorite }: MatchCardProps) {
   const { isSelectionActive } = useBetSlip();
   const [scoreHighlight, setScoreHighlight] = useState(false);
+  const [extrasOpen, setExtrasOpen] = useState(false);
   const scoreKey =
     match.isLive && match.liveScore
       ? `${match.liveScore.team1}:${match.liveScore.team2}`
@@ -63,39 +64,16 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
     return `${day} ${months[d.getMonth()]}, ${time}`;
   };
 
-  // УМНАЯ ЛОГИКА ОПРЕДЕЛЕНИЯ МАРКЕТОВ ПО ВИДУ СПОРТА
-  const getOutcomeButtons = () => {
-    // Список видов спорта, где в основной линии обычно нет ничьей
-    const isTwoWaySport = ['basketball', 'tennis', 'volleyball', 'esports'].includes((match.sport ?? '').toLowerCase());
-
-    const markets = match.markets ?? { '1': 0, x: 0, '2': 0 };
-
-    if (isTwoWaySport || !markets.x) {
-      return [
-        { key: 'П1', odds: markets['1'] },
-        { key: 'П2', odds: markets['2'] },
-      ].filter((m) => m.odds !== undefined && m.odds > 0);
-    }
-
-    // По умолчанию (для футбола, хоккея) возвращаем 3 исхода
-    return [
-      { key: 'П1', odds: markets['1'] },
-      { key: 'X', odds: markets.x },
-      { key: 'П2', odds: markets['2'] },
-    ].filter((m) => m.odds !== undefined && m.odds > 0);
-  };
-
-  const outcomeButtons = getOutcomeButtons();
-  const columnsCount = outcomeButtons.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
+  const outcomeButtons = mainOutcomeButtons(match);
   const liveMinute = formatCardMinute(match.liveStatus);
   const extraRows = extraMarketRows(match);
-  const extraCount = Number(match.extraMarkets) || extraRows.length;
+  const extraCount = Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
 
   const buildSelection = (outcome: string, odds: number): BetSelection => ({
-    id: `${match.id}-${outcome}`,
+    id: `${match.id}-1X2-${outcome}`,
     matchId: match.id,
     matchLabel: `${match.team1} — ${match.team2}`,
-    market: outcomeButtons.length === 3 ? '1X2' : 'Победитель',
+    market: '1X2',
     outcome,
     odds,
     homeTeam: match.team1,
@@ -196,19 +174,19 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
       </div>
 
       <div className="px-3 pb-2">
-        {/* Динамическая сетка кнопок */}
-        <div className={`grid ${columnsCount} gap-1.5`}>
+        <div className="grid grid-cols-3 gap-1.5">
           {outcomeButtons.map((o) => (
             <MatchOddButton
               key={o.key}
               selection={buildSelection(o.key, o.odds)}
               label={o.key}
               odds={o.odds}
-              isActive={isSelectionActive(match.id, o.key)}
+              locked={o.locked}
+              isActive={isSelectionActive(match.id, o.key, '1X2')}
             />
           ))}
         </div>
-        {extraRows.map((row) => (
+        {extrasOpen && extraRows.map((row) => (
           <div key={row.name} className="mt-1.5">
             <div className="mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">{row.name}</div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -218,24 +196,26 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
                   selection={buildCardSelection(match, item.label, item.odds, row.name)}
                   label={item.label}
                   odds={item.odds}
-                  isActive={isSelectionActive(match.id, item.label)}
+                  isActive={isSelectionActive(match.id, item.label, row.name)}
                 />
               ))}
             </div>
           </div>
         ))}
-        {extraCount > 0 && (
-          <button
-            className="w-full flex items-center justify-between mt-2 text-xs text-gray-700 dark:text-gray-200 px-1 hover:text-brand-600 transition-colors font-bold"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenMatch(match.id);
-            }}
-          >
-            <span className="font-bold">+{extraCount} рынков</span>
-            <ChevronRight className="w-3.5 h-3.5" strokeWidth={2.2} />
-          </button>
-        )}
+        <button
+          className="w-full flex items-center justify-between mt-2 text-xs text-gray-700 dark:text-gray-200 px-1 hover:text-brand-600 transition-colors font-bold"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (extraRows.length) {
+              setExtrasOpen((open) => !open);
+              return;
+            }
+            onOpenMatch(match.id);
+          }}
+        >
+          <span className="font-bold">+{extraCount} рынков</span>
+          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${extrasOpen ? 'rotate-90' : ''}`} strokeWidth={2.2} />
+        </button>
       </div>
     </div>
   );
@@ -246,42 +226,52 @@ function MatchOddButton({
   label,
   odds,
   isActive,
+  locked = false,
 }: {
   selection: BetSelection;
   label: string;
   odds: number;
   isActive: boolean;
+  locked?: boolean;
 }) {
   const handlers = useOddInteraction(selection);
   const flash = useOddsFlash(odds);
   const flashBtn = oddsFlashButtonClass(flash);
   const flashText = oddsFlashTextClass(flash);
+  const canBet = !locked && odds > 1;
 
   return (
     <button
-      {...handlers}
-      className={`flex items-center justify-between px-2.5 py-1.5 rounded-2xl border active:scale-95 select-none transition-[background-color,border-color,box-shadow,color] duration-500 ${
-        flashBtn
-          ? flashBtn
-          : isActive
-            ? 'bg-brand-600 border-brand-600 shadow-sm'
-            : 'bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-600 hover:border-brand-600'
+      {...(canBet ? handlers : { onClick: (e: React.MouseEvent) => e.stopPropagation() })}
+      disabled={!canBet}
+      className={`flex items-center justify-between px-2.5 py-1.5 rounded-2xl border select-none transition-[background-color,border-color,box-shadow,color] duration-500 ${
+        !canBet
+          ? 'bg-gray-100 dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 opacity-80'
+          : flashBtn
+            ? flashBtn
+            : isActive
+              ? 'bg-brand-600 border-brand-600 shadow-sm'
+              : 'bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-600 hover:border-brand-600 active:scale-95'
       }`}
     >
       <span
         className={`text-xs font-bold transition-colors duration-500 ${
-          flashText ? flashText : isActive ? 'text-white' : 'text-gray-900 dark:text-white'
+          flashText ? flashText : isActive && canBet ? 'text-white' : 'text-gray-900 dark:text-white'
         }`}
       >
         {label}
       </span>
-      <OddsFlashValue
-        odds={odds}
-        flash={flash}
-        className={`text-sm font-extrabold transition-colors duration-500 ${
-          flashText ? flashText : isActive ? 'text-white' : 'text-gray-900 dark:text-white'
-        }`}
-      />
+      {locked || odds <= 1 ? (
+        <Lock className="w-3.5 h-3.5 text-gray-400" strokeWidth={2.4} />
+      ) : (
+        <OddsFlashValue
+          odds={odds}
+          flash={flash}
+          className={`text-sm font-extrabold transition-colors duration-500 ${
+            flashText ? flashText : isActive ? 'text-white' : 'text-gray-900 dark:text-white'
+          }`}
+        />
+      )}
     </button>
   );
 }

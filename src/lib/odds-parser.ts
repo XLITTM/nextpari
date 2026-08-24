@@ -1,4 +1,5 @@
 import type { MarketCategory, MarketGroup } from '../types';
+import { toDecimalOdds } from './matchOdds';
 
 export interface ParsedOutcome {
   key: string;
@@ -66,6 +67,11 @@ const OUTCOME_LABEL: Record<string, string> = {
   '1': 'П1',
   '2': 'П2',
   x: 'X',
+  '1x': '1X',
+  '12': '12',
+  x2: 'X2',
+  yes: 'Да',
+  no: 'Нет',
 };
 
 const MAIN_MARKET_IDS = new Set(['1', '2', '3']);
@@ -108,15 +114,26 @@ const OUTCOME_KEY_ORDER: Record<string, number> = {
   p2: 2,
   over: 0,
   under: 1,
+  '1x': 0,
+  '12': 1,
+  x2: 2,
+  yes: 0,
+  no: 1,
 };
 
 function extractOutcomes(item: Record<string, unknown>): ParsedOutcome[] {
   const out: ParsedOutcome[] = [];
   for (const [k, v] of Object.entries(item)) {
-    if (!k.endsWith('_od') || v == null) continue;
-    const num = parseFloat(String(v));
-    if (!Number.isNaN(num) && num > 0) {
-      out.push({ key: k.replace('_od', ''), odds: num, raw: String(v) });
+    if (v == null) continue;
+    const key = k.endsWith('_od')
+      ? k.replace(/_od$/i, '')
+      : /^(home|draw|away|over|under|yes|no|1x|12|x2)$/i.test(k)
+        ? k
+        : '';
+    if (!key) continue;
+    const num = toDecimalOdds(v);
+    if (num > 1) {
+      out.push({ key: key.toLowerCase(), odds: num, raw: String(v) });
     }
   }
   return out.sort((a, b) => {

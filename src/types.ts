@@ -93,6 +93,8 @@ export interface MatchEvent {
   extraMarkets: number;
   featured?: boolean;
   marketGroups?: MarketGroup[];
+  marketsLocked?: boolean;
+  marketsEstimated?: boolean;
   stats?: MatchStat[];
   h2h?: H2HGame[];
   stadium?: { name: string; city: string; capacity: string };
