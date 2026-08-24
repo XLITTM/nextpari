@@ -619,12 +619,95 @@ function readEnv(name: string): string {
 }
 
 export function getBetsApiToken(): string {
-  return readEnv('BETSAPI_TOKEN') || readEnv('VITE_BETSAPI_TOKEN');
+  return (
+    readEnv('BETSAPI_KEY') ||
+    readEnv('BETSAPI_TOKEN') ||
+    readEnv('VITE_BETSAPI_KEY') ||
+    readEnv('VITE_BETSAPI_TOKEN')
+  );
 }
 
-const MIN_REQUEST_GAP_MS = 1800;
-const BACKOFF_START_MS = 10_000;
-const BACKOFF_MAX_MS = 120_000;
+const PRIMARY_HOST = 'https://api.b365api.com';
+const FALLBACK_HOST = 'https://api.betsapi.com';
+const RESPONSE_CACHE_TTL_MS = 10_000;
+const responseCache = new Map<string, { expires: number; payload: unknown }>();
+
+function cacheKey(path: string, search: URLSearchParams): string {
+  const params = new URLSearchParams(search);
+  params.delete('token');
+  params.sort();
+  return `${path}?${params.toString()}`;
+}
+
+function readCached<T>(key: string): T | null {
+  const hit = responseCache.get(key);
+  if (!hit) return null;
+  if (hit.expires <= Date.now()) {
+    responseCache.delete(key);
+    return null;
+  }
+  return hit.payload as T;
+}
+
+function writeCached(key: string, payload: unknown) {
+  responseCache.set(key, { expires: Date.now() + RESPONSE_CACHE_TTL_MS, payload });
+}
+
+function isRetryableHttp(status: number): boolean {
+  return status >= 500 && status <= 599;
+}
+
+async function fetchBetsApiResponse(
+  path: string,
+  search: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<Response> {
+  if (isBrowser()) {
+    const query = search.toString();
+    return fetch(`/api/betsapi${path}${query ? `?${query}` : ''}`, { signal });
+  }
+
+  const token = getBetsApiToken();
+  if (!token) throw new Error('BetsAPI token is missing');
+  search.set('token', token);
+
+  let lastError: Error | null = null;
+  for (const [index, host] of [PRIMARY_HOST, FALLBACK_HOST].entries()) {
+    try {
+      const response = await fetch(`${host}${path}?${search.toString()}`, { signal });
+      if (isRetryableHttp(response.status) && index === 0) {
+        lastError = new Error(`BetsAPI HTTP ${response.status}`);
+        continue;
+      }
+      return response;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error;
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  throw lastError ?? new Error('BetsAPI request failed');
+}
+
+async function parseBetsApiJson<T>(response: Response): Promise<T> {
+  if (response.status === 429) {
+    const retryAfter = Number(response.headers.get('retry-after'));
+    const pause = Math.max(BACKOFF_START_MS, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : backoffMs);
+    backoffMs = Math.min(Math.max(pause, backoffMs) * 2, BACKOFF_MAX_MS);
+    backoffUntil = Date.now() + pause;
+    throw new BetsApiRateLimitError(pause);
+  }
+  if (!response.ok) throw new Error(`BetsAPI HTTP ${response.status}`);
+  const json = (await response.json()) as { success?: number; error?: string } & T;
+  if (json && (json.success === 1 || (json as { results?: unknown }).results)) {
+    backoffMs = BACKOFF_START_MS;
+    return json;
+  }
+  throw new Error(json.error || 'BetsAPI returned success=0');
+}
+
+const MIN_REQUEST_GAP_MS = 12_000;
+const BACKOFF_START_MS = 60_000;
+const BACKOFF_MAX_MS = 300_000;
 
 export class BetsApiRateLimitError extends Error {
   retryAfterMs: number;
@@ -671,6 +754,32 @@ async function enqueueBetsApi<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
+function buildSearch(params: Record<string, string | number | undefined>): URLSearchParams {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === '') continue;
+    search.set(key, String(value));
+  }
+  return search;
+}
+
+async function requestBetsApi<T>(
+  path: string,
+  params: Record<string, string | number | undefined>,
+  signal?: AbortSignal,
+): Promise<T> {
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  const search = buildSearch(params);
+  const key = cacheKey(path, search);
+  const cached = readCached<T>(key);
+  if (cached) return cached;
+
+  const response = await fetchBetsApiResponse(path, search, signal);
+  const json = await parseBetsApiJson<T>(response);
+  writeCached(key, json);
+  return json;
+}
+
 async function betsapiGetDirect<T>(
   path: string,
   params: Record<string, string | number | undefined> = {},
@@ -679,40 +788,7 @@ async function betsapiGetDirect<T>(
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const wait = Math.max(0, backoffUntil - Date.now());
   if (wait > 0) await sleep(wait);
-  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === '') continue;
-    search.set(key, String(value));
-  }
-
-  let url: string;
-  if (isBrowser()) {
-    const query = search.toString();
-    url = `/api/betsapi${path}${query ? `?${query}` : ''}`;
-  } else {
-    const token = getBetsApiToken();
-    if (!token) throw new Error('BetsAPI token is missing');
-    search.set('token', token);
-    url = `https://api.betsapi.com${path}?${search.toString()}`;
-  }
-
-  const response = await fetch(url, { signal });
-  if (response.status === 429) {
-    const retryAfter = Number(response.headers.get('retry-after'));
-    const pause = Math.max(BACKOFF_START_MS, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : backoffMs);
-    backoffMs = Math.min(Math.max(pause, backoffMs) * 2, BACKOFF_MAX_MS);
-    backoffUntil = Date.now() + pause;
-    throw new BetsApiRateLimitError(pause);
-  }
-  if (!response.ok) throw new Error(`BetsAPI HTTP ${response.status}`);
-  const json = (await response.json()) as { success?: number; error?: string } & T;
-  if (json && (json.success === 1 || (json as { results?: unknown }).results)) {
-    backoffMs = BACKOFF_START_MS;
-    return json;
-  }
-  throw new Error(json.error || 'BetsAPI returned success=0');
+  return requestBetsApi<T>(path, params, signal);
 }
 
 async function betsapiGet<T>(
@@ -720,44 +796,7 @@ async function betsapiGet<T>(
   params: Record<string, string | number | undefined> = {},
   signal?: AbortSignal,
 ): Promise<T> {
-  return enqueueBetsApi(async () => {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    const search = new URLSearchParams();
-    for (const [key, value] of Object.entries(params)) {
-      if (value === undefined || value === '') continue;
-      search.set(key, String(value));
-    }
-
-    let url: string;
-    if (isBrowser()) {
-      const query = search.toString();
-      url = `/api/betsapi${path}${query ? `?${query}` : ''}`;
-    } else {
-      const token = getBetsApiToken();
-      if (!token) throw new Error('BetsAPI token is missing');
-      search.set('token', token);
-      url = `https://api.betsapi.com${path}?${search.toString()}`;
-    }
-
-    const response = await fetch(url, { signal });
-    if (response.status === 429) {
-      const retryAfter = Number(response.headers.get('retry-after'));
-      const pause = Math.max(BACKOFF_START_MS, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : backoffMs);
-      backoffMs = Math.min(Math.max(pause, backoffMs) * 2, BACKOFF_MAX_MS);
-      backoffUntil = Date.now() + pause;
-      throw new BetsApiRateLimitError(pause);
-    }
-    if (!response.ok) {
-      throw new Error(`BetsAPI HTTP ${response.status}`);
-    }
-
-    const json = (await response.json()) as { success?: number; error?: string } & T;
-    if (json && (json.success === 1 || (json as { results?: unknown }).results)) {
-      backoffMs = BACKOFF_START_MS;
-      return json;
-    }
-    throw new Error(json.error || 'BetsAPI returned success=0');
-  });
+  return enqueueBetsApi(() => requestBetsApi<T>(path, params, signal));
 }
 
 function toNum(value: unknown): number {

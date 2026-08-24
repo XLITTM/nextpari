@@ -2,24 +2,24 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import type { Plugin } from 'vite';
 import { WebSocketServer, WebSocket } from 'ws';
+import { fetchBetsApi } from '../api/betsapi/gateway.js';
 
 export const LIVE_WS_PATH = '/api/live-ws';
 
 const VIEW_PATH = '/v1/event/view';
 const ODDS_PATH = '/v2/event/odds';
-const TICK_MS = 1800;
-const BACKOFF_MS = 10_000;
+const TICK_MS = 12_000;
+const BACKOFF_MS = 60_000;
 
-async function betsapiGet(token: string, path: string, params: Record<string, string>): Promise<unknown> {
-  const search = new URLSearchParams({ ...params, token });
-  const response = await fetch(`https://api.betsapi.com${path}?${search.toString()}`);
-  if (response.status === 429) {
+async function betsapiGet(_token: string, path: string, params: Record<string, string>): Promise<unknown> {
+  const result = await fetchBetsApi(path, params);
+  if (result.status === 429) {
     const error = new Error('BetsAPI 429') as Error & { status: number };
     error.status = 429;
     throw error;
   }
-  if (!response.ok) throw new Error(`BetsAPI HTTP ${response.status}`);
-  return response.json();
+  if (result.status < 200 || result.status >= 300) throw new Error(`BetsAPI HTTP ${result.status}`);
+  return JSON.parse(result.body) as unknown;
 }
 
 function unwrapView(payload: unknown): unknown {

@@ -4,9 +4,9 @@ import { useSportsStore } from '@/stores/sportsStore';
 
 const MAX_LIVE = 16;
 const MAX_LINE = 8;
-const STALE_MS = 3_000;
+const STALE_MS = 10_000;
 
-/** Home/catalog odds: reuse quotes younger than 3s (s-maxage=3). placeBet never reads this TTL. */
+/** Home/catalog odds: reuse quotes younger than 10s. placeBet never reads this TTL. */
 
 let running = false;
 const lastHydrated = new Map<string, number>();

@@ -1,32 +1,24 @@
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
-import type { ProxyOptions } from 'vite';
+import { betsapiGatewayPlugin } from './plugins/betsapi-gateway';
 import { betsapiLiveWsPlugin } from './plugins/betsapi-live-ws';
+
+function betsApiToken(env: Record<string, string>): string {
+  return env.BETSAPI_KEY || env.BETSAPI_TOKEN || env.VITE_BETSAPI_KEY || env.VITE_BETSAPI_TOKEN || '';
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const betsToken = env.BETSAPI_TOKEN || env.VITE_BETSAPI_TOKEN || '';
+  const token = betsApiToken(env);
 
-  const betsapiProxy: ProxyOptions = {
-    target: 'https://api.betsapi.com',
-    changeOrigin: true,
-    rewrite: (path) => path.replace(/^\/api\/betsapi/, ''),
-    configure(proxy) {
-      proxy.on('proxyReq', (proxyReq) => {
-        proxyReq.setHeader('Accept', 'application/json');
-        proxyReq.setHeader('Accept-Encoding', 'identity');
-        if (!betsToken) return;
-        const current = proxyReq.path;
-        if (/[?&]token=/.test(current) && !/[?&]token=&/.test(current) && !/[?&]token=$/.test(current)) return;
-        const cleaned = current.replace(/[?&]token=([^&]*)/, '').replace(/\?$/, '');
-        proxyReq.path = `${cleaned}${cleaned.includes('?') ? '&' : '?'}token=${encodeURIComponent(betsToken)}`;
-      });
-    },
-  };
+  process.env.BETSAPI_KEY ??= env.BETSAPI_KEY || '';
+  process.env.BETSAPI_TOKEN ??= env.BETSAPI_TOKEN || env.BETSAPI_KEY || '';
+  process.env.VITE_BETSAPI_KEY ??= env.VITE_BETSAPI_KEY || '';
+  process.env.VITE_BETSAPI_TOKEN ??= env.VITE_BETSAPI_TOKEN || env.VITE_BETSAPI_KEY || '';
 
   return {
-    plugins: [react(), betsapiLiveWsPlugin(betsToken)],
+    plugins: [react(), betsapiGatewayPlugin(), betsapiLiveWsPlugin(token)],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
@@ -40,16 +32,10 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       port: 5173,
       strictPort: true,
-      proxy: {
-        '/api/betsapi': betsapiProxy,
-      },
     },
     preview: {
       host: '127.0.0.1',
       port: 4173,
-      proxy: {
-        '/api/betsapi': betsapiProxy,
-      },
     },
   };
 });
