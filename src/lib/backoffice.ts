@@ -107,6 +107,7 @@ const MANAGER_SESSION_KEY = 'nextpari-manager-session';
 const DEMO_STORE_KEY = 'nextpari-backoffice-demo';
 const SUPERADMIN_ID = '00000000-0000-0000-0000-00000000aa01';
 const MANAGER_ID = '00000000-0000-0000-0000-00000000aa02';
+const MANAGER_MARY_ID = '00000000-0000-0000-0000-00000000aa03';
 const NETWORK_ASHGABAT = '11111111-1111-1111-1111-111111111111';
 const NETWORK_MARY = '22222222-2222-2222-2222-222222222222';
 const AGENT01_ID = '00000000-0000-0000-0000-00000000ca01';
@@ -236,6 +237,18 @@ function emptyManagers(): StoredManager[] {
       isActive: true,
       createdAt: hoursAgo(96),
     },
+    {
+      id: MANAGER_MARY_ID,
+      login: 'manager02',
+      pin: '2222',
+      fullName: 'Менеджер Мары',
+      region: 'Мары',
+      allocatedBalance: 18000,
+      networkId: NETWORK_MARY,
+      networkName: 'Сеть Мары',
+      isActive: true,
+      createdAt: hoursAgo(80),
+    },
   ];
 }
 
@@ -292,16 +305,27 @@ function withCashierManager(row: BackofficeCashier): BackofficeCashier {
   };
 }
 
+function overlayManagerId(row: BackofficeCashier, store: DemoStore): BackofficeCashier {
+  if (row.managerId) return row;
+  const demo = store.cashiers.find((item) => item.id === row.id || item.login === row.login);
+  return { ...row, managerId: demo?.managerId ?? null };
+}
+
 function loadDemoStore(): DemoStore {
   try {
     const raw = localStorage.getItem(DEMO_STORE_KEY);
     if (!raw) return emptyDemoStore();
     const parsed = JSON.parse(raw) as DemoStore;
     const seed = emptyDemoStore();
+    const parsedManagers = Array.isArray(parsed.managers) ? parsed.managers : [];
+    const managerIds = new Set(parsedManagers.map((row) => row.id));
+    const managers = parsedManagers.length
+      ? [...parsedManagers, ...seed.managers.filter((row) => !managerIds.has(row.id))]
+      : seed.managers;
     return {
       cashiers: Array.isArray(parsed.cashiers) ? parsed.cashiers.map(withCashierManager) : seed.cashiers,
       ledger: Array.isArray(parsed.ledger) ? parsed.ledger : seed.ledger,
-      managers: Array.isArray(parsed.managers) && parsed.managers.length ? parsed.managers : seed.managers,
+      managers,
     };
   } catch {
     return emptyDemoStore();
@@ -798,16 +822,20 @@ export async function fetchBackofficeCashiers(session: ManagerSession): Promise<
   const { data, error } = await supabase.rpc('manager_list_cashiers', { p_manager_id: session.id });
   if (!error) {
     const rows = Array.isArray(data) ? data : [];
-    return rows.map((row) => parseCashier(asRecord(row)));
+    if (rows.length) {
+      const store = loadDemoStore();
+      return rows.map((row) => withLiveMetrics(store, overlayManagerId(parseCashier(asRecord(row)), store)));
+    }
+  } else if (!isMissingRpc(error)) {
+    throw new Error(rpcMessage(error));
   }
-  if (!isMissingRpc(error)) throw new Error(rpcMessage(error));
 
   const fromTable = await supabase
     .from('cashiers')
-    .select('id, login, full_name, city, point_name, float_balance, commission_earned, commission_rate, is_active, network_id');
+    .select('id, login, full_name, city, point_name, float_balance, commission_earned, commission_rate, is_active, network_id, manager_id');
   if (!fromTable.error && fromTable.data?.length) {
     const store = loadDemoStore();
-    return scopedCashiers(session, fromTable.data.map((row) => parseCashier(asRecord(row)))).map((row) => withLiveMetrics(store, row));
+    return scopedCashiers(session, fromTable.data.map((row) => overlayManagerId(parseCashier(asRecord(row)), store))).map((row) => withLiveMetrics(store, row));
   }
   const store = loadDemoStore();
   return scopedCashiers(session, store.cashiers).map((row) => withLiveMetrics(store, row));
@@ -822,10 +850,12 @@ export async function createBackofficeCashier(
     city: string;
     pointName: string;
     floatBalance: number;
+    managerId?: string | null;
   },
 ): Promise<void> {
+  const assignedManagerId = session.role === 'manager' ? session.id : (params.managerId ?? null);
   const { error } = await supabase.rpc('manager_create_cashier', {
-    p_manager_id: session.id,
+    p_manager_id: assignedManagerId ?? session.id,
     p_login: params.login,
     p_pin: params.pin,
     p_full_name: params.fullName,
@@ -843,8 +873,12 @@ export async function createBackofficeCashier(
   if (!Number.isFinite(params.floatBalance) || params.floatBalance < 0) {
     throw new Error('Укажите стартовый лимит кассы');
   }
-  const managerId = session.role === 'manager' ? session.id : null;
-  if (managerId) debitManagerLimit(store, managerId, params.floatBalance);
+  const assigned = assignedManagerId
+    ? store.managers.find((row) => row.id === assignedManagerId)
+    : undefined;
+  if (assignedManagerId && !assigned) throw new Error('Выберите менеджера');
+  if (assigned && !assigned.isActive) throw new Error('Выберите активного менеджера сети');
+  if (assigned) debitManagerLimit(store, assigned.id, params.floatBalance);
   store.cashiers.push({
     id: crypto.randomUUID(),
     login: params.login.trim().toLowerCase(),
@@ -857,8 +891,8 @@ export async function createBackofficeCashier(
     isActive: true,
     blockedBy: null,
     dailyTurnover: 0,
-    networkId: session.networkId ?? NETWORK_ASHGABAT,
-    managerId,
+    networkId: assigned?.networkId ?? session.networkId ?? NETWORK_ASHGABAT,
+    managerId: assigned?.id ?? null,
   });
   saveDemoStore(store);
 }

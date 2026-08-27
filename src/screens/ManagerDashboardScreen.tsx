@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle, Ban, BarChart3, Building2, CheckCircle2, Download, Landmark,
   LayoutDashboard, LogOut, Plus, RefreshCw, Shield, Snowflake,
@@ -32,9 +32,11 @@ import {
   type DashboardKpis,
   type LedgerPeriod,
   type ManagerSession,
+  type NetworkManager,
   type RiskBet,
   type VerticalKpi,
 } from '../lib/backoffice';
+import { useBackofficeStore } from '../stores/backofficeStore';
 
 type CabinetTab = 'finance' | 'managers' | 'agents' | 'players' | 'risk';
 
@@ -477,12 +479,16 @@ export function AgentsPanel({
   const [topupId, setTopupId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [managerLimit, setManagerLimit] = useState<number | null>(null);
+  const [managerFilter, setManagerFilter] = useState('');
+  const managers = useBackofficeStore((s) => s.managers);
+  const hydrate = useBackofficeStore((s) => s.hydrate);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       setRows(await fetchBackofficeCashiers(session));
+      hydrate();
       if (session.role === 'manager') {
         setManagerLimit(await fetchMyManagerLimit(session));
       }
@@ -491,7 +497,7 @@ export function AgentsPanel({
     } finally {
       setLoading(false);
     }
-  }, [session]);
+  }, [session, hydrate]);
 
   useEffect(() => {
     void load();
@@ -500,19 +506,41 @@ export function AgentsPanel({
     });
   }, [load]);
 
+  const visibleRows = useMemo(
+    () => (managerFilter ? rows.filter((row) => row.managerId === managerFilter) : rows),
+    [rows, managerFilter],
+  );
   const topupTarget = rows.find((row) => row.id === topupId) ?? null;
   const profile = rows.find((row) => row.id === profileId) ?? null;
 
   return (
     <section>
-      <HeaderRow title="Кассы и агенты" subtitle={`${rows.length} точек`} onRefresh={() => void load()} loading={loading} />
+      <HeaderRow
+        title="Кассы и агенты"
+        subtitle={managerFilter ? `${visibleRows.length} из ${rows.length} точек` : `${rows.length} точек`}
+        onRefresh={() => void load()}
+        loading={loading}
+      />
       {session.role === 'manager' && managerLimit != null && (
         <p className="text-sm text-gray-500 -mt-2 mb-4">
           Доступный лимит менеджера:{' '}
           <span className="font-extrabold text-ink-900">{formatTmtmCompact(managerLimit)}</span>
         </p>
       )}
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <select
+          value={managerFilter}
+          onChange={(e) => setManagerFilter(e.target.value)}
+          className="bg-white border border-slate-200 text-sm font-semibold px-3 py-2.5 rounded-xl outline-none min-w-[240px]"
+          aria-label="Фильтр по менеджеру"
+        >
+          <option value="">Все менеджеры (Все кассы)</option>
+          {managers.map((manager) => (
+            <option key={manager.id} value={manager.id}>
+              {manager.fullName}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={() => setCreateOpen(true)}
@@ -523,40 +551,54 @@ export function AgentsPanel({
         </button>
       </div>
       {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto shadow-sm">
+        <table className="w-full text-sm min-w-[960px]">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-gray-500">
             <tr>
-              <th className="px-4 py-3">Имя</th>
-              <th className="px-4 py-3">Город</th>
-              <th className="px-4 py-3">Адрес</th>
-              <th className="px-4 py-3 text-right">Остаток кассы</th>
-              <th className="px-4 py-3 text-right">Доход кассира</th>
-              <th className="px-4 py-3">Статус</th>
-              <th className="px-4 py-3" />
+              <th className="px-4 py-3 whitespace-nowrap">Имя / название точки</th>
+              <th className="px-4 py-3 whitespace-nowrap">Город и адрес</th>
+              <th className="px-4 py-3 whitespace-nowrap">Менеджер</th>
+              <th className="px-4 py-3 text-right whitespace-nowrap">Остаток кассы</th>
+              <th className="px-4 py-3 text-right whitespace-nowrap">Доход кассира</th>
+              <th className="px-4 py-3 whitespace-nowrap">Статус</th>
+              <th className="px-4 py-3 text-right whitespace-nowrap">Действия</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {visibleRows.map((row) => (
               <tr
                 key={row.id}
                 className="border-t border-slate-100 cursor-pointer hover:bg-slate-50"
                 onClick={() => setProfileId(row.id)}
               >
-                <td className="px-4 py-3 text-gray-700">{row.city}</td>
-                <td className="px-4 py-3 text-gray-700">{row.pointName}</td>
-                <td className="px-4 py-3 text-right font-extrabold tabular-nums">{formatTmtmCompact(row.floatBalance)}</td>
-                <td className="px-4 py-3 text-right font-semibold tabular-nums text-brand-700">
+                <td className="px-4 py-3 align-top">
+                  <p className="font-bold text-ink-900">{row.fullName}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{row.pointName}</p>
+                </td>
+                <td className="px-4 py-3 align-top text-gray-700">
+                  <p>{row.city || '—'}</p>
+                  {row.pointName ? <p className="text-xs text-gray-500 mt-0.5">{row.pointName}</p> : null}
+                </td>
+                <td className="px-4 py-3 align-top">
+                  <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-medium px-2.5 py-1 rounded-lg text-xs">
+                    <User className="w-3.5 h-3.5 shrink-0" />
+                    {managers.find((m) => m.id === row.managerId)?.fullName || 'Владелец (Прямой)'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 align-top text-right font-extrabold tabular-nums whitespace-nowrap">
+                  {formatTmtmCompact(row.floatBalance)}
+                </td>
+                <td className="px-4 py-3 align-top text-right font-semibold tabular-nums text-brand-700 whitespace-nowrap">
                   {formatTmtmCompact(row.commissionEarned)}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 align-top">
                   <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${
                     row.isActive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
                   }`}>
                     {row.isActive ? 'Активна' : 'Заблокирована'}
                   </span>
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-4 py-3 align-top">
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
@@ -595,9 +637,11 @@ export function AgentsPanel({
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && !loading && (
+            {visibleRows.length === 0 && !loading && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">Касс в этой сети пока нет</td>
+                <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                  {managerFilter ? 'У этого менеджера пока нет касс' : 'Касс в этой сети пока нет'}
+                </td>
               </tr>
             )}
           </tbody>
@@ -605,6 +649,7 @@ export function AgentsPanel({
       </div>
       {createOpen && (
         <CreateCashierModal
+          managers={managers}
           onClose={() => setCreateOpen(false)}
           onSubmit={async (form) => {
             await createBackofficeCashier(session, form);
@@ -866,9 +911,11 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 }
 
 function CreateCashierModal({
+  managers,
   onClose,
   onSubmit,
 }: {
+  managers: NetworkManager[];
   onClose: () => void;
   onSubmit: (form: {
     login: string;
@@ -877,6 +924,7 @@ function CreateCashierModal({
     city: string;
     pointName: string;
     floatBalance: number;
+    managerId: string | null;
   }) => Promise<void>;
 }) {
   const [login, setLogin] = useState('');
@@ -885,8 +933,10 @@ function CreateCashierModal({
   const [city, setCity] = useState('');
   const [pointName, setPointName] = useState('');
   const [floatBalance, setFloatBalance] = useState('1000');
+  const [managerChoice, setManagerChoice] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const activeManagers = managers.filter((row) => row.isActive);
 
   return (
     <Modal title="Новая точка / кассир" onClose={onClose}>
@@ -896,11 +946,34 @@ function CreateCashierModal({
       <Field label="PIN-код" value={pin} onChange={(v) => setPin(v.replace(/\D/g, '').slice(0, 8))} placeholder="1234" />
       <Field label="Город" value={city} onChange={setCity} placeholder="Ашхабад" />
       <Field label="Адрес точки" value={pointName} onChange={setPointName} placeholder="Точка №14 · ул. ..." />
+      <label className="block mb-3">
+        <span className="text-xs font-semibold text-gray-500 mb-1.5 block">Выберите менеджера *</span>
+        <select
+          value={managerChoice}
+          onChange={(e) => setManagerChoice(e.target.value)}
+          required
+          className="w-full bg-gray-100 rounded-xl px-3 py-2.5 text-sm font-semibold outline-none"
+        >
+          <option value="" disabled>
+            Выберите менеджера
+          </option>
+          <option value="direct">Без менеджера / Напрямую к владельцу</option>
+          {activeManagers.map((manager) => (
+            <option key={manager.id} value={manager.id}>
+              {manager.fullName}
+            </option>
+          ))}
+        </select>
+      </label>
       <Field label="Стартовый лимит кассы" value={floatBalance} onChange={setFloatBalance} placeholder="1000" />
       <button
         type="button"
         disabled={saving}
         onClick={async () => {
+          if (!managerChoice) {
+            setError('Выберите менеджера');
+            return;
+          }
           setError('');
           setSaving(true);
           try {
@@ -911,6 +984,7 @@ function CreateCashierModal({
               city,
               pointName,
               floatBalance: Number(floatBalance),
+              managerId: managerChoice === 'direct' ? null : managerChoice,
             });
           } catch (err) {
             setError(err instanceof Error ? err.message : 'Не удалось создать точку');
