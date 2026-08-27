@@ -9,3 +9,13 @@ export const CRYSTAL_ICONS = {
   ORANGE: '/images/games/crystal/gem_orange.png',
   COIN: '/images/games/crystal/gem_coin.png',
 } as const;
+
+export const GEM_SRC = {
+  green: CRYSTAL_ICONS.GREEN,
+  cyan: CRYSTAL_ICONS.CYAN,
+  blue: CRYSTAL_ICONS.BLUE,
+  red: CRYSTAL_ICONS.RED,
+  purple: CRYSTAL_ICONS.PURPLE,
+  orange: CRYSTAL_ICONS.ORANGE,
+  coin: CRYSTAL_ICONS.COIN,
+} as const;

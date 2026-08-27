@@ -1,22 +1,12 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { CRYSTAL_ICONS } from './crystalAssets';
+import { GEM_SRC } from './crystalAssets';
 import type { CrystalCell, GemKind } from './crystalMath';
 
 interface CrystalBoardProps {
   board: CrystalCell[];
   exploding: boolean[];
 }
-
-const GEM_SRC: Record<GemKind, string> = {
-  green: CRYSTAL_ICONS.GREEN,
-  cyan: CRYSTAL_ICONS.CYAN,
-  blue: CRYSTAL_ICONS.BLUE,
-  red: CRYSTAL_ICONS.RED,
-  purple: CRYSTAL_ICONS.PURPLE,
-  orange: CRYSTAL_ICONS.ORANGE,
-  coin: CRYSTAL_ICONS.COIN,
-};
 
 const GEM_GLOW: Record<GemKind, string> = {
   green: '#86efac',
@@ -37,27 +27,28 @@ export function CrystalBoard({ board, exploding }: CrystalBoardProps) {
   }, [board]);
 
   return (
-    <div className="relative mx-auto w-full max-w-[360px]">
-      <div className="aspect-square w-full rounded-2xl border border-cyan-500/30 bg-black/40 p-2 shadow-2xl shadow-cyan-950/80 backdrop-blur-md">
-        <div className="grid h-full grid-cols-7 gap-1">
-          {board.map((cell, index) => {
-            const isNew = !prevBoard.has(cell.id);
-            const boom = exploding[index];
-            return (
-              <div key={cell.id} className="relative min-h-0 min-w-0">
-                <div className={`h-full w-full ${boom ? 'crystal-pop' : isNew ? 'crystal-drop' : ''}`}>
-                  <img
-                    src={GEM_SRC[cell.kind]}
-                    alt=""
-                    draggable={false}
-                    className="h-full w-full object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
-                  />
-                </div>
-                {boom && <Sparks color={GEM_GLOW[cell.kind]} />}
+    <div className="mx-auto aspect-square w-full max-w-[360px]" style={{ maxWidth: 'min(360px, calc(100dvh - 26rem))' }}>
+      <div className="grid h-full w-full grid-cols-7 gap-1.5 p-2">
+        {board.map((cell, index) => {
+          const isNew = !prevBoard.has(cell.id);
+          const boom = exploding[index];
+          return (
+            <div
+              key={cell.id}
+              className="relative flex aspect-square items-center justify-center rounded-lg border border-white/15 bg-black/35 shadow-inner"
+            >
+              <div className={`flex h-[82%] w-[82%] items-center justify-center ${boom ? 'crystal-pop' : isNew ? 'crystal-drop' : ''}`}>
+                <img
+                  src={GEM_SRC[cell.kind]}
+                  alt=""
+                  draggable={false}
+                  className="h-full w-full object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
+                />
               </div>
-            );
-          })}
-        </div>
+              {boom && <Sparks color={GEM_GLOW[cell.kind]} />}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
