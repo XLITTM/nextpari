@@ -29,7 +29,7 @@ export function dealInitialHands(deck: CardType[] = freshShuffledDeck()): TableS
   playerHand.push(drawn.card);
   next = drawn.deck;
 
-  drawn = drawCard(next, true);
+  drawn = drawCard(next);
   dealerHand.push(drawn.card);
   next = drawn.deck;
 

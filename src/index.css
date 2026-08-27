@@ -273,8 +273,6 @@ body {
     }
   }
   .bj-card {
-    width: clamp(3rem, 11.5vw, 4.35rem);
-    height: clamp(4.4rem, 16.8vw, 6.35rem);
     perspective: 900px;
   }
   .bj-card-pre {
@@ -303,8 +301,8 @@ body {
     position: absolute;
     inset: 0;
     backface-visibility: hidden;
-    border-radius: 0.7rem;
-    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.28);
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.32);
   }
   .bj-front {
     display: flex;

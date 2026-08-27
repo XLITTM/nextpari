@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ChevronLeft,
   CircleHelp,
@@ -51,15 +51,6 @@ const CHIP_STYLES: Record<number, string> = {
   50: 'from-orange-400 to-amber-700 text-white ring-[#e4c56a]',
   100: 'from-zinc-800 to-black text-amber-300 ring-[#e4c56a]',
 };
-
-const FAN_CARDS = [
-  { rot: -46, x: -62, y: 22, rank: 'A', suit: '♥', red: true },
-  { rot: -28, x: -38, y: 6, rank: 'K', suit: '♠', red: false },
-  { rot: -12, x: -16, y: -2, rank: 'Q', suit: '♦', red: true },
-  { rot: 12, x: 16, y: -2, rank: 'J', suit: '♣', red: false },
-  { rot: 28, x: 38, y: 6, rank: '10', suit: '♥', red: true },
-  { rot: 46, x: 62, y: 22, rank: 'A', suit: '♠', red: false },
-] as const;
 
 function formatStake(value: number): string {
   const shown = Number.isInteger(value) ? String(value) : value.toFixed(2);
@@ -117,7 +108,6 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
   const inHand = stage === 'playerTurn' || stage === 'dealerTurn';
   const canBet = stage === 'betting' || stage === 'gameOver';
   const displayStake = stage === 'betting' ? stake : lockedStake || stake;
-  const canDoubleDown = stage === 'playerTurn' && playerHand.length === 2 && lockedStake <= balance;
 
   const beep = useCallback((freq: number, dur = 0.09) => {
     if (!soundOn) return;
@@ -188,13 +178,6 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
 
   useEffect(() => {
     if (stage !== 'dealerTurn') return;
-
-    if (dealerHand.some((card) => card.isHidden)) {
-      const id = window.setTimeout(() => {
-        setDealerHand((prev) => revealDealer(prev));
-      }, 280);
-      return () => window.clearTimeout(id);
-    }
 
     const playerNatural = isGoldenOchko(playerHand);
     if (playerNatural || !dealerShouldHit(dealerHand)) {
@@ -324,11 +307,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
   };
 
   const play = () => {
-    if (stage === 'dealerTurn') return;
-    if (stage === 'playerTurn') {
-      hit();
-      return;
-    }
+    if (stage === 'dealerTurn' || stage === 'playerTurn') return;
     void beginRound(stake);
   };
 
@@ -351,33 +330,6 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
     setStage('dealerTurn');
   };
 
-  const doubleDown = async () => {
-    if (stage !== 'playerTurn' || playerHand.length !== 2) return;
-    if (lockedStake > balanceRef.current) {
-      showToast('Недостаточно средств для удвоения');
-      return;
-    }
-    const debited = await setBalance(balanceRef.current - lockedStake);
-    if (!debited) {
-      showToast('Недостаточно средств для удвоения');
-      return;
-    }
-    beep(640);
-    const nextStake = lockedStake * 2;
-    setLockedStake(nextStake);
-    stakeRef.current = nextStake;
-    const next = hitHand(deckRef.current, playerHand);
-    deckRef.current = next.deck;
-    setDeck(next.deck);
-    setPlayerHand(next.hand);
-    if (isBust(next.hand)) {
-      setDealerHand((prev) => revealDealer(prev));
-      void settle(next.hand, revealDealer(dealerHand), nextStake);
-      return;
-    }
-    setStage('dealerTurn');
-  };
-
   const repeatBet = () => {
     if (inHand) return;
     const amount = lastStakeRef.current || stake;
@@ -392,20 +344,19 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
   };
 
   const banner = resultCopy(result, playerBust);
-  const playLabel = stage === 'playerTurn' ? 'ЕЩЁ' : 'PLAY';
-  const rowButtons = stage === 'playerTurn'
-    ? [
-        { id: 'hit', label: 'ЕЩЁ', onClick: hit, disabled: false },
-        { id: 'stand', label: 'СТОП', onClick: stand, disabled: false },
-        { id: 'dbl', label: 'X2', onClick: () => void doubleDown(), disabled: !canDoubleDown },
-        { id: 'max', label: 'MAX', onClick: () => undefined, disabled: true },
-      ]
-    : [
-        { id: 'min', label: 'MIN', onClick: betMin, disabled: !canBet || balance < MIN_STAKE },
-        { id: 'x2', label: 'X2', onClick: betDouble, disabled: !canBet },
-        { id: 'half', label: 'X/2', onClick: betHalf, disabled: !canBet || stake <= 0 },
-        { id: 'max', label: 'MAX', onClick: betMax, disabled: !canBet || balance < MIN_STAKE },
-      ];
+  const statusLabel = stage === 'playerTurn'
+    ? 'ВЫБЕРИТЕ ДЕЙСТВИЕ'
+    : stage === 'dealerTurn'
+      ? 'ХОД ДИЛЕРА'
+      : stage === 'gameOver'
+        ? banner.title.toUpperCase()
+        : 'СДЕЛАЙТЕ СТАВКУ';
+  const rowButtons = [
+    { id: 'min', label: 'MIN', onClick: betMin, disabled: !canBet || balance < MIN_STAKE },
+    { id: 'x2', label: 'X2', onClick: betDouble, disabled: !canBet },
+    { id: 'half', label: 'X/2', onClick: betHalf, disabled: !canBet || stake <= 0 },
+    { id: 'max', label: 'MAX', onClick: betMax, disabled: !canBet || balance < MIN_STAKE },
+  ];
 
   return (
     <div className="bj-felt relative mx-auto flex h-[100dvh] w-full max-w-md flex-col justify-between overflow-hidden overscroll-none text-white shadow-2xl max-md:max-w-none">
@@ -428,17 +379,12 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
             />
           </div>
         </header>
-        <section className="flex flex-col items-center px-2 pb-1">
-          <ScoreBadge
-            label="Дилер"
-            score={dealerHand.length ? dealerScore : null}
-            golden={isGoldenOchko(dealerHand) && stage !== 'playerTurn'}
-          />
-          <HandRow cards={dealerHand} />
-        </section>
+        <div className="mx-3 mb-2 rounded-lg bg-white px-3 py-2 text-center shadow-md">
+          <p className="text-[12px] font-black tracking-[0.16em] text-slate-800">{statusLabel}</p>
+        </div>
       </div>
 
-      <div className="relative z-10 flex min-h-0 flex-1 items-center justify-center">
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col justify-between py-2">
         <aside className="absolute left-2 top-1/2 z-20 flex -translate-y-1/2 flex-col gap-2 sm:gap-3">
           <RailButton label="История" onClick={() => setHistoryOpen(true)}>
             <History className="h-5 w-5" />
@@ -450,117 +396,144 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
             {soundOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
           </RailButton>
         </aside>
-        <div className="flex min-h-0 flex-col items-center justify-center px-12">
-          <CenterEmblem dimmed={playerHand.length > 0} />
+
+        <HandStrip
+          cards={dealerHand}
+          score={dealerScore}
+          golden={isGoldenOchko(dealerHand)}
+        />
+
+        <div className="flex min-h-[4.5rem] items-center justify-center px-10">
           {stage === 'gameOver' && result ? (
-            <div className="mt-1">
-              <ResultBanner
-                title={banner.title}
-                subtitle={banner.subtitle}
-                result={result}
-                payout={payoutAmount(lockedStake, result)}
-              />
-            </div>
-          ) : (
-            <p className="mt-1 text-center text-[10px] font-bold uppercase tracking-[0.28em] text-[#f5e6a8]/55">
-              {stage === 'betting' ? 'Сделайте ставку' : stage === 'dealerTurn' ? 'Ход дилера' : 'Ваш ход'}
-            </p>
-          )}
+            <ResultBanner
+              title={banner.title}
+              subtitle={banner.subtitle}
+              result={result}
+              payout={payoutAmount(lockedStake, result)}
+            />
+          ) : null}
         </div>
+
+        <HandStrip
+          cards={playerHand}
+          score={playerScore}
+          golden={isGoldenOchko(playerHand)}
+        />
       </div>
 
       <div className="relative z-20 flex shrink-0 flex-col pb-[env(safe-area-inset-bottom,16px)]">
-        <section className="flex flex-col items-center px-2 pt-1">
-          <HandRow cards={playerHand} />
-          <ScoreBadge
-            label="Вы"
-            score={playerHand.length ? playerScore : null}
-            golden={isGoldenOchko(playerHand)}
-          />
-        </section>
-
         <div className="px-3 pt-1">
-          {chipsOpen && canBet && (
-            <div className="mb-2 grid grid-cols-6 gap-1.5">
-              {CHIP_VALUES.map((value) => (
+          {stage === 'playerTurn' || stage === 'dealerTurn' ? (
+            <>
+              <div className="mb-3 flex justify-center">
+                <div className="rounded-xl border border-white/20 bg-[#8b2cf5] px-6 py-2 font-bold text-white">
+                  {formatStake(displayStake)}
+                </div>
+              </div>
+              {stage === 'playerTurn' && (
+                <div className="mb-3 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={stand}
+                    className="flex-1 rounded-xl border border-red-400/30 bg-gradient-to-b from-red-600 to-rose-900 py-3.5 font-black text-white shadow-lg active:translate-y-[1px]"
+                  >
+                    СТОП
+                  </button>
+                  <button
+                    type="button"
+                    onClick={hit}
+                    className="flex-1 rounded-xl border border-cyan-300/40 bg-gradient-to-b from-cyan-400 to-teal-600 py-3.5 font-black text-white shadow-lg active:translate-y-[1px]"
+                  >
+                    ЕЩЕ
+                  </button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {chipsOpen && canBet && (
+                <div className="mb-2 grid grid-cols-6 gap-1.5">
+                  {CHIP_VALUES.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => addChip(value)}
+                      disabled={stake + value > balance}
+                      className={`flex h-10 flex-col items-center justify-center rounded-full bg-gradient-to-b text-[11px] font-black shadow-lg ring-2 disabled:opacity-35 sm:h-11 ${CHIP_STYLES[value] ?? ''}`}
+                    >
+                      {value}
+                      <span className="text-[7px] font-bold opacity-80">TMTM</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="mx-auto mb-2 flex items-center justify-center gap-2">
                 <button
-                  key={value}
                   type="button"
-                  onClick={() => addChip(value)}
-                  disabled={stake + value > balance}
-                  className={`flex h-10 flex-col items-center justify-center rounded-full bg-gradient-to-b text-[11px] font-black shadow-lg ring-2 disabled:opacity-35 sm:h-11 ${CHIP_STYLES[value] ?? ''}`}
+                  onClick={openStakeModal}
+                  disabled={!canBet}
+                  className="bj-bet-pill flex min-w-[7.5rem] items-center justify-center gap-2 rounded-full px-5 py-1.5 text-sm font-black tabular-nums text-white active:scale-[0.98] disabled:opacity-40"
+                  aria-label="Изменить ставку"
                 >
-                  {value}
-                  <span className="text-[7px] font-bold opacity-80">TMTM</span>
+                  {formatStake(displayStake)}
                 </button>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={openStakeModal}
+                  disabled={!canBet}
+                  className="bj-round flex h-9 w-9 items-center justify-center rounded-full text-[#f5e6a8] active:scale-95 disabled:opacity-40"
+                  aria-label="Ручной ввод ставки"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mb-2 grid grid-cols-4 gap-2 sm:mb-3">
+                {rowButtons.map((btn) => (
+                  <button
+                    key={btn.id}
+                    type="button"
+                    onClick={btn.onClick}
+                    disabled={btn.disabled || stage === 'dealerTurn'}
+                    className="bj-ctrl h-9 rounded-xl text-[10px] font-black tracking-wide active:translate-y-[1px] disabled:opacity-40 sm:h-10 sm:text-[11px]"
+                  >
+                    {btn.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-center gap-6 sm:gap-7">
+                <button
+                  type="button"
+                  onClick={() => canBet && setIsCustomBetModalOpen(true)}
+                  disabled={!canBet}
+                  className="bj-round flex h-11 w-11 items-center justify-center rounded-full text-[#f5e6a8] active:scale-95 disabled:opacity-40 sm:h-12 sm:w-12"
+                  aria-label="Ручной ввод ставки"
+                >
+                  <Coins className="h-5 w-5" />
+                </button>
+                <button
+                  type="button"
+                  onClick={play}
+                  disabled={stage === 'dealerTurn'}
+                  className="bj-play flex h-14 w-14 items-center justify-center rounded-full text-base font-black tracking-[0.14em] active:scale-95 disabled:opacity-50 sm:h-[4.6rem] sm:w-[4.6rem] sm:text-lg"
+                  aria-label="PLAY"
+                >
+                  PLAY
+                </button>
+                <button
+                  type="button"
+                  onClick={repeatBet}
+                  disabled={inHand}
+                  className="bj-round flex h-11 w-11 items-center justify-center rounded-full text-[#f5e6a8] active:scale-95 disabled:opacity-40 sm:h-12 sm:w-12"
+                  aria-label="Повторить ставку"
+                >
+                  <RefreshCw className="h-5 w-5" />
+                </button>
+              </div>
+            </>
           )}
-
-          <div className="mx-auto mb-2 flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={openStakeModal}
-              disabled={!canBet}
-              className="bj-bet-pill flex min-w-[7.5rem] items-center justify-center gap-2 rounded-full px-5 py-1.5 text-sm font-black tabular-nums text-white active:scale-[0.98] disabled:opacity-40"
-              aria-label="Изменить ставку"
-            >
-              {formatStake(displayStake)}
-            </button>
-            <button
-              type="button"
-              onClick={openStakeModal}
-              disabled={!canBet}
-              className="bj-round flex h-9 w-9 items-center justify-center rounded-full text-[#f5e6a8] active:scale-95 disabled:opacity-40"
-              aria-label="Ручной ввод ставки"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="mb-2 grid grid-cols-4 gap-2 sm:mb-3">
-            {rowButtons.map((btn) => (
-              <button
-                key={btn.id}
-                type="button"
-                onClick={btn.onClick}
-                disabled={btn.disabled || stage === 'dealerTurn'}
-                className="bj-ctrl h-9 rounded-xl text-[10px] font-black tracking-wide active:translate-y-[1px] disabled:opacity-40 sm:h-10 sm:text-[11px]"
-              >
-                {btn.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-center gap-6 sm:gap-7">
-            <button
-              type="button"
-              onClick={() => canBet && setIsCustomBetModalOpen(true)}
-              disabled={!canBet}
-              className="bj-round flex h-11 w-11 items-center justify-center rounded-full text-[#f5e6a8] active:scale-95 disabled:opacity-40 sm:h-12 sm:w-12"
-              aria-label="Ручной ввод ставки"
-            >
-              <Coins className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={play}
-              disabled={stage === 'dealerTurn'}
-              className="bj-play flex h-14 w-14 items-center justify-center rounded-full text-base font-black tracking-[0.14em] active:scale-95 disabled:opacity-50 sm:h-[4.6rem] sm:w-[4.6rem] sm:text-lg"
-              aria-label={playLabel}
-            >
-              {playLabel}
-            </button>
-            <button
-              type="button"
-              onClick={repeatBet}
-              disabled={inHand}
-              className="bj-round flex h-11 w-11 items-center justify-center rounded-full text-[#f5e6a8] active:scale-95 disabled:opacity-40 sm:h-12 sm:w-12"
-              aria-label="Повторить ставку"
-            >
-              <RefreshCw className="h-5 w-5" />
-            </button>
-          </div>
         </div>
       </div>
 
@@ -592,7 +565,8 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
         <Drawer title="Правила 21 / Очко" onClose={() => setHelpOpen(false)}>
           <ul className="space-y-2 text-sm leading-relaxed text-white/80">
             <li>Цель — набрать 21 очко или больше, чем у дилера, без перебора.</li>
-            <li>Туз считается за 11. Картинки — 10. Остальные карты — по номиналу.</li>
+            <li>Туз — 11, валет — 2, дама — 3, король — 4, остальные карты — по номиналу.</li>
+            <li>Две карты дилера открыты с начала раунда, очки считаются сразу по обеим.</li>
             <li>Два туза — золотое очко, мгновенная победа.</li>
             <li>Дилер останавливается на 17 и выше.</li>
             <li>Выплата при победе — 1:1 от ставки.</li>
@@ -618,69 +592,6 @@ function resultLabel(result: Exclude<GameResult, null>): string {
   return 'Проигрыш';
 }
 
-function CenterEmblem({ dimmed }: { dimmed: boolean }) {
-  const rawId = useId().replace(/:/g, '');
-  const fill = `spadeFill-${rawId}`;
-  const gold = `spadeGold-${rawId}`;
-  const glow = `spadeGlow-${rawId}`;
-
-  return (
-    <div className={`bj-emblem ${dimmed ? 'opacity-55' : 'opacity-95'}`} aria-hidden>
-      <div className="bj-fan">
-        {FAN_CARDS.map((card) => (
-          <div
-            key={`${card.rank}${card.suit}${card.rot}`}
-            className="bj-fan-card"
-            style={{ transform: `translate(${card.x}px, ${card.y}px) rotate(${card.rot}deg)` }}
-          >
-            <span className={`text-[10px] ${card.red ? 'text-red-600' : 'text-slate-900'}`}>{card.rank}</span>
-            <span className={`text-sm ${card.red ? 'text-red-600' : 'text-slate-900'}`}>{card.suit}</span>
-          </div>
-        ))}
-      </div>
-      <svg className="bj-spade" viewBox="0 0 200 230" fill="none">
-        <defs>
-          <radialGradient id={fill} cx="50%" cy="32%" r="70%">
-            <stop offset="0%" stopColor="#145c52" />
-            <stop offset="55%" stopColor="#072422" />
-            <stop offset="100%" stopColor="#020908" />
-          </radialGradient>
-          <linearGradient id={gold} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#fff3b0" />
-            <stop offset="45%" stopColor="#e4c56a" />
-            <stop offset="100%" stopColor="#8a6a12" />
-          </linearGradient>
-          <filter id={glow} x="-30%" y="-20%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="#f5e6a8" floodOpacity="0.55" />
-            <feDropShadow dx="0" dy="12" stdDeviation="8" floodColor="#d4af37" floodOpacity="0.35" />
-            <feDropShadow dx="0" dy="16" stdDeviation="10" floodColor="#000" floodOpacity="0.55" />
-          </filter>
-        </defs>
-        <path
-          filter={`url(#${glow})`}
-          fill={`url(#${fill})`}
-          stroke={`url(#${gold})`}
-          strokeWidth="5"
-          d="M100 14C58 68 24 102 24 142c0 34 26 56 60 56 8 0 14-1 16-8 2 7 8 8 16 8 34 0 60-22 60-56 0-40-34-74-76-128Z"
-        />
-        <path fill={`url(#${gold})`} d="M88 186c2-8 6-12 12-16 6 4 10 8 12 16l-8 32H96l-8-32Z" />
-        <text
-          x="100"
-          y="128"
-          textAnchor="middle"
-          fill="#e8cc76"
-          fontSize="64"
-          fontWeight="900"
-          letterSpacing="2"
-          style={{ filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.8))' }}
-        >
-          21
-        </text>
-      </svg>
-    </div>
-  );
-}
-
 function RailButton({
   label,
   onClick,
@@ -702,25 +613,34 @@ function RailButton({
   );
 }
 
-function HandRow({ cards }: { cards: CardType[] }) {
-  if (!cards.length) {
-    return <div className="relative z-10 h-[clamp(3.4rem,11vh,5.4rem)]" />;
-  }
+function HandStrip({
+  cards,
+  score,
+  golden,
+}: {
+  cards: CardType[];
+  score: number;
+  golden?: boolean;
+}) {
   return (
-    <div className="relative z-10 flex items-end justify-center pl-6">
-      {cards.map((card, index) => (
-        <div key={`${card.rank}${card.suit}-${index}`} className="-ml-6">
-          <Card card={card} delay={index * 90} />
+    <div className="flex min-h-[8.5rem] w-full items-center justify-center gap-3 px-12 sm:min-h-[10rem]">
+      <div className="flex max-w-[78%] flex-wrap items-center justify-center gap-3">
+        {cards.map((card, index) => (
+          <div
+            key={`${card.rank}${card.suit}-${index}`}
+            className={index >= 2 ? 'translate-y-1' : undefined}
+          >
+            <Card card={card} delay={index * 90} />
+          </div>
+        ))}
+      </div>
+      {cards.length > 0 && (
+        <div
+          className="min-w-[48px] rounded-xl border border-white/10 bg-[#182333]/90 px-3.5 py-2 text-center text-xl font-bold text-white shadow-lg"
+        >
+          {score}
         </div>
-      ))}
-    </div>
-  );
-}
-
-function ScoreBadge({ label, score, golden }: { label: string; score: number | null; golden?: boolean }) {
-  return (
-    <div className="bj-glass relative z-10 mb-1 rounded-full px-3 py-1 text-[11px] font-bold tracking-wide text-[#f5e6a8]">
-      {label}: {score == null ? '—' : golden ? `Золотое очко (${score})` : score}
+      )}
     </div>
   );
 }
