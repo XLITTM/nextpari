@@ -47,14 +47,14 @@ function mirrorHierarchyAgent(cashier: BackofficeCashier) {
 }
 
 export const useBackofficeStore = create<BackofficeNetworkState>((set, get) => ({
-  cashiers: peekNetworkCashiers(),
-  managers: peekNetworkManagers(),
+  cashiers: peekNetworkCashiers() ?? [],
+  managers: peekNetworkManagers() ?? [],
   hydrate: () => set({
-    cashiers: peekNetworkCashiers(),
-    managers: peekNetworkManagers(),
+    cashiers: peekNetworkCashiers() ?? [],
+    managers: peekNetworkManagers() ?? [],
   }),
-  agentsOf: (managerId) => get().cashiers.filter((row) => row.managerId === managerId),
-  managerLimit: (managerId) => managerLimitOf(managerId),
+  agentsOf: (managerId) => (get().cashiers ?? []).filter((row) => row?.managerId === managerId),
+  managerLimit: (managerId) => Number(managerLimitOf(managerId ?? '')) || 0,
   toggleAgentBlockStatus: (agentId, blockedBy) => {
     const next = toggleCashierBlock(agentId, blockedBy);
     mirrorHierarchyAgent(next);
@@ -103,4 +103,14 @@ export function creditAgentFromLimit(managerId: string, agentId: string, amount:
 
 export function collectAgentToManager(managerId: string, agentId: string, amount: number) {
   return useBackofficeStore.getState().collectAgentToManager(managerId, agentId, amount);
+}
+
+export function useManagerNetwork(managerId: string | null | undefined) {
+  const cashiers = useBackofficeStore((s) => s.cashiers);
+  const managers = useBackofficeStore((s) => s.managers);
+  const hydrate = useBackofficeStore((s) => s.hydrate);
+  const managerAgents = (cashiers ?? []).filter((row) => row?.managerId === managerId);
+  const currentManager = (managers ?? []).find((row) => row?.id === managerId) ?? null;
+  const limit = Number(currentManager?.allocatedBalance ?? managerLimitOf(managerId ?? '')) || 0;
+  return { managerAgents, currentManager, limit, hydrate };
 }

@@ -10,7 +10,7 @@ import {
   collectAgentToManager,
   creditAgentFromLimit,
   toggleAgentBlockStatus,
-  useBackofficeStore,
+  useManagerNetwork,
 } from '../../stores/backofficeStore';
 
 export function ManagerAgentsPage({
@@ -20,9 +20,8 @@ export function ManagerAgentsPage({
   session: ManagerSession;
   onNotice: (value: string) => void;
 }) {
-  const hydrate = useBackofficeStore((s) => s.hydrate);
-  const cashiers = useBackofficeStore((s) => s.cashiers.filter((row) => row.managerId === session.id));
-  const limit = useBackofficeStore((s) => s.managerLimit(session.id));
+  const { managerAgents, limit, hydrate } = useManagerNetwork(session?.id);
+  const cashiers = managerAgents || [];
   const [createOpen, setCreateOpen] = useState(false);
   const [topupId, setTopupId] = useState<string | null>(null);
   const [collectId, setCollectId] = useState<string | null>(null);
@@ -33,8 +32,8 @@ export function ManagerAgentsPage({
     return subscribeNetworkSync(() => hydrate());
   }, [hydrate]);
 
-  const topupTarget = cashiers.find((row) => row.id === topupId) ?? null;
-  const collectTarget = cashiers.find((row) => row.id === collectId) ?? null;
+  const topupTarget = cashiers.find((row) => row?.id === topupId) ?? null;
+  const collectTarget = cashiers.find((row) => row?.id === collectId) ?? null;
 
   return (
     <section>
@@ -67,15 +66,15 @@ export function ManagerAgentsPage({
           </thead>
           <tbody>
             {cashiers.map((row) => (
-              <tr key={row.id} className="border-t border-slate-100">
+              <tr key={row?.id ?? row?.login} className="border-t border-slate-100">
                 <td className="px-4 py-3">
-                  <p className="font-bold text-ink-900">{row.pointName}</p>
-                  <p className="text-xs text-gray-500">{row.fullName} · {row.login}</p>
+                  <p className="font-bold text-ink-900">{row?.pointName || 'Точка'}</p>
+                  <p className="text-xs text-gray-500">{row?.fullName || 'Кассир'} · {row?.login || '—'}</p>
                 </td>
-                <td className="px-4 py-3 text-gray-700">{row.city}</td>
-                <td className="px-4 py-3 text-right font-extrabold tabular-nums">{formatTmtmCompact(row.floatBalance)}</td>
+                <td className="px-4 py-3 text-gray-700">{row?.city || '—'}</td>
+                <td className="px-4 py-3 text-right font-extrabold tabular-nums">{formatTmtmCompact(row?.floatBalance)}</td>
                 <td className="px-4 py-3 text-right font-semibold tabular-nums text-brand-700">
-                  {formatTmtmCompact(row.commissionEarned)}
+                  {formatTmtmCompact(row?.commissionEarned)}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${

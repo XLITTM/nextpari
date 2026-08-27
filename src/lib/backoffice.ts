@@ -999,8 +999,10 @@ export async function settleRiskBet(
   }
 }
 
-export function formatTmtmCompact(value: number): string {
-  return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMTM`;
+export function formatTmtmCompact(value: number | null | undefined): string {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMTM`;
 }
 
 export function formatDayLabel(isoDay: string): string {

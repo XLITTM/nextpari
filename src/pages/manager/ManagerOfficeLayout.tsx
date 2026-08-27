@@ -8,13 +8,23 @@ import {
   networkManagerLogin,
   type ManagerSession,
 } from '../../lib/backoffice';
-import { useBackofficeStore } from '../../stores/backofficeStore';
+import { useManagerNetwork } from '../../stores/backofficeStore';
 import { ManagerAgentsPage } from './ManagerAgentsPage';
 import { ManagerFinancePage } from './ManagerFinancePage';
 import { goManagerLogin, goManagerOffice, managerOfficePage, type ManagerOfficePage } from './nav';
 
-function formatTmt(value: number) {
-  return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMT`;
+function formatTmt(value: number | null | undefined) {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMT`;
+}
+
+function Loader({ label = 'Загрузка кабинета…' }: { label?: string }) {
+  return (
+    <div className="min-h-screen bg-ink-950 flex items-center justify-center">
+      <p className="text-sm font-semibold text-ink-400">{label}</p>
+    </div>
+  );
 }
 
 export function ManagerOfficeLayout() {
@@ -29,13 +39,7 @@ export function ManagerOfficeLayout() {
     if (saved && isManagerLoginPath()) goManagerOffice('agents');
   }, []);
 
-  if (booting) {
-    return (
-      <div className="min-h-screen bg-ink-950 flex items-center justify-center">
-        <p className="text-sm font-semibold text-ink-400">Загрузка кабинета…</p>
-      </div>
-    );
-  }
+  if (booting) return <Loader />;
 
   if (!session) {
     return (
@@ -136,8 +140,7 @@ function ManagerOfficeShell({
 }) {
   const [page, setPage] = useState<ManagerOfficePage>(() => managerOfficePage());
   const [notice, setNotice] = useState('');
-  const limit = useBackofficeStore((s) => s.managerLimit(session.id));
-  const hydrate = useBackofficeStore((s) => s.hydrate);
+  const { currentManager, limit, hydrate } = useManagerNetwork(session?.id);
 
   useEffect(() => {
     hydrate();
@@ -149,6 +152,8 @@ function ManagerOfficeShell({
       window.removeEventListener('popstate', sync);
     };
   }, [hydrate]);
+
+  const displayName = session?.fullName || currentManager?.fullName || session?.login || 'Менеджер';
 
   const go = (next: ManagerOfficePage) => {
     setPage(next);
@@ -185,7 +190,7 @@ function ManagerOfficeShell({
       <div className="flex-1 min-w-0 flex flex-col">
         <header className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="bg-ink-950 text-white text-sm font-semibold px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2">
-            <span>Управляющий: {session.fullName}</span>
+            <span>Управляющий: {displayName}</span>
             <span className="tabular-nums">Доступный баланс сети: {formatTmt(limit)}</span>
           </div>
         </header>
@@ -220,7 +225,7 @@ function NavBtn({
         active ? 'bg-brand-600 text-white' : 'text-ink-300 hover:bg-white/5'
       }`}
     >
-      <Icon className="w-4 h-4" />
+      {Icon ? <Icon className="w-4 h-4" /> : null}
       {label}
     </button>
   );
