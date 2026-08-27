@@ -13,7 +13,7 @@ import {
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
-import { Card } from './Card';
+import { Card, type CardScale } from './Card';
 import { calculateHandScore, freshShuffledDeck, isBust, isGoldenOchko } from './deck';
 import {
   CHIP_VALUES,
@@ -613,31 +613,36 @@ function RailButton({
   );
 }
 
+function handLayout(count: number): { scale: CardScale; gap: string } {
+  if (count >= 4) return { scale: 'sm', gap: 'gap-1.5' };
+  if (count === 3) return { scale: 'md', gap: 'gap-2' };
+  return { scale: 'lg', gap: 'gap-3' };
+}
+
 function HandStrip({
   cards,
   score,
-  golden,
 }: {
   cards: CardType[];
   score: number;
   golden?: boolean;
 }) {
+  const { scale, gap } = handLayout(cards.length);
+
   return (
-    <div className="flex min-h-[8.5rem] w-full items-center justify-center gap-3 px-12 sm:min-h-[10rem]">
-      <div className="flex max-w-[78%] flex-wrap items-center justify-center gap-3">
+    <div className="flex min-h-[8.5rem] w-full flex-nowrap items-center justify-center gap-3 px-10 sm:min-h-[10rem]">
+      <div className={`flex flex-row flex-nowrap items-center justify-center transition-all duration-300 ${gap}`}>
         {cards.map((card, index) => (
-          <div
+          <Card
             key={`${card.rank}${card.suit}-${index}`}
-            className={index >= 2 ? 'translate-y-1' : undefined}
-          >
-            <Card card={card} delay={index * 90} />
-          </div>
+            card={card}
+            delay={index * 90}
+            scale={scale}
+          />
         ))}
       </div>
       {cards.length > 0 && (
-        <div
-          className="min-w-[48px] rounded-xl border border-white/10 bg-[#182333]/90 px-3.5 py-2 text-center text-xl font-bold text-white shadow-lg"
-        >
+        <div className="min-w-[48px] shrink-0 rounded-xl border border-white/10 bg-[#182333]/90 px-3.5 py-2 text-center text-xl font-bold text-white shadow-lg">
           {score}
         </div>
       )}

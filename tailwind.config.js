@@ -46,6 +46,11 @@ export default {
           950: '#020617',
         },
       },
+      spacing: {
+        13: '3.25rem',
+        26: '6.5rem',
+        30: '7.5rem',
+      },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
       },
