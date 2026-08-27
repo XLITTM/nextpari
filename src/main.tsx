@@ -5,11 +5,6 @@ import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { initPwa } from './lib/pwa';
 import { preloadGameAssets } from './lib/preloadGameAssets';
-import { isAgentTerminalPath } from './lib/cashier';
-import { isBackofficePath, isManagerOfficePath } from './lib/backoffice';
-import { ManagerDashboardScreen } from './screens/ManagerDashboardScreen';
-import { ManagerOfficeScreen } from './screens/ManagerOfficeScreen';
-import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
 
 initPwa();
 preloadGameAssets();
@@ -24,20 +19,10 @@ if ('serviceWorker' in navigator) {
   else window.addEventListener('load', registerSw);
 }
 
-const root = createRoot(document.getElementById('root')!);
-
-const staffScreen = isAgentTerminalPath()
-  ? <MobcashAgentScreen />
-  : isManagerOfficePath()
-    ? <ManagerOfficeScreen />
-    : isBackofficePath()
-      ? <ManagerDashboardScreen />
-      : null;
-
-root.render(
+createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      {staffScreen ?? <App />}
+      <App />
     </ErrorBoundary>
   </StrictMode>
 );

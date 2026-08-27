@@ -46,6 +46,7 @@ import { bootstrapGuestSession, signInSession, signOutSession } from './hooks/us
 import { useFavoritesStore } from './stores/favoritesStore';
 import { subscribeMatchSoundToast } from './services/matchSoundService';
 import { useToast } from './ToastContext';
+import { AppRoutes, currentStaffPortal } from './routes';
 
 const GAMES_PATH = '/games';
 const BLACKJACK_PATH = '/games/blackjack';
@@ -328,6 +329,30 @@ function AppContent() {
 }
 
 export default function App() {
+  const [portal, setPortal] = useState(() => currentStaffPortal());
+
+  useEffect(() => {
+    const sync = () => setPortal(currentStaffPortal());
+    window.addEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => {
+      window.removeEventListener('hashchange', sync);
+      window.removeEventListener('popstate', sync);
+    };
+  }, []);
+
+  // Isolated staff portals — no shared session, no cross-redirects:
+  // /#/agent      → кассир
+  // /#/manager    → менеджер (логин), /#/manager/dashboard → кабинет
+  // /#/backoffice → владелец / Superadmin
+  if (portal) {
+    return (
+      <ErrorBoundary>
+        <AppRoutes portal={portal} />
+      </ErrorBoundary>
+    );
+  }
+
   return (
     <ThemeProvider>
       <BetSlipProvider>

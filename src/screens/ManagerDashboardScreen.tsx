@@ -9,10 +9,9 @@ import { ManagersPage } from '../pages/backoffice/Managers';
 import {
   cashierOpLabel,
   cashierOpRef,
-  clearManagerSession,
+  clearOwnerSession,
   collectBackofficeCashier,
   createBackofficeCashier,
-  ensureStaffPortalHome,
   exportCashierLedgerCsv,
   fetchBackofficeCashiers,
   fetchCashierLedger,
@@ -22,8 +21,8 @@ import {
   formatBackofficeDateTime,
   formatDayLabel,
   formatTmtmCompact,
-  loadManagerSession,
-  managerLogin,
+  loadOwnerSession,
+  ownerLogin,
   setCashierFrozen,
   settleRiskBet,
   subscribeNetworkSync,
@@ -44,10 +43,8 @@ export function ManagerDashboardScreen() {
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
-    document.title = 'NextPari — Кабинет управления';
-    const saved = loadManagerSession();
-    if (saved && !ensureStaffPortalHome(saved)) return;
-    setSession(saved);
+    document.title = 'NextPari — Бэкофис владельца';
+    setSession(loadOwnerSession());
     setBooting(false);
   }, []);
 
@@ -67,7 +64,7 @@ export function ManagerDashboardScreen() {
     <BackofficeShell
       session={session}
       onLogout={() => {
-        clearManagerSession();
+        clearOwnerSession();
         setSession(null);
       }}
     />
@@ -84,8 +81,7 @@ function BackofficeLogin({ onSuccess }: { onSuccess: (session: ManagerSession) =
     setError('');
     setSubmitting(true);
     try {
-      const next = await managerLogin(login, pin);
-      if (!ensureStaffPortalHome(next)) return;
+      const next = await ownerLogin(login, pin);
       onSuccess(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось войти');
@@ -102,8 +98,9 @@ function BackofficeLogin({ onSuccess }: { onSuccess: (session: ManagerSession) =
             <Shield className="w-6 h-6 text-white" />
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">NextPari</p>
-            <h1 className="text-xl font-extrabold text-ink-900">Кабинет управления</h1>
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">NextPari · Superadmin</p>
+            <h1 className="text-xl font-extrabold text-ink-900">Бэкофис владельца</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Вход только для Owner / Superadmin</p>
           </div>
         </div>
         {error && (
@@ -141,8 +138,7 @@ function BackofficeLogin({ onSuccess }: { onSuccess: (session: ManagerSession) =
           {submitting ? 'Вход…' : 'Войти'}
         </button>
         <div className="mt-4 text-[11px] text-gray-500 space-y-1">
-          <p>Superadmin: <span className="font-bold text-gray-700">owner</span> / PIN <span className="font-bold text-gray-700">0000</span></p>
-          <p>Manager: <span className="font-bold text-gray-700">manager01</span> / PIN <span className="font-bold text-gray-700">1111</span></p>
+          <p>Владелец: <span className="font-bold text-gray-700">owner</span> / PIN <span className="font-bold text-gray-700">0000</span></p>
         </div>
       </div>
     </div>
@@ -171,11 +167,11 @@ function BackofficeShell({
           </span>
         </div>
         <nav className="p-3 flex flex-col gap-1">
-          <NavBtn active={tab === 'finance'} onClick={() => setTab('finance')} icon={LayoutDashboard} label="Финансы" />
+          <NavBtn active={tab === 'finance'} onClick={() => setTab('finance')} icon={LayoutDashboard} label="Финансы сети" />
           <NavBtn active={tab === 'managers'} onClick={() => setTab('managers')} icon={UserCog} label="Менеджеры" />
-          <NavBtn active={tab === 'agents'} onClick={() => setTab('agents')} icon={Building2} label="Кассы и агенты" />
-          <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="👥 Игроки" />
-          <NavBtn active={tab === 'risk'} onClick={() => setTab('risk')} icon={AlertTriangle} label="Риски ставок" />
+          <NavBtn active={tab === 'agents'} onClick={() => setTab('agents')} icon={Building2} label="Все кассы" />
+          <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="Игроки" />
+          <NavBtn active={tab === 'risk'} onClick={() => setTab('risk')} icon={AlertTriangle} label="Риски" />
         </nav>
         <div className="mt-auto p-3">
           <button

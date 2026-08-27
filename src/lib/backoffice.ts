@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { homePathForRole, type StaffRole } from '../routes/portal';
+import { type StaffRole } from '../routes/portal';
 
 export type { StaffRole };
 export type ManagerRole = 'superadmin' | 'manager';
@@ -102,6 +102,8 @@ export interface RiskBet {
 }
 
 const SESSION_KEY = 'nextpari-backoffice-session';
+const OWNER_SESSION_KEY = 'nextpari-owner-session';
+const MANAGER_SESSION_KEY = 'nextpari-manager-session';
 const DEMO_STORE_KEY = 'nextpari-backoffice-demo';
 const SUPERADMIN_ID = '00000000-0000-0000-0000-00000000aa01';
 const MANAGER_ID = '00000000-0000-0000-0000-00000000aa02';
@@ -506,20 +508,9 @@ export function staffRoleOf(session: ManagerSession): StaffRole {
   return session.role === 'superadmin' ? 'OWNER' : 'MANAGER';
 }
 
-export function ensureStaffPortalHome(session: ManagerSession): boolean {
-  if (typeof window === 'undefined') return true;
-  const dest = homePathForRole(staffRoleOf(session));
-  const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (path !== dest) {
-    window.location.replace(dest);
-    return false;
-  }
-  return true;
-}
-
-export function loadManagerSession(): ManagerSession | null {
+function readSession(key: string): ManagerSession | null {
   try {
-    const raw = sessionStorage.getItem(SESSION_KEY);
+    const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const parsed = parseSession(asRecord(JSON.parse(raw)));
     return parsed.id ? parsed : null;
@@ -528,8 +519,8 @@ export function loadManagerSession(): ManagerSession | null {
   }
 }
 
-export function saveManagerSession(session: ManagerSession) {
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+function writeSession(key: string, session: ManagerSession) {
+  sessionStorage.setItem(key, JSON.stringify({
     id: session.id,
     login: session.login,
     full_name: session.fullName,
@@ -539,26 +530,84 @@ export function saveManagerSession(session: ManagerSession) {
   }));
 }
 
+export function loadOwnerSession(): ManagerSession | null {
+  const session = readSession(OWNER_SESSION_KEY);
+  if (session?.role === 'superadmin') return session;
+  return null;
+}
+
+export function saveOwnerSession(session: ManagerSession) {
+  writeSession(OWNER_SESSION_KEY, session);
+}
+
+export function clearOwnerSession() {
+  sessionStorage.removeItem(OWNER_SESSION_KEY);
+}
+
+export function loadNetworkManagerSession(): ManagerSession | null {
+  const session = readSession(MANAGER_SESSION_KEY);
+  if (session?.role === 'manager') return session;
+  return null;
+}
+
+export function saveNetworkManagerSession(session: ManagerSession) {
+  writeSession(MANAGER_SESSION_KEY, session);
+}
+
+export function clearNetworkManagerSession() {
+  sessionStorage.removeItem(MANAGER_SESSION_KEY);
+}
+
+/** @deprecated isolated owner/manager sessions — use loadOwnerSession / loadNetworkManagerSession */
+export function loadManagerSession(): ManagerSession | null {
+  return loadOwnerSession() ?? loadNetworkManagerSession() ?? readSession(SESSION_KEY);
+}
+
+export function saveManagerSession(session: ManagerSession) {
+  if (session.role === 'superadmin') saveOwnerSession(session);
+  else saveNetworkManagerSession(session);
+}
+
 export function clearManagerSession() {
+  clearOwnerSession();
+  clearNetworkManagerSession();
   sessionStorage.removeItem(SESSION_KEY);
+}
+
+export function staffLocation(): string {
+  if (typeof window === 'undefined') return '/';
+  const hash = window.location.hash.replace(/^#/, '');
+  if (hash.startsWith('/')) return hash.replace(/\/+$/, '') || '/';
+  return window.location.pathname.replace(/\/+$/, '') || '/';
 }
 
 export function isBackofficePath(): boolean {
   if (typeof window === 'undefined') return false;
   const host = window.location.hostname.toLowerCase();
   if (host === 'admin' || host.startsWith('admin.')) return true;
-  const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (path === '/backoffice' || path.startsWith('/backoffice/')) return true;
-  return window.location.hash.replace(/^#/, '') === '/backoffice';
+  const loc = staffLocation();
+  return loc === '/backoffice' || loc.startsWith('/backoffice/');
+}
+
+export function isManagerPortalPath(): boolean {
+  if (typeof window === 'undefined') return false;
+  const loc = staffLocation();
+  if (loc === '/manager' || loc.startsWith('/manager/')) return true;
+  if (loc === '/manager-login') return true;
+  if (loc === '/manager-office' || loc.startsWith('/manager-office/')) return true;
+  return false;
 }
 
 export function isManagerOfficePath(): boolean {
-  if (typeof window === 'undefined') return false;
-  const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  return path === '/manager-office' || path.startsWith('/manager-office/');
+  return isManagerPortalPath();
 }
 
-export async function managerLogin(login: string, pin: string): Promise<ManagerSession> {
+export function isManagerLoginPath(): boolean {
+  const loc = staffLocation();
+  return loc === '/manager' || loc === '/manager-login' || loc === '/manager/login';
+}
+
+async function authenticateStaff(login: string, pin: string): Promise<ManagerSession> {
   const { data, error } = await supabase.rpc('manager_login', {
     p_login: login.trim(),
     p_pin: pin,
@@ -568,7 +617,7 @@ export async function managerLogin(login: string, pin: string): Promise<ManagerS
       (row) => row.login.toLowerCase() === login.trim().toLowerCase() && row.pin === pin,
     );
     if (!found) throw new Error('Неверный логин или PIN-код');
-    const session: ManagerSession = {
+    return {
       id: found.id,
       login: found.login,
       fullName: found.fullName,
@@ -576,14 +625,29 @@ export async function managerLogin(login: string, pin: string): Promise<ManagerS
       networkId: found.networkId,
       networkName: found.networkName,
     };
-    saveManagerSession(session);
-    return session;
   }
   if (error) throw new Error(rpcMessage(error));
   const session = parseSession(asRecord(data));
   if (!session.id) throw new Error('Не удалось войти');
-  saveManagerSession(session);
   return session;
+}
+
+export async function ownerLogin(login: string, pin: string): Promise<ManagerSession> {
+  const session = await authenticateStaff(login, pin);
+  if (session.role !== 'superadmin') throw new Error('Неверный логин или PIN-код');
+  saveOwnerSession(session);
+  return session;
+}
+
+export async function networkManagerLogin(login: string, pin: string): Promise<ManagerSession> {
+  const session = await authenticateStaff(login, pin);
+  if (session.role !== 'manager') throw new Error('Неверный логин или PIN-код');
+  saveNetworkManagerSession(session);
+  return session;
+}
+
+export async function managerLogin(login: string, pin: string): Promise<ManagerSession> {
+  return ownerLogin(login, pin).catch(async () => networkManagerLogin(login, pin));
 }
 
 async function liveSeriesFromTables(session: ManagerSession): Promise<DashboardKpis['series']> {
@@ -1242,4 +1306,59 @@ export function adjustCashierBalanceDirect(agentId: string, amount: number): Bac
   });
   saveDemoStore(store);
   return withLiveMetrics(store, row);
+}
+
+export function managerCreditCashier(managerId: string, cashierId: string, amount: number): BackofficeCashier {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) throw new Error('Укажите сумму пополнения');
+  const store = loadDemoStore();
+  const row = store.cashiers.find((item) => item.id === cashierId);
+  if (!row) throw new Error('Касса не найдена');
+  if (row.managerId !== managerId) throw new Error('Эта точка не входит в вашу сеть');
+  debitManagerLimit(store, managerId, value);
+  row.floatBalance = Number((row.floatBalance + value).toFixed(2));
+  store.ledger.unshift({
+    id: crypto.randomUUID(),
+    cashierId,
+    type: 'topup',
+    playerPublicId: 'MANAGER',
+    receiptCode: `MC-MGR-${Date.now()}`,
+    amount: value,
+    signedAmount: value,
+    floatAfter: row.floatBalance,
+    status: 'completed',
+    createdAt: new Date().toISOString(),
+  });
+  saveDemoStore(store);
+  return withLiveMetrics(store, row);
+}
+
+export function managerCollectCashier(managerId: string, cashierId: string, amount: number): BackofficeCashier {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) throw new Error('Укажите сумму инкассации');
+  const store = loadDemoStore();
+  const row = store.cashiers.find((item) => item.id === cashierId);
+  if (!row) throw new Error('Касса не найдена');
+  if (row.managerId !== managerId) throw new Error('Эта точка не входит в вашу сеть');
+  if (row.floatBalance < value) throw new Error('Недостаточно средств в кассе для инкассации');
+  row.floatBalance = Number((row.floatBalance - value).toFixed(2));
+  creditManagerLimit(store, managerId, value);
+  store.ledger.unshift({
+    id: crypto.randomUUID(),
+    cashierId,
+    type: 'collection',
+    playerPublicId: 'MANAGER',
+    receiptCode: `MC-COL-${Date.now()}`,
+    amount: value,
+    signedAmount: -value,
+    floatAfter: row.floatBalance,
+    status: 'completed',
+    createdAt: new Date().toISOString(),
+  });
+  saveDemoStore(store);
+  return withLiveMetrics(store, row);
+}
+
+export function managerLimitOf(managerId: string): number {
+  return loadDemoStore().managers.find((row) => row.id === managerId)?.allocatedBalance ?? 0;
 }

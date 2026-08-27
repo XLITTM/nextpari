@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import {
   adjustCashierBalanceDirect,
   cashiersOfManager,
+  managerCollectCashier,
+  managerCreditCashier,
+  managerLimitOf,
   peekNetworkCashiers,
   peekNetworkManagers,
   subscribeNetworkSync,
@@ -19,8 +22,11 @@ interface BackofficeNetworkState {
   managers: NetworkManager[];
   hydrate: () => void;
   agentsOf: (managerId: string) => BackofficeCashier[];
+  managerLimit: (managerId: string) => number;
   toggleAgentBlockStatus: (agentId: string, blockedBy: CashierBlockedBy) => BackofficeCashier;
   updateAgentBalance: (agentId: string, amount: number) => BackofficeCashier;
+  creditAgentFromLimit: (managerId: string, agentId: string, amount: number) => BackofficeCashier;
+  collectAgentToManager: (managerId: string, agentId: string, amount: number) => BackofficeCashier;
 }
 
 function mirrorHierarchyAgent(cashier: BackofficeCashier) {
@@ -48,6 +54,7 @@ export const useBackofficeStore = create<BackofficeNetworkState>((set, get) => (
     managers: peekNetworkManagers(),
   }),
   agentsOf: (managerId) => get().cashiers.filter((row) => row.managerId === managerId),
+  managerLimit: (managerId) => managerLimitOf(managerId),
   toggleAgentBlockStatus: (agentId, blockedBy) => {
     const next = toggleCashierBlock(agentId, blockedBy);
     mirrorHierarchyAgent(next);
@@ -56,6 +63,18 @@ export const useBackofficeStore = create<BackofficeNetworkState>((set, get) => (
   },
   updateAgentBalance: (agentId, amount) => {
     const next = adjustCashierBalanceDirect(agentId, amount);
+    mirrorHierarchyAgent(next);
+    get().hydrate();
+    return next;
+  },
+  creditAgentFromLimit: (managerId, agentId, amount) => {
+    const next = managerCreditCashier(managerId, agentId, amount);
+    mirrorHierarchyAgent(next);
+    get().hydrate();
+    return next;
+  },
+  collectAgentToManager: (managerId, agentId, amount) => {
+    const next = managerCollectCashier(managerId, agentId, amount);
     mirrorHierarchyAgent(next);
     get().hydrate();
     return next;
@@ -76,4 +95,12 @@ export function updateAgentBalance(agentId: string, amount: number) {
 
 export function agentsOfManager(managerId: string) {
   return cashiersOfManager(managerId);
+}
+
+export function creditAgentFromLimit(managerId: string, agentId: string, amount: number) {
+  return useBackofficeStore.getState().creditAgentFromLimit(managerId, agentId, amount);
+}
+
+export function collectAgentToManager(managerId: string, agentId: string, amount: number) {
+  return useBackofficeStore.getState().collectAgentToManager(managerId, agentId, amount);
 }

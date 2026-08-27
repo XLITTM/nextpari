@@ -8,15 +8,15 @@ export interface PortalRoute {
 }
 
 export const PORTAL_HOME: Record<StaffRole, string> = {
-  OWNER: '/backoffice',
-  MANAGER: '/manager-office',
-  AGENT: '/agent',
+  OWNER: '/#/backoffice',
+  MANAGER: '/#/manager/dashboard',
+  AGENT: '/#/agent',
 };
 
 export const PORTAL_LOGIN: Record<StaffRole, string> = {
-  OWNER: '/backoffice',
-  MANAGER: '/manager-office',
-  AGENT: '/agent',
+  OWNER: '/#/backoffice',
+  MANAGER: '/#/manager',
+  AGENT: '/#/agent',
 };
 
 export const ROLE_BY_PORTAL: Record<PortalId, StaffRole> = {
@@ -27,6 +27,8 @@ export const ROLE_BY_PORTAL: Record<PortalId, StaffRole> = {
 
 export function currentPath(): string {
   if (typeof window === 'undefined') return '/';
+  const hash = window.location.hash.replace(/^#/, '');
+  if (hash.startsWith('/')) return hash.replace(/\/+$/, '') || '/';
   return window.location.pathname.replace(/\/+$/, '') || '/';
 }
 
@@ -35,21 +37,20 @@ export function parsePortalRoute(path = currentPath()): PortalRoute | null {
   if (clean === '/backoffice' || clean.startsWith('/backoffice/')) {
     return { portal: 'owner', page: 'home', isLogin: false };
   }
+  if (clean === '/manager-login' || clean === '/manager' || clean === '/manager/login') {
+    return { portal: 'manager', page: 'login', isLogin: true };
+  }
   if (clean === '/manager-office' || clean.startsWith('/manager-office/')) {
-    return { portal: 'manager', page: 'home', isLogin: false };
+    return { portal: 'manager', page: 'dashboard', isLogin: false };
+  }
+  if (clean.startsWith('/manager/')) {
+    const rest = clean.slice('/manager/'.length);
+    return { portal: 'manager', page: rest || 'dashboard', isLogin: rest === 'login' };
   }
   if (clean === '/agent' || clean.startsWith('/agent/')) {
     return { portal: 'agent', page: clean === '/agent/login' ? 'login' : 'home', isLogin: clean === '/agent/login' };
   }
-  const match = clean.match(/^\/(owner|manager|agent)(?:\/(.*))?$/);
-  if (!match) return null;
-  const portal = match[1] as PortalId;
-  const rest = (match[2] ?? '').replace(/\/+$/, '');
-  return {
-    portal,
-    page: rest || 'home',
-    isLogin: rest === 'login',
-  };
+  return null;
 }
 
 export function isStaffPortalPath(path = currentPath()): boolean {
@@ -62,6 +63,8 @@ export function homePathForRole(role: StaffRole, _requestedPortal?: StaffRole): 
 
 export function navigatePortal(path: string) {
   if (typeof window === 'undefined') return;
-  if (currentPath() === path) return;
+  if (currentPath() === path || window.location.hash === path.replace(/^[^#]*/, '') || `${window.location.pathname}${window.location.hash}` === path) {
+    return;
+  }
   window.location.assign(path);
 }
