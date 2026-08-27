@@ -56,9 +56,7 @@ export function HomeScreen({
       <SportsScroll selected={selectedSport} onSelect={setSelectedSport} />
       <PromoScroll onNavigate={onNavigate} />
 
-      <div className="space-y-4 pt-2">
-        <ChampionshipsList />
-
+      <div className="flex flex-col gap-6 pt-2">
         {(loading || filteredLive.length > 0) && (
           <section>
             <SectionHeader
@@ -112,6 +110,8 @@ export function HomeScreen({
             <p className="px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">Матчи появятся скоро</p>
           )}
         </section>
+
+        <ChampionshipsList />
 
         <section>
           <CasinoCarousel onNavigate={onNavigate} />
