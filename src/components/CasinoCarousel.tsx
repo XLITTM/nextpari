@@ -16,7 +16,7 @@ function openCasinoGame(game: CasinoGame, onNavigate?: (screen: Screen) => void)
 
 export function CasinoCarousel({ onNavigate }: CasinoCarouselProps) {
   return (
-    <div className="space-y-0 pt-1">
+    <div>
       <SectionHeader title="Казино" onSeeAll={() => {}} />
       <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-4 pb-1">
         {casinoGames.map((game) => {

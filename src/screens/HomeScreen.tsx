@@ -56,7 +56,9 @@ export function HomeScreen({
       <SportsScroll selected={selectedSport} onSelect={setSelectedSport} />
       <PromoScroll onNavigate={onNavigate} />
 
-      <div className="space-y-1 pt-2">
+      <div className="space-y-4 pt-2">
+        <ChampionshipsList />
+
         {(loading || filteredLive.length > 0) && (
           <section>
             <SectionHeader
@@ -84,7 +86,7 @@ export function HomeScreen({
           </section>
         )}
 
-        <section className="mt-4">
+        <section>
           <SectionHeader
             title="Популярное Линия"
             filterLabel="Спорт"
@@ -111,28 +113,20 @@ export function HomeScreen({
           )}
         </section>
 
-        <section className="mt-4">
+        <section>
           <CasinoCarousel onNavigate={onNavigate} />
         </section>
 
-        {/* Casino Categories */}
-        <section className="mt-4">
+        <section>
           <CasinoCategoriesScroll />
         </section>
 
-        {/* Championships LIVE */}
-        <section className="mt-4">
-          <ChampionshipsList />
-        </section>
-
-        {/* Esports Disciplines */}
-        <section className="mt-4">
+        <section>
           <EsportsDisciplinesScroll />
         </section>
 
-        {/* Esports LIVE */}
         {esportsLiveMatches.length > 0 && (
-          <section className="mt-4">
+          <section>
             <SectionHeader
               title="Киберспорт LIVE"
               badge="Esports"
@@ -154,9 +148,8 @@ export function HomeScreen({
           </section>
         )}
 
-        {/* Esports Line */}
         {esportsUpcomingMatches.length > 0 && (
-          <section className="mt-4">
+          <section>
             <SectionHeader
               title="Киберспорт Линия"
               badge="Esports"
@@ -177,7 +170,6 @@ export function HomeScreen({
             </div>
           </section>
         )}
-
       </div>
     </div>
   );
