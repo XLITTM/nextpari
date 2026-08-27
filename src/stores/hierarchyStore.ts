@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { StaffRole } from '../routes/portal';
+import { syncManagerAllocatedBalance } from '../lib/backoffice';
 
 export type HierarchyOpType =
   | 'manager_credit'
@@ -415,6 +416,7 @@ export const useHierarchyStore = create<HierarchyState>()(
               ...get().ops,
             ],
           });
+          syncManagerAllocatedBalance(created.login, created.balance);
           return created;
         },
         adjustManager: (managerId, amount, actorId) => {
@@ -428,9 +430,10 @@ export const useHierarchyStore = create<HierarchyState>()(
           if (!owner) throw new Error('Владелец не найден');
           if (delta > 0 && owner.balance < delta) throw new Error('Недостаточно средств у владельца');
           if (delta < 0 && manager.balance < Math.abs(delta)) throw new Error('Недостаточно средств у менеджера');
+          const nextBalance = money(manager.balance + delta);
           set({
             staff: get().staff.map((row) => {
-              if (row.id === manager.id) return { ...row, balance: money(row.balance + delta) };
+              if (row.id === manager.id) return { ...row, balance: nextBalance };
               if (row.id === owner.id) return { ...row, balance: money(row.balance - delta) };
               return row;
             }),
@@ -447,6 +450,7 @@ export const useHierarchyStore = create<HierarchyState>()(
               ...get().ops,
             ],
           });
+          syncManagerAllocatedBalance(manager.login, nextBalance);
         },
         createAgent: (params) => {
           const manager = get().staff.find((row) => row.id === params.managerId && row.role === 'MANAGER');

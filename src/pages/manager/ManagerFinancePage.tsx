@@ -12,7 +12,7 @@ export function ManagerFinancePage({ session }: { session: ManagerSession }) {
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const { managerAgents, limit } = useManagerNetwork(session?.id);
+  const { managerAgents, limit } = useManagerNetwork(session);
   const cashiers = managerAgents || [];
 
   const load = useCallback(async () => {

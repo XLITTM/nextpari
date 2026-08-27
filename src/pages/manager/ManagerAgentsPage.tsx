@@ -20,8 +20,9 @@ export function ManagerAgentsPage({
   session: ManagerSession;
   onNotice: (value: string) => void;
 }) {
-  const { managerAgents, limit, hydrate } = useManagerNetwork(session?.id);
+  const { managerAgents, limit, hydrate, currentManager } = useManagerNetwork(session);
   const cashiers = managerAgents || [];
+  const managerId = currentManager?.id ?? session.id;
   const [createOpen, setCreateOpen] = useState(false);
   const [topupId, setTopupId] = useState<string | null>(null);
   const [collectId, setCollectId] = useState<string | null>(null);
@@ -158,7 +159,7 @@ export function ManagerAgentsPage({
           confirm="Перевести в кассу"
           onClose={() => setTopupId(null)}
           onSubmit={(amount) => {
-            creditAgentFromLimit(session.id, topupTarget.id, amount);
+            creditAgentFromLimit(managerId, topupTarget.id, amount);
             onNotice(`Касса ${topupTarget.fullName} пополнена на ${formatTmtmCompact(amount)}`);
             setTopupId(null);
           }}
@@ -171,7 +172,7 @@ export function ManagerAgentsPage({
           confirm="Забрать в лимит"
           onClose={() => setCollectId(null)}
           onSubmit={(amount) => {
-            collectAgentToManager(session.id, collectTarget.id, amount);
+            collectAgentToManager(managerId, collectTarget.id, amount);
             onNotice(`Инкассация ${formatTmtmCompact(amount)} зачислена в лимит менеджера`);
             setCollectId(null);
           }}

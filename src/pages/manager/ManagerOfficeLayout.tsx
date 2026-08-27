@@ -6,6 +6,7 @@ import {
   isManagerLoginPath,
   loadNetworkManagerSession,
   networkManagerLogin,
+  saveNetworkManagerSession,
   type ManagerSession,
 } from '../../lib/backoffice';
 import { useManagerNetwork } from '../../stores/backofficeStore';
@@ -34,6 +35,9 @@ export function ManagerOfficeLayout() {
   useEffect(() => {
     document.title = 'NextPari — Кабинет управляющего сетью';
     const saved = loadNetworkManagerSession();
+    if (saved) {
+      saveNetworkManagerSession(saved);
+    }
     setSession(saved);
     setBooting(false);
     if (saved && isManagerLoginPath()) goManagerOffice('agents');
@@ -140,7 +144,7 @@ function ManagerOfficeShell({
 }) {
   const [page, setPage] = useState<ManagerOfficePage>(() => managerOfficePage());
   const [notice, setNotice] = useState('');
-  const { currentManager, limit, hydrate } = useManagerNetwork(session?.id);
+  const { currentManager, limit, hydrate } = useManagerNetwork(session);
 
   useEffect(() => {
     hydrate();
@@ -151,7 +155,7 @@ function ManagerOfficeShell({
       window.removeEventListener('hashchange', sync);
       window.removeEventListener('popstate', sync);
     };
-  }, [hydrate]);
+  }, [hydrate, session.id, session.login]);
 
   const displayName = session?.fullName || currentManager?.fullName || session?.login || 'Менеджер';
 

@@ -400,12 +400,36 @@ function rpcMessage(error: { message?: string } | null | undefined): string {
 function parseSession(raw: Record<string, unknown>): ManagerSession {
   const role = str(raw.role) === 'manager' ? 'manager' : 'superadmin';
   return {
-    id: str(raw.id),
+    id: str(raw.id ?? raw.manager_id ?? raw.managerId ?? raw.user_id ?? raw.userId),
     login: str(raw.login),
     fullName: str(raw.full_name ?? raw.fullName),
     role,
     networkId: raw.network_id == null && raw.networkId == null ? null : str(raw.network_id ?? raw.networkId),
     networkName: str(raw.network_name ?? raw.networkName, role === 'superadmin' ? 'Вся платформа' : 'Сеть'),
+  };
+}
+
+function findStoredManager(idOrLogin: string | null | undefined): StoredManager | undefined {
+  const key = String(idOrLogin ?? '').trim();
+  if (!key) return undefined;
+  const login = key.toLowerCase();
+  return loadDemoStore().managers.find(
+    (row) => row.id === key || row.login.toLowerCase() === login,
+  );
+}
+
+/** Align a live session with the network store so owner and manager share the same managerId. */
+export function bindManagerSession(session: ManagerSession): ManagerSession {
+  if (session.role !== 'manager') return session;
+  const match = findStoredManager(session.id) ?? findStoredManager(session.login);
+  if (!match) return session;
+  return {
+    ...session,
+    id: match.id,
+    login: match.login,
+    fullName: match.fullName || session.fullName,
+    networkId: match.networkId,
+    networkName: match.networkName || session.networkName,
   };
 }
 
@@ -442,7 +466,11 @@ function lastDays(count: number): string[] {
 
 function scopedCashiers(session: ManagerSession, list: BackofficeCashier[]): BackofficeCashier[] {
   if (session.role === 'superadmin') return list;
-  return list.filter((row) => row.managerId === session.id);
+  const bound = bindManagerSession(session);
+  const keys = new Set(
+    [bound.id, bound.login, session.id, session.login].filter((value): value is string => Boolean(value)),
+  );
+  return list.filter((row) => Boolean(row.managerId && keys.has(row.managerId)));
 }
 
 function assertCashierScope(session: ManagerSession, row: BackofficeCashier) {
@@ -514,7 +542,8 @@ function managerAccounts(): Array<ManagerSession & { pin: string }> {
 }
 
 function debitManagerLimit(store: DemoStore, managerId: string, amount: number) {
-  const manager = store.managers.find((row) => row.id === managerId);
+  const manager = store.managers.find((row) => row.id === managerId)
+    ?? store.managers.find((row) => row.login.toLowerCase() === managerId.trim().toLowerCase());
   if (!manager) throw new Error('Менеджер не найден');
   if (manager.allocatedBalance < amount) {
     throw new Error('Недостаточно лимита менеджера для выдачи в кассу');
@@ -523,9 +552,18 @@ function debitManagerLimit(store: DemoStore, managerId: string, amount: number) 
 }
 
 function creditManagerLimit(store: DemoStore, managerId: string, amount: number) {
-  const manager = store.managers.find((row) => row.id === managerId);
+  const manager = store.managers.find((row) => row.id === managerId)
+    ?? store.managers.find((row) => row.login.toLowerCase() === managerId.trim().toLowerCase());
   if (!manager) return;
   manager.allocatedBalance = Number((manager.allocatedBalance + amount).toFixed(2));
+}
+
+function cashierBelongsToManager(row: BackofficeCashier, managerId: string, store: DemoStore): boolean {
+  if (!row.managerId) return false;
+  if (row.managerId === managerId) return true;
+  const manager = store.managers.find((item) => item.id === managerId)
+    ?? store.managers.find((item) => item.login.toLowerCase() === managerId.trim().toLowerCase());
+  return Boolean(manager && (row.managerId === manager.id || row.managerId === manager.login));
 }
 
 export function staffRoleOf(session: ManagerSession): StaffRole {
@@ -537,7 +575,7 @@ function readSession(key: string): ManagerSession | null {
     const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const parsed = parseSession(asRecord(JSON.parse(raw)));
-    return parsed.id ? parsed : null;
+    return parsed.id || parsed.login ? parsed : null;
   } catch {
     return null;
   }
@@ -570,8 +608,8 @@ export function clearOwnerSession() {
 
 export function loadNetworkManagerSession(): ManagerSession | null {
   const session = readSession(MANAGER_SESSION_KEY);
-  if (session?.role === 'manager') return session;
-  return null;
+  if (session?.role !== 'manager') return null;
+  return bindManagerSession(session);
 }
 
 export function saveNetworkManagerSession(session: ManagerSession) {
@@ -664,7 +702,7 @@ export async function ownerLogin(login: string, pin: string): Promise<ManagerSes
 }
 
 export async function networkManagerLogin(login: string, pin: string): Promise<ManagerSession> {
-  const session = await authenticateStaff(login, pin);
+  const session = bindManagerSession(await authenticateStaff(login, pin));
   if (session.role !== 'manager') throw new Error('Неверный логин или PIN-код');
   saveNetworkManagerSession(session);
   return session;
@@ -853,7 +891,8 @@ export async function createBackofficeCashier(
     managerId?: string | null;
   },
 ): Promise<void> {
-  const assignedManagerId = session.role === 'manager' ? session.id : (params.managerId ?? null);
+  const bound = session.role === 'manager' ? bindManagerSession(session) : session;
+  const assignedManagerId = bound.role === 'manager' ? bound.id : (params.managerId ?? null);
   const { error } = await supabase.rpc('manager_create_cashier', {
     p_manager_id: assignedManagerId ?? session.id,
     p_login: params.login,
@@ -1214,7 +1253,7 @@ export async function fetchNetworkManagers(session: ManagerSession): Promise<Net
 
 export async function fetchMyManagerLimit(session: ManagerSession): Promise<number | null> {
   if (session.role !== 'manager') return null;
-  const mine = loadDemoStore().managers.find((row) => row.id === session.id);
+  const mine = findStoredManager(session.id) ?? findStoredManager(session.login);
   return mine?.allocatedBalance ?? 0;
 }
 
@@ -1273,7 +1312,11 @@ export function peekNetworkManagers(): NetworkManager[] {
 }
 
 export function cashiersOfManager(managerId: string): BackofficeCashier[] {
-  return peekNetworkCashiers().filter((row) => row.managerId === managerId);
+  const manager = findStoredManager(managerId);
+  const keys = new Set(
+    [managerId, manager?.id, manager?.login].filter((value): value is string => Boolean(value)),
+  );
+  return peekNetworkCashiers().filter((row) => Boolean(row.managerId && keys.has(row.managerId)));
 }
 
 export function getCashierAccess(idOrLogin: string): {
@@ -1350,7 +1393,7 @@ export function managerCreditCashier(managerId: string, cashierId: string, amoun
   const store = loadDemoStore();
   const row = store.cashiers.find((item) => item.id === cashierId);
   if (!row) throw new Error('Касса не найдена');
-  if (row.managerId !== managerId) throw new Error('Эта точка не входит в вашу сеть');
+  if (!cashierBelongsToManager(row, managerId, store)) throw new Error('Эта точка не входит в вашу сеть');
   debitManagerLimit(store, managerId, value);
   row.floatBalance = Number((row.floatBalance + value).toFixed(2));
   store.ledger.unshift({
@@ -1375,7 +1418,7 @@ export function managerCollectCashier(managerId: string, cashierId: string, amou
   const store = loadDemoStore();
   const row = store.cashiers.find((item) => item.id === cashierId);
   if (!row) throw new Error('Касса не найдена');
-  if (row.managerId !== managerId) throw new Error('Эта точка не входит в вашу сеть');
+  if (!cashierBelongsToManager(row, managerId, store)) throw new Error('Эта точка не входит в вашу сеть');
   if (row.floatBalance < value) throw new Error('Недостаточно средств в кассе для инкассации');
   row.floatBalance = Number((row.floatBalance - value).toFixed(2));
   creditManagerLimit(store, managerId, value);
@@ -1396,5 +1439,17 @@ export function managerCollectCashier(managerId: string, cashierId: string, amou
 }
 
 export function managerLimitOf(managerId: string): number {
-  return loadDemoStore().managers.find((row) => row.id === managerId)?.allocatedBalance ?? 0;
+  return findStoredManager(managerId)?.allocatedBalance ?? 0;
+}
+
+export function syncManagerAllocatedBalance(idOrLogin: string, allocatedBalance: number) {
+  const manager = findStoredManager(idOrLogin);
+  if (!manager) return;
+  const value = Number(allocatedBalance);
+  if (!Number.isFinite(value)) return;
+  const store = loadDemoStore();
+  const row = store.managers.find((item) => item.id === manager.id);
+  if (!row) return;
+  row.allocatedBalance = Number(value.toFixed(2));
+  saveDemoStore(store);
 }
