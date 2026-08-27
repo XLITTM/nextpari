@@ -25,7 +25,7 @@ export function SportsScroll({ selected, onSelect }: SportsScrollProps) {
   });
 
   return (
-    <div className="flex overflow-x-auto gap-2 scrollbar-hide px-4 pb-2">
+    <div className="flex gap-2 overflow-x-auto px-4 pb-2 pt-3 scrollbar-hide">
       {ordered.map((sport) => {
         const isActive = selected === sport.id;
         const count = sport.id === 'all' ? liveMatches.length : counts[sport.id] ?? 0;
@@ -34,16 +34,18 @@ export function SportsScroll({ selected, onSelect }: SportsScrollProps) {
             key={sport.id}
             type="button"
             onClick={() => onSelect(sport.id)}
-            className={`min-w-[56px] h-[56px] p-1 rounded-xl shadow-sm flex flex-col items-center justify-center gap-0.5 shrink-0 cursor-pointer ${
-              isActive ? 'bg-green-50' : 'bg-white'
+            className={`flex min-w-[70px] shrink-0 flex-col items-center gap-1 rounded-2xl bg-white p-3 shadow-sm dark:bg-zinc-800 ${
+              isActive ? 'shadow-md' : ''
             }`}
           >
-            <SportIcon sport={sport.id} className="w-5 h-5 text-[#4ade80]" />
-            <span className="text-[9px] text-gray-700 font-medium text-center leading-tight line-clamp-2">
+            <SportIcon sport={sport.id} className="h-6 w-6 text-[#4ade80]" />
+            <span className={`text-center text-[9px] font-medium leading-tight line-clamp-2 ${
+              isActive ? 'text-[#c88d3e]' : 'text-gray-700 dark:text-gray-300'
+            }`}>
               {sport.name}
             </span>
             {count > 0 && sport.id !== 'all' ? (
-              <span className="text-[8px] font-bold text-brand-600 tabular-nums">{count}</span>
+              <span className="text-[8px] font-bold tabular-nums text-gray-500 dark:text-gray-400">{count}</span>
             ) : null}
           </button>
         );

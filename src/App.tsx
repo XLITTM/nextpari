@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AuthScreen } from './screens/AuthScreen';
 import { Header } from './components/Header';
+import { MainTabs } from './components/MainTabs';
 import { BottomNav } from './components/BottomNav';
 import { SearchModal } from './components/SearchModal';
 import { BetSlipProvider, useBetSlip } from './BetSlipContext';
@@ -23,7 +24,7 @@ import { PromoScreen } from './screens/PromoScreen';
 import { PersonalDataScreen } from './screens/PersonalDataScreen';
 import { GameListScreen } from './screens/GameListScreen';
 import { SportsListScreen } from './screens/SportsListScreen';
-import type { Screen, SportId } from './types';
+import type { Screen, SportId, MainTab } from './types';
 import { ChampionshipsScreen } from './screens/ChampionshipsScreen';
 import { SlotsScreen } from './screens/SlotsScreen';
 import { LiveCasinoScreen } from './screens/LiveCasinoScreen';
@@ -113,6 +114,7 @@ function AppContent() {
   const [isAuthenticated, setIsAuthenticated] = useState(() => bootstrapGuestSession());
   const [screen, setScreenState] = useState<Screen>(screenFromPath);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mainTab, setMainTab] = useState<MainTab>('top');
   const favoriteMatchIds = useFavoritesStore((s) => s.favoriteMatchIds);
   const toggleMatchFavorite = useFavoritesStore((s) => s.toggleMatchFavorite);
   const { showToast } = useToast();
@@ -156,6 +158,15 @@ function AppContent() {
   const goHome = () => setScreen({ name: 'home' });
   const openGameList = (mode: 'live' | 'line') => setScreen({ name: 'gamelist', mode });
 
+  const handleMainTab = (tab: MainTab) => {
+    if (tab === 'games') {
+      setScreen({ name: 'games' });
+      return;
+    }
+    setMainTab(tab);
+    if (screen.name !== 'home') setScreen({ name: 'home' });
+  };
+
   const showHeader = screen.name === 'home' || screen.name === 'favorites';
   const isArcade =
     screen.name === 'blackjack' ||
@@ -170,6 +181,7 @@ function AppContent() {
       case 'home':
         return (
           <HomeScreen
+            mainTab={mainTab}
             onOpenMatch={openMatch}
             onOpenGameList={openGameList}
             onNavigate={setScreen}
@@ -303,10 +315,12 @@ function AppContent() {
               ? 'bg-[#07140c]'
               : 'bg-[#031c1a]'
         }`
-      : 'flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-900 max-w-lg mx-auto relative'
+      : 'relative mx-auto flex h-screen max-w-lg flex-col overflow-hidden bg-[#f0f2f5] dark:bg-gray-900'
     }>
       {showHeader && (
-        <Header balance={balance} onSearchClick={() => setSearchOpen(true)} onNavigate={setScreen} />
+        <Header balance={balance} onSearchClick={() => setSearchOpen(true)} onNavigate={setScreen}>
+          {screen.name === 'home' && <MainTabs active={mainTab} onChange={handleMainTab} />}
+        </Header>
       )}
 
       <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>

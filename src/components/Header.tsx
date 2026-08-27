@@ -1,4 +1,5 @@
 import { Search, Plus, Sun, Moon, Settings } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTheme } from '../ThemeContext';
 import type { Screen } from '../types';
 
@@ -6,57 +7,57 @@ interface HeaderProps {
   balance: number;
   onSearchClick: () => void;
   onNavigate: (screen: Screen) => void;
+  children?: ReactNode;
 }
 
-export function Header({ balance, onSearchClick, onNavigate }: HeaderProps) {
+export function Header({ balance, onSearchClick, onNavigate, children }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <header className="sticky top-0 z-50 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 safe-bottom transition-colors">
-      <div className="flex items-center justify-between px-4 h-14">
-        {/* Balance pill (left) */}
-        <div className="flex items-center gap-1 bg-gray-100 dark:bg-[#1e293b] rounded-full pl-1 pr-2.5 py-1 border border-gray-200 dark:border-gray-700">
-          <button className="w-6 h-6 rounded-full bg-brand-600 flex items-center justify-center shrink-0 active:scale-90 transition-transform shadow-sm">
-            <Plus className="w-4 h-4 text-white" strokeWidth={2.5} />
+    <header className="sticky top-0 z-50 w-full rounded-b-2xl bg-white shadow-sm dark:bg-zinc-900">
+      <div className="flex h-14 items-center justify-between px-4">
+        <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 py-1 pl-1 pr-2.5 dark:border-gray-700 dark:bg-[#1e293b]">
+          <button className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 shadow-sm transition-transform active:scale-90">
+            <Plus className="h-4 w-4 text-white" strokeWidth={2.5} />
           </button>
-          <span className="text-sm font-bold text-gray-900 dark:text-white tabular-nums whitespace-nowrap">
+          <span className="whitespace-nowrap text-sm font-bold tabular-nums text-gray-900 dark:text-white">
             {balance.toLocaleString('ru-RU')}
           </span>
         </div>
 
-        {/* Logo (center) */}
         <button type="button" className="flex items-center justify-center gap-2">
-          <img src="/logo.png" alt="Nextpari" className="w-10 h-10 object-cover rounded-xl shrink-0" />
-          <div className="font-black italic text-2xl leading-none tracking-tighter">
-            <span className="text-gray-900 dark:text-white">Next</span><span className="text-brand-600">pari</span>
+          <img src="/logo.png" alt="Nextpari" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
+          <div className="text-2xl font-black italic leading-none tracking-tighter">
+            <span className="text-gray-900 dark:text-white">Next</span>
+            <span className="text-brand-600">pari</span>
           </div>
         </button>
 
-        {/* Theme toggle + Search (right) */}
         <div className="flex items-center gap-0.5">
           <button
             onClick={toggleTheme}
-            className="w-9 h-9 flex items-center justify-center text-gray-800 dark:text-gray-200 active:scale-90 transition-transform"
+            className="flex h-9 w-9 items-center justify-center text-gray-800 transition-transform active:scale-90 dark:text-gray-200"
             aria-label="Переключить тему"
           >
-            {theme === 'dark' ? <Sun className="w-5 h-5" strokeWidth={2.2} /> : <Moon className="w-5 h-5" strokeWidth={2.2} />}
+            {theme === 'dark' ? <Sun className="h-5 w-5" strokeWidth={2.2} /> : <Moon className="h-5 w-5" strokeWidth={2.2} />}
           </button>
           <button
             onClick={() => onNavigate({ name: 'settings' })}
-            className="w-9 h-9 flex items-center justify-center text-gray-800 dark:text-gray-200 active:scale-90 transition-transform"
+            className="flex h-9 w-9 items-center justify-center text-gray-800 transition-transform active:scale-90 dark:text-gray-200"
             aria-label="Настройки"
           >
-            <Settings className="w-5 h-5" strokeWidth={2.2} />
+            <Settings className="h-5 w-5" strokeWidth={2.2} />
           </button>
           <button
             onClick={onSearchClick}
-            className="w-9 h-9 flex items-center justify-center text-gray-800 dark:text-gray-200 active:scale-90 transition-transform"
+            className="flex h-9 w-9 items-center justify-center text-gray-800 transition-transform active:scale-90 dark:text-gray-200"
             aria-label="Поиск"
           >
-            <Search className="w-5 h-5" strokeWidth={2.2} />
+            <Search className="h-5 w-5" strokeWidth={2.2} />
           </button>
         </div>
       </div>
+      {children}
     </header>
   );
 }

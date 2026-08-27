@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react';
-import { MainTabs } from '../components/MainTabs';
 import { SportsScroll } from '../components/SportsScroll';
 import { PromoScroll } from '../components/PromoScroll';
 import { MatchCard } from '../components/MatchCard';
@@ -14,6 +13,7 @@ import { useLiveMatches } from '../LiveMatchesContext';
 import type { MainTab, Screen, SportId } from '../types';
 
 interface HomeScreenProps {
+  mainTab: MainTab;
   onOpenMatch: (matchId: string) => void;
   onOpenGameList: (mode: 'live' | 'line') => void;
   onNavigate: (screen: Screen) => void;
@@ -21,8 +21,14 @@ interface HomeScreenProps {
   onToggleFavorite: (matchId: string) => void;
 }
 
-export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites, onToggleFavorite }: HomeScreenProps) {
-  const [mainTab, setMainTab] = useState<MainTab>('top');
+export function HomeScreen({
+  mainTab,
+  onOpenMatch,
+  onOpenGameList,
+  onNavigate,
+  favorites,
+  onToggleFavorite,
+}: HomeScreenProps) {
   const [selectedSport, setSelectedSport] = useState<SportId>('all');
   const { liveMatches, upcomingMatches, loading } = useLiveMatches();
 
@@ -37,18 +43,9 @@ export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites,
   const esportsLiveMatches = liveMatches.filter((match) => match.sport === 'esports');
   const esportsUpcomingMatches = upcomingMatches.filter((match) => match.sport === 'esports');
 
-  const handleMainTab = (tab: MainTab) => {
-    if (tab === 'games') {
-      onNavigate({ name: 'games' });
-      return;
-    }
-    setMainTab(tab);
-  };
-
   if (mainTab === 'casino') {
     return (
       <div>
-        <MainTabs active={mainTab} onChange={handleMainTab} />
         <CasinoGrid onNavigate={onNavigate} />
       </div>
     );
@@ -56,7 +53,6 @@ export function HomeScreen({ onOpenMatch, onOpenGameList, onNavigate, favorites,
 
   return (
     <div>
-      <MainTabs active={mainTab} onChange={handleMainTab} />
       <SportsScroll selected={selectedSport} onSelect={setSelectedSport} />
       <PromoScroll onNavigate={onNavigate} />
 

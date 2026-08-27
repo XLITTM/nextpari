@@ -34,7 +34,7 @@ body {
     text-rendering: optimizeLegibility !important;
   }
   body {
-    @apply bg-ink-100 text-ink-900 font-sans antialiased subpixel-antialiased;
+    @apply bg-[#f0f2f5] text-ink-900 font-sans antialiased subpixel-antialiased;
     overscroll-behavior-y: none;
   }
   .dark body {

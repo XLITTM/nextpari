@@ -38,7 +38,7 @@ const CARD_CLASS =
 
 export function PromoScroll({ onNavigate }: PromoScrollProps) {
   return (
-    <div className="px-4 py-2 bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div className="px-4 py-2">
       <div className="flex flex-nowrap overflow-x-auto gap-2 pb-2 snap-x scrollbar-hide">
         {promos.map((promo) => (
           <div key={promo.title} className="flex flex-col items-center gap-1 shrink-0">

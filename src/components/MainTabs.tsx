@@ -17,7 +17,7 @@ const tabs: { id: MainTab; label: string; icon: typeof Flame }[] = [
 
 export function MainTabs({ active, onChange }: MainTabsProps) {
   return (
-    <div className="flex w-full px-4">
+    <div className="flex w-full px-2">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = active === tab.id;
@@ -26,20 +26,17 @@ export function MainTabs({ active, onChange }: MainTabsProps) {
             key={tab.id}
             type="button"
             onClick={() => onChange(tab.id)}
-            className="flex-1 flex flex-col items-center gap-1 cursor-pointer py-2"
+            className={`flex flex-1 flex-col items-center gap-1 border-b-2 py-2.5 ${
+              isActive ? 'border-[#c88d3e]' : 'border-transparent'
+            }`}
           >
+            <Icon
+              className={`h-5 w-5 ${isActive ? 'text-[#c88d3e]' : 'text-gray-400 dark:text-gray-500'}`}
+              strokeWidth={1.75}
+            />
             <span
-              className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
-                isActive
-                  ? 'bg-green-500/15 ring-1 ring-green-500/40'
-                  : 'bg-gray-100 dark:bg-white/5'
-              }`}
-            >
-              <Icon className="w-6 h-6 text-green-500" strokeWidth={1.5} />
-            </span>
-            <span
-              className={`text-[10px] font-medium text-center leading-tight ${
-                isActive ? 'text-gray-900 dark:text-white' : 'text-gray-700 dark:text-gray-300'
+              className={`text-center text-[11px] font-semibold leading-tight ${
+                isActive ? 'text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400'
               }`}
             >
               {tab.label}
