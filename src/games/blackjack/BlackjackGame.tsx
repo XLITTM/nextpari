@@ -547,8 +547,18 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
                 <div key={row.id} className="bj-glass rounded-xl px-3 py-2.5">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-black text-[#f5e6a8]">{resultLabel(row.result)}</p>
-                    <p className={`text-sm font-black tabular-nums ${row.payout > 0 ? 'text-emerald-300' : 'text-white/80'}`}>
-                      {row.payout > 0 ? `+${formatStake(row.payout)}` : `−${formatStake(row.stake)}`}
+                    <p className={`text-sm font-black tabular-nums ${
+                      row.result === 'push'
+                        ? 'text-white/80'
+                        : row.payout > 0
+                          ? 'text-emerald-300'
+                          : 'text-white/80'
+                    }`}>
+                      {row.result === 'push'
+                        ? `возврат ${formatStake(row.stake)}`
+                        : row.payout > 0
+                          ? `+${formatStake(row.payout)}`
+                          : `−${formatStake(row.stake)}`}
                     </p>
                   </div>
                   <p className="mt-1 text-[11px] text-white/65">
@@ -569,6 +579,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
             <li>Две карты дилера открыты с начала раунда, очки считаются сразу по обеим.</li>
             <li>Два туза — золотое очко, мгновенная победа.</li>
             <li>Дилер останавливается на 17 и выше.</li>
+            <li>Равный счёт с дилером — ничья, ставка возвращается.</li>
             <li>Выплата при победе — 1:1 от ставки.</li>
           </ul>
         </Drawer>
@@ -674,7 +685,10 @@ function ResultBanner({
     >
       <p className="text-lg font-black tracking-wide">{title}</p>
       <p className="text-xs font-semibold opacity-80">{subtitle}</p>
-      {payout > 0 && <p className="mt-1 text-sm font-black">+{formatStake(payout)}</p>}
+      {win && payout > 0 && <p className="mt-1 text-sm font-black">+{formatStake(payout)}</p>}
+      {result === 'push' && payout > 0 && (
+        <p className="mt-1 text-sm font-black">Возврат {formatStake(payout)}</p>
+      )}
     </div>
   );
 }

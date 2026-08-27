@@ -56,10 +56,11 @@ export function resolveResult(playerHand: CardType[], dealerHand: CardType[]): G
   const dealerScore = calculateHandScore(dealer);
 
   if (isGoldenOchko(player)) return 'golden';
-  if (isBust(player)) return 'lose';
+  if (isBust(player) || playerScore > 21) return 'lose';
   if (isGoldenOchko(dealer)) return 'lose';
-  if (isBust(dealer)) return 'win';
+  if (isBust(dealer) || dealerScore > 21) return 'win';
   if (playerScore > dealerScore) return 'win';
+  if (playerScore === dealerScore) return 'push';
   return 'lose';
 }
 
