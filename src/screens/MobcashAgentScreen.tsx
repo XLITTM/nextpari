@@ -19,6 +19,7 @@ import {
   type CashierSession,
   type PayoutLookup,
 } from '../lib/cashier';
+import { CASHIER_BLOCKED_MESSAGE, subscribeNetworkSync } from '../lib/backoffice';
 
 type AgentTab = 'deposit' | 'payout' | 'history';
 type HistoryTypeFilter = '' | 'deposit' | 'payout';
@@ -179,6 +180,14 @@ function AgentDesk({
     onSession({ ...session, floatBalance: next.floatBalance });
   };
 
+  useEffect(() => {
+    return subscribeNetworkSync(() => {
+      void cashierRefresh(session.id).then(onSession).catch(() => undefined);
+    });
+  }, [session.id, onSession]);
+
+  const frozen = session.isActive === false;
+
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-900 max-w-lg mx-auto relative">
       <header className="shrink-0 bg-ink-900 text-white px-4 pt-4 pb-3">
@@ -214,6 +223,11 @@ function AgentDesk({
           </div>
           <p className="text-base font-extrabold tabular-nums text-white">{formatTmtm(session.floatBalance)}</p>
         </div>
+        {frozen && (
+          <p className="mt-2 text-[11px] font-bold text-red-300 bg-red-500/15 rounded-lg px-3 py-2">
+            {CASHIER_BLOCKED_MESSAGE}
+          </p>
+        )}
       </header>
 
       <div className="shrink-0 px-3 pt-3">
@@ -246,10 +260,10 @@ function AgentDesk({
 
       <div className="flex-1 overflow-y-auto px-3 py-3 pb-6">
         {tab === 'deposit' && (
-          <DepositTab cashierId={session.id} floatBalance={session.floatBalance} onReceipt={applyReceipt} />
+          <DepositTab cashierId={session.id} floatBalance={session.floatBalance} frozen={frozen} onReceipt={applyReceipt} />
         )}
         {tab === 'payout' && (
-          <PayoutTab cashierId={session.id} onReceipt={applyReceipt} />
+          <PayoutTab cashierId={session.id} frozen={frozen} onReceipt={applyReceipt} />
         )}
         {tab === 'history' && (
           <HistoryTab cashierId={session.id} refreshKey={session.floatBalance} />
@@ -266,10 +280,12 @@ function AgentDesk({
 function DepositTab({
   cashierId,
   floatBalance,
+  frozen,
   onReceipt,
 }: {
   cashierId: string;
   floatBalance: number;
+  frozen?: boolean;
   onReceipt: (receipt: CashierReceipt) => void;
 }) {
   const [playerId, setPlayerId] = useState('');
@@ -280,6 +296,10 @@ function DepositTab({
   const numericAmount = Number(amount);
 
   const handleDeposit = async () => {
+    if (frozen) {
+      setError(CASHIER_BLOCKED_MESSAGE);
+      return;
+    }
     if (!/^\d{6}$/.test(playerId)) {
       setError('Введите 6-значный ID игрока');
       return;
@@ -353,11 +373,11 @@ function DepositTab({
       <button
         type="button"
         onClick={() => void handleDeposit()}
-        disabled={submitting}
+        disabled={submitting || frozen}
         className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {submitting ? <Clock3 className="w-5 h-5 animate-spin" /> : <ArrowDownToLine className="w-5 h-5" />}
-        {submitting ? 'Проведение…' : 'Пополнить счёт'}
+        {frozen ? 'Касса заблокирована' : submitting ? 'Проведение…' : 'Пополнить счёт'}
       </button>
     </section>
   );
@@ -365,9 +385,11 @@ function DepositTab({
 
 function PayoutTab({
   cashierId,
+  frozen,
   onReceipt,
 }: {
   cashierId: string;
+  frozen?: boolean;
   onReceipt: (receipt: CashierReceipt) => void;
 }) {
   const [code, setCode] = useState('');
@@ -377,6 +399,10 @@ function PayoutTab({
   const [paying, setPaying] = useState(false);
 
   const handleCheck = async () => {
+    if (frozen) {
+      setError(CASHIER_BLOCKED_MESSAGE);
+      return;
+    }
     if (!/^\d{6}$/.test(code)) {
       setError('Введите 6-значный PIN-код заявки');
       setLookup(null);
@@ -396,6 +422,10 @@ function PayoutTab({
   };
 
   const handlePayout = async () => {
+    if (frozen) {
+      setError(CASHIER_BLOCKED_MESSAGE);
+      return;
+    }
     setPaying(true);
     setError('');
     try {
@@ -431,7 +461,7 @@ function PayoutTab({
       <button
         type="button"
         onClick={() => void handleCheck()}
-        disabled={checking}
+        disabled={checking || frozen}
         className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 mb-4"
       >
         {checking ? 'Проверка…' : 'Проверить код'}
@@ -449,7 +479,7 @@ function PayoutTab({
       <button
         type="button"
         onClick={() => void handlePayout()}
-        disabled={!lookup || paying}
+        disabled={!lookup || paying || frozen}
         className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2"
       >
         {paying ? <Clock3 className="w-5 h-5 animate-spin" /> : <Banknote className="w-5 h-5" />}

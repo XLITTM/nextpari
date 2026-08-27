@@ -2,19 +2,22 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   AlertTriangle, Ban, BarChart3, Building2, CheckCircle2, Download, Landmark,
   LayoutDashboard, LogOut, Plus, RefreshCw, Shield, Snowflake,
-  TrendingUp, Unlock, User, Users, Wallet, X,
+  TrendingUp, Unlock, User, UserCog, Users, Wallet, X,
 } from 'lucide-react';
 import { PlayersTab } from '../components/backoffice/PlayersTab';
+import { ManagersPage } from '../pages/backoffice/Managers';
 import {
   cashierOpLabel,
   cashierOpRef,
   clearManagerSession,
   collectBackofficeCashier,
   createBackofficeCashier,
+  ensureStaffPortalHome,
   exportCashierLedgerCsv,
   fetchBackofficeCashiers,
   fetchCashierLedger,
   fetchDashboardKpis,
+  fetchMyManagerLimit,
   fetchRiskBets,
   formatBackofficeDateTime,
   formatDayLabel,
@@ -23,6 +26,7 @@ import {
   managerLogin,
   setCashierFrozen,
   settleRiskBet,
+  subscribeNetworkSync,
   topupBackofficeCashier,
   type BackofficeCashier,
   type CashierLedgerEntry,
@@ -33,7 +37,7 @@ import {
   type VerticalKpi,
 } from '../lib/backoffice';
 
-type CabinetTab = 'finance' | 'agents' | 'players' | 'risk';
+type CabinetTab = 'finance' | 'managers' | 'agents' | 'players' | 'risk';
 
 export function ManagerDashboardScreen() {
   const [session, setSession] = useState<ManagerSession | null>(null);
@@ -41,7 +45,9 @@ export function ManagerDashboardScreen() {
 
   useEffect(() => {
     document.title = 'NextPari — Кабинет управления';
-    setSession(loadManagerSession());
+    const saved = loadManagerSession();
+    if (saved && !ensureStaffPortalHome(saved)) return;
+    setSession(saved);
     setBooting(false);
   }, []);
 
@@ -78,7 +84,9 @@ function BackofficeLogin({ onSuccess }: { onSuccess: (session: ManagerSession) =
     setError('');
     setSubmitting(true);
     try {
-      onSuccess(await managerLogin(login, pin));
+      const next = await managerLogin(login, pin);
+      if (!ensureStaffPortalHome(next)) return;
+      onSuccess(next);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось войти');
     } finally {
@@ -159,11 +167,12 @@ function BackofficeShell({
           <h1 className="text-lg font-extrabold mt-1">Бэкофис</h1>
           <p className="text-xs text-ink-400 mt-2 leading-snug">{session.fullName}</p>
           <span className="inline-flex mt-2 text-[10px] font-bold px-2 py-1 rounded-full bg-brand-600/20 text-brand-300">
-            {session.role === 'superadmin' ? 'Superadmin · Владелец' : `Manager · ${session.networkName}`}
+            Superadmin · Владелец
           </span>
         </div>
         <nav className="p-3 flex flex-col gap-1">
           <NavBtn active={tab === 'finance'} onClick={() => setTab('finance')} icon={LayoutDashboard} label="Финансы" />
+          <NavBtn active={tab === 'managers'} onClick={() => setTab('managers')} icon={UserCog} label="Менеджеры" />
           <NavBtn active={tab === 'agents'} onClick={() => setTab('agents')} icon={Building2} label="Кассы и агенты" />
           <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="👥 Игроки" />
           <NavBtn active={tab === 'risk'} onClick={() => setTab('risk')} icon={AlertTriangle} label="Риски ставок" />
@@ -187,6 +196,7 @@ function BackofficeShell({
           </div>
         )}
         {tab === 'finance' && <FinancePanel session={session} />}
+        {tab === 'managers' && <ManagersPage session={session} onNotice={setNotice} />}
         {tab === 'agents' && <AgentsPanel session={session} onNotice={setNotice} />}
         {tab === 'players' && <PlayersTab session={session} onNotice={setNotice} />}
         {tab === 'risk' && <RiskPanel session={session} onNotice={setNotice} />}
@@ -457,7 +467,7 @@ function TrendChart({
   );
 }
 
-function AgentsPanel({
+export function AgentsPanel({
   session,
   onNotice,
 }: {
@@ -470,12 +480,16 @@ function AgentsPanel({
   const [createOpen, setCreateOpen] = useState(false);
   const [topupId, setTopupId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [managerLimit, setManagerLimit] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
       setRows(await fetchBackofficeCashiers(session));
+      if (session.role === 'manager') {
+        setManagerLimit(await fetchMyManagerLimit(session));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить кассы');
     } finally {
@@ -485,6 +499,9 @@ function AgentsPanel({
 
   useEffect(() => {
     void load();
+    return subscribeNetworkSync(() => {
+      void load();
+    });
   }, [load]);
 
   const topupTarget = rows.find((row) => row.id === topupId) ?? null;
@@ -493,6 +510,12 @@ function AgentsPanel({
   return (
     <section>
       <HeaderRow title="Кассы и агенты" subtitle={`${rows.length} точек`} onRefresh={() => void load()} loading={loading} />
+      {session.role === 'manager' && managerLimit != null && (
+        <p className="text-sm text-gray-500 -mt-2 mb-4">
+          Доступный лимит менеджера:{' '}
+          <span className="font-extrabold text-ink-900">{formatTmtmCompact(managerLimit)}</span>
+        </p>
+      )}
       <div className="flex flex-wrap gap-2 mb-4">
         <button
           type="button"
@@ -553,6 +576,10 @@ function AgentsPanel({
                       type="button"
                       onClick={async (e) => {
                         e.stopPropagation();
+                        if (session.role === 'manager' && row.blockedBy === 'owner') {
+                          setError('Касса заблокирована владельцем. Разблокировать может только владелец.');
+                          return;
+                        }
                         try {
                           await setCashierFrozen(session, row.id, row.isActive);
                           onNotice(row.isActive ? `Точка ${row.fullName} заблокирована` : `Точка ${row.fullName} разморожена`);
@@ -566,7 +593,7 @@ function AgentsPanel({
                       }`}
                     >
                       {row.isActive ? <Snowflake className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
-                      {row.isActive ? 'Блок' : 'Разморозка'}
+                      {row.isActive ? 'Блок' : row.blockedBy === 'owner' && session.role === 'manager' ? 'Блок владельца' : 'Разморозка'}
                     </button>
                   </div>
                 </td>
@@ -700,6 +727,10 @@ function CashierProfileDrawer({
             <button
               type="button"
               onClick={async () => {
+                if (session.role === 'manager' && cashier.blockedBy === 'owner') {
+                  setError('Касса заблокирована владельцем. Разблокировать может только владелец.');
+                  return;
+                }
                 try {
                   await setCashierFrozen(session, cashier.id, cashier.isActive);
                   onNotice(cashier.isActive ? 'Точка заблокирована' : 'Точка разморожена');

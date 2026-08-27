@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { notifyWalletSync } from './playerProfile';
+import { assertCashierOperational, getCashierAccess, syncCashierFloatFromPos } from './backoffice';
 
 export interface CashierSession {
   id: string;
@@ -8,6 +9,7 @@ export interface CashierSession {
   city: string;
   pointName: string;
   floatBalance: number;
+  isActive: boolean;
 }
 
 export interface CashierReceipt {
@@ -63,6 +65,7 @@ const DEMO_CASHIER: CashierSession = {
   city: 'Ашхабад',
   pointName: 'Точка №12 · ул. Махтумкули',
   floatBalance: 5000,
+  isActive: true,
 };
 
 interface DemoStore {
@@ -200,15 +203,27 @@ function rpcMessage(error: { message?: string } | null | undefined): string {
     .trim() || 'Ошибка кассы';
 }
 
-function parseSession(raw: Record<string, unknown>): CashierSession {
+function withNetworkState(session: CashierSession): CashierSession {
+  const access = getCashierAccess(session.id);
+  const byLogin = access.found ? access : getCashierAccess(session.login);
+  if (!byLogin.found) return { ...session, isActive: session.isActive !== false };
   return {
+    ...session,
+    floatBalance: byLogin.floatBalance,
+    isActive: byLogin.isActive,
+  };
+}
+
+function parseSession(raw: Record<string, unknown>): CashierSession {
+  return withNetworkState({
     id: str(raw.id),
     login: str(raw.login),
     fullName: str(raw.full_name ?? raw.fullName),
     city: str(raw.city),
     pointName: str(raw.point_name ?? raw.pointName),
     floatBalance: num(raw.float_balance ?? raw.floatBalance),
-  };
+    isActive: raw.is_active !== false && raw.isActive !== false,
+  });
 }
 
 function parseReceipt(raw: Record<string, unknown>): CashierReceipt {
@@ -246,6 +261,7 @@ export function saveCashierSession(session: CashierSession) {
     city: session.city,
     point_name: session.pointName,
     float_balance: session.floatBalance,
+    is_active: session.isActive !== false,
   }));
 }
 
@@ -263,7 +279,7 @@ export async function cashierLogin(login: string, pin: string): Promise<CashierS
       throw new Error('Неверный логин или PIN-код');
     }
     const store = loadDemoStore();
-    const session = { ...DEMO_CASHIER, floatBalance: store.floatBalance };
+    const session = withNetworkState({ ...DEMO_CASHIER, floatBalance: store.floatBalance });
     saveCashierSession(session);
     return session;
   }
@@ -277,7 +293,7 @@ export async function cashierLogin(login: string, pin: string): Promise<CashierS
 export async function cashierRefresh(cashierId: string): Promise<CashierSession> {
   if (cashierId === DEMO_CASHIER_ID) {
     const store = loadDemoStore();
-    const session = { ...DEMO_CASHIER, floatBalance: store.floatBalance };
+    const session = withNetworkState({ ...DEMO_CASHIER, floatBalance: store.floatBalance });
     saveCashierSession(session);
     return session;
   }
@@ -286,7 +302,7 @@ export async function cashierRefresh(cashierId: string): Promise<CashierSession>
   });
   if (error && isMissingRpc(error)) {
     const store = loadDemoStore();
-    const session = { ...DEMO_CASHIER, floatBalance: store.floatBalance };
+    const session = withNetworkState({ ...DEMO_CASHIER, floatBalance: store.floatBalance });
     saveCashierSession(session);
     return session;
   }
@@ -307,6 +323,7 @@ export async function cashierDepositToPlayer(params: {
     p_amount: params.amount,
   });
   if (error && isMissingRpc(error)) {
+    assertCashierOperational(params.cashierId);
     if (!/^\d{6}$/.test(params.playerId)) throw new Error('Введите 6-значный ID игрока');
     if (!(params.amount > 0)) throw new Error('Введите сумму пополнения');
     const store = loadDemoStore();
@@ -328,6 +345,7 @@ export async function cashierDepositToPlayer(params: {
     });
     saveDemoStore(store);
     notifyWalletSync();
+    syncCashierFloatFromPos(params.cashierId, store.floatBalance);
     const receipt = demoReceipt('deposit', params.playerId, params.amount, store.floatBalance, receiptCode);
     saveCashierSession({ ...DEMO_CASHIER, floatBalance: store.floatBalance });
     return receipt;
@@ -409,6 +427,7 @@ export async function cashierPayoutByCode(params: {
     p_code: params.code,
   });
   if (error && isMissingRpc(error)) {
+    assertCashierOperational(params.cashierId);
     const lookup = await cashierLookupPayoutCode(params.code);
     await supabase
       .from('mobcash_orders')
@@ -434,6 +453,7 @@ export async function cashierPayoutByCode(params: {
       createdAt: new Date().toISOString(),
     });
     saveDemoStore(store);
+    syncCashierFloatFromPos(params.cashierId, store.floatBalance);
     saveCashierSession({ ...DEMO_CASHIER, floatBalance: store.floatBalance });
     return demoReceipt('payout', lookup.playerPublicId, lookup.amount, store.floatBalance, receiptCode);
   }
@@ -656,6 +676,6 @@ export function isAgentTerminalPath(): boolean {
   const host = window.location.hostname.toLowerCase();
   if (host === 'agent' || host.startsWith('agent.')) return true;
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (path === '/agent') return true;
+  if (path === '/agent' || path.startsWith('/agent/')) return true;
   return window.location.hash.replace(/^#/, '') === '/agent';
 }

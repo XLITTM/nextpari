@@ -3,13 +3,13 @@ import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { isAgentTerminalPath } from './lib/cashier';
-import { isBackofficePath } from './lib/backoffice';
-import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
-import { ManagerDashboardScreen } from './screens/ManagerDashboardScreen';
-import { ThemeProvider } from './ThemeContext';
 import { initPwa } from './lib/pwa';
 import { preloadGameAssets } from './lib/preloadGameAssets';
+import { isAgentTerminalPath } from './lib/cashier';
+import { isBackofficePath, isManagerOfficePath } from './lib/backoffice';
+import { ManagerDashboardScreen } from './screens/ManagerDashboardScreen';
+import { ManagerOfficeScreen } from './screens/ManagerOfficeScreen';
+import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
 
 initPwa();
 preloadGameAssets();
@@ -26,18 +26,18 @@ if ('serviceWorker' in navigator) {
 
 const root = createRoot(document.getElementById('root')!);
 
+const staffScreen = isAgentTerminalPath()
+  ? <MobcashAgentScreen />
+  : isManagerOfficePath()
+    ? <ManagerOfficeScreen />
+    : isBackofficePath()
+      ? <ManagerDashboardScreen />
+      : null;
+
 root.render(
   <StrictMode>
     <ErrorBoundary>
-      {isAgentTerminalPath() ? (
-        <ThemeProvider>
-          <MobcashAgentScreen />
-        </ThemeProvider>
-      ) : isBackofficePath() ? (
-        <ManagerDashboardScreen />
-      ) : (
-        <App />
-      )}
+      {staffScreen ?? <App />}
     </ErrorBoundary>
   </StrictMode>
 );

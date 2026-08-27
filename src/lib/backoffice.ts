@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
+import { homePathForRole, type StaffRole } from '../routes/portal';
 
+export type { StaffRole };
 export type ManagerRole = 'superadmin' | 'manager';
 
 export interface ManagerSession {
@@ -9,6 +11,19 @@ export interface ManagerSession {
   role: ManagerRole;
   networkId: string | null;
   networkName: string;
+}
+
+export interface NetworkManager {
+  id: string;
+  login: string;
+  fullName: string;
+  region: string;
+  allocatedBalance: number;
+  networkId: string;
+  networkName: string;
+  isActive: boolean;
+  createdAt: string;
+  cashierCount: number;
 }
 
 export interface VerticalKpi {
@@ -36,6 +51,10 @@ export interface DashboardKpis {
 
 export type CashierOpType = 'deposit' | 'payout' | 'topup' | 'collection';
 export type LedgerPeriod = 'today' | '7d' | 'month';
+export type CashierBlockedBy = 'owner' | 'manager';
+export const NETWORK_SYNC_EVENT = 'nextpari-network-sync';
+export const NETWORK_SYNC_AT_KEY = 'nextpari-network-sync-at';
+export const CASHIER_BLOCKED_MESSAGE = 'Касса заблокирована. Депозиты и выплаты недоступны.';
 
 export interface CashierLedgerEntry {
   id: string;
@@ -60,7 +79,10 @@ export interface BackofficeCashier {
   commissionEarned: number;
   commissionRate: number;
   isActive: boolean;
+  blockedBy: CashierBlockedBy | null;
+  dailyTurnover: number;
   networkId: string | null;
+  managerId: string | null;
 }
 
 export interface RiskBet {
@@ -85,6 +107,21 @@ const SUPERADMIN_ID = '00000000-0000-0000-0000-00000000aa01';
 const MANAGER_ID = '00000000-0000-0000-0000-00000000aa02';
 const NETWORK_ASHGABAT = '11111111-1111-1111-1111-111111111111';
 const NETWORK_MARY = '22222222-2222-2222-2222-222222222222';
+const AGENT01_ID = '00000000-0000-0000-0000-00000000ca01';
+const AGENT02_ID = '00000000-0000-0000-0000-00000000ca02';
+
+interface StoredManager {
+  id: string;
+  login: string;
+  pin: string;
+  fullName: string;
+  region: string;
+  allocatedBalance: number;
+  networkId: string;
+  networkName: string;
+  isActive: boolean;
+  createdAt: string;
+}
 
 const DEMO_ACCOUNTS: Array<ManagerSession & { pin: string }> = [
   {
@@ -110,6 +147,7 @@ const DEMO_ACCOUNTS: Array<ManagerSession & { pin: string }> = [
 interface DemoStore {
   cashiers: BackofficeCashier[];
   ledger: CashierLedgerEntry[];
+  managers: StoredManager[];
 }
 
 function hoursAgo(hours: number): string {
@@ -182,11 +220,28 @@ function demoLedgerSeed(): CashierLedgerEntry[] {
   ];
 }
 
+function emptyManagers(): StoredManager[] {
+  return [
+    {
+      id: MANAGER_ID,
+      login: 'manager01',
+      pin: '1111',
+      fullName: 'Мерет Аннаев',
+      region: 'Ашхабад',
+      allocatedBalance: 42000,
+      networkId: NETWORK_ASHGABAT,
+      networkName: 'Сеть Ашхабад',
+      isActive: true,
+      createdAt: hoursAgo(96),
+    },
+  ];
+}
+
 function emptyDemoStore(): DemoStore {
   return {
     cashiers: [
       {
-        id: '00000000-0000-0000-0000-00000000ca01',
+        id: AGENT01_ID,
         login: 'agent01',
         fullName: 'Азат Мередов',
         city: 'Ашхабад',
@@ -195,10 +250,13 @@ function emptyDemoStore(): DemoStore {
         commissionEarned: 142.5,
         commissionRate: 1,
         isActive: true,
+        blockedBy: null,
+        dailyTurnover: 350,
         networkId: NETWORK_ASHGABAT,
+        managerId: MANAGER_ID,
       },
       {
-        id: '00000000-0000-0000-0000-00000000ca02',
+        id: AGENT02_ID,
         login: 'agent02',
         fullName: 'Гульшат Бердыева',
         city: 'Мары',
@@ -207,10 +265,28 @@ function emptyDemoStore(): DemoStore {
         commissionEarned: 86.4,
         commissionRate: 1,
         isActive: true,
+        blockedBy: null,
+        dailyTurnover: 0,
         networkId: NETWORK_MARY,
+        managerId: null,
       },
     ],
     ledger: demoLedgerSeed(),
+    managers: emptyManagers(),
+  };
+}
+
+function withCashierManager(row: BackofficeCashier): BackofficeCashier {
+  const hasManager = Object.prototype.hasOwnProperty.call(row, 'managerId');
+  const managerId = hasManager
+    ? row.managerId
+    : (row.id === AGENT01_ID || row.login === 'agent01' ? MANAGER_ID : null);
+  return {
+    ...row,
+    commissionRate: row.commissionRate || 1,
+    blockedBy: row.blockedBy ?? null,
+    dailyTurnover: Number(row.dailyTurnover) || 0,
+    managerId,
   };
 }
 
@@ -219,11 +295,11 @@ function loadDemoStore(): DemoStore {
     const raw = localStorage.getItem(DEMO_STORE_KEY);
     if (!raw) return emptyDemoStore();
     const parsed = JSON.parse(raw) as DemoStore;
+    const seed = emptyDemoStore();
     return {
-      cashiers: Array.isArray(parsed.cashiers)
-        ? parsed.cashiers.map((row) => ({ ...row, commissionRate: row.commissionRate || 1 }))
-        : emptyDemoStore().cashiers,
-      ledger: Array.isArray(parsed.ledger) ? parsed.ledger : emptyDemoStore().ledger,
+      cashiers: Array.isArray(parsed.cashiers) ? parsed.cashiers.map(withCashierManager) : seed.cashiers,
+      ledger: Array.isArray(parsed.ledger) ? parsed.ledger : seed.ledger,
+      managers: Array.isArray(parsed.managers) && parsed.managers.length ? parsed.managers : seed.managers,
     };
   } catch {
     return emptyDemoStore();
@@ -232,6 +308,42 @@ function loadDemoStore(): DemoStore {
 
 function saveDemoStore(store: DemoStore) {
   localStorage.setItem(DEMO_STORE_KEY, JSON.stringify(store));
+  syncPosFloat(store);
+  emitNetworkSync();
+}
+
+export function emitNetworkSync() {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(NETWORK_SYNC_AT_KEY, String(Date.now()));
+  window.dispatchEvent(new Event(NETWORK_SYNC_EVENT));
+}
+
+export function subscribeNetworkSync(onSync: () => void): () => void {
+  if (typeof window === 'undefined') return () => undefined;
+  const onEvent = () => onSync();
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === NETWORK_SYNC_AT_KEY || event.key === DEMO_STORE_KEY) onSync();
+  };
+  window.addEventListener(NETWORK_SYNC_EVENT, onEvent);
+  window.addEventListener('storage', onStorage);
+  return () => {
+    window.removeEventListener(NETWORK_SYNC_EVENT, onEvent);
+    window.removeEventListener('storage', onStorage);
+  };
+}
+
+function syncPosFloat(store: DemoStore) {
+  if (typeof localStorage === 'undefined') return;
+  const agent = store.cashiers.find((row) => row.id === AGENT01_ID || row.login === 'agent01');
+  if (!agent) return;
+  try {
+    const raw = localStorage.getItem('mobcash-demo-store');
+    const parsed = raw ? JSON.parse(raw) as Record<string, unknown> : {};
+    parsed.floatBalance = agent.floatBalance;
+    localStorage.setItem('mobcash-demo-store', JSON.stringify(parsed));
+  } catch {
+    /* ignore POS mirror errors */
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -282,7 +394,12 @@ function parseCashier(raw: Record<string, unknown>): BackofficeCashier {
     commissionEarned: num(raw.commission_earned ?? raw.commissionEarned),
     commissionRate: num(raw.commission_rate ?? raw.commissionRate) || 1,
     isActive: raw.is_active !== false && raw.isActive !== false,
+    blockedBy: str(raw.blocked_by ?? raw.blockedBy) === 'owner'
+      ? 'owner'
+      : str(raw.blocked_by ?? raw.blockedBy) === 'manager' ? 'manager' : null,
+    dailyTurnover: num(raw.daily_turnover ?? raw.dailyTurnover),
     networkId: raw.network_id == null && raw.networkId == null ? null : str(raw.network_id ?? raw.networkId),
+    managerId: raw.manager_id == null && raw.managerId == null ? null : str(raw.manager_id ?? raw.managerId),
   };
 }
 
@@ -299,7 +416,105 @@ function lastDays(count: number): string[] {
 
 function scopedCashiers(session: ManagerSession, list: BackofficeCashier[]): BackofficeCashier[] {
   if (session.role === 'superadmin') return list;
-  return list.filter((row) => row.networkId === session.networkId);
+  return list.filter((row) => row.managerId === session.id);
+}
+
+function assertCashierScope(session: ManagerSession, row: BackofficeCashier) {
+  if (session.role === 'superadmin') return;
+  if (row.managerId === session.id) return;
+  throw new Error('Эта точка не входит в вашу сеть');
+}
+
+function applyCashierBlock(row: BackofficeCashier, frozen: boolean, blockedBy: CashierBlockedBy) {
+  if (frozen) {
+    row.isActive = false;
+    row.blockedBy = blockedBy;
+    return;
+  }
+  if (blockedBy === 'manager' && row.blockedBy === 'owner') {
+    throw new Error('Касса заблокирована владельцем. Разблокировать может только владелец.');
+  }
+  row.isActive = true;
+  row.blockedBy = null;
+}
+
+function dayStartIso(): string {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return now.toISOString();
+}
+
+function cashierDayTurnover(store: DemoStore, cashierId: string): number {
+  return store.ledger
+    .filter((row) => row.cashierId === cashierId && row.createdAt >= dayStartIso() && (row.type === 'deposit' || row.type === 'payout'))
+    .reduce((sum, row) => sum + row.amount, 0);
+}
+
+function withLiveMetrics(store: DemoStore, row: BackofficeCashier): BackofficeCashier {
+  return {
+    ...row,
+    blockedBy: row.blockedBy ?? null,
+    dailyTurnover: cashierDayTurnover(store, row.id) || row.dailyTurnover || 0,
+  };
+}
+
+function toPublicManager(row: StoredManager, cashiers: BackofficeCashier[]): NetworkManager {
+  return {
+    id: row.id,
+    login: row.login,
+    fullName: row.fullName,
+    region: row.region,
+    allocatedBalance: row.allocatedBalance,
+    networkId: row.networkId,
+    networkName: row.networkName,
+    isActive: row.isActive,
+    createdAt: row.createdAt,
+    cashierCount: cashiers.filter((item) => item.managerId === row.id).length,
+  };
+}
+
+function managerAccounts(): Array<ManagerSession & { pin: string }> {
+  const extra = loadDemoStore().managers.map((row) => ({
+    id: row.id,
+    login: row.login,
+    pin: row.pin,
+    fullName: row.fullName,
+    role: 'manager' as const,
+    networkId: row.networkId,
+    networkName: row.networkName,
+  }));
+  const seen = new Set(DEMO_ACCOUNTS.map((row) => row.login.toLowerCase()));
+  return [...DEMO_ACCOUNTS, ...extra.filter((row) => !seen.has(row.login.toLowerCase()))];
+}
+
+function debitManagerLimit(store: DemoStore, managerId: string, amount: number) {
+  const manager = store.managers.find((row) => row.id === managerId);
+  if (!manager) throw new Error('Менеджер не найден');
+  if (manager.allocatedBalance < amount) {
+    throw new Error('Недостаточно лимита менеджера для выдачи в кассу');
+  }
+  manager.allocatedBalance = Number((manager.allocatedBalance - amount).toFixed(2));
+}
+
+function creditManagerLimit(store: DemoStore, managerId: string, amount: number) {
+  const manager = store.managers.find((row) => row.id === managerId);
+  if (!manager) return;
+  manager.allocatedBalance = Number((manager.allocatedBalance + amount).toFixed(2));
+}
+
+export function staffRoleOf(session: ManagerSession): StaffRole {
+  return session.role === 'superadmin' ? 'OWNER' : 'MANAGER';
+}
+
+export function ensureStaffPortalHome(session: ManagerSession): boolean {
+  if (typeof window === 'undefined') return true;
+  const dest = homePathForRole(staffRoleOf(session));
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (path !== dest) {
+    window.location.replace(dest);
+    return false;
+  }
+  return true;
 }
 
 export function loadManagerSession(): ManagerSession | null {
@@ -333,8 +548,14 @@ export function isBackofficePath(): boolean {
   const host = window.location.hostname.toLowerCase();
   if (host === 'admin' || host.startsWith('admin.')) return true;
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
-  if (path === '/backoffice') return true;
+  if (path === '/backoffice' || path.startsWith('/backoffice/')) return true;
   return window.location.hash.replace(/^#/, '') === '/backoffice';
+}
+
+export function isManagerOfficePath(): boolean {
+  if (typeof window === 'undefined') return false;
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  return path === '/manager-office' || path.startsWith('/manager-office/');
 }
 
 export async function managerLogin(login: string, pin: string): Promise<ManagerSession> {
@@ -343,7 +564,7 @@ export async function managerLogin(login: string, pin: string): Promise<ManagerS
     p_pin: pin,
   });
   if (error && isMissingRpc(error)) {
-    const found = DEMO_ACCOUNTS.find(
+    const found = managerAccounts().find(
       (row) => row.login.toLowerCase() === login.trim().toLowerCase() && row.pin === pin,
     );
     if (!found) throw new Error('Неверный логин или PIN-код');
@@ -521,9 +742,11 @@ export async function fetchBackofficeCashiers(session: ManagerSession): Promise<
     .from('cashiers')
     .select('id, login, full_name, city, point_name, float_balance, commission_earned, commission_rate, is_active, network_id');
   if (!fromTable.error && fromTable.data?.length) {
-    return scopedCashiers(session, fromTable.data.map((row) => parseCashier(asRecord(row))));
+    const store = loadDemoStore();
+    return scopedCashiers(session, fromTable.data.map((row) => parseCashier(asRecord(row)))).map((row) => withLiveMetrics(store, row));
   }
-  return scopedCashiers(session, loadDemoStore().cashiers);
+  const store = loadDemoStore();
+  return scopedCashiers(session, store.cashiers).map((row) => withLiveMetrics(store, row));
 }
 
 export async function createBackofficeCashier(
@@ -553,6 +776,11 @@ export async function createBackofficeCashier(
   if (store.cashiers.some((row) => row.login.toLowerCase() === params.login.trim().toLowerCase())) {
     throw new Error('Кассир с таким логином уже существует');
   }
+  if (!Number.isFinite(params.floatBalance) || params.floatBalance < 0) {
+    throw new Error('Укажите стартовый лимит кассы');
+  }
+  const managerId = session.role === 'manager' ? session.id : null;
+  if (managerId) debitManagerLimit(store, managerId, params.floatBalance);
   store.cashiers.push({
     id: crypto.randomUUID(),
     login: params.login.trim().toLowerCase(),
@@ -563,7 +791,10 @@ export async function createBackofficeCashier(
     commissionEarned: 0,
     commissionRate: 1,
     isActive: true,
+    blockedBy: null,
+    dailyTurnover: 0,
     networkId: session.networkId ?? NETWORK_ASHGABAT,
+    managerId,
   });
   saveDemoStore(store);
 }
@@ -584,9 +815,8 @@ export async function topupBackofficeCashier(
   const store = loadDemoStore();
   const row = store.cashiers.find((item) => item.id === cashierId);
   if (!row) throw new Error('Касса не найдена');
-  if (session.role !== 'superadmin' && row.networkId !== session.networkId) {
-    throw new Error('Эта точка не входит в вашу сеть');
-  }
+  assertCashierScope(session, row);
+  if (session.role === 'manager') debitManagerLimit(store, session.id, amount);
   row.floatBalance = Number((row.floatBalance + amount).toFixed(2));
   store.ledger.unshift({
     id: crypto.randomUUID(),
@@ -621,7 +851,8 @@ export async function setCashierFrozen(
   const store = loadDemoStore();
   const row = store.cashiers.find((item) => item.id === cashierId);
   if (!row) throw new Error('Касса не найдена');
-  row.isActive = !frozen;
+  assertCashierScope(session, row);
+  applyCashierBlock(row, frozen, session.role === 'superadmin' ? 'owner' : 'manager');
   saveDemoStore(store);
   await supabase.from('cashiers').update({ is_active: !frozen }).eq('id', cashierId);
 }
@@ -804,8 +1035,10 @@ export async function collectBackofficeCashier(
   const store = loadDemoStore();
   const row = store.cashiers.find((item) => item.id === cashierId);
   if (!row) throw new Error('Касса не найдена');
+  assertCashierScope(session, row);
   if (row.floatBalance < amount) throw new Error('Недостаточно средств в кассе для инкассации');
   row.floatBalance = Number((row.floatBalance - amount).toFixed(2));
+  if (session.role === 'manager') creditManagerLimit(store, session.id, amount);
   store.ledger.unshift({
     id: crypto.randomUUID(),
     cashierId,
@@ -869,4 +1102,144 @@ export function formatBackofficeDateTime(iso: string): string {
   const hh = String(date.getHours()).padStart(2, '0');
   const min = String(date.getMinutes()).padStart(2, '0');
   return `${dd}.${mm}.${yyyy}, ${hh}:${min}`;
+}
+
+export async function fetchNetworkManagers(session: ManagerSession): Promise<NetworkManager[]> {
+  const store = loadDemoStore();
+  const rows = session.role === 'superadmin'
+    ? store.managers
+    : store.managers.filter((row) => row.id === session.id);
+  return rows.map((row) => toPublicManager(row, store.cashiers));
+}
+
+export async function fetchMyManagerLimit(session: ManagerSession): Promise<number | null> {
+  if (session.role !== 'manager') return null;
+  const mine = loadDemoStore().managers.find((row) => row.id === session.id);
+  return mine?.allocatedBalance ?? 0;
+}
+
+export async function createNetworkManager(
+  session: ManagerSession,
+  params: {
+    fullName: string;
+    login: string;
+    password: string;
+    allocatedBalance: number;
+    region?: string;
+  },
+): Promise<NetworkManager> {
+  if (session.role !== 'superadmin') throw new Error('Создавать менеджеров может только владелец');
+  const fullName = params.fullName.trim();
+  const login = params.login.trim().toLowerCase();
+  const password = params.password.trim();
+  const region = (params.region ?? '').trim() || 'Регион';
+  if (!fullName || !login || !password) throw new Error('Укажите имя, логин и пароль');
+  if (!(params.allocatedBalance >= 0)) throw new Error('Укажите выделенный баланс');
+
+  const store = loadDemoStore();
+  const taken = [
+    ...DEMO_ACCOUNTS.map((row) => row.login),
+    ...store.managers.map((row) => row.login),
+    ...store.cashiers.map((row) => row.login),
+  ].some((value) => value.toLowerCase() === login);
+  if (taken) throw new Error('Логин уже занят');
+
+  const networkId = crypto.randomUUID();
+  const row: StoredManager = {
+    id: crypto.randomUUID(),
+    login,
+    pin: password,
+    fullName,
+    region,
+    allocatedBalance: Number(params.allocatedBalance.toFixed(2)),
+    networkId,
+    networkName: `Сеть ${region}`,
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  };
+  store.managers.push(row);
+  saveDemoStore(store);
+  return toPublicManager(row, store.cashiers);
+}
+
+export function peekNetworkCashiers(): BackofficeCashier[] {
+  const store = loadDemoStore();
+  return store.cashiers.map((row) => withLiveMetrics(store, row));
+}
+
+export function peekNetworkManagers(): NetworkManager[] {
+  const store = loadDemoStore();
+  return store.managers.map((row) => toPublicManager(row, store.cashiers));
+}
+
+export function cashiersOfManager(managerId: string): BackofficeCashier[] {
+  return peekNetworkCashiers().filter((row) => row.managerId === managerId);
+}
+
+export function getCashierAccess(idOrLogin: string): {
+  found: boolean;
+  isActive: boolean;
+  blockedBy: CashierBlockedBy | null;
+  floatBalance: number;
+} {
+  const store = loadDemoStore();
+  const row = store.cashiers.find((item) => item.id === idOrLogin || item.login === idOrLogin.toLowerCase());
+  if (!row) {
+    return { found: false, isActive: true, blockedBy: null, floatBalance: 0 };
+  }
+  return {
+    found: true,
+    isActive: row.isActive,
+    blockedBy: row.blockedBy ?? null,
+    floatBalance: row.floatBalance,
+  };
+}
+
+export function assertCashierOperational(idOrLogin: string) {
+  const access = getCashierAccess(idOrLogin);
+  if (access.found && !access.isActive) {
+    throw new Error(CASHIER_BLOCKED_MESSAGE);
+  }
+}
+
+export function toggleCashierBlock(agentId: string, blockedBy: CashierBlockedBy): BackofficeCashier {
+  const store = loadDemoStore();
+  const row = store.cashiers.find((item) => item.id === agentId);
+  if (!row) throw new Error('Касса не найдена');
+  applyCashierBlock(row, row.isActive, blockedBy);
+  saveDemoStore(store);
+  return withLiveMetrics(store, row);
+}
+
+export function syncCashierFloatFromPos(cashierId: string, floatBalance: number) {
+  const store = loadDemoStore();
+  const row = store.cashiers.find((item) => item.id === cashierId || item.login === cashierId);
+  if (!row) return;
+  row.floatBalance = Number(floatBalance.toFixed(2));
+  saveDemoStore(store);
+}
+
+export function adjustCashierBalanceDirect(agentId: string, amount: number): BackofficeCashier {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value === 0) throw new Error('Укажите сумму корректировки');
+  const store = loadDemoStore();
+  const row = store.cashiers.find((item) => item.id === agentId);
+  if (!row) throw new Error('Касса не найдена');
+  const next = Number((row.floatBalance + value).toFixed(2));
+  if (next < 0) throw new Error('Недостаточно средств в кассе для списания');
+  row.floatBalance = next;
+  store.ledger.unshift({
+    id: crypto.randomUUID(),
+    cashierId: agentId,
+    type: value > 0 ? 'topup' : 'collection',
+    playerPublicId: 'OWNER',
+    receiptCode: `MC-OWNER-${Date.now()}`,
+    amount: Math.abs(value),
+    signedAmount: value,
+    floatAfter: row.floatBalance,
+    status: 'completed',
+    createdAt: new Date().toISOString(),
+  });
+  saveDemoStore(store);
+  return withLiveMetrics(store, row);
 }
