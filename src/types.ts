@@ -197,7 +197,7 @@ export interface BetHistoryEntry {
   ticketCode?: string;
 }
 
-export type WithdrawalMethod = 'card' | 'crypto' | 'ewallet';
+export type WithdrawalMethod = 'card' | 'crypto' | 'ewallet' | 'cash';
 export type WithdrawalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface WithdrawalRequest {
@@ -208,6 +208,10 @@ export interface WithdrawalRequest {
   status: WithdrawalStatus;
   rejection_reason: string | null;
   created_at: string;
+  pin_code?: string | null;
+  city?: string | null;
+  point?: string | null;
+  player_id?: string | null;
 }
 
 export interface PersonalData {
@@ -251,4 +255,5 @@ export type Screen =
   | { name: 'aviator' }
   | { name: 'apples' }
   | { name: 'crystal' }
-  | { name: 'dice' };
+  | { name: 'dice' }
+  | { name: 'league'; leagueId: string };

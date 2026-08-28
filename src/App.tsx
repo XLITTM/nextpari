@@ -40,6 +40,7 @@ import { BlackjackGame } from './games/blackjack/BlackjackGame';
 import { AviatorGame } from './games/aviator/AviatorGame';
 import { ApplesGame } from './games/apples/ApplesGame';
 import { DiceGame } from './games/dice/DiceGame';
+import { LeagueScreen } from './screens/LeagueScreen';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -48,6 +49,7 @@ import { useFavoritesStore } from './stores/favoritesStore';
 import { subscribeMatchSoundToast } from './services/matchSoundService';
 import { useToast } from './ToastContext';
 import { AppRoutes, currentStaffPortal } from './routes';
+import { leaguePath } from './lib/leagueRoute';
 
 const GAMES_PATH = '/games';
 const BLACKJACK_PATH = '/games/blackjack';
@@ -67,6 +69,10 @@ function screenFromPath(): Screen {
   if (path === CRYSTAL_PATH) return { name: 'crystal' };
   if (path === DICE_PATH) return { name: 'dice' };
   if (path === GAMES_PATH) return { name: 'games' };
+  if (path.startsWith('/league/')) {
+    const leagueId = decodeURIComponent(path.slice('/league/'.length));
+    if (leagueId) return { name: 'league', leagueId };
+  }
   return { name: 'home' };
 }
 
@@ -77,6 +83,7 @@ function pathForScreen(screen: Screen): string {
   if (screen.name === 'crystal') return CRYSTAL_PATH;
   if (screen.name === 'dice') return DICE_PATH;
   if (screen.name === 'games') return GAMES_PATH;
+  if (screen.name === 'league') return leaguePath(screen.leagueId);
   return '/';
 }
 
@@ -103,7 +110,8 @@ function navActive(name: Screen['name']): Screen['name'] {
     name === 'promo-details' ||
     name === 'promo-marathon' ||
     name === 'promo-welcome' ||
-    name === 'promo-unbeatable'
+    name === 'promo-unbeatable' ||
+    name === 'league'
   ) {
     return 'home';
   }
@@ -293,6 +301,16 @@ function AppContent() {
         return <AviatorGame onBack={() => setScreen({ name: 'games' })} />;
       case 'apples':
         return <ApplesGame onBack={() => setScreen({ name: 'games' })} />;
+      case 'league':
+        return (
+          <LeagueScreen
+            leagueId={screen.leagueId}
+            onBack={goHome}
+            onOpenMatch={openMatch}
+            favorites={favoriteMatchIds}
+            onToggleFavorite={toggleFavorite}
+          />
+        );
       default:
         return null;
     }

@@ -211,7 +211,7 @@ export function useManagerNetwork(sessionOrId: ManagerRef) {
   const limit = Number(
     currentManager?.allocatedBalance
     ?? hierarchyBalance
-    ?? managerLimitOf(currentManager?.id ?? id || login),
+    ?? managerLimitOf((currentManager?.id ?? id) || login),
   ) || 0;
   return { managerAgents, currentManager, limit, hydrate };
 }

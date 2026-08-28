@@ -11,10 +11,9 @@ import type { BetSelection, MatchEvent, SportId } from '@/types';
 type MarketTab = 'all' | 'main' | 'totals' | 'handicaps' | 'goals' | 'corners' | '1st-half' | '2nd-half' | 'sets' | 'games' | 'quarters' | 'halves';
 
 const FOOTBALL_TABS: { id: MarketTab; label: string }[] = [
-  { id: 'main', label: 'Основные' },
-  { id: 'totals', label: 'Тоталы' },
-  { id: 'handicaps', label: 'Форы' },
-  { id: 'goals', label: 'Голы' },
+  { id: 'main', label: 'Основная игра' },
+  { id: '1st-half', label: '1-й тайм' },
+  { id: '2nd-half', label: '2-й тайм' },
 ];
 
 const TENNIS_TABS: { id: MarketTab; label: string }[] = [
@@ -281,15 +280,15 @@ export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchE
 
   if (!state) {
     return (
-      <div className="relative z-10 -mt-5 rounded-t-[24px] bg-[#F5F5F5] pb-24 pt-6 shadow-[0_-12px_24px_rgba(0,0,0,0.18)]">
+      <div className="relative z-10 -mt-4 rounded-t-3xl bg-white pb-24 pt-2 shadow-[0_-8px_20px_rgba(0,0,0,0.12)]">
         <div className="flex h-40 items-center justify-center text-sm text-[#666666]">Загрузка росписи...</div>
       </div>
     );
   }
 
   return (
-    <div className="relative z-10 -mt-5 rounded-t-[24px] bg-[#F5F5F5] pb-24 pt-3 shadow-[0_-12px_24px_rgba(0,0,0,0.18)]">
-      <div className="flex items-center gap-2 overflow-x-auto px-3 scrollbar-hide">
+    <div className="relative z-10 -mt-4 rounded-t-3xl bg-white pb-24 pt-2 shadow-[0_-8px_20px_rgba(0,0,0,0.12)]">
+      <div className="mb-1 flex h-9 items-center gap-1.5 overflow-x-auto px-3 scrollbar-hide">
         {tabs.map((item) => {
           const active = tab === item.id;
           return (
@@ -297,8 +296,10 @@ export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchE
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
-              className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold whitespace-nowrap transition-colors ${
-                active ? 'bg-[#22C55E] text-white' : 'bg-white text-[#1A1A1A]'
+              className={`shrink-0 whitespace-nowrap rounded-full py-1.5 text-[13px] transition-colors ${
+                active
+                  ? 'bg-emerald-500 px-5 font-bold text-white shadow'
+                  : 'bg-white px-4 font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
               }`}
             >
               {item.label}
@@ -307,7 +308,7 @@ export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchE
         })}
       </div>
 
-      <div className="flex flex-col gap-2.5 p-3">
+      <div className="flex flex-col gap-0 px-2">
         {markets.length === 0 ? (
           <p className="py-16 text-center text-sm font-semibold text-[#666666]">Нет рынков по этому фильтру</p>
         ) : (
@@ -347,17 +348,17 @@ function MarketAccordion({
   onPin: () => void;
 }) {
   return (
-    <div className="overflow-hidden rounded-xl bg-white">
+    <div className="overflow-hidden bg-white">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-3.5 py-3 text-left"
+        className="flex w-full items-center justify-between px-2.5 py-2 text-left"
       >
-        <span className="min-w-0 text-sm font-bold leading-tight text-[#1A1A1A]">
+        <span className="min-w-0 text-[14px] font-semibold leading-tight text-[#1A1A1A]">
           {market.name}{' '}
-          <span className="font-semibold text-[#666666]">({market.lineCount})</span>
+          <span className="font-medium text-[#888888]">({market.lineCount})</span>
         </span>
-        <div className="ml-2 flex shrink-0 items-center gap-1.5">
+        <div className="ml-2 flex shrink-0 items-center gap-1">
           <span
             role="button"
             tabIndex={0}
@@ -374,17 +375,17 @@ function MarketAccordion({
             }}
             className="flex h-7 w-7 items-center justify-center"
           >
-            <Pin className={`h-4 w-4 ${pinned ? 'fill-[#22C55E] text-[#22C55E]' : 'text-[#666666]'}`} />
+            <Pin className={`h-4 w-4 ${pinned ? 'fill-emerald-500 text-emerald-500' : 'text-emerald-500'}`} />
           </span>
           {open ? (
-            <ChevronDown className="h-4 w-4 text-[#666666]" />
+            <ChevronDown className="h-4 w-4 text-emerald-500" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-[#666666]" />
+            <ChevronRight className="h-4 w-4 text-emerald-500" />
           )}
         </div>
       </button>
       {open && (
-        <div className={`grid gap-2 px-3 pb-3 ${gridClass(market)}`}>
+        <div className={`grid gap-1.5 px-2.5 pb-2 ${gridClass(market)}`}>
           {market.outcomes.map((outcome) => (
             <OutcomeButton
               key={outcome.key}
@@ -446,7 +447,7 @@ function OutcomeButton({
     <button
       type="button"
       {...handlers}
-      className={`flex min-h-[52px] items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left shadow-sm transition-[transform,background-color,border-color,box-shadow] duration-150 active:scale-[0.97] ${
+      className={`flex min-h-[44px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left shadow-sm transition-[transform,background-color,border-color,box-shadow] duration-150 active:scale-[0.97] ${
         active
           ? 'border-[#16A34A] bg-[#22C55E] shadow-[0_4px_10px_rgba(34,197,94,0.28)]'
           : 'border-[#E5E7EB] bg-[#F3F4F6] hover:border-[#D1D5DB] hover:bg-white hover:shadow-md'
@@ -459,7 +460,7 @@ function OutcomeButton({
       >
         {label}
       </span>
-      <span className={`shrink-0 text-lg font-extrabold tabular-nums ${oddsColor}`}>{formatOdds(odds)}</span>
+      <span className={`shrink-0 text-[17px] font-extrabold tabular-nums ${oddsColor}`}>{formatOdds(odds)}</span>
     </button>
   );
 }

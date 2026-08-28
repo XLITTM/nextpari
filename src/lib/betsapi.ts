@@ -998,9 +998,23 @@ function firstViewEvent(results: unknown): BetsApiEvent | null {
   return null;
 }
 
-export async function fetchEventView(eventId: string): Promise<BetsApiEvent | null> {
-  const json = await betsapiGet<{ results?: unknown }>('/v1/event/view', { event_id: eventId });
+export async function fetchEventView(
+  eventId: string,
+  signal?: AbortSignal,
+): Promise<BetsApiEvent | null> {
+  const json = await betsapiGet<{ results?: unknown }>('/v1/event/view', { event_id: eventId }, signal);
   return firstViewEvent(json.results);
+}
+
+export async function fetchEventHistory(
+  eventId: string,
+  qty = 10,
+  signal?: AbortSignal,
+): Promise<{ h2h?: BetsApiEvent[]; home?: BetsApiEvent[]; away?: BetsApiEvent[] } | null> {
+  const json = await betsapiGet<{
+    results?: { h2h?: BetsApiEvent[]; home?: BetsApiEvent[]; away?: BetsApiEvent[] };
+  }>('/v1/event/history', { event_id: eventId, qty }, signal);
+  return json.results ?? null;
 }
 
 export interface LiveEventSnapshot {

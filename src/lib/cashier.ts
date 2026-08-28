@@ -32,6 +32,8 @@ export interface PayoutLookup {
   amount: number;
   status: string;
   createdAt: string;
+  city?: string;
+  point?: string;
 }
 
 export interface CashierOperation {
@@ -52,10 +54,20 @@ export interface PlayerCashPayout {
   status: 'pending' | 'paid' | 'cancelled';
   paidAt: string | null;
   createdAt: string;
+  city?: string;
+  point?: string;
+}
+
+export interface CashPayoutMeta {
+  city: string;
+  point: string;
+  playerPublicId?: string;
+  amount?: number;
 }
 
 const SESSION_KEY = 'mobcash-cashier-session';
 const DEMO_STORE_KEY = 'mobcash-demo-store';
+const PAYOUT_META_KEY = 'mobcash-payout-meta.v1';
 const DEMO_CASHIER_ID = '00000000-0000-0000-0000-00000000ca01';
 
 const DEMO_CASHIER: CashierSession = {
@@ -78,9 +90,49 @@ interface DemoStore {
     amount: number;
     status: 'pending' | 'paid';
     createdAt: string;
+    city?: string;
+    point?: string;
   }>;
   playerPayouts: PlayerCashPayout[];
   receiptSeq: number;
+}
+
+function loadPayoutMeta(): Record<string, CashPayoutMeta> {
+  try {
+    const raw = localStorage.getItem(PAYOUT_META_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, CashPayoutMeta>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function savePayoutMeta(map: Record<string, CashPayoutMeta>) {
+  localStorage.setItem(PAYOUT_META_KEY, JSON.stringify(map));
+}
+
+export function rememberPayoutMeta(code: string, meta: CashPayoutMeta) {
+  if (!/^\d{6}$/.test(code)) return;
+  const map = loadPayoutMeta();
+  map[code] = meta;
+  savePayoutMeta(map);
+}
+
+export function getPayoutMeta(code: string): CashPayoutMeta | null {
+  return loadPayoutMeta()[code] ?? null;
+}
+
+function withPickupMeta<T extends { city?: string; point?: string }>(
+  code: string,
+  row: T,
+): T & { city?: string; point?: string } {
+  const meta = getPayoutMeta(code);
+  return {
+    ...row,
+    city: row.city || meta?.city,
+    point: row.point || meta?.point,
+  };
 }
 
 function emptyDemoStore(): DemoStore {
@@ -365,14 +417,14 @@ async function findMobcashOrder(code: string): Promise<PayoutLookup | null> {
     .limit(1)
     .maybeSingle();
   if (byCode.error || !byCode.data) return null;
-  return {
+  return withPickupMeta(code, {
     ok: true,
     id: str(byCode.data.id),
     playerPublicId: str(byCode.data.player_public_id),
     amount: num(byCode.data.amount),
     status: str(byCode.data.status),
     createdAt: str(byCode.data.created_at, new Date().toISOString()),
-  };
+  });
 }
 
 export async function cashierLookupPayoutCode(code: string): Promise<PayoutLookup> {
@@ -394,28 +446,32 @@ export async function cashierLookupPayoutCode(code: string): Promise<PayoutLooku
       amount: item.amount,
       status: item.status === 'paid' ? 'paid' as const : 'pending' as const,
       createdAt: item.createdAt,
+      city: item.city,
+      point: item.point,
     }))].find((item) => item.secretCode === code);
     if (!req) throw new Error('Код не найден');
     if (req.status !== 'pending') throw new Error('Заявка уже закрыта');
-    return {
+    return withPickupMeta(code, {
       ok: true,
       id: req.id,
       playerPublicId: req.playerPublicId,
       amount: req.amount,
       status: req.status,
       createdAt: req.createdAt,
-    };
+      city: req.city,
+      point: req.point,
+    });
   }
   if (error) throw new Error(rpcMessage(error));
   const raw = asRecord(data);
-  return {
+  return withPickupMeta(code, {
     ok: true,
     id: str(raw.id),
     playerPublicId: str(raw.player_public_id ?? raw.playerPublicId),
     amount: num(raw.amount),
     status: str(raw.status),
     createdAt: str(raw.created_at ?? raw.createdAt),
-  };
+  });
 }
 
 export async function cashierPayoutByCode(params: {
@@ -429,19 +485,28 @@ export async function cashierPayoutByCode(params: {
   if (error && isMissingRpc(error)) {
     assertCashierOperational(params.cashierId);
     const lookup = await cashierLookupPayoutCode(params.code);
+    if (lookup.status !== 'pending') throw new Error('Заявка уже закрыта');
+    const store = loadDemoStore();
+    if (store.floatBalance < lookup.amount) {
+      throw new Error('Недостаточно средств в кассе для выдачи');
+    }
     await supabase
       .from('mobcash_orders')
       .update({ status: 'paid', paid_at: new Date().toISOString() })
       .eq('cash_code', params.code)
       .eq('status', 'pending');
-    const store = loadDemoStore();
+    await supabase
+      .from('cashier_payout_requests')
+      .update({ status: 'paid', paid_at: new Date().toISOString() })
+      .eq('secret_code', params.code)
+      .eq('status', 'pending');
     const markPaid = (list: { secretCode: string; status: string }[]) => {
       const item = list.find((row) => row.secretCode === params.code && row.status === 'pending');
       if (item) item.status = 'paid';
     };
     markPaid(store.payouts);
     markPaid(store.playerPayouts);
-    store.floatBalance = Number((store.floatBalance + lookup.amount).toFixed(2));
+    store.floatBalance = Number((store.floatBalance - lookup.amount).toFixed(2));
     const receiptCode = nextReceipt(store);
     store.operations.unshift({
       id: crypto.randomUUID(),
@@ -455,10 +520,15 @@ export async function cashierPayoutByCode(params: {
     saveDemoStore(store);
     syncCashierFloatFromPos(params.cashierId, store.floatBalance);
     saveCashierSession({ ...DEMO_CASHIER, floatBalance: store.floatBalance });
+    const { markWithdrawalPaidByPin } = await import('./withdrawalRequests');
+    markWithdrawalPaidByPin(params.code);
     return demoReceipt('payout', lookup.playerPublicId, lookup.amount, store.floatBalance, receiptCode);
   }
   if (error) throw new Error(rpcMessage(error));
-  return parseReceipt(asRecord(data));
+  const receipt = parseReceipt(asRecord(data));
+  const { markWithdrawalPaidByPin } = await import('./withdrawalRequests');
+  markWithdrawalPaidByPin(params.code);
+  return receipt;
 }
 
 export async function cashierShiftHistory(params: {
@@ -498,7 +568,7 @@ export async function cashierShiftHistory(params: {
 }
 
 function randomCashCode(): string {
-  return String(100000 + Math.floor(Math.random() * 900000));
+  return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 async function insertMobcashOrder(params: {
@@ -528,37 +598,75 @@ async function insertMobcashOrder(params: {
   return data?.id ? String(data.id) : null;
 }
 
-export async function playerCreateCashPayout(amount: number): Promise<{
+export async function playerCreateCashPayout(
+  amount: number,
+  pickup?: { city: string; point: string; pinCode?: string },
+): Promise<{
   code: string;
   amount: number;
   playerPublicId: string;
   newBalance: number;
+  city?: string;
+  point?: string;
 }> {
-  const { data, error } = await supabase.rpc('player_create_cash_payout', {
-    p_amount: amount,
-  });
-  if (!error) {
-    const raw = asRecord(data);
-    const code = str(raw.cash_code ?? raw.code);
-    const paidAmount = num(raw.amount);
-    const publicId = str(raw.player_public_id ?? raw.playerPublicId);
-    const wallet = await supabase.from('wallets').select('id').limit(1).maybeSingle();
-    if (wallet.data?.id && code) {
-      await insertMobcashOrder({
-        walletId: String(wallet.data.id),
-        playerPublicId: publicId,
-        cashCode: code,
-        amount: paidAmount,
-      });
-    }
-    return {
-      code,
-      amount: paidAmount,
+  const attachMeta = (code: string, publicId: string, paidAmount: number) => {
+    if (!pickup?.city || !pickup?.point) return;
+    rememberPayoutMeta(code, {
+      city: pickup.city,
+      point: pickup.point,
       playerPublicId: publicId,
-      newBalance: num(raw.new_balance ?? raw.newBalance),
-    };
+      amount: paidAmount,
+    });
+  };
+
+  const preferredPin =
+    pickup?.pinCode && /^\d{6}$/.test(pickup.pinCode) ? pickup.pinCode : null;
+
+  // Without a fixed PIN, prefer the RPC so the server allocates a unique cash_code.
+  if (!preferredPin) {
+    const { data, error } = await supabase.rpc('player_create_cash_payout', {
+      p_amount: amount,
+    });
+    if (!error && data) {
+      const raw = asRecord(data);
+      const code = str(raw.cash_code ?? raw.code);
+      const paidAmount = num(raw.amount);
+      const publicId = str(raw.player_public_id ?? raw.playerPublicId);
+      const wallet = await supabase.from('wallets').select('id').limit(1).maybeSingle();
+      if (wallet.data?.id && code) {
+        await insertMobcashOrder({
+          walletId: String(wallet.data.id),
+          playerPublicId: publicId,
+          cashCode: code,
+          amount: paidAmount,
+        });
+      }
+      attachMeta(code, publicId, paidAmount);
+      const store = loadDemoStore();
+      store.playerPayouts.unshift({
+        id: str(raw.id, crypto.randomUUID()),
+        playerPublicId: publicId,
+        secretCode: code,
+        amount: paidAmount,
+        status: 'pending',
+        paidAt: null,
+        createdAt: new Date().toISOString(),
+        city: pickup?.city,
+        point: pickup?.point,
+      });
+      saveDemoStore(store);
+      notifyWalletSync();
+      return {
+        code,
+        amount: paidAmount,
+        playerPublicId: publicId,
+        newBalance: num(raw.new_balance ?? raw.newBalance),
+        city: pickup?.city,
+        point: pickup?.point,
+      };
+    }
+    if (error && !isMissingRpc(error)) throw new Error(rpcMessage(error));
   }
-  if (!isMissingRpc(error)) throw new Error(rpcMessage(error));
 
   if (!(amount > 0)) throw new Error('Введите сумму вывода');
   const primary = await supabase.from('wallets').select('id, balance, public_id').limit(1).maybeSingle();
@@ -566,49 +674,66 @@ export async function playerCreateCashPayout(amount: number): Promise<{
     ? await supabase.from('wallets').select('id, balance').limit(1).maybeSingle()
     : primary;
   const current = Number(wallet.data?.balance ?? 0);
-  if (!wallet.data?.id) throw new Error('Кошелёк не найден');
-  if (current < amount) throw new Error('Недостаточно средств на балансе');
-  const code = randomCashCode();
   const publicId = str((wallet.data as { public_id?: string } | null)?.public_id, '645912');
-  const { error: walletError } = await supabase
-    .from('wallets')
-    .update({ balance: Number((current - amount).toFixed(2)), updated_at: new Date().toISOString() })
-    .eq('id', wallet.data.id);
-  if (walletError) throw new Error('Не удалось списать баланс');
+  if (wallet.data?.id && current < amount) throw new Error('Недостаточно средств на балансе');
+  if (!wallet.data?.id && amount <= 0) throw new Error('Кошелёк не найден');
+  const code = preferredPin ?? randomCashCode();
+  const newBalance = Number((Math.max(0, current - amount)).toFixed(2));
+  if (wallet.data?.id) {
+    const { error: walletError } = await supabase
+      .from('wallets')
+      .update({ balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', wallet.data.id);
+    if (walletError) {
+      console.error('Wallet update failed, using local Mobcash order:', walletError.message);
+    }
+    await insertMobcashOrder({
+      walletId: String(wallet.data.id),
+      playerPublicId: publicId,
+      cashCode: code,
+      amount,
+    });
+    await supabase.from('cashier_payout_requests').insert({
+      wallet_id: wallet.data.id,
+      player_public_id: publicId,
+      secret_code: code,
+      amount,
+      status: 'pending',
+    });
+    await supabase.from('transactions').insert({
+      type: 'withdraw',
+      title: pickup
+        ? `Вывод наличными Mobcash · ${pickup.city} · ${pickup.point}`
+        : 'Вывод наличными у агента Mobcash',
+      amount: -amount,
+      status: 'completed',
+    });
+  }
 
-  const orderId = await insertMobcashOrder({
-    walletId: String(wallet.data.id),
-    playerPublicId: publicId,
-    cashCode: code,
-    amount,
-  });
-  await supabase.from('cashier_payout_requests').insert({
-    wallet_id: wallet.data.id,
-    player_public_id: publicId,
-    secret_code: code,
-    amount,
-    status: 'pending',
-  });
-  await supabase.from('transactions').insert({
-    type: 'withdraw',
-    title: 'Вывод наличными у агента Mobcash',
-    amount: -amount,
-    status: 'completed',
-  });
-
+  attachMeta(code, publicId, amount);
   const store = loadDemoStore();
   const payout: PlayerCashPayout = {
-    id: orderId ?? crypto.randomUUID(),
+    id: crypto.randomUUID(),
     playerPublicId: publicId,
     secretCode: code,
     amount,
     status: 'pending',
     paidAt: null,
     createdAt: new Date().toISOString(),
+    city: pickup?.city,
+    point: pickup?.point,
   };
   store.playerPayouts.unshift(payout);
   saveDemoStore(store);
-  return { code, amount, playerPublicId: publicId, newBalance: Number((current - amount).toFixed(2)) };
+  notifyWalletSync();
+  return {
+    code,
+    amount,
+    playerPublicId: publicId,
+    newBalance,
+    city: pickup?.city,
+    point: pickup?.point,
+  };
 }
 
 export async function playerListCashPayouts(): Promise<PlayerCashPayout[]> {
@@ -623,36 +748,38 @@ export async function playerListCashPayouts(): Promise<PlayerCashPayout[]> {
       return fromTable.data.map((row) => {
         const raw = asRecord(row);
         const status = str(raw.status);
-        return {
+        const secretCode = str(raw.cash_code);
+        return withPickupMeta(secretCode, {
           id: str(raw.id),
           playerPublicId: str(raw.player_public_id),
-          secretCode: str(raw.cash_code),
+          secretCode,
           amount: num(raw.amount),
-          status: status === 'paid' || status === 'cancelled' ? status : 'pending',
+          status: (status === 'paid' || status === 'cancelled' ? status : 'pending') as PlayerCashPayout['status'],
           paidAt: raw.paid_at == null ? null : str(raw.paid_at),
           createdAt: str(raw.created_at),
-        };
+        });
       });
     }
-    return loadDemoStore().playerPayouts;
+    return loadDemoStore().playerPayouts.map((row) => withPickupMeta(row.secretCode, row));
   }
   if (error) {
     console.error('Failed to load cash payouts:', error.message);
-    return [];
+    return loadDemoStore().playerPayouts.map((row) => withPickupMeta(row.secretCode, row));
   }
   const rows = Array.isArray(data) ? data : [];
   return rows.map((row) => {
     const raw = asRecord(row);
     const status = str(raw.status);
-    return {
+    const secretCode = str(raw.secret_code ?? raw.secretCode ?? raw.cash_code ?? raw.cashCode);
+    return withPickupMeta(secretCode, {
       id: str(raw.id),
       playerPublicId: str(raw.player_public_id ?? raw.playerPublicId),
-      secretCode: str(raw.secret_code ?? raw.secretCode ?? raw.cash_code ?? raw.cashCode),
+      secretCode,
       amount: num(raw.amount),
-      status: status === 'paid' || status === 'cancelled' ? status : 'pending',
+      status: (status === 'paid' || status === 'cancelled' ? status : 'pending') as PlayerCashPayout['status'],
       paidAt: raw.paid_at == null && raw.paidAt == null ? null : str(raw.paid_at ?? raw.paidAt),
       createdAt: str(raw.created_at ?? raw.createdAt),
-    };
+    });
   });
 }
 

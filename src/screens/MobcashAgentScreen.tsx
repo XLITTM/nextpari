@@ -472,6 +472,14 @@ function PayoutTab({
           <p className="text-[11px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-400 mb-2">Заявка найдена</p>
           <Row label="ID игрока" value={lookup.playerPublicId} />
           <Row label="К выплате" value={formatTmtm(lookup.amount)} accent />
+          <Row
+            label="Адрес кассы"
+            value={
+              lookup.city && lookup.point
+                ? `${lookup.city} · ${lookup.point}`
+                : lookup.city || lookup.point || 'Точка выдачи не указана'
+            }
+          />
           <Row label="Создана" value={formatCashierDate(lookup.createdAt)} />
         </div>
       )}

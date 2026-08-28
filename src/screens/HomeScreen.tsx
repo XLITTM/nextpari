@@ -111,7 +111,9 @@ export function HomeScreen({
           )}
         </section>
 
-        <ChampionshipsList />
+        <ChampionshipsList
+          onOpenLeague={(leagueId) => onNavigate({ name: 'league', leagueId })}
+        />
 
         <section>
           <CasinoCarousel onNavigate={onNavigate} />

@@ -2,6 +2,7 @@ import { Star } from 'lucide-react';
 import { SectionHeader } from './SectionHeader';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useFavoritesStore } from '../stores/favoritesStore';
+import { toLeagueId } from '../lib/leagueRoute';
 
 function colorFromName(name: string): string {
   let hash = 0;
@@ -10,7 +11,11 @@ function colorFromName(name: string): string {
   return palette[hash % palette.length];
 }
 
-export function ChampionshipsList() {
+interface ChampionshipsListProps {
+  onOpenLeague: (leagueId: string) => void;
+}
+
+export function ChampionshipsList({ onOpenLeague }: ChampionshipsListProps) {
   const { liveMatches } = useLiveMatches();
   const favoriteLeagueIds = useFavoritesStore((s) => s.favoriteLeagueIds);
   const toggleLeagueFavorite = useFavoritesStore((s) => s.toggleLeagueFavorite);
@@ -46,6 +51,15 @@ export function ChampionshipsList() {
         {leagues.map((ch) => (
           <div
             key={`${ch.country}-${ch.name}`}
+            role="link"
+            tabIndex={0}
+            onClick={() => onOpenLeague(toLeagueId(ch.country, ch.name))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onOpenLeague(toLeagueId(ch.country, ch.name));
+              }
+            }}
             className="flex items-center gap-3 bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-3 active:scale-[0.99] transition-transform cursor-pointer"
           >
             <div className="relative shrink-0">

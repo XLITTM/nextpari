@@ -1,13 +1,14 @@
 interface TeamLogoProps {
   teamName: string;
   logo?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 const sizeMap = {
-  sm: 'w-7 h-7 p-1',
-  md: 'w-10 h-10 p-1.5',
+  xs: 'w-5 h-5 p-0.5',
+  sm: 'w-6 h-6 p-0.5',
+  md: 'w-10 h-10 p-1',
   lg: 'w-14 h-14 p-2',
 };
 

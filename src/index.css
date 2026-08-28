@@ -78,54 +78,77 @@ body {
   .animate-fadeIn {
     animation: fadeIn 0.3s ease-out;
   }
+  @keyframes matchFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes matchSheetIn {
+    from { opacity: 0; transform: translateY(16px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .match-stadium-bg,
+  .match-bg-football,
+  .match-bg-basketball,
+  .match-bg-tennis,
+  .match-bg-hockey,
+  .match-bg-esports,
+  .match-bg-default {
+    position: relative;
+    isolation: isolate;
+  }
+  .match-stadium-bg::before,
+  .match-bg-football::before,
+  .match-bg-basketball::before,
+  .match-bg-tennis::before,
+  .match-bg-hockey::before,
+  .match-bg-esports::before,
+  .match-bg-default::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-size: cover;
+    background-position: center;
+    filter: brightness(1.05) contrast(1.05);
+  }
   .match-stadium-bg,
   .match-bg-football {
-    background-color: #07140c;
-    background-image:
-      linear-gradient(180deg, rgba(4, 10, 8, 0.55) 0%, rgba(4, 10, 8, 0.28) 42%, rgba(4, 10, 8, 0.62) 100%),
-      url('https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1600&q=80');
-    background-size: cover;
-    background-position: center;
+    background-color: #0a1f12;
+  }
+  .match-stadium-bg::before,
+  .match-bg-football::before {
+    background-image: url('https://images.unsplash.com/photo-1522778119026-d647f0596c20?auto=format&fit=crop&w=1600&q=80');
   }
   .match-bg-basketball {
-    background-color: #1a1208;
-    background-image:
-      linear-gradient(180deg, rgba(12, 8, 4, 0.62) 0%, rgba(12, 8, 4, 0.32) 45%, rgba(12, 8, 4, 0.7) 100%),
-      url('https://images.unsplash.com/photo-1504450758481-7338eba7524a?auto=format&fit=crop&w=1600&q=80');
-    background-size: cover;
-    background-position: center;
+    background-color: #24180c;
+  }
+  .match-bg-basketball::before {
+    background-image: url('https://images.unsplash.com/photo-1504450758481-7338eba7524a?auto=format&fit=crop&w=1600&q=80');
   }
   .match-bg-tennis {
-    background-color: #0c3a2e;
-    background-image:
-      linear-gradient(180deg, rgba(6, 20, 16, 0.55) 0%, rgba(6, 20, 16, 0.28) 45%, rgba(6, 20, 16, 0.65) 100%),
-      url('https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=1600&q=80');
-    background-size: cover;
-    background-position: center;
+    background-color: #104838;
+  }
+  .match-bg-tennis::before {
+    background-image: url('https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=1600&q=80');
   }
   .match-bg-hockey {
-    background-color: #0b1520;
-    background-image:
-      linear-gradient(180deg, rgba(6, 12, 20, 0.58) 0%, rgba(6, 12, 20, 0.3) 45%, rgba(6, 12, 20, 0.68) 100%),
-      url('https://images.unsplash.com/photo-1515703407324-5eae1e016df0?auto=format&fit=crop&w=1600&q=80');
-    background-size: cover;
-    background-position: center;
+    background-color: #102030;
+  }
+  .match-bg-hockey::before {
+    background-image: url('https://images.unsplash.com/photo-1515703407324-5eae1e016df0?auto=format&fit=crop&w=1600&q=80');
   }
   .match-bg-esports {
-    background-color: #0b0614;
-    background-image:
-      linear-gradient(180deg, rgba(8, 4, 18, 0.6) 0%, rgba(8, 4, 18, 0.28) 45%, rgba(8, 4, 18, 0.72) 100%),
-      url('https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1600&q=80');
-    background-size: cover;
-    background-position: center;
+    background-color: #140a22;
+  }
+  .match-bg-esports::before {
+    background-image: url('https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=1600&q=80');
   }
   .match-bg-default {
-    background-color: #101418;
-    background-image:
-      linear-gradient(180deg, rgba(8, 10, 12, 0.62) 0%, rgba(8, 10, 12, 0.32) 45%, rgba(8, 10, 12, 0.7) 100%),
-      url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
-    background-size: cover;
-    background-position: center;
+    background-color: #181c20;
+  }
+  .match-bg-default::before {
+    background-image: url('https://images.unsplash.com/photo-1574629810360-7efbbe195018?auto=format&fit=crop&w=1600&q=80');
   }
   .bj-felt {
     position: relative;

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  AlertTriangle, Ban, BarChart3, Building2, CheckCircle2, Download, Landmark,
+  AlertTriangle, Ban, BarChart3, Building2, CheckCircle2, Clock3, Download, Landmark,
   LayoutDashboard, LogOut, Plus, RefreshCw, Shield, Snowflake,
-  TrendingUp, Unlock, User, UserCog, Users, Wallet, X,
+  TrendingUp, Unlock, User, UserCog, Users, Wallet, X, XCircle,
 } from 'lucide-react';
 import { PlayersTab } from '../components/backoffice/PlayersTab';
 import { ManagersPage } from '../pages/backoffice/Managers';
+import type { WithdrawalRequest } from '../types';
+import { listWithdrawalRequests } from '../lib/withdrawalRequests';
 import {
   cashierOpLabel,
   cashierOpRef,
@@ -322,7 +324,101 @@ function FinancePanel({ session }: { session: ManagerSession }) {
         </p>
         {kpis && <TrendChart series={kpis.series} showBets={session.role === 'superadmin'} />}
       </div>
+      <WithdrawalRequestsPanel />
     </section>
+  );
+}
+
+function WithdrawalRequestsPanel() {
+  const [rows, setRows] = useState<WithdrawalRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setRows(await listWithdrawalRequests());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить заявки');
+      setRows([]);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const statusBadge = (status: WithdrawalRequest['status']) => {
+    if (status === 'approved') {
+      return { label: 'Выплачено', className: 'bg-green-100 text-green-700', icon: CheckCircle2 };
+    }
+    if (status === 'rejected') {
+      return { label: 'Отклонено', className: 'bg-red-100 text-red-700', icon: XCircle };
+    }
+    return { label: 'В обработке', className: 'bg-amber-100 text-amber-700', icon: Clock3 };
+  };
+
+  return (
+    <div className="mt-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-ink-900">Финансовые операции · Заявки на вывод</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Карты, крипто, кошельки и наличные Mobcash</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-ink-700 hover:bg-slate-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Обновить
+        </button>
+      </div>
+      {error && <p className="mb-3 text-sm font-semibold text-red-600">{error}</p>}
+      {loading ? (
+        <p className="py-8 text-center text-sm text-gray-500">Загрузка заявок…</p>
+      ) : rows.length === 0 ? (
+        <p className="py-8 text-center text-sm text-gray-500">Заявок на вывод пока нет</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-xs uppercase tracking-wide text-gray-500">
+                <th className="px-2 py-2 font-bold">Дата</th>
+                <th className="px-2 py-2 font-bold">Способ / точка</th>
+                <th className="px-2 py-2 font-bold">Сумма</th>
+                <th className="px-2 py-2 font-bold">Статус</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => {
+                const badge = statusBadge(row.status);
+                const StatusIcon = badge.icon;
+                const date = new Date(row.created_at);
+                const dateStr = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}.${date.getFullYear()} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+                return (
+                  <tr key={row.id} className="border-b border-slate-100 last:border-0">
+                    <td className="px-2 py-3 whitespace-nowrap text-xs font-medium text-gray-600">{dateStr}</td>
+                    <td className="px-2 py-3 font-semibold text-ink-900">{row.method_label}</td>
+                    <td className="px-2 py-3 whitespace-nowrap font-extrabold tabular-nums text-red-600">
+                      − {Number(row.amount).toLocaleString('ru-RU')} TMTM
+                    </td>
+                    <td className="px-2 py-3">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-bold ${badge.className}`}>
+                        <StatusIcon className="h-3 w-3" />
+                        {badge.label}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
