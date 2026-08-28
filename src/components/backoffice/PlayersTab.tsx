@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Ban, Search, RefreshCw, Unlock, Wallet, X, Users,
 } from 'lucide-react';
+import { SendPlayerMessageForm } from './SendPlayerMessageForm';
 import type { ManagerSession } from '../../lib/backoffice';
 import {
   adjustPlayerBalance,
@@ -23,9 +24,11 @@ type ProfileTab = 'summary' | 'games' | 'sports' | 'transactions';
 export function PlayersTab({
   session,
   onNotice,
+  showMessageForm = true,
 }: {
   session: ManagerSession;
   onNotice: (value: string) => void;
+  showMessageForm?: boolean;
 }) {
   const [rows, setRows] = useState<PlayerListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,6 +75,12 @@ export function PlayersTab({
           Обновить
         </button>
       </div>
+
+      {showMessageForm && (
+        <div className="mb-5">
+          <SendPlayerMessageForm />
+        </div>
+      )}
 
       <div className="mb-4 flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3">
         <Search className="w-4 h-4 text-gray-400 shrink-0" />

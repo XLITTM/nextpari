@@ -291,6 +291,7 @@ function DepositTab({
   const [playerId, setPlayerId] = useState('');
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const numericAmount = Number(amount);
@@ -300,8 +301,12 @@ function DepositTab({
       setError(CASHIER_BLOCKED_MESSAGE);
       return;
     }
-    if (!/^\d{6}$/.test(playerId)) {
-      setError('Введите 6-значный ID игрока');
+    if (playerId.length < 5) {
+      setError('Неверный ID');
+      return;
+    }
+    if (!/^\d{5,6}$/.test(playerId)) {
+      setError('Неверный ID');
       return;
     }
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -314,6 +319,7 @@ function DepositTab({
     }
     setSubmitting(true);
     setError('');
+    setSuccess('');
     try {
       const receipt = await cashierDepositToPlayer({
         cashierId,
@@ -321,6 +327,8 @@ function DepositTab({
         amount: numericAmount,
       });
       onReceipt(receipt);
+      setSuccess(`Счет игрока ${playerId} пополнен на ${numericAmount} TMTM`);
+      setPlayerId('');
       setAmount('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка пополнения');
@@ -335,12 +343,20 @@ function DepositTab({
       <p className="text-xs text-gray-500 dark:text-gray-300 mt-0.5 mb-4">Пополнение игрока · списание с кассы</p>
 
       {error && <ErrorBanner message={error} />}
+      {success && (
+        <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+          {success}
+        </div>
+      )}
 
       <label className="text-xs font-semibold text-gray-500 dark:text-gray-300 mb-1.5 block">ID игрока</label>
       <input
         inputMode="numeric"
         value={playerId}
-        onChange={(e) => setPlayerId(e.target.value.replace(/\D/g, '').slice(0, 6))}
+        onChange={(e) => {
+          setPlayerId(e.target.value.replace(/\D/g, '').slice(0, 6));
+          setSuccess('');
+        }}
         placeholder="645912"
         className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-2xl font-extrabold tracking-[0.35em] text-center rounded-xl px-4 py-3 mb-4 outline-none border border-gray-200 dark:border-gray-600 focus:border-brand-600 tabular-nums"
       />

@@ -7,8 +7,12 @@ import {
   ScanLine, Bell, Info, Star, LogOut,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { IconCasino, IconEsports, IconGames, IconSport } from '../components/SectionIcons';
+import { InboxModal } from '../components/InboxModal';
+import { countUnreadForPlayer, subscribeSiteMessages } from '../lib/siteMessages';
+import { DEMO_PUBLIC_ID } from '../lib/playerProfile';
+import { useWallet } from '../WalletContext';
 import type { Screen } from '../types';
 
 interface MenuScreenProps {
@@ -102,6 +106,21 @@ const specialStyles: Record<SpecialType, string> = {
 
 export function MenuScreen({ balance, onNavigate, onLogout }: MenuScreenProps) {
   const [activeTab, setActiveTab] = useState<SubTabId>('top');
+  const [isInboxOpen, setIsInboxOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const { publicId } = useWallet();
+  const playerId = publicId || DEMO_PUBLIC_ID;
+
+  useEffect(() => {
+    const refreshUnread = () => setUnreadCount(countUnreadForPlayer(playerId));
+    refreshUnread();
+    window.addEventListener('focus', refreshUnread);
+    const unsub = subscribeSiteMessages(refreshUnread);
+    return () => {
+      window.removeEventListener('focus', refreshUnread);
+      unsub();
+    };
+  }, [playerId]);
 
   return (
     <div className="min-h-full bg-gray-100 dark:bg-gray-900 overflow-y-auto pb-28">
@@ -120,8 +139,18 @@ export function MenuScreen({ balance, onNavigate, onLogout }: MenuScreenProps) {
               Личные данные →
             </button>
           </div>
-          <button className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-[#1e293b] flex items-center justify-center text-gray-600 dark:text-gray-200 hover:text-gray-800 dark:hover:text-white transition-colors">
+          <button
+            type="button"
+            onClick={() => setIsInboxOpen(true)}
+            className="relative w-9 h-9 rounded-xl bg-gray-100 dark:bg-[#1e293b] flex items-center justify-center text-gray-600 dark:text-gray-200 hover:text-gray-800 dark:hover:text-white transition-colors"
+            aria-label="Входящие"
+          >
             <Mail className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
           <button
             type="button"
@@ -134,6 +163,15 @@ export function MenuScreen({ balance, onNavigate, onLogout }: MenuScreenProps) {
           </button>
         </div>
       </div>
+
+      <InboxModal
+        open={isInboxOpen}
+        playerId={playerId}
+        onClose={() => {
+          setIsInboxOpen(false);
+          setUnreadCount(countUnreadForPlayer(playerId));
+        }}
+      />
 
       {/* 2. Balance + deposit */}
       <div className="bg-white dark:bg-[#1e293b] px-4 pb-4 transition-colors">

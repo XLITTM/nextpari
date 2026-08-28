@@ -6,6 +6,8 @@ import {
   WALLET_SYNC_EVENT,
   ensureLocalGuest,
   DEMO_PUBLIC_ID,
+  PLAYER_BALANCE_KEY,
+  readPlayerBalance,
 } from './lib/playerProfile';
 import { useUserStore } from './stores/userStore';
 
@@ -22,9 +24,10 @@ const WalletContext = createContext<WalletContextValue | null>(null);
 function readCachedWallet() {
   const guest = ensureLocalGuest();
   const stored = useUserStore.getState();
+  const fromPlayerBalance = readPlayerBalance(guest.demoBalance);
   return {
     publicId: stored.publicId || guest.publicId,
-    balance: stored.balance || guest.demoBalance,
+    balance: Math.max(stored.balance || 0, guest.demoBalance || 0, fromPlayerBalance || 0),
     walletId: stored.walletId || guest.walletId,
   };
 }
@@ -42,14 +45,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const applySnapshot = useCallback(
     (next: { publicId: string; balance: number; walletId: string | null }) => {
       const local = useUserStore.getState();
+      const fromBridge = readPlayerBalance(0);
       const keepLocal = Date.now() - local.lastWriteAt < 12_000 && local.balance !== next.balance;
-      const balance = keepLocal
+      let balance = keepLocal
         ? local.balance
         : next.balance >= 0 && (next.balance > 0 || local.balance <= 0)
           ? next.balance
           : local.balance > 0
             ? local.balance
             : 1000;
+      // Agent terminal credits may land in player_balance ahead of remote sync.
+      if (fromBridge > balance) balance = fromBridge;
       setPublicId(next.publicId || DEMO_PUBLIC_ID);
       setBalance(balance);
       setWalletId(next.walletId);
@@ -75,10 +81,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    const applyLocalPlayerBalance = () => {
+      const next = readPlayerBalance();
+      if (!Number.isFinite(next) || next < 0) return;
+      setBalance((prev) => (next > prev ? next : prev));
+      setStoreBalance(next);
+    };
     const onSync = () => {
+      applyLocalPlayerBalance();
+      void refresh();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key && event.key !== PLAYER_BALANCE_KEY && event.key !== 'nextpari-player-profile') return;
+      applyLocalPlayerBalance();
       void refresh();
     };
     window.addEventListener(WALLET_SYNC_EVENT, onSync);
+    window.addEventListener('storage', onStorage);
     window.addEventListener('focus', onSync);
     document.addEventListener('visibilitychange', onSync);
 
@@ -90,18 +109,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       channel = null;
     }
 
+    // Hydrate from player_balance on mount (agent tab may have credited it).
+    applyLocalPlayerBalance();
+
     const poll = window.setInterval(() => {
       void refresh();
     }, 8000);
 
     return () => {
       window.removeEventListener(WALLET_SYNC_EVENT, onSync);
+      window.removeEventListener('storage', onStorage);
       window.removeEventListener('focus', onSync);
       document.removeEventListener('visibilitychange', onSync);
       channel?.close();
       window.clearInterval(poll);
     };
-  }, [refresh]);
+  }, [refresh, setStoreBalance]);
 
   useEffect(() => {
     const filter = walletId ? `id=eq.${walletId}` : publicId ? `public_id=eq.${publicId}` : undefined;

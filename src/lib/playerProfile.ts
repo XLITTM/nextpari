@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 
 export const PLAYER_PROFILE_KEY = 'nextpari-player-profile';
+export const PLAYER_BALANCE_KEY = 'player_balance';
 export const WALLET_SYNC_EVENT = 'nextpari-wallet-sync';
 export const DEMO_BALANCE = 1000;
 export const DEMO_PUBLIC_ID = '729767';
@@ -117,7 +118,34 @@ export async function syncPlayerWallet(): Promise<{
   return { publicId: local.publicId, balance: local.demoBalance, walletId: local.walletId };
 }
 
+export function readPlayerBalance(fallback = DEMO_BALANCE): number {
+  try {
+    const raw = localStorage.getItem(PLAYER_BALANCE_KEY);
+    if (raw == null || raw === '') {
+      const local = ensureLocalGuest();
+      return local.demoBalance > 0 ? local.demoBalance : fallback;
+    }
+    const value = Number.parseFloat(raw);
+    return Number.isFinite(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function writePlayerBalance(balance: number) {
+  const safe = Number(Math.max(0, balance).toFixed(2));
+  localStorage.setItem(PLAYER_BALANCE_KEY, String(safe));
+  return safe;
+}
+
+export function creditPlayerBalanceLocal(amount: number): number {
+  const current = readPlayerBalance(126.19);
+  return writePlayerBalance(current + amount);
+}
+
 export function persistLocalBalance(balance: number) {
+  const safe = Number(Math.max(0, balance).toFixed(2));
   const local = ensureLocalGuest();
-  writeLocalProfile({ ...local, demoBalance: Number(Math.max(0, balance).toFixed(2)) });
+  writeLocalProfile({ ...local, demoBalance: safe });
+  writePlayerBalance(safe);
 }

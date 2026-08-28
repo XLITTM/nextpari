@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronLeft, Coins, HelpCircle, Play, Plus, RefreshCw, Volume2, VolumeX, X,
+  ChevronLeft, HelpCircle, Plus, Volume2, VolumeX, X,
 } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
@@ -32,6 +32,7 @@ const MIN_BET = 6;
 const MAX_BET = 2293.67;
 const DEFAULT_BET = 10;
 const BET_STEPS = [6, 10, 20, 50, 100, 250, 500, 1000, 2293.67];
+const AUTO_SPIN_OPTIONS = [10, 25, 50, 100] as const;
 
 const WEIGHTS: Record<SymbolId, number> = {
   cat: 1,
@@ -76,38 +77,25 @@ function formatTmtm(value: number): string {
   });
 }
 
-function TileFace({
-  symbol,
-  size = 'md',
-}: {
-  symbol: SymbolDef | null;
-  size?: 'sm' | 'md' | 'lg';
-}) {
-  const iconSize = size === 'lg' ? 'text-4xl' : size === 'sm' ? 'text-2xl' : 'text-3xl';
-  const pad = size === 'lg' ? 'p-2' : size === 'sm' ? 'p-1' : 'p-1.5';
+function TileFace({ symbol }: { symbol: SymbolDef | null }) {
   if (!symbol) {
     return (
-      <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-b from-[#3a2818] to-[#1a1008]">
-        <span className={`${iconSize} leading-none text-amber-300 drop-shadow-[0_0_8px_rgba(251,191,36,0.7)]`}>
-          𓂀
-        </span>
-        <span className="mt-0.5 text-[10px] text-cyan-300/90">◆</span>
-      </div>
+      <img
+        src="/assets/games/pharaoh/tile_back.png"
+        alt="Tile Back"
+        className="pointer-events-none h-full w-full select-none rounded-xl object-cover shadow-inner"
+        draggable={false}
+      />
     );
   }
   return (
-    <div className={`flex h-full w-full flex-col items-center justify-center border-2 ${symbol.color} ${pad}`}>
-      <div className="min-h-0 w-full flex-1">
-        <img
-          src={symbol.img}
-          alt={symbol.name}
-          className="h-full w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
-          draggable={false}
-        />
-      </div>
-      <span className="mt-0.5 shrink-0 text-[9px] font-bold uppercase tracking-wide text-amber-100/90">
-        x{symbol.mult}
-      </span>
+    <div className={`flex h-full w-full items-center justify-center border-2 bg-[#1a1008]/85 p-1.5 ${symbol.color}`}>
+      <img
+        src={symbol.img}
+        alt={symbol.name}
+        className="h-full w-full object-contain drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+        draggable={false}
+      />
     </div>
   );
 }
@@ -116,23 +104,25 @@ function FlipTile({
   flipped,
   symbol,
   matched,
-  size = 'md',
   className = '',
 }: {
   flipped: boolean;
   symbol: SymbolDef | null;
   matched?: boolean;
-  size?: 'sm' | 'md' | 'lg';
   className?: string;
 }) {
   return (
-    <div className={`relative ${className}`} style={{ perspective: 800 }}>
-      <div className={`pharaoh-tile relative h-full w-full ${flipped ? 'is-flipped' : ''} ${matched ? 'pharaoh-match-glow rounded-xl' : ''}`}>
-        <div className="pharaoh-tile-face absolute inset-0 overflow-hidden rounded-xl ring-2 ring-amber-600/80">
-          <TileFace symbol={null} size={size} />
+    <div className={`relative aspect-square ${className}`} style={{ perspective: 800 }}>
+      <div
+        className={`pharaoh-tile relative h-full w-full ${flipped ? 'is-flipped' : ''} ${
+          matched ? 'pharaoh-match-glow rounded-xl' : ''
+        }`}
+      >
+        <div className="pharaoh-tile-face absolute inset-0 overflow-hidden rounded-xl">
+          <TileFace symbol={null} />
         </div>
         <div className="pharaoh-tile-face pharaoh-tile-back absolute inset-0 overflow-hidden rounded-xl ring-2 ring-amber-500/90">
-          <TileFace symbol={symbol} size={size} />
+          <TileFace symbol={symbol} />
         </div>
       </div>
     </div>
@@ -154,14 +144,13 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [betSheetOpen, setBetSheetOpen] = useState(false);
-  const [autoplay, setAutoplay] = useState(false);
+  const [autoSpinsLeft, setAutoSpinsLeft] = useState(0);
+  const [showAutoModal, setShowAutoModal] = useState(false);
   const [winAmount, setWinAmount] = useState(0);
   const busyRef = useRef(false);
   const timersRef = useRef<number[]>([]);
   const balanceRef = useRef(balance);
   balanceRef.current = balance;
-  const autoplayRef = useRef(autoplay);
-  autoplayRef.current = autoplay;
 
   const clearTimers = () => {
     timersRef.current.forEach((id) => window.clearTimeout(id));
@@ -218,18 +207,9 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
       }
 
       busyRef.current = false;
-
-      if (autoplayRef.current) {
-        const id = window.setTimeout(() => {
-          void startRoundRef.current();
-        }, 1600);
-        timersRef.current.push(id);
-      }
     },
     [muted, setBalance, showToast],
   );
-
-  const startRoundRef = useRef<() => Promise<void>>(async () => undefined);
 
   const startRound = useCallback(async () => {
     if (busyRef.current) return;
@@ -240,7 +220,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
     }
     if (stake > balanceRef.current) {
       showToast('Недостаточно средств');
-      setAutoplay(false);
+      setAutoSpinsLeft(0);
       return;
     }
 
@@ -256,7 +236,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
       setPhase('idle');
       setStatus('СДЕЛАЙТЕ СТАВКУ');
       showToast('Не удалось списать ставку');
-      setAutoplay(false);
+      setAutoSpinsLeft(0);
       return;
     }
 
@@ -286,15 +266,6 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
     });
   }, [bet, finishRound, setBalance, showToast]);
 
-  startRoundRef.current = startRound;
-
-  const cycleBet = () => {
-    if (busyRef.current) return;
-    const idx = BET_STEPS.findIndex((step) => step >= bet);
-    const next = BET_STEPS[(idx + 1) % BET_STEPS.length] ?? DEFAULT_BET;
-    setBet(clampBet(Math.min(next, balanceRef.current || next)));
-  };
-
   const statusTone = useMemo(() => {
     if (phase === 'won') return 'from-emerald-400 to-lime-500 text-emerald-950';
     if (phase === 'lost') return 'from-rose-400 to-red-500 text-white';
@@ -302,12 +273,49 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
     return 'from-[#f0d080] to-[#d4a017] text-[#3b2a14]';
   }, [phase]);
 
-  return (
-    <div className="pharaoh-root relative h-[100dvh] max-h-[100dvh] w-full overflow-hidden text-white">
-      <div className="pharaoh-bg pharaoh-columns pointer-events-none absolute inset-0" />
-      <div className="pharaoh-sand" />
+  const isPlaying = phase === 'opening';
 
-      <div className="relative z-10 flex h-full flex-col pb-[calc(env(safe-area-inset-bottom)+8px)]">
+  const openBetModal = () => {
+    if (isPlaying) return;
+    setBetSheetOpen(true);
+  };
+
+  const handlePlay = useCallback(() => {
+    void startRound();
+  }, [startRound]);
+
+  useEffect(() => {
+    if (autoSpinsLeft <= 0 || isPlaying) return undefined;
+    const timer = window.setTimeout(() => {
+      if (busyRef.current) return;
+      setAutoSpinsLeft((prev) => Math.max(0, prev - 1));
+      handlePlay();
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [autoSpinsLeft, isPlaying, handlePlay]);
+
+  const onAutoButtonClick = () => {
+    if (autoSpinsLeft > 0) {
+      setAutoSpinsLeft(0);
+      return;
+    }
+    if (isPlaying) return;
+    setShowAutoModal(true);
+  };
+
+  const startAutoSpins = (count: number) => {
+    setShowAutoModal(false);
+    setAutoSpinsLeft(count);
+  };
+
+  return (
+    <div
+      className="pharaoh-root relative flex min-h-screen h-[100dvh] max-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-cover bg-center bg-no-repeat text-white"
+      style={{ backgroundImage: "url('/assets/games/pharaoh/bg.png')" }}
+    >
+      <div className="pointer-events-none absolute inset-0 z-0 bg-black/30 backdrop-blur-[1px]" />
+
+      <div className="relative z-10 flex h-full min-h-0 flex-col pb-[calc(env(safe-area-inset-bottom)+8px)]">
         {/* Header */}
         <header className="flex shrink-0 items-center gap-2 px-3 pt-[max(env(safe-area-inset-top),8px)]">
           <button
@@ -368,22 +376,20 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
                 flipped={prizeFlipped}
                 symbol={prize}
                 matched={phase === 'won'}
-                size="lg"
                 className="h-[5.5rem] w-[5.5rem]"
               />
             </div>
           </div>
 
           <div className="pharaoh-frame w-full max-w-[320px] rounded-2xl p-2.5">
-            <div className="grid grid-cols-3 gap-2 rounded-xl bg-[#1a1008]/90 p-2">
+            <div className="grid grid-cols-3 gap-2 rounded-xl bg-[#1a1008]/70 p-2 backdrop-blur-[2px]">
               {board.map((symbol, index) => (
                 <FlipTile
                   key={index}
                   flipped={boardFlipped[index]}
                   symbol={symbol}
                   matched={matched[index]}
-                  size="md"
-                  className="aspect-square w-full"
+                  className="w-full"
                 />
               ))}
             </div>
@@ -397,12 +403,12 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
         </div>
 
         {/* Controls */}
-        <div className="z-20 flex shrink-0 flex-col items-center gap-3 px-4 pb-2">
+        <div className="relative z-10 flex shrink-0 flex-col items-center gap-2 px-4 pb-6">
           <button
             type="button"
-            disabled={busyRef.current && phase === 'opening'}
-            onClick={() => setBetSheetOpen(true)}
-            className="rounded-xl border-2 border-amber-600/80 bg-gradient-to-b from-[#3a2818] to-[#1a1008] px-5 py-1.5 text-sm font-black tabular-nums text-amber-100 shadow-lg active:scale-95 disabled:opacity-60"
+            disabled={isPlaying}
+            onClick={openBetModal}
+            className="rounded-xl border-2 border-amber-600/80 bg-gradient-to-b from-[#3a2818]/90 to-[#1a1008]/90 px-5 py-1.5 text-sm font-black tabular-nums text-amber-100 shadow-lg backdrop-blur-sm active:scale-95 disabled:opacity-60"
           >
             {formatTmtm(bet)} TMTM
           </button>
@@ -410,42 +416,53 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
           <div className="flex w-full max-w-sm items-center justify-between gap-4 px-2">
             <button
               type="button"
-              disabled={phase === 'opening'}
-              onClick={cycleBet}
-              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-fuchsia-800 ring-2 ring-violet-300/40 active:scale-90 disabled:opacity-50"
-              aria-label="Изменить ставку"
+              disabled={isPlaying}
+              onClick={openBetModal}
+              className="h-16 w-16 drop-shadow-xl transition-all duration-150 hover:brightness-110 active:scale-90 disabled:opacity-50"
+              aria-label="Ставка"
             >
-              <Coins className="h-7 w-7 text-amber-200" />
+              <img
+                src="/assets/games/pharaoh/btn_coins.png"
+                alt="Ставка"
+                className="h-full w-full object-contain"
+                draggable={false}
+              />
             </button>
 
             <button
               type="button"
-              disabled={phase === 'opening'}
-              onClick={() => void startRound()}
-              className="pharaoh-play flex h-[4.5rem] w-[4.5rem] items-center justify-center rounded-2xl bg-gradient-to-b from-lime-400 to-green-600 active:scale-95 disabled:opacity-60"
-              aria-label="Старт"
+              disabled={isPlaying}
+              onClick={handlePlay}
+              className="h-20 w-20 drop-shadow-[0_0_15px_rgba(34,197,94,0.4)] transition-all duration-150 hover:brightness-125 active:scale-95 disabled:opacity-50 disabled:grayscale"
+              aria-label="Играть"
             >
-              <Play className="h-9 w-9 fill-white text-white" />
+              <img
+                src="/assets/games/pharaoh/btn_play.png"
+                alt="Играть"
+                className="h-full w-full object-contain"
+                draggable={false}
+              />
             </button>
 
             <button
               type="button"
-              disabled={phase === 'opening'}
-              onClick={() => {
-                setAutoplay((v) => {
-                  const next = !v;
-                  if (next && phase !== 'opening') {
-                    window.setTimeout(() => void startRoundRef.current(), 0);
-                  }
-                  return next;
-                });
-              }}
-              className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-b from-violet-500 to-fuchsia-800 ring-2 active:scale-90 disabled:opacity-50 ${
-                autoplay ? 'ring-lime-300/80' : 'ring-violet-300/40'
+              onClick={onAutoButtonClick}
+              className={`relative h-16 w-16 drop-shadow-xl transition-all duration-150 hover:brightness-110 active:scale-90 disabled:opacity-50 ${
+                autoSpinsLeft > 0 ? 'brightness-125 drop-shadow-[0_0_12px_rgba(250,204,21,0.55)]' : ''
               }`}
-              aria-label="Автоигра"
+              aria-label={autoSpinsLeft > 0 ? `Стоп автоигры (${autoSpinsLeft})` : 'Автоигра'}
             >
-              <RefreshCw className={`h-7 w-7 text-amber-200 ${autoplay ? 'animate-spin' : ''}`} />
+              <img
+                src="/assets/games/pharaoh/btn_auto.png"
+                alt="Автоигра"
+                className="h-full w-full object-contain"
+                draggable={false}
+              />
+              {autoSpinsLeft > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1 text-[11px] font-black text-amber-950 shadow">
+                  {autoSpinsLeft}
+                </span>
+              )}
             </button>
           </div>
         </div>
@@ -513,6 +530,43 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
             <p className="mt-4 text-center text-sm font-black uppercase tracking-wide text-[#5b3210]">
               Отзыщи сокровища фараона!
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Auto spins modal */}
+      {showAutoModal && (
+        <div
+          className="absolute inset-0 z-50 flex items-end bg-black/60 sm:items-center sm:justify-center"
+          onClick={() => setShowAutoModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-t-3xl bg-[#1a1008] px-4 pb-6 pt-4 ring-1 ring-amber-600/40 sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-1 text-center text-sm font-bold text-amber-100">Автоигра</p>
+            <p className="mb-3 text-center text-xs font-medium text-amber-100/60">
+              Выберите число автоматических спинов
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {AUTO_SPIN_OPTIONS.map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() => startAutoSpins(count)}
+                  className="rounded-xl bg-gradient-to-b from-amber-500 to-amber-700 py-3 text-base font-black text-amber-950 shadow active:scale-95"
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAutoModal(false)}
+              className="mt-3 w-full rounded-xl bg-white/10 py-2.5 text-sm font-bold text-amber-50 ring-1 ring-white/10 active:scale-95"
+            >
+              Отмена
+            </button>
           </div>
         </div>
       )}

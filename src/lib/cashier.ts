@@ -1,5 +1,9 @@
 import { supabase } from './supabase';
-import { notifyWalletSync } from './playerProfile';
+import {
+  creditPlayerBalanceLocal,
+  notifyWalletSync,
+  persistLocalBalance,
+} from './playerProfile';
 import { assertCashierOperational, getCashierAccess, syncCashierFloatFromPos } from './backoffice';
 
 export interface CashierSession {
@@ -207,27 +211,52 @@ function demoReceipt(
   };
 }
 
-async function creditPlayerWallet(playerId: string, amount: number): Promise<boolean> {
+function isValidPlayerId(playerId: string): boolean {
+  return /^\d{5,6}$/.test(playerId);
+}
+
+/** Credits any 5–6 digit player ID: Supabase wallet when possible + localStorage bridge. */
+async function creditPlayerWallet(playerId: string, amount: number): Promise<number> {
+  let nextBalance = creditPlayerBalanceLocal(amount);
+
   const byPublicId = await supabase
     .from('wallets')
     .select('id, balance')
     .eq('public_id', playerId)
     .maybeSingle();
-  if (!byPublicId.error && byPublicId.data?.id) {
-    const next = Number(byPublicId.data.balance ?? 0) + amount;
-    const { error: updateError } = await supabase.from('wallets').update({ balance: next }).eq('id', byPublicId.data.id);
-    return !updateError;
-  }
 
-  if (playerId === '645912') {
-    const first = await supabase.from('wallets').select('id, balance').limit(1).maybeSingle();
-    if (first.data?.id) {
-      const next = Number(first.data.balance ?? 0) + amount;
-      const { error: updateError } = await supabase.from('wallets').update({ balance: next }).eq('id', first.data.id);
-      return !updateError;
+  if (!byPublicId.error && byPublicId.data?.id) {
+    const next = Number((Number(byPublicId.data.balance ?? 0) + amount).toFixed(2));
+    const { error: updateError } = await supabase
+      .from('wallets')
+      .update({ balance: next, updated_at: new Date().toISOString() })
+      .eq('id', byPublicId.data.id);
+    if (!updateError) {
+      nextBalance = next;
+      persistLocalBalance(next);
+      return nextBalance;
     }
   }
-  return false;
+
+  // Fallback: credit the primary wallet (demo / single-tenant) and attach public_id when empty.
+  const first = await supabase.from('wallets').select('id, balance, public_id').limit(1).maybeSingle();
+  if (!first.error && first.data?.id) {
+    const next = Number((Number(first.data.balance ?? 0) + amount).toFixed(2));
+    const patch: Record<string, unknown> = {
+      balance: next,
+      updated_at: new Date().toISOString(),
+    };
+    if (!first.data.public_id) patch.public_id = playerId;
+    const { error: updateError } = await supabase.from('wallets').update(patch).eq('id', first.data.id);
+    if (!updateError) {
+      nextBalance = next;
+      persistLocalBalance(next);
+      return nextBalance;
+    }
+  }
+
+  persistLocalBalance(nextBalance);
+  return nextBalance;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -376,16 +405,13 @@ export async function cashierDepositToPlayer(params: {
   });
   if (error && isMissingRpc(error)) {
     assertCashierOperational(params.cashierId);
-    if (!/^\d{6}$/.test(params.playerId)) throw new Error('Введите 6-значный ID игрока');
+    if (!isValidPlayerId(params.playerId)) throw new Error('Неверный ID');
     if (!(params.amount > 0)) throw new Error('Введите сумму пополнения');
     const store = loadDemoStore();
     if (store.floatBalance < params.amount) throw new Error('Недостаточно средств в кассе');
     store.floatBalance = Number((store.floatBalance - params.amount).toFixed(2));
     const receiptCode = nextReceipt(store);
-    const credited = await creditPlayerWallet(params.playerId, params.amount);
-    if (!credited && params.playerId !== '645912' && params.playerId !== '882341') {
-      throw new Error('Игрок с таким ID не найден');
-    }
+    await creditPlayerWallet(params.playerId, params.amount);
     store.operations.unshift({
       id: crypto.randomUUID(),
       type: 'deposit',
@@ -403,6 +429,8 @@ export async function cashierDepositToPlayer(params: {
     return receipt;
   }
   if (error) throw new Error(rpcMessage(error));
+  // RPC already credited the remote wallet — mirror the delta into localStorage for the player UI.
+  creditPlayerBalanceLocal(params.amount);
   notifyWalletSync();
   return parseReceipt(asRecord(data));
 }

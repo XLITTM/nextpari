@@ -109,7 +109,7 @@ const GAMES: HubGame[] = [
     name: 'Сокровища Фараона',
     badge: 'HOT',
     winLabel: 'x10000',
-    cover: CASINO_COVERS.c2,
+    cover: '/assets/games/pharaoh/cover.png',
     gradient: 'from-amber-700 via-yellow-800 to-stone-950',
     route: { name: 'pharaoh' },
     categories: ['all', 'foryou', 'best', 'lottery'],

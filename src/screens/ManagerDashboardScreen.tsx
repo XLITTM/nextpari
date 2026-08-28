@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle, Ban, BarChart3, Building2, CheckCircle2, Clock3, Download, Landmark,
-  LayoutDashboard, LogOut, Plus, RefreshCw, Shield, Snowflake,
+  LayoutDashboard, LogOut, Mail, Plus, RefreshCw, Shield, Snowflake,
   TrendingUp, Unlock, User, UserCog, Users, Wallet, X, XCircle,
 } from 'lucide-react';
 import { PlayersTab } from '../components/backoffice/PlayersTab';
+import { SendPlayerMessageForm } from '../components/backoffice/SendPlayerMessageForm';
 import { ManagersPage } from '../pages/backoffice/Managers';
 import type { WithdrawalRequest } from '../types';
 import { listWithdrawalRequests } from '../lib/withdrawalRequests';
@@ -40,7 +41,7 @@ import {
 } from '../lib/backoffice';
 import { useBackofficeStore } from '../stores/backofficeStore';
 
-type CabinetTab = 'finance' | 'managers' | 'agents' | 'players' | 'risk';
+type CabinetTab = 'finance' | 'managers' | 'agents' | 'players' | 'messages' | 'risk';
 
 export function ManagerDashboardScreen() {
   const [session, setSession] = useState<ManagerSession | null>(null);
@@ -175,6 +176,7 @@ function BackofficeShell({
           <NavBtn active={tab === 'managers'} onClick={() => setTab('managers')} icon={UserCog} label="Менеджеры" />
           <NavBtn active={tab === 'agents'} onClick={() => setTab('agents')} icon={Building2} label="Все кассы" />
           <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="Игроки" />
+          <NavBtn active={tab === 'messages'} onClick={() => setTab('messages')} icon={Mail} label="Сообщения" />
           <NavBtn active={tab === 'risk'} onClick={() => setTab('risk')} icon={AlertTriangle} label="Риски" />
         </nav>
         <div className="mt-auto p-3">
@@ -198,7 +200,13 @@ function BackofficeShell({
         {tab === 'finance' && <FinancePanel session={session} />}
         {tab === 'managers' && <ManagersPage session={session} onNotice={setNotice} />}
         {tab === 'agents' && <AgentsPanel session={session} onNotice={setNotice} />}
-        {tab === 'players' && <PlayersTab session={session} onNotice={setNotice} />}
+        {tab === 'players' && <PlayersTab session={session} onNotice={setNotice} showMessageForm={false} />}
+        {tab === 'messages' && (
+          <div className="max-w-2xl">
+            <h2 className="text-2xl font-extrabold text-ink-900 mb-5">Сообщения игрокам</h2>
+            <SendPlayerMessageForm />
+          </div>
+        )}
         {tab === 'risk' && <RiskPanel session={session} onNotice={setNotice} />}
       </main>
     </div>
