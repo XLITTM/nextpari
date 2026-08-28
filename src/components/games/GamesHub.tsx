@@ -105,6 +105,16 @@ const GAMES: HubGame[] = [
     categories: ['all', 'foryou', 'best', 'crash'],
   },
   {
+    id: 'pharaoh',
+    name: 'Сокровища Фараона',
+    badge: 'HOT',
+    winLabel: 'x10000',
+    cover: CASINO_COVERS.c2,
+    gradient: 'from-amber-700 via-yellow-800 to-stone-950',
+    route: { name: 'pharaoh' },
+    categories: ['all', 'foryou', 'best', 'lottery'],
+  },
+  {
     id: 'western-slot',
     name: 'Western Slot',
     badge: 'HOT',
@@ -316,10 +326,10 @@ export function GamesHub({ onBack, onNavigate }: GamesHubProps) {
           />
         ) : lobby === 'cashback' ? (
           <LobbyPanel
-            title="Кешбэк"
-            text="Возврат части проигрыша начисляется автоматически. Следите за статусом в Promo."
-            action="К условиям"
-            onAction={() => onNavigate({ name: 'promo' })}
+            title="VIP кешбэк"
+            text="Повышайте уровень и забирайте кешбэк — от Медного до статуса VIP."
+            action="Открыть VIP кешбэк"
+            onAction={() => onNavigate({ name: 'vip-cashback' })}
           />
         ) : (
           <div className="grid grid-cols-2 gap-3 px-3">

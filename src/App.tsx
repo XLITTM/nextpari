@@ -40,6 +40,8 @@ import { BlackjackGame } from './games/blackjack/BlackjackGame';
 import { AviatorGame } from './games/aviator/AviatorGame';
 import { ApplesGame } from './games/apples/ApplesGame';
 import { DiceGame } from './games/dice/DiceGame';
+import { PharaohTreasure } from './games/pharaoh/PharaohTreasure';
+import { VipCashbackScreen } from './screens/VipCashbackScreen';
 import { LeagueScreen } from './screens/LeagueScreen';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
@@ -57,6 +59,8 @@ const AVIATOR_PATH = '/games/aviator';
 const APPLES_PATH = '/games/apples';
 const CRYSTAL_PATH = '/games/crystal';
 const DICE_PATH = '/games/dice';
+const PHARAOH_PATH = '/games/pharaoh';
+const VIP_CASHBACK_PATH = '/casino/vip-cashback';
 function currentPath(): string {
   return window.location.pathname.replace(/\/+$/, '') || '/';
 }
@@ -68,6 +72,8 @@ function screenFromPath(): Screen {
   if (path === APPLES_PATH) return { name: 'apples' };
   if (path === CRYSTAL_PATH) return { name: 'crystal' };
   if (path === DICE_PATH) return { name: 'dice' };
+  if (path === PHARAOH_PATH) return { name: 'pharaoh' };
+  if (path === VIP_CASHBACK_PATH) return { name: 'vip-cashback' };
   if (path === GAMES_PATH) return { name: 'games' };
   if (path.startsWith('/league/')) {
     const leagueId = decodeURIComponent(path.slice('/league/'.length));
@@ -82,6 +88,8 @@ function pathForScreen(screen: Screen): string {
   if (screen.name === 'apples') return APPLES_PATH;
   if (screen.name === 'crystal') return CRYSTAL_PATH;
   if (screen.name === 'dice') return DICE_PATH;
+  if (screen.name === 'pharaoh') return PHARAOH_PATH;
+  if (screen.name === 'vip-cashback') return VIP_CASHBACK_PATH;
   if (screen.name === 'games') return GAMES_PATH;
   if (screen.name === 'league') return leaguePath(screen.leagueId);
   return '/';
@@ -107,6 +115,8 @@ function navActive(name: Screen['name']): Screen['name'] {
     name === 'apples' ||
     name === 'crystal' ||
     name === 'dice' ||
+    name === 'pharaoh' ||
+    name === 'vip-cashback' ||
     name === 'promo-details' ||
     name === 'promo-marathon' ||
     name === 'promo-welcome' ||
@@ -181,8 +191,10 @@ function AppContent() {
     screen.name === 'aviator' ||
     screen.name === 'apples' ||
     screen.name === 'crystal' ||
-    screen.name === 'dice';
+    screen.name === 'dice' ||
+    screen.name === 'pharaoh';
   const isGamesHub = screen.name === 'games';
+  const isVipCashback = screen.name === 'vip-cashback';
 
   const renderScreen = () => {
     switch (screen.name) {
@@ -270,6 +282,15 @@ function AppContent() {
         return <CrystalGame onBack={() => setScreen({ name: 'games' })} />;
       case 'dice':
         return <DiceGame onBack={() => setScreen({ name: 'games' })} />;
+      case 'pharaoh':
+        return <PharaohTreasure onBack={() => setScreen({ name: 'games' })} />;
+      case 'vip-cashback':
+        return (
+          <VipCashbackScreen
+            onBack={() => setScreen({ name: 'promo' })}
+            onNavigate={setScreen}
+          />
+        );
       case 'promo-details':
         return <PromoDetailsScreen onBack={() => setScreen({ name: 'home' })} onNavigate={setScreen} />;
       case 'promo-marathon':
@@ -341,13 +362,13 @@ function AppContent() {
         </Header>
       )}
 
-      <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>
+      <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub || isVipCashback ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>
         <ErrorBoundary resetKey={screen.name}>
           {renderScreen()}
         </ErrorBoundary>
       </div>
 
-      {!isArcade && !isGamesHub && (
+      {!isArcade && !isGamesHub && !isVipCashback && (
         <BottomNav
           active={navActive(screen.name)}
           onChange={setScreen}

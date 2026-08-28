@@ -7,9 +7,11 @@ import { useToast } from '../ToastContext';
 import { useProfile } from '../ProfileContext';
 import { RestrictionModal } from '../components/RestrictionModal';
 
+import type { Screen } from '../types';
+
 interface PromoScreenProps {
   onBack: () => void;
-  onNavigate: (screen: { name: 'personal-data' }) => void;
+  onNavigate: (screen: Screen) => void;
 }
 
 const promoItems = [
@@ -31,6 +33,10 @@ export function PromoScreen({ onBack, onNavigate }: PromoScreenProps) {
   const handleItemClick = (action: string) => {
     if (action === 'check') {
       setShowCheckModal(true);
+      return;
+    }
+    if (action === 'vip' || action === 'cashback') {
+      onNavigate({ name: 'vip-cashback' });
       return;
     }
     if (!isProfileComplete) {

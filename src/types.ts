@@ -256,4 +256,6 @@ export type Screen =
   | { name: 'apples' }
   | { name: 'crystal' }
   | { name: 'dice' }
+  | { name: 'pharaoh' }
+  | { name: 'vip-cashback' }
   | { name: 'league'; leagueId: string };
