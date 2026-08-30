@@ -25,12 +25,25 @@ export function Header({ balance, onSearchClick, onNavigate, children }: HeaderP
           </span>
         </div>
 
-        <button type="button" className="flex items-center justify-center gap-2">
-          <img src="/logo.png" alt="Nextpari" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
-          <div className="text-2xl font-black italic leading-none tracking-tighter">
-            <span className="text-gray-900 dark:text-white">Next</span>
-            <span className="text-brand-600">pari</span>
-          </div>
+        <button
+          type="button"
+          onClick={() => onNavigate({ name: 'home' })}
+          className="flex select-none items-center transition-transform active:scale-95"
+          aria-label="NextPari — на главную"
+        >
+          <img
+            src="/assets/logo-black.png"
+            alt="NextPari"
+            className="block h-7 w-auto object-contain drop-shadow-sm dark:hidden sm:h-8"
+            draggable={false}
+          />
+          <img
+            src="/assets/logo-white.png"
+            alt=""
+            aria-hidden
+            className="hidden h-7 w-auto object-contain drop-shadow-[0_0_10px_rgba(74,255,118,0.2)] dark:block sm:h-8"
+            draggable={false}
+          />
         </button>
 
         <div className="flex items-center gap-0.5">
