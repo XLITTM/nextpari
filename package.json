@@ -17,7 +17,8 @@
     "manager:auth:test": "tsx --tsconfig tsconfig.server.json --test src/manager/auth/managerAuth.test.ts server/staff/managerAuthGateway.test.ts",
     "cashier:auth:test": "tsx --tsconfig tsconfig.server.json --test src/cashier/auth/cashierAuth.test.ts server/staff/cashierAuthGateway.test.ts server/staff/staffBindingContext.test.ts",
     "cashier:control:test": "tsx --tsconfig tsconfig.server.json --test server/cashier/cashierControl.test.ts src/cashier/services.test.ts server/cashier/cashierPlayerFinance.test.ts server/staff/staffHierarchy.test.ts",
-    "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts server/staff/staffHierarchy.test.ts"
+    "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts server/staff/staffHierarchy.test.ts",
+    "player:auth:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test src/lib/playerAuth.security.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

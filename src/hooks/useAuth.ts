@@ -1,28 +1,40 @@
-import { ensureLocalGuest } from '../lib/playerProfile';
+import { clearDemoPlayerState, getPlayerSession, signOutPlayer } from '../lib/playerAuth';
+import { supabase } from '../lib/supabase';
 
 export const AUTH_KEY = 'nextpari-auth';
 
 export function bootstrapGuestSession(): boolean {
-  ensureLocalGuest();
-  if (typeof sessionStorage === 'undefined') return true;
-  if (sessionStorage.getItem(AUTH_KEY) === '1') return true;
-  sessionStorage.setItem(AUTH_KEY, '1');
-  return true;
+  return false;
 }
 
 export function isAuthenticatedSession(): boolean {
-  return sessionStorage.getItem(AUTH_KEY) === '1';
+  return false;
 }
 
 export function signInSession() {
-  ensureLocalGuest();
-  sessionStorage.setItem(AUTH_KEY, '1');
+  /* Player entry requires a real Supabase session. */
 }
 
 export function signOutSession() {
-  sessionStorage.removeItem(AUTH_KEY);
+  void signOutPlayer();
 }
 
 export function readGuestPublicId(): string {
-  return ensureLocalGuest().publicId;
+  return '';
+}
+
+export async function restorePlayerSession() {
+  clearDemoPlayerState();
+  return getPlayerSession();
+}
+
+export function subscribePlayerAuth(
+  onSession: (authenticated: boolean) => void,
+) {
+  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+    onSession(Boolean(session?.user));
+  });
+  return () => {
+    data.subscription.unsubscribe();
+  };
 }

@@ -3,6 +3,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { APPLE_CLOVER_PNG, APPLE_RED_PNG } from './appleAssets';
 import { APPLE_LEVELS } from './appleConfig';
@@ -67,6 +68,11 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
     }
     if (amount > balanceRef.current) {
       showToast('Недостаточно средств');
+      return;
+    }
+    const blocked = blockedGamesWager();
+    if (blocked) {
+      showToast(blocked);
       return;
     }
     setBusy(true);

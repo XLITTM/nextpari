@@ -1,174 +1,75 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from './lib/supabase';
-import {
-  persistLocalBalance,
-  syncPlayerWallet,
-  WALLET_SYNC_EVENT,
-  ensureLocalGuest,
-  DEMO_PUBLIC_ID,
-  PLAYER_BALANCE_KEY,
-  readPlayerBalance,
-} from './lib/playerProfile';
+import { ensureOwnPlayerWallet } from './lib/playerWallet';
 import { useUserStore } from './stores/userStore';
 
 interface WalletContextValue {
   balance: number;
   publicId: string | null;
   loading: boolean;
+  available: boolean;
+  error: string | null;
   refresh: () => Promise<void>;
   applyBalance: (next: number) => void;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
-function readCachedWallet() {
-  const guest = ensureLocalGuest();
-  const stored = useUserStore.getState();
-  const fromPlayerBalance = readPlayerBalance(guest.demoBalance);
-  return {
-    publicId: stored.publicId || guest.publicId,
-    balance: Math.max(stored.balance || 0, guest.demoBalance || 0, fromPlayerBalance || 0),
-    walletId: stored.walletId || guest.walletId,
-  };
-}
-
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const cached = readCachedWallet();
-  const [balance, setBalance] = useState(cached.balance);
-  const [publicId, setPublicId] = useState<string | null>(cached.publicId);
-  const [walletId, setWalletId] = useState<string | null>(cached.walletId);
-  const [loading, setLoading] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [publicId, setPublicId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [available, setAvailable] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const hydrate = useUserStore((state) => state.hydrate);
-  const setStoreBalance = useUserStore((state) => state.setBalance);
-  const walletIdRef = useRef<string | null>(cached.walletId);
-
-  const applySnapshot = useCallback(
-    (next: { publicId: string; balance: number; walletId: string | null }) => {
-      const local = useUserStore.getState();
-      const fromBridge = readPlayerBalance(0);
-      const keepLocal = Date.now() - local.lastWriteAt < 12_000 && local.balance !== next.balance;
-      let balance = keepLocal
-        ? local.balance
-        : next.balance >= 0 && (next.balance > 0 || local.balance <= 0)
-          ? next.balance
-          : local.balance > 0
-            ? local.balance
-            : 1000;
-      // Agent terminal credits may land in player_balance ahead of remote sync.
-      if (fromBridge > balance) balance = fromBridge;
-      setPublicId(next.publicId || DEMO_PUBLIC_ID);
-      setBalance(balance);
-      setWalletId(next.walletId);
-      walletIdRef.current = next.walletId;
-      persistLocalBalance(balance);
-      hydrate({
-        publicId: next.publicId || DEMO_PUBLIC_ID,
-        balance,
-        walletId: next.walletId,
-      });
-    },
-    [hydrate],
-  );
+  const resetUser = useUserStore((state) => state.reset);
 
   const refresh = useCallback(async () => {
-    const snapshot = await syncPlayerWallet();
-    applySnapshot(snapshot);
-    setLoading(false);
-  }, [applySnapshot]);
+    setLoading(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.user) {
+        setBalance(0);
+        setPublicId(null);
+        setAvailable(false);
+        setError(null);
+        resetUser();
+        return;
+      }
+      const wallet = await ensureOwnPlayerWallet();
+      setPublicId(wallet.publicId);
+      setBalance(wallet.balance);
+      setAvailable(true);
+      setError(null);
+      hydrate({
+        publicId: wallet.publicId,
+        balance: wallet.balance,
+        walletId: wallet.walletId,
+      });
+    } catch (err) {
+      setAvailable(false);
+      setError(err instanceof Error ? err.message : 'WALLET_UNAVAILABLE');
+    } finally {
+      setLoading(false);
+    }
+  }, [hydrate, resetUser]);
 
   useEffect(() => {
     void refresh();
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      void refresh();
+    });
+    return () => {
+      data.subscription.unsubscribe();
+    };
   }, [refresh]);
 
-  useEffect(() => {
-    const applyLocalPlayerBalance = () => {
-      const next = readPlayerBalance();
-      if (!Number.isFinite(next) || next < 0) return;
-      setBalance((prev) => (next > prev ? next : prev));
-      setStoreBalance(next);
-    };
-    const onSync = () => {
-      applyLocalPlayerBalance();
-      void refresh();
-    };
-    const onStorage = (event: StorageEvent) => {
-      if (event.key && event.key !== PLAYER_BALANCE_KEY && event.key !== 'nextpari-player-profile') return;
-      applyLocalPlayerBalance();
-      void refresh();
-    };
-    window.addEventListener(WALLET_SYNC_EVENT, onSync);
-    window.addEventListener('storage', onStorage);
-    window.addEventListener('focus', onSync);
-    document.addEventListener('visibilitychange', onSync);
-
-    let channel: BroadcastChannel | null = null;
-    try {
-      channel = new BroadcastChannel(WALLET_SYNC_EVENT);
-      channel.onmessage = onSync;
-    } catch {
-      channel = null;
-    }
-
-    // Hydrate from player_balance on mount (agent tab may have credited it).
-    applyLocalPlayerBalance();
-
-    const poll = window.setInterval(() => {
-      void refresh();
-    }, 8000);
-
-    return () => {
-      window.removeEventListener(WALLET_SYNC_EVENT, onSync);
-      window.removeEventListener('storage', onStorage);
-      window.removeEventListener('focus', onSync);
-      document.removeEventListener('visibilitychange', onSync);
-      channel?.close();
-      window.clearInterval(poll);
-    };
-  }, [refresh, setStoreBalance]);
-
-  useEffect(() => {
-    const filter = walletId ? `id=eq.${walletId}` : publicId ? `public_id=eq.${publicId}` : undefined;
-    const live = supabase
-      .channel(`wallet-live-${walletId ?? publicId ?? 'guest'}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'wallets',
-          ...(filter ? { filter } : {}),
-        },
-        (payload) => {
-          const row = (payload.new ?? payload.old) as { id?: string; balance?: number; public_id?: string } | undefined;
-          if (!row) return;
-          if (walletIdRef.current && row.id && row.id !== walletIdRef.current) return;
-          if (typeof row.balance === 'number' && row.balance > 0) {
-            setBalance(row.balance);
-            persistLocalBalance(row.balance);
-            setStoreBalance(row.balance);
-          }
-          if (row.public_id) setPublicId(String(row.public_id).replace(/\D/g, '') || publicId);
-        },
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(live);
-    };
-  }, [publicId, setStoreBalance, walletId]);
-
-  const applyBalance = useCallback(
-    (next: number) => {
-      const safe = Number(Math.max(0, next).toFixed(2));
-      setBalance(safe);
-      persistLocalBalance(safe);
-      setStoreBalance(safe);
-    },
-    [setStoreBalance],
-  );
+  const applyBalance = useCallback((_next: number) => {
+    /* Browser cannot mint or change canonical balance. */
+  }, []);
 
   return (
-    <WalletContext.Provider value={{ balance, publicId, loading, refresh, applyBalance }}>
+    <WalletContext.Provider value={{ balance, publicId, loading, available, error, refresh, applyBalance }}>
       {children}
     </WalletContext.Provider>
   );
@@ -178,4 +79,10 @@ export function useWallet() {
   const ctx = useContext(WalletContext);
   if (!ctx) throw new Error('useWallet must be used within WalletProvider');
   return ctx;
+}
+
+export function formatPlayerMoney(balance: number, available: boolean, loading?: boolean): string {
+  if (loading) return '…';
+  if (!available) return 'недоступен';
+  return `${balance.toLocaleString('ru-RU')} TMTM`;
 }

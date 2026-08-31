@@ -4,13 +4,13 @@ import { useTheme } from '../ThemeContext';
 import type { Screen } from '../types';
 
 interface HeaderProps {
-  balance: number;
+  balanceLabel: string;
   onSearchClick: () => void;
   onNavigate: (screen: Screen) => void;
   children?: ReactNode;
 }
 
-export function Header({ balance, onSearchClick, onNavigate, children }: HeaderProps) {
+export function Header({ balanceLabel, onSearchClick, onNavigate, children }: HeaderProps) {
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -21,7 +21,7 @@ export function Header({ balance, onSearchClick, onNavigate, children }: HeaderP
             <Plus className="h-4 w-4 text-white" strokeWidth={2.5} />
           </button>
           <span className="whitespace-nowrap text-sm font-bold tabular-nums text-gray-900 dark:text-white">
-            {balance.toLocaleString('ru-RU')}
+            {balanceLabel}
           </span>
         </div>
 

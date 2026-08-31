@@ -3,6 +3,7 @@ import { ChevronLeft, History, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { AviatorCanvas, WAITING_TIME, type FlightPhase } from './AviatorCanvas';
 import {
@@ -223,7 +224,11 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
       .filter(({ panel }) => panel.status === 'queued');
     const total = queued.reduce((sum, row) => sum + parseAmount(row.panel.amount), 0);
     if (total > 0) {
-      if (total > balanceRef.current) {
+      const blocked = blockedGamesWager();
+      if (blocked) {
+        showToast(blocked);
+        queued.forEach(({ index }) => updatePanel(index, { status: 'idle' }));
+      } else if (total > balanceRef.current) {
         showToast('Недостаточно средств');
         queued.forEach(({ index }) => updatePanel(index, { status: 'idle' }));
       } else {

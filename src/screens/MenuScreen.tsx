@@ -11,12 +11,12 @@ import { useEffect, useState } from 'react';
 import { IconCasino, IconEsports, IconGames, IconSport } from '../components/SectionIcons';
 import { InboxModal } from '../components/InboxModal';
 import { countUnreadForPlayer, subscribeSiteMessages } from '../lib/siteMessages';
-import { DEMO_PUBLIC_ID } from '../lib/playerProfile';
-import { useWallet } from '../WalletContext';
+import { formatPlayerMoney, useWallet } from '../WalletContext';
 import type { Screen } from '../types';
 
 interface MenuScreenProps {
   balance: number;
+  balanceLabel?: string;
   onNavigate: (screen: Screen) => void;
   onLogout: () => void;
 }
@@ -104,12 +104,13 @@ const specialStyles: Record<SpecialType, string> = {
   orange: 'bg-orange-500',
 };
 
-export function MenuScreen({ balance, onNavigate, onLogout }: MenuScreenProps) {
+export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: MenuScreenProps) {
   const [activeTab, setActiveTab] = useState<SubTabId>('top');
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { publicId } = useWallet();
-  const playerId = publicId || DEMO_PUBLIC_ID;
+  const { publicId, available, loading } = useWallet();
+  const playerId = publicId || '';
+  const moneyLabel = balanceLabel ?? formatPlayerMoney(balance, available, loading);
 
   useEffect(() => {
     const refreshUnread = () => setUnreadCount(countUnreadForPlayer(playerId));
@@ -181,7 +182,7 @@ export function MenuScreen({ balance, onNavigate, onLogout }: MenuScreenProps) {
             <div className="flex-1 text-left min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-200 leading-tight font-semibold">Баланс</p>
               <p className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums leading-tight">
-                {balance.toLocaleString('ru-RU')} TMTM
+                {moneyLabel}
               </p>
             </div>
             <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-200 shrink-0" />

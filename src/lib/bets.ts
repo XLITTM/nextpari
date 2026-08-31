@@ -1,9 +1,8 @@
 import { supabase } from './supabase';
-import { generateTicketCode } from '../betslipLogic';
 import { tournamentLine } from './betTicket';
-import { persistWalletBalance } from '../games/blackjack/wallet';
-import { useUserStore } from '../stores/userStore';
-import { checkLiveQuotes, type OddsUpdate } from './liveBetGuard';
+import { blockedSportsBet, SPORTS_BET_GATE_MESSAGE } from './playerMoneyGate';
+import { ensureOwnPlayerWallet } from './playerWallet';
+import type { OddsUpdate } from './liveBetGuard';
 import type { BetEvent, BetHistoryEntry, BetSelection, BetStatus, SportId } from '../types';
 
 export interface WalletRow {
@@ -13,32 +12,17 @@ export interface WalletRow {
 }
 
 export async function fetchWallet(): Promise<WalletRow | null> {
-  const withPublicId = await supabase
-    .from('wallets')
-    .select('id, balance, public_id')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (!withPublicId.error && withPublicId.data?.id) {
+  try {
+    const wallet = await ensureOwnPlayerWallet();
     return {
-      id: withPublicId.data.id as string,
-      balance: Number(withPublicId.data.balance ?? 0),
-      publicId: (withPublicId.data.public_id as string | null) ?? null,
+      id: wallet.walletId,
+      balance: wallet.balance,
+      publicId: wallet.publicId,
     };
-  }
-
-  const { data, error } = await supabase
-    .from('wallets')
-    .select('id, balance')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  if (error) {
-    console.error('Failed to load wallet:', error.message);
+  } catch (error) {
+    console.error('Failed to load wallet:', error instanceof Error ? error.message : error);
     return null;
   }
-  if (!data?.id) return null;
-  return { id: data.id as string, balance: Number(data.balance ?? 0), publicId: null };
 }
 
 export async function fetchWalletBalance(): Promise<number | null> {
@@ -46,212 +30,19 @@ export async function fetchWalletBalance(): Promise<number | null> {
   return wallet?.balance ?? null;
 }
 
-function splitTeams(label: string): { homeTeam: string; awayTeam: string } {
-  const parts = label.split(/\s+[—–-]\s+/);
-  return { homeTeam: parts[0]?.trim() ?? '', awayTeam: parts[1]?.trim() ?? '' };
-}
-
-function teamsOf(selection: BetSelection) {
-  if (selection.homeTeam || selection.awayTeam) {
-    return { homeTeam: selection.homeTeam ?? '', awayTeam: selection.awayTeam ?? '' };
-  }
-  return splitTeams(selection.matchLabel);
-}
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function dbMatchId(matchId?: string): string | undefined {
-  if (!matchId || !UUID_RE.test(matchId)) return undefined;
-  return matchId;
-}
-
 export type PlaceBetResult =
   | { ok: true; newBalance: number }
   | { ok: false; error: string; reason?: 'odds_changed' | 'suspended' | 'generic'; updates?: OddsUpdate[] };
 
-export async function placeBet(params: {
+export async function placeBet(_params: {
   selections: BetSelection[];
   stake: number;
   mode: 'single' | 'express';
   skipLiveCheck?: boolean;
 }): Promise<PlaceBetResult> {
-  const { selections, stake, mode, skipLiveCheck } = params;
-  if (!selections.length) return { ok: false, error: 'Купон пуст' };
-  if (!Number.isFinite(stake) || stake <= 0) return { ok: false, error: 'Введите сумму ставки' };
-
-  const isExpress = mode === 'express' && selections.length >= 2;
-  const totalOdds = isExpress
-    ? selections.reduce((acc, item) => acc * item.odds, 1)
-    : selections.length === 1
-      ? selections[0].odds
-      : selections.reduce((acc, item) => acc + item.odds, 0);
-  const totalStake = isExpress || selections.length === 1 ? stake : stake * selections.length;
-  const potentialWin = isExpress || selections.length === 1
-    ? stake * (isExpress ? selections.reduce((acc, item) => acc * item.odds, 1) : selections[0].odds)
-    : selections.reduce((acc, item) => acc + stake * item.odds, 0);
-
-  const store = useUserStore.getState();
-  if (totalStake > store.balance) return { ok: false, error: 'Недостаточно средств' };
-
-  if (!skipLiveCheck && selections.some((row) => row.isLive)) {
-    const check = await checkLiveQuotes(selections);
-    if (check.status === 'suspended') {
-      return { ok: false, error: check.error, reason: 'suspended' };
-    }
-    if (check.status === 'odds_changed') {
-      return {
-        ok: false,
-        error: check.error,
-        reason: 'odds_changed',
-        updates: check.updates,
-      };
-    }
-  }
-
-  if (!store.debit(totalStake)) return { ok: false, error: 'Недостаточно средств' };
-  const newBalance = useUserStore.getState().balance;
-  void persistWalletBalance(newBalance);
-
-  const wallet = await fetchWallet();
-  if (!wallet) {
-    return { ok: true, newBalance };
-  }
-
-  const first = selections[0];
-  const teams = teamsOf(first);
-  const couponType = selections.length > 1 ? 'express' : 'single';
-  const events = selections.map((item) => {
-    const names = teamsOf(item);
-    const matchLabel = item.matchLabel || [names.homeTeam, names.awayTeam].filter(Boolean).join(' — ');
-    const tournament = tournamentLine({
-      tournament: item.tournament,
-      sport: item.sport,
-      country: item.country,
-      league: item.league,
-    });
-    return {
-      matchId: item.matchId,
-      matchLabel,
-      homeTeam: names.homeTeam,
-      awayTeam: names.awayTeam,
-      tournament,
-      sport: item.sport ?? null,
-      country: item.country ?? null,
-      league: item.league ?? null,
-      market: item.market,
-      selection: item.outcome,
-      outcome: item.outcome,
-      odds: item.odds,
-      isLive: Boolean(item.isLive),
-      liveStatus: item.liveStatus ?? null,
-      matchStatus: item.isLive ? item.liveStatus || 'LIVE' : 'Не начался',
-    };
-  });
-
-  const fullPayload = {
-    ...(dbMatchId(first.matchId) ? { match_id: dbMatchId(first.matchId) } : {}),
-    selection: isExpress ? selections.map((item) => item.outcome).join(', ') : first.outcome,
-    odds: Number(totalOdds.toFixed(4)),
-    amount: Number(totalStake.toFixed(2)),
-    potential_win: Number(potentialWin.toFixed(2)),
-    status: 'accepted',
-    wallet_id: wallet.id,
-    home_team: teams.homeTeam,
-    away_team: teams.awayTeam,
-    market: first.market,
-    type: couponType,
-    total_odds: Number(totalOdds.toFixed(4)),
-    events,
-    ticket_code: generateTicketCode(),
-  };
-
-  let bet = await supabase.from('bets').insert(fullPayload).select('id').single();
-  if (bet.error) {
-    bet = await supabase
-      .from('bets')
-      .insert({
-        ...(dbMatchId(first.matchId) ? { match_id: dbMatchId(first.matchId) } : {}),
-        selection: fullPayload.selection,
-        odds: fullPayload.odds,
-        amount: fullPayload.amount,
-        potential_win: fullPayload.potential_win,
-        status: 'accepted',
-        wallet_id: wallet.id,
-      })
-      .select('id')
-      .single();
-  }
-  if (bet.error || !bet.data?.id) {
-    const retry = await supabase
-      .from('bets')
-      .insert({
-        ...(dbMatchId(first.matchId) ? { match_id: dbMatchId(first.matchId) } : {}),
-        selection: fullPayload.selection,
-        odds: fullPayload.odds,
-        amount: fullPayload.amount,
-        potential_win: fullPayload.potential_win,
-        status: 'pending',
-        wallet_id: wallet.id,
-      })
-      .select('id')
-      .single();
-    if (retry.error || !retry.data?.id) {
-      console.error('Failed to insert bet:', bet.error?.message ?? retry.error?.message);
-      return { ok: true, newBalance };
-    }
-    bet = retry;
-  }
-
-  const { error: walletError } = await supabase
-    .from('wallets')
-    .update({ balance: newBalance, updated_at: new Date().toISOString() })
-    .eq('id', wallet.id);
-
-  if (walletError) {
-    console.warn('Wallet remote sync skipped:', walletError.message);
-  }
-
-  const { error: txError } = await supabase.from('transactions').insert({
-    type: 'bet_placed',
-    title: couponType === 'express' ? `Ставка: экспресс (${events.length} событий)` : `Ставка: ${first.matchLabel}`,
-    amount: -totalStake,
-    status: 'completed',
-    bet_id: bet.data.id,
-  });
-  if (txError) console.error('Failed to insert transaction:', txError.message);
-
-  const itemRows = events.map((event) => ({
-    bet_id: bet.data.id,
-    ...(dbMatchId(event.matchId) ? { match_id: dbMatchId(event.matchId) } : {}),
-    home_team: event.homeTeam,
-    away_team: event.awayTeam,
-    match_label: event.matchLabel,
-    tournament: event.tournament,
-    sport: event.sport,
-    country: event.country,
-    market: event.market,
-    selection: event.selection,
-    outcome: event.outcome,
-    odds: event.odds,
-    is_live: event.isLive,
-    live_status: event.liveStatus,
-    match_status: event.matchStatus,
-  }));
-  const { error: itemsError } = await supabase.from('bet_items').insert(itemRows);
-  if (itemsError) {
-    const coreRows = itemRows.map((row) => {
-      const next = { ...row } as Record<string, unknown>;
-      delete next.tournament;
-      delete next.sport;
-      delete next.country;
-      delete next.selection;
-      return next;
-    });
-    const { error: retryItems } = await supabase.from('bet_items').insert(coreRows);
-    if (retryItems) console.error('Failed to insert bet_items:', retryItems.message);
-  }
-
-  return { ok: true, newBalance };
+  const blocked = blockedSportsBet();
+  if (blocked) return { ok: false, error: blocked };
+  return { ok: false, error: SPORTS_BET_GATE_MESSAGE };
 }
 
 function mapStatus(value: string | undefined): BetStatus {

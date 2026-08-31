@@ -68,7 +68,7 @@ export function filterMessagesForPlayer(
 ): SiteMessage[] {
   if (!messages.length) return [];
 
-  const currentId = String(playerId || '729767' || '645912').trim().toLowerCase();
+  const currentId = String(playerId || '').trim().toLowerCase();
   const digits = currentId.replace(/\D/g, '');
 
   const matched = messages.filter((msg) => {

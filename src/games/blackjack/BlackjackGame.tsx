@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
+import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { Card, type CardScale } from './Card';
 import { calculateHandScore, freshShuffledDeck, isBust, isGoldenOchko } from './deck';
@@ -267,6 +268,11 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
     }
     if (amount > balanceRef.current) {
       showToast('Недостаточно средств');
+      return;
+    }
+    const blocked = blockedGamesWager();
+    if (blocked) {
+      showToast(blocked);
       return;
     }
 

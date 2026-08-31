@@ -5,6 +5,7 @@ import {
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { DepositModal } from '@/components/games/DepositModal';
 import './pharaoh.css';
 
@@ -220,6 +221,12 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
     }
     if (stake > balanceRef.current) {
       showToast('Недостаточно средств');
+      setAutoSpinsLeft(0);
+      return;
+    }
+    const blocked = blockedGamesWager();
+    if (blocked) {
+      showToast(blocked);
       setAutoSpinsLeft(0);
       return;
     }

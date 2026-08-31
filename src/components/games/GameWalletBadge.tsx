@@ -1,4 +1,4 @@
-import { useWallet } from '../../WalletContext';
+import { formatPlayerMoney, useWallet } from '../../WalletContext';
 
 interface GameWalletBadgeProps {
   format?: (value: number) => string;
@@ -7,17 +7,20 @@ interface GameWalletBadgeProps {
 }
 
 export function GameWalletBadge({
-  format = (value) => value.toFixed(2),
+  format,
   labelClassName = 'text-[8px] font-semibold uppercase tracking-wide opacity-70',
   valueClassName = 'text-[11px] font-black tabular-nums',
 }: GameWalletBadgeProps) {
-  const { balance, publicId } = useWallet();
+  const { balance, publicId, available, loading } = useWallet();
   const id = (publicId || '').replace(/\D/g, '');
+  const value = available && format
+    ? format(balance)
+    : formatPlayerMoney(balance, available, loading);
 
   return (
     <>
       <p className={labelClassName}>{id ? `#${id}` : 'Баланс'}</p>
-      <p className={valueClassName}>{format(balance)}</p>
+      <p className={valueClassName}>{value}</p>
     </>
   );
 }

@@ -3,6 +3,7 @@ import { ChevronLeft, Info, Play, Volume2, VolumeX, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { useUserStore } from '@/stores/userStore';
 import './dice.css';
 
@@ -122,6 +123,11 @@ export function DiceGame({ onBack }: DiceGameProps) {
     const stake = parseStake(stakeInput);
     if (stake < MIN_STAKE) {
       showToast(`Минимум ${MIN_STAKE} TMTM`);
+      return;
+    }
+    const blocked = blockedGamesWager();
+    if (blocked) {
+      showToast(blocked);
       return;
     }
     if (stake > useUserStore.getState().balance) {

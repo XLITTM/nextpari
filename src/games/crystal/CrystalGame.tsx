@@ -3,6 +3,7 @@ import { ChevronLeft, Settings, Zap, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { persistWalletBalance } from '@/games/blackjack/wallet';
+import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { CrystalBoard } from './CrystalBoard';
 import { CRYSTAL_BG, GEM_SRC } from './crystalAssets';
@@ -140,6 +141,12 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
     }
     if (amount > balanceRef.current) {
       showToast('Недостаточно средств');
+      stopAuto();
+      return;
+    }
+    const blocked = blockedGamesWager();
+    if (blocked) {
+      showToast(blocked);
       stopAuto();
       return;
     }

@@ -1,7 +1,7 @@
 import { Copy, X } from 'lucide-react';
 import { useState } from 'react';
 import { useToast } from '../../ToastContext';
-import { ensureLocalGuest } from '../../lib/playerProfile';
+import { formatPlayerMoney } from '../../WalletContext';
 
 interface DepositModalProps {
   publicId: string | null;
@@ -12,9 +12,14 @@ interface DepositModalProps {
 export function DepositModal({ publicId, onClose, onWallet }: DepositModalProps) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
-  const playerId = (publicId || ensureLocalGuest().publicId).replace(/\D/g, '');
+  const playerId = (publicId || '').replace(/\D/g, '');
+  const playerIdLabel = playerId || formatPlayerMoney(0, false);
 
   const copyId = async () => {
+    if (!playerId) {
+      showToast('ID игрока недоступен');
+      return;
+    }
     try {
       await navigator.clipboard.writeText(playerId);
       setCopied(true);
@@ -45,7 +50,7 @@ export function DepositModal({ publicId, onClose, onWallet }: DepositModalProps)
         <div className="mt-3 flex items-center justify-between gap-3 rounded-xl bg-black/30 px-3 py-2.5">
           <div className="min-w-0">
             <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">ID игрока</p>
-            <p className="text-lg font-black tabular-nums tracking-widest">#{playerId}</p>
+            <p className="text-lg font-black tabular-nums tracking-widest">#{playerIdLabel}</p>
           </div>
           <button
             type="button"

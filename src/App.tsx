@@ -10,7 +10,7 @@ import { QuickBetProvider } from './QuickBetContext';
 import { QuickBetSheet } from './components/QuickBetSheet';
 import { ThemeProvider } from './ThemeContext';
 import { ProfileProvider } from './ProfileContext';
-import { WalletProvider, useWallet } from './WalletContext';
+import { WalletProvider, useWallet, formatPlayerMoney } from './WalletContext';
 import { LiveMatchesProvider } from './LiveMatchesContext';
 import { HomeScreen } from './screens/HomeScreen';
 import { MatchDetailsScreen } from './screens/MatchDetailsScreen';
@@ -46,7 +46,10 @@ import { LeagueScreen } from './screens/LeagueScreen';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { bootstrapGuestSession, signInSession, signOutSession } from './hooks/useAuth';
+import { subscribePlayerAuth } from './hooks/useAuth';
+import { clearDemoPlayerState, getPlayerSession, signOutPlayer } from './lib/playerAuth';
+import { bootstrapOwnPlayerAccount } from './lib/playerWallet';
+import { useUserStore } from './stores/userStore';
 import { useFavoritesStore } from './stores/favoritesStore';
 import { subscribeMatchSoundToast } from './services/matchSoundService';
 import { useToast } from './ToastContext';
@@ -129,7 +132,8 @@ function navActive(name: Screen['name']): Screen['name'] {
 }
 
 function AppContent() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => bootstrapGuestSession());
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [screen, setScreenState] = useState<Screen>(screenFromPath);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('top');
@@ -149,18 +153,47 @@ function AppContent() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  useEffect(() => {
+    clearDemoPlayerState();
+    let cancelled = false;
+    void getPlayerSession().then(async (session) => {
+      if (cancelled) return;
+      if (session?.user) {
+        try {
+          await bootstrapOwnPlayerAccount();
+        } catch {
+          /* Wallet unavailable is shown after entry. */
+        }
+        if (!cancelled) setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+      }
+      if (!cancelled) setAuthReady(true);
+    });
+    const unsubscribe = subscribePlayerAuth((ok) => {
+      setIsAuthenticated(ok);
+      setAuthReady(true);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
   const handleAuthSuccess = () => {
-    signInSession();
     setIsAuthenticated(true);
     setScreen(screenFromPath());
   };
 
   const handleLogout = () => {
-    signOutSession();
-    setIsAuthenticated(false);
+    useUserStore.getState().reset();
+    void signOutPlayer().finally(() => {
+      setIsAuthenticated(false);
+    });
   };
 
-  const { balance } = useWallet();
+  const { balance, available, loading: walletLoading } = useWallet();
+  const moneyLabel = formatPlayerMoney(balance, available, walletLoading);
 
   useEffect(() => {
     return subscribeMatchSoundToast(({ title, body }) => {
@@ -227,7 +260,7 @@ function AppContent() {
           />
         );
       case 'menu':
-        return <MenuScreen balance={balance} onNavigate={setScreen} onLogout={handleLogout} />;
+        return <MenuScreen balance={balance} balanceLabel={moneyLabel} onNavigate={setScreen} onLogout={handleLogout} />;
       case 'wallet':
         return <WalletScreen balance={balance} onBack={() => setScreen({ name: 'menu' })} onNavigate={setScreen} />;
       case 'promo':
@@ -337,6 +370,14 @@ function AppContent() {
     }
   };
 
+  if (!authReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-ink-900 via-ink-850 to-ink-950">
+        <p className="text-sm font-semibold text-ink-300">Загрузка…</p>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="max-w-lg mx-auto">
@@ -357,7 +398,7 @@ function AppContent() {
       : 'relative mx-auto flex h-screen max-w-lg flex-col overflow-hidden bg-[#f0f2f5] dark:bg-gray-900'
     }>
       {showHeader && (
-        <Header balance={balance} onSearchClick={() => setSearchOpen(true)} onNavigate={setScreen}>
+        <Header balanceLabel={moneyLabel} onSearchClick={() => setSearchOpen(true)} onNavigate={setScreen}>
           {screen.name === 'home' && <MainTabs active={mainTab} onChange={handleMainTab} />}
         </Header>
       )}
