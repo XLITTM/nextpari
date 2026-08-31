@@ -215,3 +215,10 @@ export async function postCashierPayoutConfirm(
   }
   return rec;
 }
+
+export function isCashierFinanceEnabled(finance: CashierFinanceOverview | null | undefined): boolean {
+  if (!finance) return false;
+  return finance.activationPending === false
+    && String(finance.operational.migrationState).toLowerCase() === 'active'
+    && String(finance.operational.status).toLowerCase() === 'active';
+}

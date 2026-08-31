@@ -7,10 +7,18 @@ import { useCashierAuth } from '../cashier/auth/CashierAuthProvider';
 import { cashierAuthErrorMessage, type CashierStaffContext } from '../cashier/auth/cashierAuth';
 import {
   fetchCashierFinance,
+  fetchCashierPayout,
   fetchCashierTransfers,
+  isCashierFinanceEnabled,
+  postCashierDeposit,
+  postCashierPayoutConfirm,
   type CashierFinanceOverview,
   type CashierTransferList,
 } from '../cashier/services';
+import {
+  isAmbiguousStaffError,
+  retainIdempotencyKey,
+} from '../shared/staff/financeGate';
 
 function formatTmtm(value: number): string {
   return `${value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TMTM`;
@@ -20,6 +28,7 @@ type AgentTab = 'deposit' | 'payout' | 'history';
 
 const QUICK_AMOUNTS = [10, 50, 100, 500];
 const FINANCE_PENDING = 'Financial activation pending';
+const FINANCE_ACTIVE = 'Финансовые операции активны';
 
 export function MobcashAgentScreen() {
   const { loading, staff, deniedMessage, signOut } = useCashierAuth();
@@ -143,6 +152,9 @@ function AgentDesk({
   const [transfers, setTransfers] = useState<CashierTransferList | null>(null);
   const [transfersError, setTransfersError] = useState('');
   const [transfersLoading, setTransfersLoading] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+
+  const reloadCanonical = () => setReloadTick((n) => n + 1);
 
   useEffect(() => {
     let cancelled = false;
@@ -164,10 +176,10 @@ function AgentDesk({
     return () => {
       cancelled = true;
     };
-  }, [staff.legacyCashierId]);
+  }, [staff.legacyCashierId, reloadTick]);
 
   useEffect(() => {
-    if (tab !== 'history') return undefined;
+    if (tab !== 'history' && reloadTick === 0) return undefined;
     let cancelled = false;
     setTransfersLoading(true);
     setTransfersError('');
@@ -187,12 +199,13 @@ function AgentDesk({
     return () => {
       cancelled = true;
     };
-  }, [tab]);
+  }, [tab, reloadTick]);
 
   const displayName = finance?.cashier.fullName || staff.displayName || 'Кассир';
   const point = [finance?.cashier.city, finance?.cashier.pointName].filter(Boolean).join(' · ');
   const migrationState = finance?.operational.migrationState || 'staging';
   const balance = finance?.operational.availableBalance ?? null;
+  const moneyEnabled = isCashierFinanceEnabled(finance);
 
   let balanceLabel = '…';
   if (!financeLoading && financeError) balanceLabel = 'недоступен';
@@ -234,8 +247,12 @@ function AgentDesk({
           </div>
           <p className="text-base font-extrabold tabular-nums text-white">{balanceLabel}</p>
         </div>
-        <p className="mt-2 text-[11px] font-bold text-amber-200 bg-amber-500/15 rounded-lg px-3 py-2">
-          State: {migrationState} · {FINANCE_PENDING}
+        <p className={`mt-2 text-[11px] font-bold rounded-lg px-3 py-2 ${
+          moneyEnabled
+            ? 'text-emerald-200 bg-emerald-500/15'
+            : 'text-amber-200 bg-amber-500/15'
+        }`}>
+          State: {migrationState} · {moneyEnabled ? FINANCE_ACTIVE : FINANCE_PENDING}
         </p>
         {financeError && (
           <p className="mt-2 text-[11px] font-bold text-red-300 bg-red-500/15 rounded-lg px-3 py-2">
@@ -273,8 +290,12 @@ function AgentDesk({
       </div>
 
       <div className="flex-1 overflow-y-auto px-3 py-3 pb-6">
-        {tab === 'deposit' && <DepositTab />}
-        {tab === 'payout' && <PayoutTab />}
+        {tab === 'deposit' && (
+          <DepositTab enabled={moneyEnabled} onSuccess={reloadCanonical} />
+        )}
+        {tab === 'payout' && (
+          <PayoutTab enabled={moneyEnabled} onSuccess={reloadCanonical} />
+        )}
         {tab === 'history' && (
           <HistoryTab
             loading={transfersLoading}
@@ -295,15 +316,73 @@ function PendingBanner() {
   );
 }
 
-function DepositTab() {
+function ActiveBanner() {
+  return (
+    <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-200">
+      {FINANCE_ACTIVE}
+    </div>
+  );
+}
+
+function DepositTab({
+  enabled,
+  onSuccess,
+}: {
+  enabled: boolean;
+  onSuccess: () => void;
+}) {
   const [playerId, setPlayerId] = useState('');
   const [amount, setAmount] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [idempotency, setIdempotency] = useState<{ key: string; fingerprint: string } | null>(null);
+
+  const submit = async () => {
+    setError('');
+    setSuccess('');
+    const publicId = playerId.replace(/\D/g, '').slice(0, 6);
+    const n = Number(amount);
+    if (!/^[0-9]{6}$/.test(publicId)) {
+      setError('Укажите 6-значный ID игрока');
+      return;
+    }
+    if (!Number.isFinite(n) || n <= 0) {
+      setError('Сумма должна быть больше 0');
+      return;
+    }
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    const fingerprint = `${publicId}:${n}`;
+    const slot = retainIdempotencyKey(idempotency, fingerprint);
+    setIdempotency(slot);
+    setBusy(true);
+    try {
+      await postCashierDeposit({
+        playerPublicId: publicId,
+        amount: n,
+        idempotencyKey: slot.key,
+      });
+      setIdempotency(null);
+      setConfirming(false);
+      setSuccess('Пополнение выполнено');
+      onSuccess();
+    } catch (err) {
+      if (!isAmbiguousStaffError(err)) setIdempotency(null);
+      setError(err instanceof Error ? err.message : 'DEPOSIT_UNAVAILABLE');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <section className="bg-white dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <h2 className="text-base font-bold text-gray-900 dark:text-white">Приём наличных</h2>
       <p className="text-xs text-gray-500 dark:text-gray-300 mt-0.5 mb-4">Пополнение игрока · списание с кассы</p>
-      <PendingBanner />
+      {enabled ? <ActiveBanner /> : <PendingBanner />}
 
       <label className="text-xs font-semibold text-gray-500 dark:text-gray-300 mb-1.5 block">ID игрока</label>
       <input
@@ -311,7 +390,7 @@ function DepositTab() {
         value={playerId}
         onChange={(e) => setPlayerId(e.target.value.replace(/\D/g, '').slice(0, 6))}
         placeholder="645912"
-        disabled
+        disabled={!enabled || busy}
         className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-2xl font-extrabold tracking-[0.35em] text-center rounded-xl px-4 py-3 mb-4 outline-none border border-gray-200 dark:border-gray-600 tabular-nums disabled:opacity-60"
       />
 
@@ -322,7 +401,7 @@ function DepositTab() {
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         placeholder="0"
-        disabled
+        disabled={!enabled || busy}
         className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-lg font-bold tabular-nums rounded-xl px-4 py-3 mb-3 outline-none border border-gray-200 dark:border-gray-600 disabled:opacity-60"
       />
       <div className="grid grid-cols-4 gap-2 mb-4">
@@ -330,7 +409,8 @@ function DepositTab() {
           <button
             key={value}
             type="button"
-            disabled
+            disabled={!enabled || busy}
+            onClick={() => setAmount(String((Number(amount) || 0) + value))}
             className="py-2 rounded-xl border border-gray-200 dark:border-gray-600 text-xs font-bold text-gray-800 dark:text-gray-100 bg-gray-50 dark:bg-gray-800 disabled:opacity-50"
           >
             +{value}
@@ -338,50 +418,137 @@ function DepositTab() {
         ))}
       </div>
 
+      {error && (
+        <p className="mb-3 text-xs font-bold text-red-600">{error}</p>
+      )}
+      {success && (
+        <p className="mb-3 text-xs font-bold text-emerald-700">{success}</p>
+      )}
+
       <button
         type="button"
-        disabled
+        disabled={!enabled || busy}
+        onClick={() => void submit()}
         className="w-full bg-brand-600 text-white font-bold py-3.5 rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
       >
         <Clock3 className="w-5 h-5" />
-        {FINANCE_PENDING}
+        {!enabled ? FINANCE_PENDING : busy ? 'Обработка…' : confirming ? 'Подтвердить пополнение' : 'Пополнить'}
       </button>
     </section>
   );
 }
 
-function PayoutTab() {
+function PayoutTab({
+  enabled,
+  onSuccess,
+}: {
+  enabled: boolean;
+  onSuccess: () => void;
+}) {
   const [code, setCode] = useState('');
+  const [lookup, setLookup] = useState<Record<string, unknown> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [idempotency, setIdempotency] = useState<{ key: string; fingerprint: string } | null>(null);
+
+  const normalized = code.replace(/[^0-9a-f]/gi, '').toLowerCase().slice(0, 16);
+
+  const lookupPayout = async () => {
+    setError('');
+    setSuccess('');
+    setLookup(null);
+    if (!/^[0-9a-f]{16}$/.test(normalized)) {
+      setError('Код выплаты — 16 символов 0-9a-f');
+      return;
+    }
+    setBusy(true);
+    try {
+      const rec = await fetchCashierPayout(normalized);
+      const data = rec.data && typeof rec.data === 'object' ? rec.data as Record<string, unknown> : rec;
+      setLookup({
+        playerPublicId: data.player_public_id ?? data.playerPublicId,
+        amount: data.amount,
+        currency: data.currency,
+        expiresAt: data.expires_at ?? data.expiresAt,
+        status: data.status,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'PAYOUT_UNAVAILABLE');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmPayout = async () => {
+    setError('');
+    setSuccess('');
+    if (!lookup || !/^[0-9a-f]{16}$/.test(normalized)) return;
+    const slot = retainIdempotencyKey(idempotency, normalized);
+    setIdempotency(slot);
+    setBusy(true);
+    try {
+      await postCashierPayoutConfirm({ code: normalized, idempotencyKey: slot.key });
+      setIdempotency(null);
+      setLookup(null);
+      setSuccess('Выплата подтверждена');
+      onSuccess();
+    } catch (err) {
+      if (!isAmbiguousStaffError(err)) setIdempotency(null);
+      setError(err instanceof Error ? err.message : 'PAYOUT_UNAVAILABLE');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <section className="bg-white dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <h2 className="text-base font-bold text-gray-900 dark:text-white">Выплата наличных</h2>
       <p className="text-xs text-gray-500 dark:text-gray-300 mt-0.5 mb-4">Вывод игрока по коду заявки</p>
-      <PendingBanner />
+      {enabled ? <ActiveBanner /> : <PendingBanner />}
 
       <label className="text-xs font-semibold text-gray-500 dark:text-gray-300 mb-1.5 block">Код заявки</label>
       <input
-        inputMode="numeric"
+        inputMode="text"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         value={code}
-        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-        placeholder="••••••"
-        disabled
-        className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-2xl font-extrabold tracking-[0.35em] text-center rounded-xl px-4 py-3 mb-3 outline-none border border-gray-200 dark:border-gray-600 tabular-nums disabled:opacity-60"
+        onChange={(e) => {
+          setCode(e.target.value.replace(/[^0-9a-f]/gi, '').toLowerCase().slice(0, 16));
+          setLookup(null);
+        }}
+        placeholder="deadbeefcafebabe"
+        disabled={!enabled || busy}
+        className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-lg font-extrabold tracking-[0.12em] text-center rounded-xl px-4 py-3 mb-3 outline-none border border-gray-200 dark:border-gray-600 tabular-nums disabled:opacity-60"
       />
       <button
         type="button"
-        disabled
+        disabled={!enabled || busy}
+        onClick={() => void lookupPayout()}
         className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl disabled:opacity-50 mb-4"
       >
-        {FINANCE_PENDING}
+        {!enabled ? FINANCE_PENDING : busy && !lookup ? 'Поиск…' : 'Найти заявку'}
       </button>
+      {lookup && (
+        <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-600 px-3 py-2 text-xs">
+          <p className="font-bold text-gray-900 dark:text-white">ID игрока: {String(lookup.playerPublicId ?? '—')}</p>
+          <p className="text-gray-600 dark:text-gray-300">
+            Сумма: {String(lookup.amount ?? '—')} {String(lookup.currency ?? 'TMTM')}
+          </p>
+          <p className="text-gray-500">Истекает: {String(lookup.expiresAt ?? '—')}</p>
+        </div>
+      )}
+      {error && <p className="mb-3 text-xs font-bold text-red-600">{error}</p>}
+      {success && <p className="mb-3 text-xs font-bold text-emerald-700">{success}</p>}
       <button
         type="button"
-        disabled
+        disabled={!enabled || busy || !lookup}
+        onClick={() => void confirmPayout()}
         className="w-full bg-brand-600 text-white font-bold py-3.5 rounded-xl disabled:opacity-40 flex items-center justify-center gap-2"
       >
         <Banknote className="w-4 h-4" />
-        {FINANCE_PENDING}
+        {!enabled ? FINANCE_PENDING : busy && lookup ? 'Подтверждение…' : 'Подтвердить выплату'}
       </button>
     </section>
   );

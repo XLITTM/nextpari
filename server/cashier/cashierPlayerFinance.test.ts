@@ -301,11 +301,13 @@ describe('cashier player finance BFF', () => {
     assert.match(httpSrc, /assertCashierPayoutRateLimit/);
   });
 
-  it('24-25. production cashier UI stays disabled; no legacy money RPC', () => {
-    assert.equal(screen.includes('postCashierDeposit'), false);
-    assert.equal(screen.includes('postCashierPayoutConfirm'), false);
-    assert.equal(screen.includes('/api/cashier/deposits'), false);
+  it('24-25. active cashier UI uses canonical BFF; no legacy money RPC', () => {
+    assert.equal(screen.includes('postCashierDeposit'), true);
+    assert.equal(screen.includes('postCashierPayoutConfirm'), true);
+    assert.equal(screen.includes('fetchCashierPayout'), true);
+    assert.match(screen, /Финансовые операции активны/);
     assert.match(screen, /Financial activation pending/);
+    assert.match(screen, /\[0-9a-f\]\{16\}/);
     assert.equal(screen.includes('cashier_deposit_to_player'), false);
     assert.equal(screen.includes('cashier_payout_by_code'), false);
     assert.equal(services.includes("from '../lib/cashier'"), false);

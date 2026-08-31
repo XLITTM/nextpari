@@ -431,6 +431,109 @@ export async function sendOwnerMessage(params: {
   });
 }
 
+export interface OwnerManagerRow {
+  managerId: string;
+  login: string;
+  fullName: string;
+  status: string;
+  networkId: string;
+  networkName: string;
+  authBound: boolean;
+  authUserId: string | null;
+  operationalBalance: number | null;
+  operationalStatus: string;
+  operationalMigrationState: string;
+  cashierCount: number;
+}
+
+export interface OwnerManagerCashierRow {
+  cashierId: string;
+  login: string;
+  fullName: string;
+  city: string;
+  pointName: string;
+  isActive: boolean;
+  authBound: boolean;
+  operationalBalance: number | null;
+  operationalStatus: string;
+  operationalMigrationState: string;
+}
+
+function parseOwnerManager(raw: Record<string, unknown>): OwnerManagerRow {
+  return {
+    managerId: str(raw.manager_id ?? raw.managerId),
+    login: str(raw.login),
+    fullName: str(raw.full_name ?? raw.fullName),
+    status: str(raw.status),
+    networkId: str(raw.network_id ?? raw.networkId),
+    networkName: str(raw.network_name ?? raw.networkName),
+    authBound: raw.auth_bound === true || raw.authBound === true,
+    authUserId: raw.auth_user_id == null && raw.authUserId == null ? null : str(raw.auth_user_id ?? raw.authUserId),
+    operationalBalance: raw.operational_balance == null && raw.operationalBalance == null
+      ? null
+      : num(raw.operational_balance ?? raw.operationalBalance),
+    operationalStatus: str(raw.operational_status ?? raw.operationalStatus),
+    operationalMigrationState: str(raw.operational_migration_state ?? raw.operationalMigrationState, 'staging'),
+    cashierCount: num(raw.cashier_count ?? raw.cashierCount),
+  };
+}
+
+function parseOwnerManagerCashier(raw: Record<string, unknown>): OwnerManagerCashierRow {
+  return {
+    cashierId: str(raw.cashier_id ?? raw.cashierId),
+    login: str(raw.login),
+    fullName: str(raw.full_name ?? raw.fullName),
+    city: str(raw.city),
+    pointName: str(raw.point_name ?? raw.pointName),
+    isActive: raw.is_active !== false && raw.isActive !== false,
+    authBound: raw.auth_bound === true || raw.authBound === true,
+    operationalBalance: raw.operational_balance == null && raw.operationalBalance == null
+      ? null
+      : num(raw.operational_balance ?? raw.operationalBalance),
+    operationalStatus: str(raw.operational_status ?? raw.operationalStatus),
+    operationalMigrationState: str(raw.operational_migration_state ?? raw.operationalMigrationState, 'staging'),
+  };
+}
+
+export async function fetchOwnerManagers(): Promise<OwnerManagerRow[]> {
+  const data = await ownerData('/api/owner/managers');
+  const rec = asRecord(data);
+  const rows = Array.isArray(rec.rows) ? rec.rows : asRows(data);
+  return rows.map((row) => parseOwnerManager(asRecord(row)));
+}
+
+export async function fetchOwnerManagerDetail(managerId: string): Promise<{
+  manager: OwnerManagerRow;
+  cashiers: OwnerManagerCashierRow[];
+}> {
+  const data = await ownerData(`/api/owner/managers/${encodeURIComponent(managerId)}`);
+  const rec = asRecord(data);
+  return {
+    manager: parseOwnerManager(asRecord(rec.manager)),
+    cashiers: asRows(rec.cashiers).map((row) => parseOwnerManagerCashier(asRecord(row))),
+  };
+}
+
+export async function postOwnerManager(input: {
+  login: string;
+  fullName: string;
+  networkName: string;
+  email: string;
+  temporaryPassword: string;
+}): Promise<OwnerManagerRow> {
+  const data = await ownerData('/api/owner/managers', {
+    method: 'POST',
+    body: JSON.stringify({
+      login: input.login,
+      fullName: input.fullName,
+      networkName: input.networkName,
+      email: input.email,
+      temporaryPassword: input.temporaryPassword,
+    }),
+  });
+  return parseOwnerManager(asRecord(data));
+}
+
 export function formatTmtmCompact(value: number | null | undefined): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;

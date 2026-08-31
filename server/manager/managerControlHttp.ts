@@ -15,8 +15,12 @@ import {
 } from '../staff/managerAuthService.js';
 import { publicManagerStaff, type ManagerStaffContext } from '../staff/managerContext.js';
 import { clearManagerCookies, requestIsSecure } from '../staff/managerCookies.js';
-import type { StaffLog } from '../staff/types.js';
+import type { AuthAdminPort, StaffLog } from '../staff/types.js';
 import { createManagerJwtRpc, type ManagerRpcPort } from './managerRpc.js';
+import {
+  liveAuthAdminPort,
+  provisionManagerCashier,
+} from '../staff/staffHierarchyService.js';
 
 export const MONEY_RPC_DENYLIST = [
   'manager_create_cashier',
@@ -35,6 +39,7 @@ export const CANONICAL_MANAGER_FINANCE_RPCS = [
 export interface ManagerControlDeps {
   sessionPorts?: ManagerAuthGatewayPorts;
   rpcFactory?: (accessToken: string) => ManagerRpcPort;
+  adminFactory?: () => AuthAdminPort;
 }
 
 function normalizePath(pathname: string): string {
@@ -146,7 +151,8 @@ type ControlAction =
   | { kind: 'risk' }
   | { kind: 'players' }
   | { kind: 'dossier'; playerId: string }
-  | { kind: 'messages' };
+  | { kind: 'messages' }
+  | { kind: 'createCashier' };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -172,7 +178,11 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 
   if (path === '/api/manager/me') return m === 'GET' ? { kind: 'me' } : 'method';
   if (path === '/api/manager/dashboard') return m === 'GET' ? { kind: 'dashboard' } : 'method';
-  if (path === '/api/manager/cashiers') return m === 'GET' ? { kind: 'cashiers' } : 'method';
+  if (path === '/api/manager/cashiers') {
+    if (m === 'GET') return { kind: 'cashiers' };
+    if (m === 'POST') return { kind: 'createCashier' };
+    return 'method';
+  }
   if (path === '/api/manager/finance') return m === 'GET' ? { kind: 'finance' } : 'method';
   if (path === '/api/manager/transfers') return m === 'GET' ? { kind: 'transfers' } : 'method';
   if (path === '/api/manager/risk-bets') return m === 'GET' ? { kind: 'risk' } : 'method';
@@ -254,6 +264,8 @@ async function runControl(
       throw staffError('PLAYER_NOT_FOUND', 404);
     case 'messages':
       return { rows: [], total: 0, available: false };
+    case 'createCashier':
+      throw staffError('NOT_FOUND', 404);
     default:
       throw staffError('NOT_FOUND', 404);
   }
@@ -297,6 +309,20 @@ export async function handleManagerControlRequest(
     }
 
     const rpc = (deps.rpcFactory ?? createManagerJwtRpc)(resolved.accessToken);
+    if (matched.kind === 'createCashier') {
+      const data = await provisionManagerCashier({
+        body: parseJsonPayload(input.body),
+        admin: (deps.adminFactory ?? liveAuthAdminPort)(),
+        invoke: (name, args) => rpc.invoke(name, args),
+        log,
+      });
+      return {
+        status: 200,
+        body: { ok: true, data },
+        cookies: sessionCookies,
+      };
+    }
+
     const data = await runControl(
       matched,
       rpc,

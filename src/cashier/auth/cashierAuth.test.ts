@@ -99,6 +99,7 @@ describe('cashier browser same-origin auth', () => {
     assert.equal(screen.includes('cashierLogin'), false);
     assert.equal(screen.includes('1234'), false);
     assert.equal(screen.includes('Financial activation pending'), true);
+    assert.equal(screen.includes('Финансовые операции активны'), true);
     assert.equal(screen.includes("from '../lib/cashier'"), false);
     assert.equal(screen.includes('supabase'), false);
   });

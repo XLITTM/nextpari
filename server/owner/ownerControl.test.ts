@@ -134,6 +134,7 @@ async function ownerPost(
     cookie?: string;
     session?: OwnerAuthGatewayPorts;
     rpc?: ReturnType<typeof createRpc>;
+    adminFactory?: () => import('../staff/types.js').AuthAdminPort;
   },
 ) {
   const rpc = opts?.rpc ?? createRpc();
@@ -146,7 +147,7 @@ async function ownerPost(
       cookieSecure: true,
       body,
     },
-    { sessionPorts: session, rpcFactory: rpc.rpcFactory },
+    { sessionPorts: session, rpcFactory: rpc.rpcFactory, adminFactory: opts?.adminFactory },
   );
   return { result, rpc, session };
 }
@@ -438,5 +439,89 @@ describe('owner control center same-origin BFF', () => {
     assert.equal(body.ok, true);
     assert.equal(rpc.calls[0]?.name, 'owner_dashboard_stats');
     assert.equal(rpc.calls[0]?.token, ACCESS);
+  });
+
+  it('lists and opens managers under Owner JWT without impersonation', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/managers');
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_list_managers');
+    const detail = await ownerGet('/api/owner/managers/ccc5f5ad-079e-4420-9080-e7ded4ff9496');
+    assert.equal(detail.result.status, 200);
+    assert.equal(detail.rpc.calls[0]?.name, 'owner_manager_detail');
+    assert.equal(detail.rpc.calls[0]?.args?.p_manager_id, 'ccc5f5ad-079e-4420-9080-e7ded4ff9496');
+    const dashboard = readFileSync(join(root, 'src/owner/ManagerDashboardScreen.tsx'), 'utf8');
+    const panel = readFileSync(join(root, 'src/owner/OwnerManagersPanel.tsx'), 'utf8');
+    assert.equal(dashboard.includes('MigrationPending'), false);
+    assert.match(dashboard, /OwnerManagersPanel/);
+    assert.match(panel, /Открыть/);
+    assert.equal(panel.includes('/api/manager/auth'), false);
+    assert.equal(panel.includes('signInWithPassword'), false);
+    assert.equal(panel.includes('startingBalance'), false);
+    assert.equal(panel.includes('pin_hash'), false);
+    assert.equal(panel.includes('p_pin'), false);
+  });
+
+  it('creates manager via Auth Admin identity then Owner JWT provision; compensates on DB failure', async () => {
+    const deleted: string[] = [];
+    const created = await ownerPost('/api/owner/managers', {
+      login: 'manager02',
+      fullName: 'Новый менеджер',
+      networkName: 'Сеть 2',
+      email: 'manager02@example.com',
+      temporaryPassword: 'temporary-pass-12',
+    }, {
+      adminFactory: () => ({
+        async createUser() {
+          return { id: 'auth-manager-2' };
+        },
+        async deleteUser(id) {
+          deleted.push(id);
+        },
+      }),
+    });
+    assert.equal(created.result.status, 200);
+    assert.equal(created.rpc.calls[0]?.name, 'owner_provision_manager');
+    assert.equal(created.rpc.calls[0]?.args?.p_auth_user_id, 'auth-manager-2');
+    assert.equal(created.rpc.calls[0]?.args?.p_float, undefined);
+    assert.equal(JSON.stringify(created.result.body).includes('temporary-pass-12'), false);
+
+    const failRpc = createRpc();
+    failRpc.rpcFactory = (accessToken: string): OwnerRpcPort => ({
+      async invoke(name, args) {
+        failRpc.calls.push({ token: accessToken, name, args });
+        throw staffError('LOGIN_TAKEN', 409);
+      },
+    });
+    const deletedFail: string[] = [];
+    const failed = await handleOwnerControlRequest(
+      {
+        method: 'POST',
+        pathname: '/api/owner/managers',
+        cookie: cookieHeader(ACCESS, REFRESH),
+        cookieSecure: true,
+        body: {
+          login: 'manager02',
+          fullName: 'Новый менеджер',
+          networkName: 'Сеть 2',
+          email: 'manager02@example.com',
+          temporaryPassword: 'temporary-pass-12',
+        },
+      },
+      {
+        sessionPorts: createAuthPorts(),
+        rpcFactory: failRpc.rpcFactory,
+        adminFactory: () => ({
+          async createUser() {
+            return { id: 'auth-manager-fail' };
+          },
+          async deleteUser(id) {
+            deletedFail.push(id);
+          },
+        }),
+      },
+    );
+    assert.equal(failed.status, 409);
+    assert.deepEqual(deletedFail, ['auth-manager-fail']);
+    assert.equal(JSON.stringify(failed.body).includes('temporary-pass-12'), false);
   });
 });

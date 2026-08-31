@@ -32,6 +32,10 @@ export function mapManagerRpcError(error: { message?: string; code?: string }): 
     || code === 'INSUFFICIENT_OPERATIONAL_BALANCE'
     || code === 'IDEMPOTENCY_KEY_CONFLICT'
     || code === 'CASHIER_NOT_ACTIVE'
+    || code === 'LOGIN_TAKEN'
+    || code === 'STAFF_AUTH_ALREADY_BOUND'
+    || code === 'PLAYER_ACCOUNT_CANNOT_BECOME_STAFF'
+    || (code && code.endsWith('_BOUND'))
   ) {
     return staffError(code, 409);
   }

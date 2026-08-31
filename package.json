@@ -13,11 +13,11 @@
     "worker": "tsx --env-file=.env --tsconfig tsconfig.app.json scripts/run-sports-worker.ts",
     "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts server/staff/esmImportSmoke.test.ts",
     "owner:auth:test": "tsx --tsconfig tsconfig.server.json --test src/owner/auth/ownerAuth.test.ts server/staff/ownerAuthGateway.test.ts",
-    "owner:control:test": "tsx --tsconfig tsconfig.server.json --test server/owner/ownerControl.test.ts",
+    "owner:control:test": "tsx --tsconfig tsconfig.server.json --test server/owner/ownerControl.test.ts server/staff/staffHierarchy.test.ts",
     "manager:auth:test": "tsx --tsconfig tsconfig.server.json --test src/manager/auth/managerAuth.test.ts server/staff/managerAuthGateway.test.ts",
     "cashier:auth:test": "tsx --tsconfig tsconfig.server.json --test src/cashier/auth/cashierAuth.test.ts server/staff/cashierAuthGateway.test.ts server/staff/staffBindingContext.test.ts",
-    "cashier:control:test": "tsx --tsconfig tsconfig.server.json --test server/cashier/cashierControl.test.ts src/cashier/services.test.ts server/cashier/cashierPlayerFinance.test.ts",
-    "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts"
+    "cashier:control:test": "tsx --tsconfig tsconfig.server.json --test server/cashier/cashierControl.test.ts src/cashier/services.test.ts server/cashier/cashierPlayerFinance.test.ts server/staff/staffHierarchy.test.ts",
+    "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts server/staff/staffHierarchy.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

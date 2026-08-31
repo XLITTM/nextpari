@@ -23,6 +23,14 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
   if (code === 'JWT_REQUIRED' || code === 'JWT_INVALID' || code === 'AUTH_REQUIRED') {
     return staffError(code, 401);
   }
+  if (
+    code === 'LOGIN_TAKEN'
+    || code === 'STAFF_AUTH_ALREADY_BOUND'
+    || code === 'PLAYER_ACCOUNT_CANNOT_BECOME_STAFF'
+    || (code && code.endsWith('_BOUND'))
+  ) {
+    return staffError(code, 409);
+  }
   if (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED'))) {
     return staffError(code, 400);
   }

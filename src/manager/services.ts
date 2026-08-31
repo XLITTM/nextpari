@@ -287,6 +287,60 @@ export async function fetchManagerTransfers(): Promise<{ rows: unknown[]; total:
   };
 }
 
+export async function postManagerFund(input: {
+  cashierId: string;
+  amount: number;
+  idempotencyKey: string;
+  note?: string;
+}): Promise<unknown> {
+  return managerData(`/api/manager/cashiers/${encodeURIComponent(input.cashierId)}/fund`, {
+    method: 'POST',
+    body: JSON.stringify({
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      note: input.note ?? null,
+    }),
+  });
+}
+
+export async function postManagerCollect(input: {
+  cashierId: string;
+  amount: number;
+  idempotencyKey: string;
+  note?: string;
+}): Promise<unknown> {
+  return managerData(`/api/manager/cashiers/${encodeURIComponent(input.cashierId)}/collect`, {
+    method: 'POST',
+    body: JSON.stringify({
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      note: input.note ?? null,
+    }),
+  });
+}
+
+export async function postManagerCashier(input: {
+  login: string;
+  fullName: string;
+  city: string;
+  pointName: string;
+  email: string;
+  temporaryPassword: string;
+}): Promise<Record<string, unknown>> {
+  const data = await managerData('/api/manager/cashiers', {
+    method: 'POST',
+    body: JSON.stringify({
+      login: input.login,
+      fullName: input.fullName,
+      city: input.city,
+      pointName: input.pointName,
+      email: input.email,
+      temporaryPassword: input.temporaryPassword,
+    }),
+  });
+  return asRecord(data);
+}
+
 export function formatTmtmCompact(value: number | null | undefined): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;

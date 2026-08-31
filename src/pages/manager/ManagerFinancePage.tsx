@@ -7,6 +7,7 @@ import {
   type DashboardKpis,
   type ManagerFinanceOverview,
 } from '../../manager/services';
+import { isOperationalAccountActive } from '../../shared/staff/financeGate';
 
 export function ManagerFinancePage() {
   const [kpis, setKpis] = useState<DashboardKpis | null>(null);
@@ -38,11 +39,17 @@ export function ManagerFinancePage() {
   }, [load]);
 
   const cards = [
-    { label: 'Операционный баланс', value: finance?.manager?.availableBalance ?? 0, icon: Wallet },
-    { label: 'Остаток во всех кассах', value: finance?.cashiers.reduce((sum, row) => sum + row.availableBalance, 0) ?? 0, icon: Building2 },
-    { label: 'Депозиты Мобкеш', value: kpis?.deposits ?? 0, icon: Landmark },
-    { label: 'Выплаты наличными', value: kpis?.payouts ?? 0, icon: TrendingUp },
-    { label: 'Оборот кассовой сети', value: kpis?.turnover ?? 0, icon: BarChart3 },
+    {
+      label: 'Операционный баланс',
+      valueLabel: finance?.manager
+        ? formatTmtmCompact(finance.manager.availableBalance)
+        : 'недоступен',
+      icon: Wallet,
+    },
+    { label: 'Остаток во всех кассах', valueLabel: formatTmtmCompact(finance?.cashiers.reduce((sum, row) => sum + row.availableBalance, 0) ?? 0), icon: Building2 },
+    { label: 'Депозиты Мобкеш', valueLabel: formatTmtmCompact(kpis?.deposits ?? 0), icon: Landmark },
+    { label: 'Выплаты наличными', valueLabel: formatTmtmCompact(kpis?.payouts ?? 0), icon: TrendingUp },
+    { label: 'Оборот кассовой сети', valueLabel: formatTmtmCompact(kpis?.turnover ?? 0), icon: BarChart3 },
   ];
 
   const ggrCards = [
@@ -51,6 +58,8 @@ export function ManagerFinancePage() {
     { label: 'GGR Games (Fast Games)', value: kpis?.verticals.games.ggr ?? 0, icon: Gamepad2, iconClass: 'text-orange-500' },
     { label: 'Общий GGR сети', value: kpis?.ggr ?? 0, icon: TrendingUp, iconClass: 'text-amber-500' },
   ];
+
+  const managerMoneyOk = isOperationalAccountActive(finance?.manager);
 
   return (
     <section>
@@ -68,10 +77,10 @@ export function ManagerFinancePage() {
         </button>
       </div>
       <p className="mb-4 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
-        Операционный счёт менеджера: {finance?.manager?.migrationState || 'staging'}
-        {' · '}
-        {formatTmtmCompact(finance?.manager?.availableBalance ?? 0)}.
-        Financial activation pending — пополнение и инкассация отключены.
+        Операционный счёт менеджера: {finance?.manager ? `${finance.manager.status} · ${finance.manager.migrationState} · ${formatTmtmCompact(finance.manager.availableBalance)}` : 'недоступен'}.
+        {managerMoneyOk
+          ? ' Финансовые операции активны для касс со статусом active.'
+          : ' Financial activation pending — пополнение и инкассация отключены.'}
       </p>
       {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
       {loading && !kpis && !error && (
@@ -84,7 +93,7 @@ export function ManagerFinancePage() {
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 leading-snug pr-2">{card.label}</p>
               <card.icon className="w-4 h-4 text-brand-600 shrink-0" />
             </div>
-            <p className="text-2xl font-black tabular-nums text-ink-900 dark:text-white">{formatTmtmCompact(card.value)}</p>
+            <p className="text-2xl font-black tabular-nums text-ink-900 dark:text-white">{card.valueLabel}</p>
           </article>
         ))}
       </div>
@@ -104,7 +113,9 @@ export function ManagerFinancePage() {
             </tr>
           </thead>
           <tbody>
-            {(finance?.cashiers ?? []).map((row) => (
+            {(finance?.cashiers ?? []).map((row) => {
+              const moneyOk = managerMoneyOk && isOperationalAccountActive(row);
+              return (
               <tr key={row.cashierId} className="border-t border-slate-100">
                 <td className="px-4 py-3">
                   <p className="font-bold">{row.fullName || row.login}</p>
@@ -114,17 +125,18 @@ export function ManagerFinancePage() {
                   <p className="font-extrabold tabular-nums">{formatTmtmCompact(row.availableBalance)}</p>
                   <p className="text-[10px] text-gray-400">legacy float (diagnostic): {formatTmtmCompact(row.legacyFloatBalance)}</p>
                 </td>
-                <td className="px-4 py-3 text-xs font-semibold text-amber-700">{row.migrationState}</td>
+                <td className="px-4 py-3 text-xs font-semibold text-amber-700">{row.status} · {row.migrationState}</td>
                 <td className="px-4 py-3 text-right">
-                  <button type="button" disabled title="Financial activation pending" className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed mr-1">
+                  <button type="button" disabled={!moneyOk} title={moneyOk ? 'Пополнить' : 'Financial activation pending'} className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed mr-1">
                     Пополнить
                   </button>
-                  <button type="button" disabled title="Financial activation pending" className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed">
+                  <button type="button" disabled={!moneyOk} title={moneyOk ? 'Инкассация' : 'Financial activation pending'} className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed">
                     Инкассация
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
             {(!finance || finance.cashiers.length === 0) && (
               <tr>
                 <td colSpan={4} className="px-4 py-8 text-center text-gray-500">

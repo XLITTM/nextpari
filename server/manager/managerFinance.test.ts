@@ -234,16 +234,23 @@ describe('manager canonical operational finance BFF', () => {
   it('frontend keeps fund/collect disabled while staging', () => {
     const agents = readFileSync(join(root, 'src/pages/manager/ManagerAgentsPage.tsx'), 'utf8');
     const finance = readFileSync(join(root, 'src/pages/manager/ManagerFinancePage.tsx'), 'utf8');
+    const layout = readFileSync(join(root, 'src/pages/manager/ManagerOfficeLayout.tsx'), 'utf8');
     const services = readFileSync(join(root, 'src/manager/services.ts'), 'utf8');
     assert.match(agents, /Financial activation pending/);
     assert.match(finance, /Financial activation pending/);
     assert.match(agents, /disabled/);
     assert.match(finance, /disabled/);
-    assert.equal(agents.includes('/fund'), false);
-    assert.equal(agents.includes('/collect'), false);
-    assert.equal(finance.includes('/fund'), false);
-    assert.equal(finance.includes('/collect'), false);
+    assert.match(agents, /Добавить кассира/);
+    assert.match(agents, /postManagerCashier/);
+    assert.equal(agents.includes('manager_create_cashier'), false);
+    assert.equal(agents.includes('p_float'), false);
+    assert.equal(agents.includes('networkId'), false);
+    assert.equal(layout.includes('staging · 0 TMT'), false);
+    assert.match(layout, /недоступен/);
+    assert.match(layout, /fetchManagerFinance/);
     assert.match(services, /\/api\/manager\/finance/);
+    assert.match(services, /postManagerFund/);
+    assert.match(services, /postManagerCollect/);
     assert.equal(services.includes('manager_topup_cashier'), false);
     assert.equal(services.includes('supabase.rpc'), false);
   });

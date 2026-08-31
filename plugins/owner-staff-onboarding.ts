@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin, ViteDevServer } from 'vite';
+import { attachCashierControlHttp } from '../server/cashier/cashierControlHttp';
 import { attachManagerControlHttp } from '../server/manager/managerControlHttp';
 import { attachOwnerControlHttp } from '../server/owner/ownerControlHttp';
+import { attachCashierAuthHttp } from '../server/staff/cashierAuthHttp';
 import { attachManagerAuthHttp } from '../server/staff/managerAuthHttp';
 import { attachOwnerAuthHttp } from '../server/staff/ownerAuthHttp';
 import { attachOwnerStaffHttp } from '../server/staff/httpHandler';
@@ -15,11 +17,19 @@ function attachOwnerStaff(server: ViteDevServer) {
       })
       .then((handled) => {
         if (handled) return true;
+        return attachCashierAuthHttp(req, res);
+      })
+      .then((handled) => {
+        if (handled) return true;
         return attachManagerControlHttp(req, res);
       })
       .then((handled) => {
         if (handled) return true;
         return attachOwnerControlHttp(req, res);
+      })
+      .then((handled) => {
+        if (handled) return true;
+        return attachCashierControlHttp(req, res);
       })
       .then((handled) => {
         if (handled) return true;

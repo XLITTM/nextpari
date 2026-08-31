@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType } from 'react';
 import { ClipboardList, LogOut, Shield, ShieldAlert, Store, User, UserCheck } from 'lucide-react';
 import { isManagerLoginPath } from '../../lib/backoffice';
 import { useManagerAuth } from '../../manager/auth/ManagerAuthProvider';
+import { fetchManagerFinance, formatTmtmCompact } from '../../manager/services';
 import { ManagerAgentsPage } from './ManagerAgentsPage';
 import { ManagerFinancePage } from './ManagerFinancePage';
 import { ManagerPlayersPage } from './ManagerPlayersPage';
@@ -128,6 +129,29 @@ function ManagerOfficeShell({
 }) {
   const [page, setPage] = useState<ManagerOfficePage>(() => managerOfficePage());
   const [notice, setNotice] = useState('');
+  const [balanceLabel, setBalanceLabel] = useState('…');
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchManagerFinance()
+      .then((finance) => {
+        if (cancelled) return;
+        const manager = finance.manager;
+        if (!manager) {
+          setBalanceLabel('недоступен');
+          return;
+        }
+        setBalanceLabel(
+          `${manager.status} · ${manager.migrationState} · ${formatTmtmCompact(manager.availableBalance)}`,
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setBalanceLabel('недоступен');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const sync = () => setPage(managerOfficePage());
@@ -176,7 +200,7 @@ function ManagerOfficeShell({
         <header className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="bg-ink-950 text-white text-sm font-semibold px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2">
             <span>Управляющий: {displayName}</span>
-            <span className="tabular-nums text-amber-200">Операционный баланс: staging · 0 TMT</span>
+            <span className="tabular-nums text-amber-200">Операционный баланс: {balanceLabel}</span>
           </div>
         </header>
         <main className="flex-1 min-w-0 p-6 overflow-x-auto">

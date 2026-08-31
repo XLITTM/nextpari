@@ -5,6 +5,7 @@ import {
   CASHIER_FINANCE_PATH,
   CASHIER_TRANSFERS_PATH,
   fetchCashierFinance,
+  isCashierFinanceEnabled,
   parseCashierFinance,
 } from './services';
 import { readFileSync } from 'node:fs';
@@ -27,6 +28,28 @@ describe('cashier browser finance client', () => {
     assert.equal(parsed?.cashier.fullName, 'Азат Мередов');
   });
 
+  it('active account enables money UI; staging disables it', () => {
+    const active = parseCashierFinance({
+      ok: true,
+      data: {
+        cashier: { cashierId: 'c1' },
+        operational: { accountId: 'a1', availableBalance: 3550, migrationState: 'active', status: 'active' },
+        activationPending: false,
+      },
+    });
+    const staging = parseCashierFinance({
+      ok: true,
+      data: {
+        cashier: { cashierId: 'c1' },
+        operational: { accountId: 'a1', availableBalance: 3550, migrationState: 'staging', status: 'active' },
+        activationPending: true,
+      },
+    });
+    assert.equal(isCashierFinanceEnabled(active), true);
+    assert.equal(isCashierFinanceEnabled(staging), false);
+    assert.equal(isCashierFinanceEnabled(null), false);
+  });
+
   it('does not coerce missing balance to 0', () => {
     const parsed = parseCashierFinance({
       ok: true,
@@ -44,11 +67,12 @@ describe('cashier browser finance client', () => {
     await assert.rejects(() => fetchCashierFinance(fetchFn), /FINANCE_RPC_UNAVAILABLE/);
   });
 
-  it('prepared deposit/payout clients exist but UI does not call them', () => {
+  it('prepared deposit/payout clients are used by the cashier UI', () => {
     assert.match(services, /CASHIER_DEPOSITS_PATH/);
     assert.equal(CASHIER_DEPOSITS_PATH, '/api/cashier/deposits');
     assert.match(services, /postCashierDeposit/);
     assert.match(services, /postCashierPayoutConfirm/);
+    assert.match(services, /isCashierFinanceEnabled/);
   });
 
   it('calls same-origin finance and transfers only', async () => {

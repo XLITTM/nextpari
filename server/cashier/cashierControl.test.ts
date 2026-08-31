@@ -269,7 +269,10 @@ describe('cashier same-origin control center', () => {
     }
     const screen = readFileSync(join(root, 'src/screens/MobcashAgentScreen.tsx'), 'utf8');
     assert.match(screen, /Financial activation pending/);
+    assert.match(screen, /Финансовые операции активны/);
     assert.match(screen, /fetchCashierFinance/);
+    assert.match(screen, /postCashierDeposit/);
+    assert.match(screen, /\[0-9a-f\]\{16\}/);
     assert.equal(screen.includes('formatTmtm(0)'), false);
   });
 

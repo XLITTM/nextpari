@@ -155,6 +155,7 @@ async function managerPost(
     cookie?: string;
     session?: ManagerAuthGatewayPorts;
     rpc?: ReturnType<typeof createRpc>;
+    adminFactory?: () => import('../staff/types.js').AuthAdminPort;
   },
 ) {
   const rpc = opts?.rpc ?? createRpc();
@@ -167,7 +168,7 @@ async function managerPost(
       cookieSecure: true,
       body,
     },
-    { sessionPorts: session, rpcFactory: rpc.rpcFactory },
+    { sessionPorts: session, rpcFactory: rpc.rpcFactory, adminFactory: opts?.adminFactory },
   );
   return { result, rpc, session };
 }
@@ -378,13 +379,81 @@ describe('manager control center same-origin BFF', () => {
     }
   });
 
-  it('17. manager_create_cashier disabled', async () => {
+  it('17. manager_create_cashier disabled; canonical provision derives network from JWT', async () => {
+    const created: string[] = [];
     const { result, rpc } = await managerPost('/api/manager/cashiers', {
       login: 'agent99',
-      floatBalance: 1000,
+      fullName: 'Новый кассир',
+      city: 'Ашхабад',
+      pointName: 'Точка 9',
+      email: 'agent99@example.com',
+      temporaryPassword: 'temporary-pass-12',
+    }, {
+      adminFactory: () => ({
+        async createUser() {
+          created.push('auth-cashier-1');
+          return { id: 'auth-cashier-1' };
+        },
+        async deleteUser() {},
+      }),
     });
-    assert.equal(result.status, 405);
+    assert.equal(result.status, 200);
+    assert.equal(created.length, 1);
+    assert.equal(rpc.calls[0]?.name, 'manager_provision_cashier');
+    assert.equal(rpc.calls[0]?.args?.p_auth_user_id, 'auth-cashier-1');
+    assert.equal(rpc.calls[0]?.args?.p_network_id, undefined);
+    assert.equal(rpc.calls[0]?.args?.p_manager_id, undefined);
+    assert.equal(rpc.calls[0]?.args?.p_float, undefined);
     assert.equal(rpc.calls.some((call) => call.name === 'manager_create_cashier'), false);
+    const forbidden = await managerPost('/api/manager/cashiers', {
+      login: 'agent99',
+      fullName: 'Новый кассир',
+      city: 'Ашхабад',
+      pointName: 'Точка 9',
+      email: 'agent99@example.com',
+      temporaryPassword: 'temporary-pass-12',
+      floatBalance: 1000,
+      networkId: NETWORK_ID,
+    }, {
+      adminFactory: () => ({
+        async createUser() {
+          throw new Error('createUser must not run');
+        },
+        async deleteUser() {},
+      }),
+    });
+    assert.equal(forbidden.result.status, 400);
+    assert.equal(forbidden.result.body.error, 'FIELD_FORBIDDEN');
+    assert.equal(forbidden.rpc.calls.some((call) => call.name === 'manager_create_cashier'), false);
+    const deleted: string[] = [];
+    const failRpc = createRpc();
+    failRpc.rpcFactory = (accessToken: string): ManagerRpcPort => ({
+      async invoke(name, args) {
+        failRpc.calls.push({ token: accessToken, name, args });
+        throw staffError('LOGIN_TAKEN', 409);
+      },
+    });
+    const compensated = await managerPost('/api/manager/cashiers', {
+      login: 'agent99',
+      fullName: 'Новый кассир',
+      city: 'Ашхабад',
+      pointName: 'Точка 9',
+      email: 'agent99@example.com',
+      temporaryPassword: 'temporary-pass-12',
+    }, {
+      rpc: failRpc,
+      adminFactory: () => ({
+        async createUser() {
+          return { id: 'auth-cashier-fail' };
+        },
+        async deleteUser(id) {
+          deleted.push(id);
+        },
+      }),
+    });
+    assert.equal(compensated.result.status, 409);
+    assert.deepEqual(deleted, ['auth-cashier-fail']);
+    assert.equal(JSON.stringify(compensated.result.body).includes('temporary-pass-12'), false);
   });
 
   it('18. legacy topup path disabled; canonical collect requires idempotency', async () => {

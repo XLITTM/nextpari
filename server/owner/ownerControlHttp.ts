@@ -15,12 +15,17 @@ import {
 } from '../staff/ownerAuthService.js';
 import { publicOwnerStaff } from '../staff/ownerContext.js';
 import { clearOwnerCookies, requestIsSecure } from '../staff/ownerCookies.js';
-import type { StaffLog } from '../staff/types.js';
+import type { AuthAdminPort, StaffLog } from '../staff/types.js';
 import { createOwnerJwtRpc, type OwnerRpcPort } from './ownerRpc.js';
+import {
+  liveAuthAdminPort,
+  provisionOwnerManager,
+} from '../staff/staffHierarchyService.js';
 
 export interface OwnerControlDeps {
   sessionPorts?: OwnerAuthGatewayPorts;
   rpcFactory?: (accessToken: string) => OwnerRpcPort;
+  adminFactory?: () => AuthAdminPort;
 }
 
 function normalizePath(pathname: string): string {
@@ -83,7 +88,10 @@ type ControlAction =
   | { kind: 'dossier'; playerId: string }
   | { kind: 'block'; playerId: string }
   | { kind: 'withdrawals' }
-  | { kind: 'message' };
+  | { kind: 'message' }
+  | { kind: 'managers' }
+  | { kind: 'createManager' }
+  | { kind: 'managerDetail'; managerId: string };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -101,9 +109,17 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   const dossier = path.match(/^\/api\/owner\/players\/([^/]+)$/);
   if (dossier) return m === 'GET' ? { kind: 'dossier', playerId: dossier[1] } : 'method';
 
+  const managerDetail = path.match(/^\/api\/owner\/managers\/([^/]+)$/);
+  if (managerDetail) return m === 'GET' ? { kind: 'managerDetail', managerId: managerDetail[1] } : 'method';
+
   if (path === '/api/owner/me') return m === 'GET' ? { kind: 'me' } : 'method';
   if (path === '/api/owner/dashboard') return m === 'GET' ? { kind: 'dashboard' } : 'method';
   if (path === '/api/owner/cashiers') return m === 'GET' ? { kind: 'cashiers' } : 'method';
+  if (path === '/api/owner/managers') {
+    if (m === 'GET') return { kind: 'managers' };
+    if (m === 'POST') return { kind: 'createManager' };
+    return 'method';
+  }
   if (path === '/api/owner/risk-bets') return m === 'GET' ? { kind: 'risk' } : 'method';
   if (path === '/api/owner/players') return m === 'GET' ? { kind: 'players' } : 'method';
   if (path === '/api/owner/withdrawals') return m === 'GET' ? { kind: 'withdrawals' } : 'method';
@@ -154,6 +170,14 @@ async function runControl(
         p_blocked: requireBoolean(rec.blocked, 'BLOCKED_REQUIRED'),
         p_reason: rec.reason == null ? null : String(rec.reason).trim() || null,
       });
+    case 'managers':
+      return rpc.invoke('owner_list_managers');
+    case 'managerDetail':
+      return rpc.invoke('owner_manager_detail', {
+        p_manager_id: requireId(decodeURIComponent(action.managerId), 'MANAGER_ID_REQUIRED'),
+      });
+    case 'createManager':
+      throw staffError('NOT_FOUND', 404);
     case 'withdrawals':
       return rpc.invoke('owner_list_withdrawals', {
         p_status: query.get('status')?.trim() || null,
@@ -217,6 +241,20 @@ export async function handleOwnerControlRequest(
     }
 
     const rpc = (deps.rpcFactory ?? createOwnerJwtRpc)(resolved.accessToken);
+    if (matched.kind === 'createManager') {
+      const data = await provisionOwnerManager({
+        body: parseJsonPayload(input.body),
+        admin: (deps.adminFactory ?? liveAuthAdminPort)(),
+        invoke: (name, args) => rpc.invoke(name, args),
+        log,
+      });
+      return {
+        status: 200,
+        body: { ok: true, data },
+        cookies: sessionCookies,
+      };
+    }
+
     const data = await runControl(matched, rpc, queryOf(input.search), parseJsonPayload(input.body));
     return {
       status: 200,

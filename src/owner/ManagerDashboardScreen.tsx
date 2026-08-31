@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useOwnerAuth } from './auth/OwnerAuthProvider';
 import { MessagesPanel } from './MessagesPanel';
-import { MigrationPending } from './MigrationPending';
+import { OwnerManagersPanel } from './OwnerManagersPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
 import {
@@ -177,12 +177,7 @@ function BackofficeShell({
 
       <main className="flex-1 min-w-0 p-6 overflow-x-auto">
         {tab === 'finance' && <FinancePanel />}
-        {tab === 'managers' && (
-          <MigrationPending
-            title="Менеджеры"
-            detail="CRUD менеджеров сейчас опирается на localStorage. Будет переведено на защищённое ядро."
-          />
-        )}
+        {tab === 'managers' && <OwnerManagersPanel />}
         {tab === 'agents' && <AgentsPanel />}
         {tab === 'players' && <PlayersPanel />}
         {tab === 'messages' && <MessagesPanel />}

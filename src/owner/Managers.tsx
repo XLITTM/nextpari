@@ -1,11 +1,5 @@
-import { MigrationPending } from './MigrationPending';
+import { OwnerManagersPanel } from './OwnerManagersPanel';
 
-/** Managers CRUD is localStorage-backed. Live owner path shows migration pending. */
 export function ManagersPage() {
-  return (
-    <MigrationPending
-      title="Менеджеры"
-      detail="CRUD менеджеров сейчас опирается на localStorage. Будет переведено на защищённое ядро."
-    />
-  );
+  return <OwnerManagersPanel />;
 }

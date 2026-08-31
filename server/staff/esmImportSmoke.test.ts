@@ -27,6 +27,8 @@ const RUNTIME_GRAPH = [
   'api/owner/players.ts',
   'api/owner/withdrawals.ts',
   'api/owner/messages.ts',
+  'api/owner/managers.ts',
+  'api/owner/managers/[managerId].ts',
   'api/manager/me.ts',
   'api/manager/dashboard.ts',
   'api/manager/cashiers.ts',
@@ -56,6 +58,7 @@ const RUNTIME_GRAPH = [
   'server/staff/cashierCookies.ts',
   'server/staff/cashierContext.ts',
   'server/staff/staffOnboardingService.ts',
+  'server/staff/staffHierarchyService.ts',
   'server/staff/staffAuthAdmin.ts',
   'server/staff/env.ts',
   'server/staff/errors.ts',
@@ -68,6 +71,7 @@ const RUNTIME_GRAPH = [
   'server/manager/vercelHandler.ts',
   'server/cashier/cashierRpc.ts',
   'server/cashier/cashierControlHttp.ts',
+  'server/cashier/cashierPayoutRateLimit.ts',
   'server/cashier/vercelHandler.ts',
   'server/supabase/admin.ts',
 ] as const;
@@ -147,6 +151,7 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/owner/players.js',
         'api/owner/withdrawals.js',
         'api/owner/messages.js',
+        'api/owner/managers.js',
       ];
       const managerControlEntries = [
         'api/manager/me.js',
