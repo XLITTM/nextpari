@@ -9,7 +9,7 @@ import { ToastProvider } from './ToastContext';
 import { QuickBetProvider } from './QuickBetContext';
 import { QuickBetSheet } from './components/QuickBetSheet';
 import { ThemeProvider } from './ThemeContext';
-import { ProfileProvider } from './ProfileContext';
+import { ProfileProvider, useProfile } from './ProfileContext';
 import { WalletProvider, useWallet, formatPlayerMoney } from './WalletContext';
 import { LiveMatchesProvider } from './LiveMatchesContext';
 import { HomeScreen } from './screens/HomeScreen';
@@ -164,19 +164,22 @@ function AppContent() {
     };
   }, []);
 
-  const handleAuthSuccess = () => {
+  const { balance, available, loading: walletLoading, refresh: refreshWallet } = useWallet();
+  const { refresh: refreshProfile, reset: resetProfile } = useProfile();
+
+  const handleAuthSuccess = async () => {
+    await Promise.all([refreshWallet(), refreshProfile()]);
     setIsAuthenticated(true);
     setScreen(screenFromPath());
   };
 
   const handleLogout = () => {
     useUserStore.getState().reset();
+    resetProfile();
     void signOutPlayer().finally(() => {
       setIsAuthenticated(false);
     });
   };
-
-  const { balance, available, loading: walletLoading } = useWallet();
   const moneyLabel = formatPlayerMoney(balance, available, walletLoading);
 
   useEffect(() => {

@@ -8,9 +8,11 @@ import {
 } from './playerCookies.js';
 import {
   normalizePlayerPhone,
+  parsePlayerProfileFields,
   validatePlayerEmail,
   validatePlayerPassword,
   validatePlayerPhone,
+  type PlayerProfileFields,
 } from './playerValidators.js';
 
 export interface PlayerAuthTokens {
@@ -21,6 +23,22 @@ export interface PlayerAuthTokens {
 export interface PlayerAuthUser {
   id: string;
   email: string;
+  phone?: string;
+  emailConfirmed?: boolean;
+  phoneConfirmed?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface PlayerSafeProfile {
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  birthDate: string;
+  passport: string;
+  phone: string;
+  email: string;
+  phoneVerified: boolean;
+  emailVerified: boolean;
 }
 
 export interface PlayerAccountProvision {
@@ -44,6 +62,11 @@ export interface PlayerAuthGatewayPorts {
   getAuthUser: (accessToken: string) => Promise<PlayerAuthUser>;
   ensurePlayerAccount: (accessToken: string) => Promise<PlayerAccountProvision>;
   loadOwnWallet: (accessToken: string, walletId: string) => Promise<PlayerOwnWallet>;
+  savePlayerProfile: (
+    accessToken: string,
+    fields: PlayerProfileFields,
+    refreshToken?: string | null,
+  ) => Promise<void>;
   signOut?: (accessToken: string, refreshToken: string | null) => Promise<void>;
 }
 
@@ -90,6 +113,30 @@ function isRefreshableAuthError(err: unknown): boolean {
   return playerAuthError(err).httpStatus === 401;
 }
 
+function metaText(metadata: Record<string, unknown> | undefined, ...keys: string[]): string {
+  if (!metadata) return '';
+  for (const key of keys) {
+    const value = metadata[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+export function publicProfileFromUser(user: PlayerAuthUser): PlayerSafeProfile {
+  const metadata = user.metadata ?? {};
+  return {
+    firstName: metaText(metadata, 'firstName', 'first_name'),
+    lastName: metaText(metadata, 'lastName', 'last_name'),
+    middleName: metaText(metadata, 'middleName', 'middle_name'),
+    birthDate: metaText(metadata, 'birthDate', 'birth_date'),
+    passport: metaText(metadata, 'passport'),
+    phone: String(user.phone ?? '').trim() || metaText(metadata, 'phone'),
+    email: String(user.email ?? '').trim(),
+    phoneVerified: user.phoneConfirmed === true,
+    emailVerified: user.emailConfirmed === true,
+  };
+}
+
 function publicPlayerSnapshot(input: {
   email: string;
   publicId: string;
@@ -97,6 +144,7 @@ function publicPlayerSnapshot(input: {
   currency: string;
   status: string;
   migrationState: string | null;
+  profile: PlayerSafeProfile;
 }): Record<string, unknown> {
   return {
     ok: true,
@@ -111,6 +159,7 @@ function publicPlayerSnapshot(input: {
       status: input.status,
       migrationState: input.migrationState,
     },
+    profile: input.profile,
   };
 }
 
@@ -145,6 +194,7 @@ async function snapshotFromAccessToken(
     currency: own.currency || 'TMTM',
     status: own.status || 'active',
     migrationState: provision.migrationState,
+    profile: publicProfileFromUser(user),
   });
 }
 
@@ -222,6 +272,10 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
       return {
         id: data.user.id,
         email: String(data.user.email ?? ''),
+        phone: String(data.user.phone ?? ''),
+        emailConfirmed: Boolean(data.user.email_confirmed_at),
+        phoneConfirmed: Boolean(data.user.phone_confirmed_at),
+        metadata: asRecord(data.user.user_metadata),
       };
     },
     async ensurePlayerAccount(accessToken) {
@@ -273,6 +327,36 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
         status: 'active',
         publicId: own.data?.public_id == null ? undefined : String(own.data.public_id),
       };
+    },
+    async savePlayerProfile(accessToken, fields, refreshToken) {
+      const client = createAnonAuthClient(env.supabaseUrl, env.supabaseAnonKey);
+      if (refreshToken) {
+        const { error: sessionError } = await client.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError) {
+          throw staffError('JWT_INVALID', 401);
+        }
+      }
+      const { data: existing, error: userError } = await client.auth.getUser(accessToken);
+      if (userError || !existing.user?.id) {
+        throw staffError('AUTH_REQUIRED', 401);
+      }
+      const previous = asRecord(existing.user.user_metadata);
+      const { error } = await client.auth.updateUser({
+        data: {
+          ...previous,
+          firstName: fields.firstName,
+          lastName: fields.lastName,
+          middleName: fields.middleName,
+          birthDate: fields.birthDate,
+          passport: fields.passport,
+        },
+      });
+      if (error) {
+        throw staffError('PROFILE_UNAVAILABLE', 503);
+      }
     },
     async signOut(accessToken, refreshToken) {
       const client = createAnonAuthClient(env.supabaseUrl, env.supabaseAnonKey);
@@ -422,6 +506,77 @@ export async function readPlayerSession(
       status: mapped.httpStatus,
       body: { ok: false, authenticated: false, error: mapped.code },
       cookies: clearPlayerCookies(secure),
+    };
+  }
+}
+
+export async function readPlayerProfileSession(
+  ports: PlayerAuthGatewayPorts,
+  cookieHeader: string | undefined,
+  secure: boolean,
+): Promise<PlayerAuthHttpResult> {
+  try {
+    const resolved = await resolvePlayerSession(ports, cookieHeader, secure);
+    const profile = resolved.body.profile && typeof resolved.body.profile === 'object'
+      ? resolved.body.profile
+      : publicProfileFromUser({ id: '', email: '' });
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        authenticated: true,
+        player: resolved.body.player,
+        profile,
+      },
+      cookies: resolved.cookies,
+    };
+  } catch (err) {
+    const mapped = playerAuthError(err);
+    return {
+      status: mapped.httpStatus,
+      body: { ok: false, authenticated: false, error: mapped.code },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+}
+
+export async function updatePlayerProfileSession(
+  ports: PlayerAuthGatewayPorts,
+  cookieHeader: string | undefined,
+  body: Record<string, unknown>,
+  secure: boolean,
+): Promise<PlayerAuthHttpResult> {
+  const parsed = parsePlayerProfileFields(body);
+  if ('error' in parsed) {
+    return {
+      status: 400,
+      body: { ok: false, authenticated: false, error: parsed.error },
+    };
+  }
+
+  try {
+    const resolved = await resolvePlayerSession(ports, cookieHeader, secure);
+    const cookies = readPlayerCookies(cookieHeader);
+    await ports.savePlayerProfile(resolved.accessToken, parsed, cookies.refreshToken);
+    const next = await snapshotFromAccessToken(ports, resolved.accessToken);
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        authenticated: true,
+        player: next.player,
+        profile: next.profile,
+      },
+      cookies: resolved.cookies,
+    };
+  } catch (err) {
+    const mapped = playerAuthError(err);
+    return {
+      status: mapped.httpStatus,
+      body: { ok: false, authenticated: false, error: mapped.code },
+      cookies: mapped.httpStatus === 401 || mapped.httpStatus === 403
+        ? clearPlayerCookies(secure)
+        : undefined,
     };
   }
 }

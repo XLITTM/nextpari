@@ -13,10 +13,73 @@ export interface PlayerWalletSnapshot {
   migrationState: string | null;
 }
 
+export interface PlayerProfileSnapshot {
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  birthDate: string;
+  passport: string;
+  phone: string;
+  email: string;
+  phoneVerified: boolean;
+  emailVerified: boolean;
+}
+
 export interface PlayerMeSnapshot {
   authenticated: true;
   player: { publicId: string; email: string };
   wallet: PlayerWalletSnapshot;
+  profile: PlayerProfileSnapshot;
+}
+
+export interface WalletViewState {
+  balance: number;
+  publicId: string | null;
+  available: boolean;
+  error: string | null;
+}
+
+export const EMPTY_PLAYER_PROFILE: PlayerProfileSnapshot = {
+  firstName: '',
+  lastName: '',
+  middleName: '',
+  birthDate: '',
+  passport: '',
+  phone: '',
+  email: '',
+  phoneVerified: false,
+  emailVerified: false,
+};
+
+export function playerDisplayName(profile: { firstName?: string; lastName?: string; first_name?: string; last_name?: string }): string {
+  const first = String(profile.firstName ?? profile.first_name ?? '').trim();
+  const last = String(profile.lastName ?? profile.last_name ?? '').trim();
+  if (first && last) return `${first} ${last}`;
+  return 'Новый игрок';
+}
+
+export function walletViewFromSnapshot(snapshot: PlayerMeSnapshot | null): WalletViewState {
+  if (!snapshot?.authenticated) {
+    return { balance: 0, publicId: null, available: false, error: null };
+  }
+  return {
+    balance: snapshot.wallet.balance,
+    publicId: snapshot.player.publicId,
+    available: true,
+    error: null,
+  };
+}
+
+export function isPlayerProfileComplete(profile: PlayerProfileSnapshot): boolean {
+  return Boolean(
+    profile.firstName.trim()
+    && profile.lastName.trim()
+    && profile.middleName.trim()
+    && profile.birthDate.trim()
+    && profile.phone.trim()
+    && profile.email.trim()
+    && profile.passport.trim(),
+  );
 }
 
 export interface PlayerAuthUser {
@@ -100,6 +163,9 @@ function snapshotFromBody(body: Record<string, unknown>): PlayerMeSnapshot | nul
   if (body.authenticated !== true || !player || !wallet) return null;
   const balance = Number(wallet.balance);
   if (!Number.isFinite(balance)) return null;
+  const profile = body.profile && typeof body.profile === 'object' && !Array.isArray(body.profile)
+    ? body.profile as Record<string, unknown>
+    : {};
   return {
     authenticated: true,
     player: {
@@ -112,7 +178,78 @@ function snapshotFromBody(body: Record<string, unknown>): PlayerMeSnapshot | nul
       status: String(wallet.status ?? 'active') || 'active',
       migrationState: wallet.migrationState == null ? null : String(wallet.migrationState),
     },
+    profile: profileFromBody(profile, String(player.email ?? '')),
   };
+}
+
+function profileFromBody(profile: Record<string, unknown>, fallbackEmail = ''): PlayerProfileSnapshot {
+  return {
+    firstName: String(profile.firstName ?? profile.first_name ?? ''),
+    lastName: String(profile.lastName ?? profile.last_name ?? ''),
+    middleName: String(profile.middleName ?? profile.middle_name ?? ''),
+    birthDate: String(profile.birthDate ?? profile.birth_date ?? ''),
+    passport: String(profile.passport ?? ''),
+    phone: String(profile.phone ?? ''),
+    email: String(profile.email ?? fallbackEmail),
+    phoneVerified: profile.phoneVerified === true || profile.phone_verified === true,
+    emailVerified: profile.emailVerified === true || profile.email_verified === true,
+  };
+}
+
+export function personalDataFromProfile(profile: PlayerProfileSnapshot) {
+  return {
+    first_name: profile.firstName,
+    last_name: profile.lastName,
+    middle_name: profile.middleName,
+    birth_date: profile.birthDate,
+    phone: profile.phone,
+    phone_verified: profile.phoneVerified,
+    email: profile.email,
+    email_verified: profile.emailVerified,
+    passport: profile.passport,
+  };
+}
+
+export async function fetchPlayerProfile(): Promise<PlayerProfileSnapshot | null> {
+  const res = await fetch('/api/player/profile', { credentials: 'same-origin' });
+  if (res.status === 401 || res.status === 403) return null;
+  const body = await readJson(res);
+  if (!res.ok) return null;
+  const profile = body.profile && typeof body.profile === 'object' && !Array.isArray(body.profile)
+    ? body.profile as Record<string, unknown>
+    : null;
+  if (!profile) return null;
+  return profileFromBody(profile, String((body.player as { email?: string } | undefined)?.email ?? ''));
+}
+
+export async function savePlayerProfile(input: {
+  firstName: string;
+  lastName: string;
+  middleName: string;
+  birthDate: string;
+  passport: string;
+}): Promise<PlayerProfileSnapshot> {
+  const res = await fetch('/api/player/profile', {
+    method: 'PUT',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      firstName: input.firstName,
+      lastName: input.lastName,
+      middleName: input.middleName,
+      birthDate: input.birthDate,
+      passport: input.passport,
+    }),
+  });
+  const body = await readJson(res);
+  if (!res.ok) {
+    throw new Error(String(body.error ?? 'PROFILE_UNAVAILABLE'));
+  }
+  const profile = body.profile && typeof body.profile === 'object' && !Array.isArray(body.profile)
+    ? body.profile as Record<string, unknown>
+    : null;
+  if (!profile) throw new Error('PROFILE_UNAVAILABLE');
+  return profileFromBody(profile);
 }
 
 export async function fetchPlayerMe(): Promise<PlayerMeSnapshot | null> {

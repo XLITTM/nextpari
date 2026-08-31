@@ -4,7 +4,6 @@ import {
 } from 'lucide-react';
 import { useToast } from '../ToastContext';
 import { useProfile } from '../ProfileContext';
-import type { PersonalData } from '../types';
 
 interface PersonalDataScreenProps {
   onBack: () => void;
@@ -12,135 +11,48 @@ interface PersonalDataScreenProps {
 
 export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
   const { showToast } = useToast();
-  const { personalData, refresh } = useProfile();
+  const { personalData, refresh, save } = useProfile();
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [middleName, setMiddleName] = useState('');
   const [birthDate, setBirthDate] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
   const [passport, setPassport] = useState('');
-  const [phoneVerified, setPhoneVerified] = useState(false);
-  const [emailVerified, setEmailVerified] = useState(false);
-
   const [saving, setSaving] = useState(false);
 
-  // SMS verification flow
-  const [showSmsInput, setShowSmsInput] = useState(false);
-  const [smsCode, setSmsCode] = useState('');
-  const [verifyingSms, setVerifyingSms] = useState(false);
-
-  // Email verification flow
-  const [emailCodeSent, setEmailCodeSent] = useState(false);
-  const [showEmailInput, setShowEmailInput] = useState(false);
-  const [emailCode, setEmailCode] = useState('');
-  const [verifyingEmail, setVerifyingEmail] = useState(false);
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   useEffect(() => {
     setFirstName(personalData.first_name);
     setLastName(personalData.last_name);
     setMiddleName(personalData.middle_name);
     setBirthDate(personalData.birth_date);
-    setPhone(personalData.phone);
-    setEmail(personalData.email);
     setPassport(personalData.passport);
-    setPhoneVerified(personalData.phone_verified);
-    setEmailVerified(personalData.email_verified);
   }, [personalData]);
 
-  const handleSendSms = () => {
-    if (!phone.trim()) {
-      showToast('Введите номер телефона');
-      return;
-    }
-    setShowSmsInput(true);
-    showToast('Код отправлен на номер ' + phone);
-  };
-
-  const handleConfirmSms = () => {
-    if (smsCode.trim().length < 4) {
-      showToast('Введите код из SMS');
-      return;
-    }
-    setVerifyingSms(true);
-    setTimeout(() => {
-      setVerifyingSms(false);
-      setPhoneVerified(true);
-      setShowSmsInput(false);
-      setSmsCode('');
-      showToast('Телефон подтверждён');
-    }, 800);
-  };
-
-  const handleSendEmailCode = () => {
-    if (!email.trim() || !email.includes('@')) {
-      showToast('Введите корректный email');
-      return;
-    }
-    setEmailCodeSent(true);
-    setShowEmailInput(true);
-    showToast('Код отправлен на ' + email);
-  };
-
-  const handleConfirmEmail = () => {
-    if (emailCode.trim().length < 4) {
-      showToast('Введите код из письма');
-      return;
-    }
-    setVerifyingEmail(true);
-    setTimeout(() => {
-      setVerifyingEmail(false);
-      setEmailVerified(true);
-      setShowEmailInput(false);
-      setEmailCode('');
-      showToast('Email подтверждён');
-    }, 800);
-  };
-
   const handleSave = async () => {
-    if (!lastName.trim() || !firstName.trim() || !middleName.trim()) {
-      showToast('Заполните ФИО');
-      return;
-    }
-    if (!birthDate) {
-      showToast('Выберите дату рождения');
-      return;
-    }
-    if (!phone.trim() || !phoneVerified) {
-      showToast('Подтвердите номер телефона');
-      return;
-    }
-    if (!email.trim() || !emailVerified) {
-      showToast('Подтвердите email');
-      return;
-    }
-    if (!passport.trim()) {
-      showToast('Заполните паспортные данные');
-      return;
-    }
-
     setSaving(true);
-    const payload: PersonalData = {
-      first_name: firstName.trim(),
-      last_name: lastName.trim(),
-      middle_name: middleName.trim(),
-      birth_date: birthDate,
-      phone: phone.trim(),
-      phone_verified: phoneVerified,
-      email: email.trim(),
-      email_verified: emailVerified,
-      passport: passport.trim(),
-    };
-
-    void payload;
-    setSaving(false);
-    showToast('Сохранение временно недоступно');
+    try {
+      await save({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        middleName: middleName.trim(),
+        birthDate,
+        passport: passport.trim(),
+      });
+      await refresh();
+      showToast('Данные сохранены');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Не удалось сохранить профиль');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="pt-2 pb-4">
-      {/* Header */}
       <div className="flex items-center gap-3 px-3 pb-3">
         <button
           onClick={onBack}
@@ -151,9 +63,7 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
         <h1 className="text-lg font-bold text-gray-900 dark:text-white">Личные данные</h1>
       </div>
 
-      {/* Form */}
       <div className="px-3 space-y-4">
-        {/* FIO */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white">ФИО</h2>
           <FieldInput label="Фамилия" value={lastName} onChange={setLastName} placeholder="Иванов" />
@@ -161,7 +71,6 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
           <FieldInput label="Отчество" value={middleName} onChange={setMiddleName} placeholder="Иванович" />
         </div>
 
-        {/* Birth date */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white">Дата рождения</h2>
           <input
@@ -172,119 +81,53 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
           />
         </div>
 
-        {/* Phone */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white">Номер телефона</h2>
-            {phoneVerified && <VerifiedBadge />}
+            {personalData.phone_verified && <VerifiedBadge />}
           </div>
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => { setPhone(e.target.value); if (phoneVerified) setPhoneVerified(false); }}
-                placeholder="+993 6X XX XX XX"
-                className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-xl pl-9 pr-4 py-3 outline-none border border-gray-200 dark:border-gray-600 focus:border-brand-600 transition-colors"
-              />
-            </div>
-            {!phoneVerified && (
-              <button
-                onClick={handleSendSms}
-                className="px-4 bg-brand-600 text-white text-sm font-bold rounded-xl active:scale-95 transition-transform whitespace-nowrap"
-              >
-                Подтвердить
-              </button>
-            )}
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="tel"
+              value={personalData.phone}
+              readOnly
+              placeholder="Указан при регистрации"
+              className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-xl pl-9 pr-4 py-3 outline-none border border-gray-200 dark:border-gray-600"
+            />
           </div>
-
-          {showSmsInput && !phoneVerified && (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={smsCode}
-                onChange={(e) => setSmsCode(e.target.value)}
-                placeholder="Код из SMS"
-                className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-xl px-4 py-3 outline-none border border-gray-200 dark:border-gray-600 focus:border-brand-600 transition-colors text-center tracking-widest"
-              />
-              <button
-                onClick={handleConfirmSms}
-                disabled={verifyingSms}
-                className="px-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold rounded-xl active:scale-95 transition-transform whitespace-nowrap disabled:opacity-50"
-              >
-                {verifyingSms ? '...' : 'OK'}
-              </button>
-            </div>
-          )}
+          <p className="text-xs text-gray-500 dark:text-gray-300">
+            Телефон из регистрации. SMS-подтверждение пока не подключено.
+          </p>
         </div>
 
-        {/* Email */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white">Электронная почта</h2>
-            {emailVerified && <VerifiedBadge />}
+            {personalData.email_verified && <VerifiedBadge />}
           </div>
-          <div className="flex gap-2">
-            <div className="flex-1 relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); if (emailVerified) setEmailVerified(false); }}
-                placeholder="example@mail.com"
-                className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-xl pl-9 pr-4 py-3 outline-none border border-gray-200 dark:border-gray-600 focus:border-brand-600 transition-colors"
-              />
-            </div>
-            {!emailVerified && (
-              <button
-                onClick={handleSendEmailCode}
-                className="px-4 bg-brand-600 text-white text-sm font-bold rounded-xl active:scale-95 transition-transform whitespace-nowrap"
-              >
-                Подтвердить
-              </button>
-            )}
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="email"
+              value={personalData.email}
+              readOnly
+              placeholder="Указан при регистрации"
+              className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-xl pl-9 pr-4 py-3 outline-none border border-gray-200 dark:border-gray-600"
+            />
           </div>
-
-          {showEmailInput && !emailVerified && (
-            <div className="flex gap-2">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={emailCode}
-                onChange={(e) => setEmailCode(e.target.value)}
-                placeholder="Код из письма"
-                className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-xl px-4 py-3 outline-none border border-gray-200 dark:border-gray-600 focus:border-brand-600 transition-colors text-center tracking-widest"
-              />
-              <button
-                onClick={handleConfirmEmail}
-                disabled={verifyingEmail}
-                className="px-4 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold rounded-xl active:scale-95 transition-transform whitespace-nowrap disabled:opacity-50"
-              >
-                {verifyingEmail ? '...' : 'OK'}
-              </button>
-            </div>
-          )}
-          {emailCodeSent && !emailVerified && !showEmailInput && (
-            <button
-              onClick={() => setShowEmailInput(true)}
-              className="text-xs font-bold text-brand-600"
-            >
-              Ввести код повторно
-            </button>
-          )}
+          <p className="text-xs text-gray-500 dark:text-gray-300">
+            Email из аккаунта. Подтверждение только по фактическому состоянию Auth.
+          </p>
         </div>
 
-        {/* Passport */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white">Паспортные данные</h2>
           <FieldInput label="Серия и номер паспорта" value={passport} onChange={setPassport} placeholder="AB1234567" />
         </div>
 
-        {/* Save button */}
         <button
-          onClick={handleSave}
+          onClick={() => void handleSave()}
           disabled={saving}
           className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 text-base"
         >

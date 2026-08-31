@@ -9,6 +9,7 @@ import {
   PLAYER_AUTH_LOGOUT_PATH,
   PLAYER_AUTH_REGISTER_PATH,
   PLAYER_ME_PATH,
+  PLAYER_PROFILE_PATH,
   PLAYER_WALLET_PATH,
   handlePlayerAuthRequest,
 } from './playerAuthHttp.js';
@@ -72,18 +73,22 @@ function createPlayerPorts(init?: {
   signUps: Array<{ email: string; password: string; phone: string }>;
   ensureTokens: string[];
   walletLoads: Array<{ token: string; walletId: string }>;
+  profileSaves: Array<{ token: string; fields: Record<string, string>; userId?: unknown; walletId?: unknown }>;
   signOuts: number;
 } {
   const signIns: Array<{ email: string; password: string }> = [];
   const signUps: Array<{ email: string; password: string; phone: string }> = [];
   const ensureTokens: string[] = [];
   const walletLoads: Array<{ token: string; walletId: string }> = [];
+  const profileByToken = new Map<string, Record<string, string>>();
+  const profileSaves: Array<{ token: string; fields: Record<string, string>; userId?: unknown; walletId?: unknown }> = [];
   let signOuts = 0;
   return {
     signIns,
     signUps,
     ensureTokens,
     walletLoads,
+    profileSaves,
     get signOuts() { return signOuts; },
     async signInWithPassword(email, password) {
       signIns.push({ email, password });
@@ -105,7 +110,15 @@ function createPlayerPorts(init?: {
     async getAuthUser(accessToken) {
       if (init?.userMissing) throw staffError('AUTH_REQUIRED', 401);
       assert.ok(accessToken === ACCESS || accessToken === ACCESS2);
-      return { id: 'auth-user-1', email: PLAYER_EMAIL };
+      const stored = profileByToken.get(accessToken) ?? {};
+      return {
+        id: 'auth-user-1',
+        email: PLAYER_EMAIL,
+        phone: PLAYER_PHONE,
+        emailConfirmed: false,
+        phoneConfirmed: false,
+        metadata: { phone: PLAYER_PHONE, ...stored },
+      };
     },
     async ensurePlayerAccount(accessToken) {
       ensureTokens.push(accessToken);
@@ -128,6 +141,16 @@ function createPlayerPorts(init?: {
         status: 'active',
         publicId: '110790',
       };
+    },
+    async savePlayerProfile(accessToken, fields) {
+      profileSaves.push({ token: accessToken, fields: { ...fields } });
+      profileByToken.set(accessToken, {
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        middleName: fields.middleName,
+        birthDate: fields.birthDate,
+        passport: fields.passport,
+      });
     },
     async signOut() {
       signOuts += 1;
@@ -328,6 +351,9 @@ describe('player same-origin auth gateway', () => {
       'src/lib/playerAuth.ts',
       'src/lib/playerWallet.ts',
       'src/hooks/useAuth.ts',
+      'src/ProfileContext.tsx',
+      'src/screens/MenuScreen.tsx',
+      'src/screens/PersonalDataScreen.tsx',
     ];
     for (const rel of files) {
       const source = readFileSync(join(root, rel), 'utf8');
@@ -338,5 +364,76 @@ describe('player same-origin auth gateway', () => {
     }
     const plugin = readFileSync(join(root, 'plugins/owner-staff-onboarding.ts'), 'utf8');
     assert.match(plugin, /attachPlayerAuthHttp/);
+  });
+
+  it('new player profile starts empty and is scoped to the JWT session', async () => {
+    const ports = createPlayerPorts();
+    const empty = await handlePlayerAuthRequest(
+      {
+        method: 'GET',
+        pathname: PLAYER_PROFILE_PATH,
+        cookie: playerCookieHeader(ACCESS, REFRESH),
+        cookieSecure: true,
+      },
+      ports,
+    );
+    assert.equal(empty.status, 200);
+    const emptyProfile = empty.body.profile as Record<string, unknown>;
+    assert.equal(emptyProfile.firstName, '');
+    assert.equal(emptyProfile.lastName, '');
+    assert.equal(emptyProfile.middleName, '');
+    assert.equal(emptyProfile.birthDate, '');
+    assert.equal(emptyProfile.passport, '');
+    assert.equal(emptyProfile.phone, PLAYER_PHONE);
+    assert.equal(emptyProfile.email, PLAYER_EMAIL);
+    assert.equal(emptyProfile.emailVerified, false);
+    assert.equal(emptyProfile.phoneVerified, false);
+    assert.equal(jsonHasSecrets(empty.body as Record<string, unknown>, [ACCESS, REFRESH, WALLET_UUID]), false);
+
+    const saved = await handlePlayerAuthRequest(
+      {
+        method: 'PUT',
+        pathname: PLAYER_PROFILE_PATH,
+        cookie: playerCookieHeader(ACCESS, REFRESH),
+        cookieSecure: true,
+        body: {
+          firstName: 'Азиз',
+          lastName: 'Бердиев',
+          middleName: '',
+          birthDate: '1995-01-02',
+          passport: 'AB1234567',
+          userId: 'other-user',
+          profileId: 'other-profile',
+          walletId: WALLET_UUID,
+        },
+      },
+      ports,
+    );
+    assert.equal(saved.status, 200);
+    const profile = saved.body.profile as Record<string, unknown>;
+    assert.equal(profile.firstName, 'Азиз');
+    assert.equal(profile.lastName, 'Бердиев');
+    assert.deepEqual(ports.profileSaves, [{
+      token: ACCESS,
+      fields: {
+        firstName: 'Азиз',
+        lastName: 'Бердиев',
+        middleName: '',
+        birthDate: '1995-01-02',
+        passport: 'AB1234567',
+      },
+    }]);
+    assert.equal(jsonHasSecrets(saved.body as Record<string, unknown>, [WALLET_UUID, 'other-user', ACCESS]), false);
+    assert.equal('userId' in saved.body, false);
+    assert.equal('walletId' in saved.body, false);
+  });
+
+  it('GET /api/player/profile requires a session', async () => {
+    const missing = await handlePlayerAuthRequest(
+      { method: 'GET', pathname: PLAYER_PROFILE_PATH, cookieSecure: true },
+      createPlayerPorts(),
+    );
+    assert.equal(missing.status, 401);
+    assert.equal(missing.body.authenticated, false);
   });
 });

@@ -25,6 +25,7 @@ const RUNTIME_GRAPH = [
   'api/player/auth/logout.ts',
   'api/player/me.ts',
   'api/player/wallet.ts',
+  'api/player/profile.ts',
   'api/owner/dashboard.ts',
   'api/owner/me.ts',
   'api/owner/cashiers.ts',
@@ -161,6 +162,7 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/player/auth/logout.js',
         'api/player/me.js',
         'api/player/wallet.js',
+        'api/player/profile.js',
       ];
       const controlEntries = [
         'api/owner/dashboard.js',

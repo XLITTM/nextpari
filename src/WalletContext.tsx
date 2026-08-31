@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { fetchPlayerMe } from './lib/playerAuth';
+import { fetchPlayerMe, walletViewFromSnapshot } from './lib/playerAuth';
 import { useUserStore } from './stores/userStore';
 
 interface WalletContextValue {
@@ -27,21 +27,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const snapshot = await fetchPlayerMe();
-      if (!snapshot?.authenticated) {
-        setBalance(0);
-        setPublicId(null);
-        setAvailable(false);
-        setError(null);
+      const next = walletViewFromSnapshot(snapshot);
+      setBalance(next.balance);
+      setPublicId(next.publicId);
+      setAvailable(next.available);
+      setError(next.error);
+      if (!next.available) {
         resetUser();
         return;
       }
-      setPublicId(snapshot.player.publicId);
-      setBalance(snapshot.wallet.balance);
-      setAvailable(true);
-      setError(null);
       hydrate({
-        publicId: snapshot.player.publicId,
-        balance: snapshot.wallet.balance,
+        publicId: next.publicId ?? '',
+        balance: next.balance,
         walletId: null,
       });
     } catch (err) {
@@ -76,5 +73,5 @@ export function useWallet() {
 export function formatPlayerMoney(balance: number, available: boolean, loading?: boolean): string {
   if (loading) return '…';
   if (!available) return 'недоступен';
-  return `${balance.toLocaleString('ru-RU')} TMTM`;
+  return `${Number(balance).toLocaleString('ru-RU')} TMTM`;
 }

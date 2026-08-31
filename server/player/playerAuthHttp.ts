@@ -12,8 +12,10 @@ import {
   livePlayerAuthPorts,
   loginPlayerWithPassword,
   logoutPlayerSession,
+  readPlayerProfileSession,
   readPlayerSession,
   registerPlayerWithPassword,
+  updatePlayerProfileSession,
   type PlayerAuthGatewayPorts,
   type PlayerAuthHttpResult,
 } from './playerAuthService.js';
@@ -25,6 +27,7 @@ export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
 export const PLAYER_AUTH_LOGOUT_PATH = '/api/player/auth/logout';
 export const PLAYER_ME_PATH = '/api/player/me';
 export const PLAYER_WALLET_PATH = '/api/player/wallet';
+export const PLAYER_PROFILE_PATH = '/api/player/profile';
 
 function normalizePath(pathname: string): string {
   return pathname.replace(/\/$/, '') || '/';
@@ -36,8 +39,9 @@ export function isPlayerAuthPath(pathname: string): boolean {
     path === PLAYER_AUTH_REGISTER_PATH
     || path === PLAYER_AUTH_LOGIN_PATH
     || path === PLAYER_AUTH_LOGOUT_PATH
-    || path === PLAYER_ME_PATH
+    ||     path === PLAYER_ME_PATH
     || path === PLAYER_WALLET_PATH
+    || path === PLAYER_PROFILE_PATH
   );
 }
 
@@ -112,6 +116,15 @@ export async function handlePlayerAuthRequest(
       }
       return readPlayerSession(ports, input.cookie, secure);
     }
+    if (path === PLAYER_PROFILE_PATH) {
+      if (method === 'GET') {
+        return readPlayerProfileSession(ports, input.cookie, secure);
+      }
+      if (method === 'PUT') {
+        return updatePlayerProfileSession(ports, input.cookie, asRecord(parseJsonPayload(input.body)), secure);
+      }
+      throw staffError('METHOD_NOT_ALLOWED', 405);
+    }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {
     if (error instanceof StaffOnboardingError) {
@@ -119,7 +132,13 @@ export async function handlePlayerAuthRequest(
         status: error.httpStatus,
         body: { ok: false, authenticated: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405
-          ? { Allow: path === PLAYER_ME_PATH || path === PLAYER_WALLET_PATH ? 'GET' : 'POST' }
+          ? {
+            Allow: path === PLAYER_PROFILE_PATH
+              ? 'GET, PUT'
+              : path === PLAYER_ME_PATH || path === PLAYER_WALLET_PATH
+                ? 'GET'
+                : 'POST',
+          }
           : undefined,
       };
     }
@@ -148,7 +167,7 @@ export async function attachPlayerAuthHttp(
   if (!isPlayerAuthPath(pathname)) return false;
   try {
     const method = req.method ?? 'GET';
-    const body = method === 'GET' ? {} : await readJsonBody(req);
+    const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
     const result = await handlePlayerAuthRequest(
       {
         method,

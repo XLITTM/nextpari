@@ -3,7 +3,7 @@ import { Eye, EyeOff, Mail, Phone, Lock, Check } from 'lucide-react';
 import { signInPlayer, signUpPlayer } from '../lib/playerAuth';
 
 interface AuthScreenProps {
-  onAuthSuccess: () => void;
+  onAuthSuccess: () => void | Promise<void>;
 }
 
 export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
@@ -29,7 +29,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         setError('invalid credentials');
         return;
       }
-      onAuthSuccess();
+      await onAuthSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'invalid credentials');
     } finally {
@@ -56,7 +56,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         setTab('login');
         return;
       }
-      onAuthSuccess();
+      await onAuthSuccess();
     } catch (err) {
       const message = err instanceof Error ? err.message : 'invalid credentials';
       if (message === 'email confirmation required') {

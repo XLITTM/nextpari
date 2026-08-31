@@ -6,14 +6,21 @@ import { fileURLToPath } from 'node:url';
 import {
   clearDemoPlayerState,
   fetchPlayerMe,
+  fetchPlayerProfile,
+  isPlayerProfileComplete,
   mapPlayerAuthError,
+  playerDisplayName,
+  savePlayerProfile,
   signInPlayer,
   signOutPlayer,
   signUpPlayer,
   validatePlayerEmail,
   validatePlayerPassword,
   validatePlayerPhone,
+  walletViewFromSnapshot,
+  EMPTY_PLAYER_PROFILE,
 } from './playerAuth';
+import { formatPlayerMoney } from '../WalletContext';
 import { bootstrapGuestSession, isAuthenticatedSession } from '../hooks/useAuth';
 import {
   CANONICAL_GAMES_WAGER_ENABLED,
@@ -59,7 +66,10 @@ const playerMoneyFiles = [
 const sameOriginPlayerFiles = [
   'App.tsx',
   'screens/AuthScreen.tsx',
+  'screens/MenuScreen.tsx',
+  'screens/PersonalDataScreen.tsx',
   'WalletContext.tsx',
+  'ProfileContext.tsx',
   'lib/playerAuth.ts',
   'lib/playerWallet.ts',
   'hooks/useAuth.ts',
@@ -417,6 +427,125 @@ describe('player money source scans', () => {
     assert.match(menu, /недоступен|formatPlayerMoney|balanceLabel/);
     assert.equal(menu.includes('DEMO_PUBLIC_ID'), false);
     assert.equal(read('lib/siteMessages.ts').includes('729767'), false);
+  });
+});
+
+describe('new player profile onboarding', () => {
+  it('new player shows Новый игрок and never Wiktoriya Sarkisyan', () => {
+    const menu = read('screens/MenuScreen.tsx');
+    assert.equal(menu.includes('Wiktoriya Sarkisyan'), false);
+    assert.equal(menu.includes('Wiktoriya'), false);
+    assert.match(menu, /playerDisplayName/);
+    assert.match(menu, /ID:/);
+    assert.match(menu, /Заполнить профиль/);
+    assert.equal(playerDisplayName({ first_name: '', last_name: '' }), 'Новый игрок');
+    assert.equal(playerDisplayName({ firstName: '', lastName: '' }), 'Новый игрок');
+    assert.equal(playerDisplayName({ first_name: 'Азиз', last_name: 'Бердиев' }), 'Азиз Бердиев');
+  });
+
+  it('zero balance renders 0 TMTM and 401 does not poison wallet state', () => {
+    assert.equal(formatPlayerMoney(0, true, false), '0 TMTM');
+    assert.equal(formatPlayerMoney(0, false, false), 'недоступен');
+    const idle = walletViewFromSnapshot(null);
+    assert.equal(idle.available, false);
+    assert.equal(idle.error, null);
+    assert.equal(idle.balance, 0);
+    assert.equal(idle.publicId, null);
+    const ready = walletViewFromSnapshot({
+      authenticated: true,
+      player: { publicId: '110790', email: 'player@nextpari.test' },
+      wallet: { balance: 0, currency: 'TMTM', status: 'active', migrationState: 'active' },
+      profile: EMPTY_PLAYER_PROFILE,
+    });
+    assert.equal(ready.available, true);
+    assert.equal(ready.balance, 0);
+    assert.equal(ready.publicId, '110790');
+    assert.equal(formatPlayerMoney(ready.balance, ready.available, false), '0 TMTM');
+  });
+
+  it('wallet and profile refresh after login and register', () => {
+    const app = read('App.tsx');
+    const auth = read('screens/AuthScreen.tsx');
+    assert.match(app, /refreshWallet/);
+    assert.match(app, /refreshProfile/);
+    assert.match(app, /await Promise\.all\(\[refreshWallet\(\), refreshProfile\(\)\]\)/);
+    assert.match(auth, /await onAuthSuccess\(\)/);
+    assert.match(auth, /signInPlayer/);
+    assert.match(auth, /signUpPlayer/);
+  });
+
+  it('profile starts empty and save is scoped to the current session', async () => {
+    assert.equal(EMPTY_PLAYER_PROFILE.firstName, '');
+    assert.equal(EMPTY_PLAYER_PROFILE.lastName, '');
+    assert.equal(isPlayerProfileComplete(EMPTY_PLAYER_PROFILE), false);
+    const calls: Array<{ url: string; method: string; body?: Record<string, unknown> }> = [];
+    const restore = mockFetch(async (input, init) => {
+      const method = String(init?.method ?? 'GET');
+      const body = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : undefined;
+      calls.push({ url: String(input), method, body });
+      if (method === 'GET') {
+        return jsonResponse(401, { ok: false, authenticated: false, error: 'JWT_REQUIRED' });
+      }
+      return jsonResponse(200, {
+        ok: true,
+        authenticated: true,
+        player: { publicId: '110790', email: 'player@nextpari.test' },
+        profile: {
+          firstName: 'Азиз',
+          lastName: 'Бердиев',
+          middleName: '',
+          birthDate: '1995-01-02',
+          passport: 'AB1234567',
+          phone: '+99365123456',
+          email: 'player@nextpari.test',
+          phoneVerified: false,
+          emailVerified: false,
+        },
+      });
+    });
+    try {
+      assert.equal(await fetchPlayerProfile(), null);
+      const saved = await savePlayerProfile({
+        firstName: 'Азиз',
+        lastName: 'Бердиев',
+        middleName: '',
+        birthDate: '1995-01-02',
+        passport: 'AB1234567',
+      });
+      assert.equal(playerDisplayName(saved), 'Азиз Бердиев');
+      assert.equal(saved.phoneVerified, false);
+      assert.deepEqual(calls[0], { url: '/api/player/profile', method: 'GET', body: undefined });
+      assert.equal(calls[1]?.url, '/api/player/profile');
+      assert.equal(calls[1]?.method, 'PUT');
+      assert.deepEqual(calls[1]?.body, {
+        firstName: 'Азиз',
+        lastName: 'Бердиев',
+        middleName: '',
+        birthDate: '1995-01-02',
+        passport: 'AB1234567',
+      });
+      assert.equal(calls[1]?.body && 'userId' in calls[1].body, false);
+      assert.equal(calls[1]?.body && 'walletId' in calls[1].body, false);
+      assert.equal(calls[1]?.body && 'profileId' in calls[1].body, false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('has no fake OTP verification and no local identity', () => {
+    const personal = read('screens/PersonalDataScreen.tsx');
+    const profile = read('ProfileContext.tsx');
+    const menu = read('screens/MenuScreen.tsx');
+    assert.equal(personal.includes('setTimeout'), false);
+    assert.equal(personal.includes('Сохранение временно недоступно'), false);
+    assert.equal(personal.includes('Код из SMS'), false);
+    assert.equal(personal.includes('Код из письма'), false);
+    assert.match(personal, /save\(/);
+    assert.match(profile, /savePlayerProfile|save\(/);
+    assert.match(profile, /fetchPlayerProfile/);
+    assert.equal(profile.includes('localStorage'), false);
+    assert.equal(menu.includes('localStorage'), false);
+    assert.equal(read('lib/playerAuth.ts').includes('userId'), false);
   });
 });
 

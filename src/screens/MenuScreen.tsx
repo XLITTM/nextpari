@@ -12,6 +12,8 @@ import { IconCasino, IconEsports, IconGames, IconSport } from '../components/Sec
 import { InboxModal } from '../components/InboxModal';
 import { countUnreadForPlayer, subscribeSiteMessages } from '../lib/siteMessages';
 import { formatPlayerMoney, useWallet } from '../WalletContext';
+import { useProfile } from '../ProfileContext';
+import { playerDisplayName } from '../lib/playerAuth';
 import type { Screen } from '../types';
 
 interface MenuScreenProps {
@@ -109,7 +111,9 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { publicId, available, loading } = useWallet();
+  const { personalData } = useProfile();
   const playerId = publicId || '';
+  const displayName = playerDisplayName(personalData);
   const moneyLabel = balanceLabel ?? formatPlayerMoney(balance, available, loading);
 
   useEffect(() => {
@@ -132,12 +136,15 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
             <User className="w-7 h-7 text-gray-500 dark:text-gray-200" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-base font-bold text-gray-900 dark:text-white truncate">Wiktoriya Sarkisyan</p>
+            <p className="text-base font-bold text-gray-900 dark:text-white truncate">{displayName}</p>
+            {playerId ? (
+              <p className="text-xs text-gray-500 dark:text-gray-300 mt-0.5 font-semibold">ID: {playerId}</p>
+            ) : null}
             <button
               onClick={() => onNavigate({ name: 'personal-data' })}
               className="text-xs text-brand-600 dark:text-brand-400 mt-0.5 font-semibold active:scale-95 transition-transform"
             >
-              Личные данные →
+              Заполнить профиль →
             </button>
           </div>
           <button
