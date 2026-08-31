@@ -12,7 +12,7 @@
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
     "worker": "tsx --env-file=.env --tsconfig tsconfig.app.json scripts/run-sports-worker.ts",
     "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts server/staff/esmImportSmoke.test.ts",
-    "owner:auth:test": "tsx --test src/owner/auth/ownerAuth.test.ts"
+    "owner:auth:test": "tsx --tsconfig tsconfig.server.json --test src/owner/auth/ownerAuth.test.ts server/staff/ownerAuthGateway.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

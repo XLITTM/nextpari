@@ -11,8 +11,15 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const RUNTIME_GRAPH = [
   'api/owner/staff/manager.ts',
   'api/owner/staff/cashier.ts',
+  'api/owner/auth/login.ts',
+  'api/owner/auth/session.ts',
+  'api/owner/auth/logout.ts',
   'server/staff/vercelHandler.ts',
   'server/staff/httpHandler.ts',
+  'server/staff/ownerAuthHttp.ts',
+  'server/staff/ownerAuthService.ts',
+  'server/staff/ownerCookies.ts',
+  'server/staff/ownerContext.ts',
   'server/staff/staffOnboardingService.ts',
   'server/staff/staffAuthAdmin.ts',
   'server/staff/env.ts',
@@ -36,6 +43,7 @@ describe('staff onboarding Node ESM import graph', () => {
   it('runtime sources use explicit .js relative specifiers', () => {
     const files = [
       ...listTsFiles(join(root, 'api/owner/staff')),
+      ...listTsFiles(join(root, 'api/owner/auth')),
       ...listTsFiles(join(root, 'server/staff')),
       join(root, 'server/supabase/admin.ts'),
     ].filter((path) => !path.endsWith('.test.ts'));
@@ -73,14 +81,17 @@ describe('staff onboarding Node ESM import graph', () => {
         writeFileSync(outFile, outputText);
       }
 
-      for (const entry of ['manager.js', 'cashier.js']) {
-        const compiled = readFileSync(join(outDir, 'api/owner/staff', entry), 'utf8');
+      const staffEntries = ['api/owner/staff/manager.js', 'api/owner/staff/cashier.js'];
+      const authEntries = ['api/owner/auth/login.js', 'api/owner/auth/session.js', 'api/owner/auth/logout.js'];
+
+      for (const rel of staffEntries) {
+        const compiled = readFileSync(join(outDir, rel), 'utf8');
         assert.match(compiled, /from ['"]\.\.\/\.\.\/\.\.\/server\/staff\/httpHandler\.js['"]/);
         assert.match(compiled, /from ['"]\.\.\/\.\.\/\.\.\/server\/staff\/vercelHandler\.js['"]/);
-        assert.equal(compiled.includes("from '../../../server/staff/httpHandler';"), false);
-        assert.equal(compiled.includes("from '../../../server/staff/vercelHandler';"), false);
+      }
 
-        const fileUrl = pathToFileURL(join(outDir, 'api/owner/staff', entry)).href;
+      for (const rel of [...staffEntries, ...authEntries]) {
+        const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,
           ['--input-type=module', '-e', `await import(${JSON.stringify(fileUrl)})`],
@@ -89,7 +100,7 @@ describe('staff onboarding Node ESM import graph', () => {
         assert.equal(
           loaded.status,
           0,
-          `${entry} failed to load:\n${loaded.stdout}\n${loaded.stderr}`,
+          `${rel} failed to load:\n${loaded.stdout}\n${loaded.stderr}`,
         );
         assert.equal(loaded.stderr.includes('ERR_MODULE_NOT_FOUND'), false, loaded.stderr);
       }

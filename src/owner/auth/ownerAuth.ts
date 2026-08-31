@@ -1,3 +1,6 @@
+export const OWNER_AUTH_LOGIN_PATH = '/api/owner/auth/login';
+export const OWNER_AUTH_SESSION_PATH = '/api/owner/auth/session';
+export const OWNER_AUTH_LOGOUT_PATH = '/api/owner/auth/logout';
 export const OWNER_AUTH_STORAGE_KEY = 'nextpari-owner-auth-v1';
 export const LEGACY_OWNER_SESSION_KEY = 'nextpari-owner-session';
 export const LEGACY_BACKOFFICE_SESSION_KEY = 'nextpari-backoffice-session';
@@ -10,18 +13,14 @@ export interface OwnerStaffContext {
   networkId: string | null;
 }
 
-export interface OwnerAuthSession {
-  access_token: string;
+export interface OwnerGatewayResponse {
+  ok: boolean;
+  staff?: OwnerStaffContext;
+  error?: string;
 }
 
-export interface OwnerAuthPorts {
-  signInWithPassword: (input: {
-    email: string;
-    password: string;
-  }) => Promise<{ session: OwnerAuthSession | null; error: { message?: string } | null }>;
-  signOut: () => Promise<void>;
-  getSession: () => Promise<OwnerAuthSession | null>;
-  currentStaffContext: () => Promise<unknown>;
+export interface OwnerAuthFetch {
+  (input: string, init?: RequestInit): Promise<Response>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -31,13 +30,24 @@ function asRecord(value: unknown): Record<string, unknown> {
   return {};
 }
 
-function firstRow(data: unknown): Record<string, unknown> {
-  if (Array.isArray(data)) return asRecord(data[0]);
-  return asRecord(data);
+export function parseOwnerStaffJson(raw: unknown): OwnerStaffContext | null {
+  const rec = asRecord(Array.isArray(raw) ? raw[0] : raw);
+  if (rec.role !== 'owner' || rec.status !== 'active') return null;
+  const authUserId = String(rec.authUserId ?? rec.auth_user_id ?? '');
+  if (!authUserId) return null;
+  return {
+    authUserId,
+    role: 'owner',
+    status: 'active',
+    displayName: String(rec.displayName ?? rec.display_name ?? ''),
+    networkId: rec.networkId == null && rec.network_id == null
+      ? null
+      : String(rec.networkId ?? rec.network_id),
+  };
 }
 
 export function assertActiveOwnerContext(raw: unknown): OwnerStaffContext {
-  const rec = firstRow(raw);
+  const rec = asRecord(Array.isArray(raw) ? raw[0] : raw);
   const role = String(rec.role ?? '');
   const status = String(rec.status ?? '');
   if (role !== 'owner') {
@@ -46,71 +56,76 @@ export function assertActiveOwnerContext(raw: unknown): OwnerStaffContext {
   if (status !== 'active') {
     throw new Error(status === 'blocked' ? 'STAFF_ACCOUNT_BLOCKED' : 'STAFF_ACCOUNT_DISABLED');
   }
-  const authUserId = String(rec.auth_user_id ?? rec.authUserId ?? '');
-  if (!authUserId) throw new Error('STAFF_ACCOUNT_NOT_FOUND');
+  const parsed = parseOwnerStaffJson(rec);
+  if (!parsed) throw new Error('STAFF_ACCOUNT_NOT_FOUND');
+  return parsed;
+}
+
+export function ownerAuthErrorMessage(code: string): string {
+  if (code.includes('STAFF_ACCOUNT_NOT_FOUND')) return 'Доступ запрещён: сотрудник не найден';
+  if (code.includes('OWNER_REQUIRED')) return 'Доступ запрещён: требуется роль владельца';
+  if (code.includes('STAFF_ACCOUNT_BLOCKED')) return 'Доступ запрещён: аккаунт заблокирован';
+  if (code.includes('STAFF_ACCOUNT_DISABLED')) return 'Доступ запрещён: аккаунт отключён';
+  if (code === 'EMAIL_PASSWORD_REQUIRED') return 'Введите email и пароль';
+  if (code === 'AUTH_FAILED' || code.toLowerCase().includes('invalid login')) {
+    return 'Неверный email или пароль';
+  }
+  return code || 'Доступ запрещён';
+}
+
+async function readJson(res: Response): Promise<OwnerGatewayResponse> {
+  const raw = await res.json().catch(() => ({}));
+  const rec = asRecord(raw);
   return {
-    authUserId,
-    role: 'owner',
-    status: 'active',
-    displayName: String(rec.display_name ?? rec.displayName ?? ''),
-    networkId: rec.network_id == null && rec.networkId == null
-      ? null
-      : String(rec.network_id ?? rec.networkId),
+    ok: rec.ok === true,
+    staff: parseOwnerStaffJson(rec.staff) ?? undefined,
+    error: rec.error == null ? undefined : String(rec.error),
   };
 }
 
-export function accessTokenOf(session: OwnerAuthSession | null | undefined): string | null {
-  const token = session?.access_token?.trim() ?? '';
-  return token || null;
-}
-
-export async function authenticateOwnerWithPassword(
-  ports: OwnerAuthPorts,
+export async function loginOwnerViaGateway(
+  fetchFn: OwnerAuthFetch,
   email: string,
   password: string,
-): Promise<{ accessToken: string; staff: OwnerStaffContext }> {
-  const trimmedEmail = email.trim();
-  if (!trimmedEmail || !password) {
+): Promise<OwnerStaffContext> {
+  const trimmed = email.trim();
+  if (!trimmed || !password) {
     throw new Error('EMAIL_PASSWORD_REQUIRED');
   }
-  const { session, error } = await ports.signInWithPassword({
-    email: trimmedEmail,
-    password,
+  const res = await fetchFn(OWNER_AUTH_LOGIN_PATH, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: trimmed, password }),
   });
-  if (error) {
-    throw new Error(error.message || 'AUTH_FAILED');
+  const payload = await readJson(res);
+  if (!res.ok || !payload.ok || !payload.staff) {
+    throw new Error(payload.error || 'AUTH_FAILED');
   }
-  const accessToken = accessTokenOf(session);
-  if (!accessToken) {
-    await ports.signOut();
-    throw new Error('SESSION_NOT_CREATED');
-  }
-  try {
-    const staff = assertActiveOwnerContext(await ports.currentStaffContext());
-    return { accessToken, staff };
-  } catch (err) {
-    await ports.signOut();
-    throw err;
-  }
+  return payload.staff;
 }
 
-export async function restoreOwnerStaffSession(
-  ports: OwnerAuthPorts,
-): Promise<{ accessToken: string; staff: OwnerStaffContext } | null> {
-  const session = await ports.getSession();
-  const accessToken = accessTokenOf(session);
-  if (!accessToken) return null;
-  try {
-    const staff = assertActiveOwnerContext(await ports.currentStaffContext());
-    return { accessToken, staff };
-  } catch (err) {
-    await ports.signOut();
-    throw err;
+export async function restoreOwnerViaGateway(
+  fetchFn: OwnerAuthFetch,
+): Promise<OwnerStaffContext | null> {
+  const res = await fetchFn(OWNER_AUTH_SESSION_PATH, {
+    method: 'GET',
+    credentials: 'include',
+  });
+  if (res.status === 401) return null;
+  const payload = await readJson(res);
+  if (!res.ok || !payload.ok || !payload.staff) {
+    if (res.status === 403) throw new Error(payload.error || 'OWNER_REQUIRED');
+    return null;
   }
+  return payload.staff;
 }
 
-export async function signOutOwner(ports: OwnerAuthPorts): Promise<void> {
-  await ports.signOut();
+export async function logoutOwnerViaGateway(fetchFn: OwnerAuthFetch): Promise<void> {
+  await fetchFn(OWNER_AUTH_LOGOUT_PATH, {
+    method: 'POST',
+    credentials: 'include',
+  });
 }
 
 export function clearOwnerAuthStorage(storage: {
@@ -119,11 +134,4 @@ export function clearOwnerAuthStorage(storage: {
   storage.removeItem(OWNER_AUTH_STORAGE_KEY);
   storage.removeItem(LEGACY_OWNER_SESSION_KEY);
   storage.removeItem(LEGACY_BACKOFFICE_SESSION_KEY);
-}
-
-export function ownerPortalUsesPlayerStorage(
-  ownerKey: string,
-  playerKey: string,
-): boolean {
-  return ownerKey === playerKey;
 }

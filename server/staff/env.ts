@@ -10,13 +10,16 @@ function requireEnv(name: string): string {
   return value;
 }
 
-export interface StaffOnboardingEnv {
+export interface OwnerAuthEnv {
   supabaseUrl: string;
   supabaseAnonKey: string;
+}
+
+export interface StaffOnboardingEnv extends OwnerAuthEnv {
   supabaseServiceRoleKey: string;
 }
 
-export function loadStaffOnboardingEnv(): StaffOnboardingEnv {
+export function loadOwnerAuthEnv(): OwnerAuthEnv {
   if (readEnv('VITE_SUPABASE_SERVICE_ROLE_KEY')) {
     throw new Error('VITE_SUPABASE_SERVICE_ROLE_KEY_FORBIDDEN');
   }
@@ -31,9 +34,13 @@ export function loadStaffOnboardingEnv(): StaffOnboardingEnv {
     throw new Error('SUPABASE_ANON_KEY_REQUIRED');
   }
 
+  return { supabaseUrl, supabaseAnonKey };
+}
+
+export function loadStaffOnboardingEnv(): StaffOnboardingEnv {
+  const auth = loadOwnerAuthEnv();
   return {
-    supabaseUrl,
-    supabaseAnonKey,
+    ...auth,
     supabaseServiceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   };
 }

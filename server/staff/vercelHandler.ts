@@ -9,6 +9,7 @@ import {
   type StaffHttpPortsFactory,
   type StaffJsonResponse,
 } from './httpHandler.js';
+import { requestIsSecure } from './ownerCookies.js';
 import type { StaffLog } from './types.js';
 
 export interface VercelStaffRequest {
@@ -38,6 +39,8 @@ export async function handleVercelOwnerStaff(
         method: req.method ?? 'GET',
         pathname,
         authorization: headerValue(req.headers, 'authorization'),
+        cookie: headerValue(req.headers, 'cookie'),
+        cookieSecure: requestIsSecure(req.headers),
         body,
       },
       portsFactory,

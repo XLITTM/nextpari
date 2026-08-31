@@ -1,7 +1,4 @@
-import {
-  OWNER_STAFF_CASHIER_PATH,
-} from '../../../server/staff/httpHandler.js';
-import { handleVercelOwnerStaff } from '../../../server/staff/vercelHandler.js';
+import { handleVercelOwnerAuth, OWNER_AUTH_LOGOUT_PATH } from '../../../server/staff/ownerAuthHttp.js';
 
 export default async function handler(
   req: {
@@ -16,5 +13,5 @@ export default async function handler(
     json: (body: unknown) => unknown;
   },
 ): Promise<void> {
-  await handleVercelOwnerStaff(req, res, OWNER_STAFF_CASHIER_PATH);
+  await handleVercelOwnerAuth(req, res, OWNER_AUTH_LOGOUT_PATH);
 }

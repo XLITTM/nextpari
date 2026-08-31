@@ -12,7 +12,7 @@ export default async function handler(
   },
   res: {
     status: (code: number) => unknown;
-    setHeader: (name: string, value: string) => unknown;
+    setHeader: (name: string, value: string | string[]) => unknown;
     json: (body: unknown) => unknown;
   },
 ): Promise<void> {

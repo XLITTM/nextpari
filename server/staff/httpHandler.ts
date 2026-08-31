@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StaffOnboardingError, redactForLog, staffError } from './errors.js';
 import { loadStaffOnboardingEnv } from './env.js';
+import { liveOwnerAuthPorts, resolveOwnerSession, type OwnerAuthGatewayPorts } from './ownerAuthService.js';
+import { clearOwnerCookies, readOwnerCookies, requestIsSecure } from './ownerCookies.js';
 import { createLiveStaffPorts } from './staffAuthAdmin.js';
 import { onboardStaff } from './staffOnboardingService.js';
 import type { AuthAdminPort, OwnerStaffPort, StaffLog, StaffOnboardRole } from './types.js';
@@ -18,13 +20,14 @@ export interface StaffHttpResult {
   status: number;
   body: Record<string, unknown>;
   headers?: Record<string, string>;
+  cookies?: string[];
 }
 
 export type StaffJsonResponse = {
   writableEnded?: boolean;
   statusCode?: number;
   status?: (code: number) => unknown;
-  setHeader: (name: string, value: string) => unknown;
+  setHeader: (name: string, value: string | string[]) => unknown;
   json?: (body: unknown) => unknown;
   end?: (chunk?: string) => unknown;
 };
@@ -133,6 +136,9 @@ export function writeStaffJson(res: StaffJsonResponse, result: StaffHttpResult):
   for (const [name, value] of Object.entries(headers)) {
     res.setHeader(name, value);
   }
+  if (result.cookies?.length) {
+    res.setHeader('Set-Cookie', result.cookies);
+  }
   if (typeof res.json === 'function') {
     res.json(result.body);
     return;
@@ -160,10 +166,13 @@ export async function handleOwnerStaffRequest(
     method: string;
     pathname: string;
     authorization: string | undefined;
+    cookie?: string;
+    cookieSecure?: boolean;
     body: unknown;
   },
   portsFactory: StaffHttpPortsFactory,
   log: StaffLog = staffHttpLog,
+  sessionPorts?: OwnerAuthGatewayPorts,
 ): Promise<StaffHttpResult> {
   try {
     if (input.method !== 'POST') {
@@ -173,7 +182,23 @@ export async function handleOwnerStaffRequest(
     if (!role) {
       throw staffError('NOT_FOUND', 404);
     }
-    const accessToken = readBearerToken(input.authorization);
+    let accessToken: string;
+    let sessionCookies: string[] | undefined;
+    if (input.authorization) {
+      accessToken = readBearerToken(input.authorization);
+    } else {
+      const pair = readOwnerCookies(input.cookie);
+      if (!pair.accessToken && !pair.refreshToken) {
+        throw staffError('JWT_REQUIRED', 401);
+      }
+      const resolved = await resolveOwnerSession(
+        sessionPorts ?? liveOwnerAuthPorts(),
+        input.cookie,
+        input.cookieSecure === true,
+      );
+      accessToken = resolved.accessToken;
+      sessionCookies = resolved.cookies;
+    }
     const body = asRecord(input.body);
     const ports = portsFactory(accessToken);
     const result = await onboardStaff(
@@ -188,13 +213,16 @@ export async function handleOwnerStaffRequest(
       ports,
       log,
     );
-    return { status: 200, body: { ...result } };
+    return { status: 200, body: { ...result }, cookies: sessionCookies };
   } catch (error) {
     if (error instanceof StaffOnboardingError) {
       return {
         status: error.httpStatus,
         body: errorBody(error),
         headers: resultHeaders(error),
+        cookies: error.httpStatus === 401 && input.cookie
+          ? clearOwnerCookies(input.cookieSecure === true)
+          : undefined,
       };
     }
     log.error('staff_onboarding_unhandled', {
@@ -223,11 +251,14 @@ export async function attachOwnerStaffHttp(
     const body = await readJsonBody(req);
     const header = req.headers.authorization;
     const authorization = Array.isArray(header) ? header[0] : header;
+    const cookieHeader = req.headers.cookie;
     const result = await handleOwnerStaffRequest(
       {
         method: req.method ?? 'GET',
         pathname,
         authorization,
+        cookie: Array.isArray(cookieHeader) ? cookieHeader.join('; ') : cookieHeader,
+        cookieSecure: requestIsSecure(req.headers),
         body,
       },
       livePortsFactory,

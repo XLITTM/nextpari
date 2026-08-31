@@ -1,5 +1,22 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
+export function createAnonAuthClient(url: string, anonKey: string): SupabaseClient {
+  if (!url.trim()) {
+    throw new Error('SUPABASE_URL_REQUIRED');
+  }
+  if (!anonKey.trim()) {
+    throw new Error('SUPABASE_ANON_KEY_REQUIRED');
+  }
+
+  return createClient(url, anonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
 export function createServiceRoleClient(url: string, serviceRoleKey: string): SupabaseClient {
   if (!url.trim()) {
     throw new Error('SUPABASE_URL_REQUIRED');

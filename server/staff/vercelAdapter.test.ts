@@ -34,8 +34,8 @@ function createRes() {
       statusCode = code;
       return this;
     },
-    setHeader(name: string, value: string) {
-      headers[name.toLowerCase()] = value;
+    setHeader(name: string, value: string | string[]) {
+      headers[name.toLowerCase()] = Array.isArray(value) ? value.join(', ') : value;
     },
     json(payload: unknown) {
       body = payload as Record<string, unknown>;

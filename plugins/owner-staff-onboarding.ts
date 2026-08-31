@@ -1,10 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin, ViteDevServer } from 'vite';
+import { attachOwnerAuthHttp } from '../server/staff/ownerAuthHttp';
 import { attachOwnerStaffHttp } from '../server/staff/httpHandler';
 
 function attachOwnerStaff(server: ViteDevServer) {
   server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    void attachOwnerStaffHttp(req, res)
+    void attachOwnerAuthHttp(req, res)
+      .then((handledAuth) => {
+        if (handledAuth) return true;
+        return attachOwnerStaffHttp(req, res);
+      })
       .then((handled) => {
         if (!handled) next();
       })
