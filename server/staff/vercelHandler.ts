@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
-import { StaffOnboardingError } from './errors';
+import { StaffOnboardingError } from './errors.js';
 import {
   handleOwnerStaffRequest,
   livePortsFactory,
@@ -8,8 +8,8 @@ import {
   writeStaffJson,
   type StaffHttpPortsFactory,
   type StaffJsonResponse,
-} from './httpHandler';
-import type { StaffLog } from './types';
+} from './httpHandler.js';
+import type { StaffLog } from './types.js';
 
 export interface VercelStaffRequest {
   method?: string;

@@ -6,9 +6,9 @@ import { fileURLToPath } from 'node:url';
 import {
   OWNER_STAFF_CASHIER_PATH,
   OWNER_STAFF_MANAGER_PATH,
-} from './httpHandler';
-import type { AuthAdminPort, OwnerStaffPort, StaffLog } from './types';
-import { handleVercelOwnerStaff } from './vercelHandler';
+} from './httpHandler.js';
+import type { AuthAdminPort, OwnerStaffPort, StaffLog } from './types.js';
+import { handleVercelOwnerStaff } from './vercelHandler.js';
 
 const MANAGER_ID = 'ccc5f5ad-079e-4420-9080-e7ded4ff9496';
 const CASHIER_ID = '0393d651-e13a-4f04-ba7d-352f63bc62a5';

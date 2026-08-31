@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { StaffOnboardingError, redactForLog, staffError } from './errors';
-import { loadStaffOnboardingEnv } from './env';
-import { createLiveStaffPorts } from './staffAuthAdmin';
-import { onboardStaff } from './staffOnboardingService';
-import type { AuthAdminPort, OwnerStaffPort, StaffLog, StaffOnboardRole } from './types';
+import { StaffOnboardingError, redactForLog, staffError } from './errors.js';
+import { loadStaffOnboardingEnv } from './env.js';
+import { createLiveStaffPorts } from './staffAuthAdmin.js';
+import { onboardStaff } from './staffOnboardingService.js';
+import type { AuthAdminPort, OwnerStaffPort, StaffLog, StaffOnboardRole } from './types.js';
 
 export const JSON_BODY_LIMIT = 16 * 1024;
 

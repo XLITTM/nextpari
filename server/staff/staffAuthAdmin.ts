@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createServiceRoleClient, createUserJwtClient } from '../supabase/admin';
-import type { StaffOnboardingEnv } from './env';
-import { extractErrorCode, rpcMessage, staffError } from './errors';
-import type { AuthAdminPort, OwnerStaffPort, StaffBindingRow, StaffBindResult } from './types';
+import { createServiceRoleClient, createUserJwtClient } from '../supabase/admin.js';
+import type { StaffOnboardingEnv } from './env.js';
+import { extractErrorCode, rpcMessage, staffError } from './errors.js';
+import type { AuthAdminPort, OwnerStaffPort, StaffBindingRow, StaffBindResult } from './types.js';
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {

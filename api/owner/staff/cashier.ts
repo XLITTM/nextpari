@@ -1,7 +1,7 @@
 import {
   OWNER_STAFF_CASHIER_PATH,
-} from '../../../server/staff/httpHandler';
-import { handleVercelOwnerStaff } from '../../../server/staff/vercelHandler';
+} from '../../../server/staff/httpHandler.js';
+import { handleVercelOwnerStaff } from '../../../server/staff/vercelHandler.js';
 
 export default async function handler(
   req: {

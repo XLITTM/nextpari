@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { redactForLog, StaffOnboardingError } from './errors';
-import { loadStaffOnboardingEnv } from './env';
-import { handleOwnerStaffRequest } from './httpHandler';
-import { onboardStaff } from './staffOnboardingService';
-import type { AuthAdminPort, OwnerStaffPort, StaffBindingRow, StaffBindResult, StaffLog } from './types';
+import { redactForLog, StaffOnboardingError } from './errors.js';
+import { loadStaffOnboardingEnv } from './env.js';
+import { handleOwnerStaffRequest } from './httpHandler.js';
+import { onboardStaff } from './staffOnboardingService.js';
+import type { AuthAdminPort, OwnerStaffPort, StaffBindingRow, StaffBindResult, StaffLog } from './types.js';
 
 const MANAGER_ID = 'ccc5f5ad-079e-4420-9080-e7ded4ff9496';
 const CASHIER_ID = '0393d651-e13a-4f04-ba7d-352f63bc62a5';

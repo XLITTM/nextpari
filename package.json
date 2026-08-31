@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
     "worker": "tsx --env-file=.env --tsconfig tsconfig.app.json scripts/run-sports-worker.ts",
-    "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts"
+    "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts server/staff/esmImportSmoke.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

@@ -1,4 +1,4 @@
-import { StaffOnboardingError, staffError } from './errors';
+import { StaffOnboardingError, staffError } from './errors.js';
 import type {
   AuthAdminPort,
   OwnerStaffPort,
@@ -8,7 +8,7 @@ import type {
   StaffOnboardInput,
   StaffOnboardRole,
   StaffOnboardSuccess,
-} from './types';
+} from './types.js';
 
 const EMAIL_MAX = 254;
 const PASSWORD_MIN = 12;
