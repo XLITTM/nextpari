@@ -128,15 +128,6 @@ interface StoredManager {
 
 const DEMO_ACCOUNTS: Array<ManagerSession & { pin: string }> = [
   {
-    id: SUPERADMIN_ID,
-    login: 'owner',
-    pin: '0000',
-    fullName: 'Владелец NextPari',
-    role: 'superadmin',
-    networkId: null,
-    networkName: 'Вся платформа',
-  },
-  {
     id: MANAGER_ID,
     login: 'manager01',
     pin: '1111',
@@ -593,13 +584,11 @@ function writeSession(key: string, session: ManagerSession) {
 }
 
 export function loadOwnerSession(): ManagerSession | null {
-  const session = readSession(OWNER_SESSION_KEY);
-  if (session?.role === 'superadmin') return session;
   return null;
 }
 
-export function saveOwnerSession(session: ManagerSession) {
-  writeSession(OWNER_SESSION_KEY, session);
+export function saveOwnerSession(_session: ManagerSession) {
+  /* Owner portal no longer persists PIN/demo authority. */
 }
 
 export function clearOwnerSession() {
@@ -694,11 +683,8 @@ async function authenticateStaff(login: string, pin: string): Promise<ManagerSes
   return session;
 }
 
-export async function ownerLogin(login: string, pin: string): Promise<ManagerSession> {
-  const session = await authenticateStaff(login, pin);
-  if (session.role !== 'superadmin') throw new Error('Неверный логин или PIN-код');
-  saveOwnerSession(session);
-  return session;
+export async function ownerLogin(_login: string, _pin: string): Promise<ManagerSession> {
+  throw new Error('Owner portal uses Supabase Auth');
 }
 
 export async function networkManagerLogin(login: string, pin: string): Promise<ManagerSession> {
@@ -709,7 +695,7 @@ export async function networkManagerLogin(login: string, pin: string): Promise<M
 }
 
 export async function managerLogin(login: string, pin: string): Promise<ManagerSession> {
-  return ownerLogin(login, pin).catch(async () => networkManagerLogin(login, pin));
+  return networkManagerLogin(login, pin);
 }
 
 async function liveSeriesFromTables(session: ManagerSession): Promise<DashboardKpis['series']> {

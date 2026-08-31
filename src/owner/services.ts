@@ -1,0 +1,485 @@
+import { assertActiveOwnerContext, type OwnerStaffContext } from './auth/ownerAuth';
+import { ownerSupabase } from './auth/ownerSupabase';
+import type {
+  BackofficeCashier,
+  CashierLedgerEntry,
+  CashierOpType,
+  DashboardKpis,
+  LedgerPeriod,
+  RiskBet,
+  VerticalKpi,
+} from '../lib/backoffice';
+
+export type {
+  BackofficeCashier,
+  CashierLedgerEntry,
+  DashboardKpis,
+  LedgerPeriod,
+  OwnerStaffContext,
+  RiskBet,
+  VerticalKpi,
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+function str(value: unknown, fallback = ''): string {
+  if (value == null) return fallback;
+  return String(value);
+}
+
+function num(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function rpcMessage(error: { message?: string } | null | undefined): string {
+  const raw = error?.message ?? 'Ошибка';
+  return raw
+    .replace(/^.*ERROR:\s*/i, '')
+    .replace(/\s+Where:[\s\S]*$/i, '')
+    .trim() || raw;
+}
+
+function throwRpc(error: { message?: string }): never {
+  throw new Error(rpcMessage(error));
+}
+
+function firstRow(data: unknown): Record<string, unknown> {
+  if (Array.isArray(data)) return asRecord(data[0]);
+  return asRecord(data);
+}
+
+function asRows(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data == null) return [];
+  return [data];
+}
+
+function parseVerticalKpi(value: unknown): VerticalKpi {
+  const raw = asRecord(value);
+  const turnover = num(raw.turnover);
+  const payouts = num(raw.payouts);
+  const ggr = raw.ggr == null ? turnover - payouts : num(raw.ggr);
+  const margin = raw.margin == null
+    ? (turnover > 0 ? Number(((ggr / turnover) * 100).toFixed(2)) : 0)
+    : num(raw.margin);
+  return { turnover, payouts, ggr, margin };
+}
+
+function parseCashier(raw: Record<string, unknown>): BackofficeCashier {
+  return {
+    id: str(raw.id),
+    login: str(raw.login),
+    fullName: str(raw.full_name ?? raw.fullName),
+    city: str(raw.city),
+    pointName: str(raw.point_name ?? raw.pointName),
+    floatBalance: num(raw.float_balance ?? raw.floatBalance),
+    commissionEarned: num(raw.commission_earned ?? raw.commissionEarned),
+    commissionRate: num(raw.commission_rate ?? raw.commissionRate) || 1,
+    isActive: raw.is_active !== false && raw.isActive !== false,
+    blockedBy: str(raw.blocked_by ?? raw.blockedBy) === 'owner'
+      ? 'owner'
+      : str(raw.blocked_by ?? raw.blockedBy) === 'manager' ? 'manager' : null,
+    dailyTurnover: num(raw.daily_turnover ?? raw.dailyTurnover),
+    networkId: raw.network_id == null && raw.networkId == null ? null : str(raw.network_id ?? raw.networkId),
+    managerId: raw.manager_id == null && raw.managerId == null ? null : str(raw.manager_id ?? raw.managerId),
+  };
+}
+
+function parseOpType(value: string): CashierOpType {
+  if (value === 'payout' || value === 'topup' || value === 'collection') return value;
+  return 'deposit';
+}
+
+function parseLedgerEntry(raw: Record<string, unknown>, cashierId?: string): CashierLedgerEntry {
+  const type = parseOpType(str(raw.type));
+  const amount = num(raw.amount);
+  const signed = raw.signed_amount == null && raw.signedAmount == null
+    ? (type === 'deposit' || type === 'collection' ? -amount : amount)
+    : num(raw.signed_amount ?? raw.signedAmount);
+  return {
+    id: str(raw.id),
+    cashierId: cashierId ?? (raw.cashier_id ? str(raw.cashier_id) : undefined),
+    type,
+    playerPublicId: str(raw.player_public_id ?? raw.playerPublicId),
+    receiptCode: str(raw.receipt_code ?? raw.receiptCode),
+    amount,
+    signedAmount: signed,
+    floatAfter: raw.float_after == null && raw.floatAfter == null ? null : num(raw.float_after ?? raw.floatAfter),
+    status: str(raw.status) === 'failed' ? 'failed' : 'completed',
+    createdAt: str(raw.created_at ?? raw.createdAt),
+  };
+}
+
+function parseRiskBet(raw: Record<string, unknown>): RiskBet {
+  const amount = num(raw.amount);
+  const odds = num(raw.odds ?? raw.total_odds);
+  const potential = num(raw.potential_win ?? raw.potentialWin) || amount * odds;
+  const status = str(raw.status, 'accepted');
+  return {
+    id: str(raw.id),
+    matchId: str(raw.match_id ?? raw.matchId),
+    selection: str(raw.selection),
+    odds,
+    amount,
+    potentialWin: potential,
+    status,
+    homeTeam: str(raw.home_team ?? raw.homeTeam),
+    awayTeam: str(raw.away_team ?? raw.awayTeam),
+    type: str(raw.type, 'single'),
+    ticketCode: str(raw.ticket_code ?? raw.ticketCode),
+    createdAt: str(raw.created_at ?? raw.createdAt),
+    suspicious: Boolean(raw.suspicious) || amount >= 200 || potential >= 800 || odds >= 10,
+  };
+}
+
+export function ledgerPeriodFrom(period: LedgerPeriod): string {
+  const now = new Date();
+  if (period === 'today') {
+    now.setHours(0, 0, 0, 0);
+    return now.toISOString();
+  }
+  if (period === '7d') {
+    now.setDate(now.getDate() - 7);
+    return now.toISOString();
+  }
+  now.setDate(1);
+  now.setHours(0, 0, 0, 0);
+  return now.toISOString();
+}
+
+export async function getCurrentOwnerContext(): Promise<OwnerStaffContext> {
+  const { data, error } = await ownerSupabase.rpc('current_staff_context');
+  if (error) throwRpc(error);
+  return assertActiveOwnerContext(data);
+}
+
+export async function fetchOwnerDashboard(): Promise<DashboardKpis> {
+  const { data, error } = await ownerSupabase.rpc('owner_dashboard_stats');
+  if (error) throwRpc(error);
+  const raw = asRecord(data);
+  const seriesRaw = Array.isArray(raw.series) ? raw.series : [];
+  const verticalsRaw = asRecord(raw.verticals);
+  return {
+    role: 'superadmin',
+    networkName: str(raw.network_name, 'Вся платформа'),
+    turnover: num(raw.turnover),
+    ggr: num(raw.ggr),
+    deposits: num(raw.deposits),
+    payouts: num(raw.payouts),
+    floatTotal: num(raw.float_total ?? raw.floatTotal),
+    series: seriesRaw.map((item) => {
+      const row = asRecord(item);
+      return {
+        day: str(row.day).slice(0, 10),
+        bets: num(row.bets),
+        deposits: num(row.deposits),
+      };
+    }),
+    verticals: {
+      sports: parseVerticalKpi(verticalsRaw.sports),
+      casino: parseVerticalKpi(verticalsRaw.casino),
+      games: parseVerticalKpi(verticalsRaw.games),
+    },
+  };
+}
+
+export async function fetchOwnerCashiers(): Promise<BackofficeCashier[]> {
+  const { data, error } = await ownerSupabase.rpc('owner_list_cashiers');
+  if (error) throwRpc(error);
+  return asRows(data).map((row) => parseCashier(asRecord(row)));
+}
+
+export async function fetchOwnerCashierLedger(params: {
+  cashierId: string;
+  from?: string | null;
+}): Promise<CashierLedgerEntry[]> {
+  const { data, error } = await ownerSupabase.rpc('owner_cashier_ledger', {
+    p_cashier_id: params.cashierId,
+    p_from: params.from ?? null,
+  });
+  if (error) throwRpc(error);
+  return asRows(data).map((row) => parseLedgerEntry(asRecord(row), params.cashierId));
+}
+
+export async function fetchOwnerRiskBets(): Promise<RiskBet[]> {
+  const { data, error } = await ownerSupabase.rpc('owner_list_risk_bets');
+  if (error) throwRpc(error);
+  return asRows(data).map((row) => parseRiskBet(asRecord(row)));
+}
+
+export interface OwnerPlayerListItem {
+  id: string;
+  profileId: string | null;
+  walletId: string | null;
+  publicId: string;
+  email: string;
+  phone: string;
+  displayName: string;
+  walletStatus: string;
+  legacyBalance: number;
+  availableBalance: number;
+  lockedBalance: number;
+  usdtBalance: number;
+  blocked: boolean;
+  createdAt: string;
+}
+
+export interface OwnerPlayerListPage {
+  rows: OwnerPlayerListItem[];
+  total: number;
+}
+
+export interface OwnerDossierSection<T> {
+  supported: boolean;
+  rows: T[];
+  summary?: Record<string, unknown>;
+  payoutRequests?: T[];
+}
+
+export interface OwnerPlayerDossier {
+  profile: Record<string, unknown>;
+  wallet: Record<string, unknown>;
+  ledger: OwnerDossierSection<Record<string, unknown>>;
+  sportsBets: OwnerDossierSection<Record<string, unknown>>;
+  casino: OwnerDossierSection<Record<string, unknown>>;
+  depositsWithdrawals: OwnerDossierSection<Record<string, unknown>>;
+  vip: { supported: boolean };
+  risk: Record<string, unknown>;
+  messages: OwnerDossierSection<Record<string, unknown>>;
+}
+
+export interface OwnerWithdrawalRow {
+  id: string;
+  walletId: string | null;
+  playerPublicId: string;
+  amount: number;
+  status: string;
+  cashierId: string | null;
+  paidAt: string | null;
+  createdAt: string;
+}
+
+function parsePlayerListItem(raw: Record<string, unknown>): OwnerPlayerListItem {
+  const publicId = str(raw.public_id ?? raw.publicId);
+  const id = str(raw.id ?? raw.profile_id ?? raw.wallet_id, publicId);
+  return {
+    id,
+    profileId: raw.profile_id == null && raw.profileId == null ? null : str(raw.profile_id ?? raw.profileId),
+    walletId: raw.wallet_id == null && raw.walletId == null ? null : str(raw.wallet_id ?? raw.walletId),
+    publicId,
+    email: str(raw.email),
+    phone: str(raw.phone),
+    displayName: str(raw.display_name ?? raw.displayName, publicId),
+    walletStatus: str(raw.wallet_status ?? raw.walletStatus, 'active'),
+    legacyBalance: num(raw.legacy_balance ?? raw.legacyBalance),
+    availableBalance: num(raw.available_balance ?? raw.availableBalance),
+    lockedBalance: num(raw.locked_balance ?? raw.lockedBalance),
+    usdtBalance: num(raw.usdt_balance ?? raw.usdtBalance),
+    blocked: Boolean(raw.is_blocked ?? raw.blocked),
+    createdAt: str(raw.created_at ?? raw.createdAt),
+  };
+}
+
+function parsePayoutRequestRow(raw: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: raw.id ?? null,
+    wallet_id: raw.wallet_id ?? raw.walletId ?? null,
+    player_public_id: raw.player_public_id ?? raw.playerPublicId ?? '',
+    amount: raw.amount ?? 0,
+    status: raw.status ?? '',
+    cashier_id: raw.cashier_id ?? raw.cashierId ?? null,
+    paid_at: raw.paid_at ?? raw.paidAt ?? null,
+    created_at: raw.created_at ?? raw.createdAt ?? null,
+  };
+}
+
+function parseDossierSection(value: unknown): OwnerDossierSection<Record<string, unknown>> {
+  const raw = asRecord(value);
+  const rows = asRows(raw.rows).map((row) => asRecord(row));
+  const payouts = raw.payout_requests == null && raw.payoutRequests == null
+    ? undefined
+    : asRows(raw.payout_requests ?? raw.payoutRequests).map((row) => parsePayoutRequestRow(asRecord(row)));
+  return {
+    supported: raw.supported !== false,
+    rows,
+    summary: raw.summary && typeof raw.summary === 'object' ? asRecord(raw.summary) : undefined,
+    payoutRequests: payouts,
+  };
+}
+
+export async function fetchOwnerPlayers(params?: {
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<OwnerPlayerListPage> {
+  const { data, error } = await ownerSupabase.rpc('owner_list_players', {
+    p_search: params?.search?.trim() || null,
+    p_limit: params?.limit ?? 50,
+    p_offset: params?.offset ?? 0,
+  });
+  if (error) throwRpc(error);
+  const raw = asRecord(data);
+  const rowsSource = Array.isArray(raw.rows) ? raw.rows : asRows(data);
+  return {
+    rows: rowsSource.map((row) => parsePlayerListItem(asRecord(row))),
+    total: num(raw.total) || rowsSource.length,
+  };
+}
+
+export async function fetchOwnerPlayerDossier(playerId: string): Promise<OwnerPlayerDossier> {
+  const { data, error } = await ownerSupabase.rpc('owner_player_dossier', {
+    p_player_id: playerId,
+  });
+  if (error) throwRpc(error);
+  const raw = asRecord(data);
+  const vipRaw = asRecord(raw.vip);
+  return {
+    profile: asRecord(raw.profile),
+    wallet: asRecord(raw.wallet),
+    ledger: parseDossierSection(raw.ledger),
+    sportsBets: parseDossierSection(raw.sports_bets ?? raw.sportsBets),
+    casino: parseDossierSection(raw.casino),
+    depositsWithdrawals: parseDossierSection(raw.deposits_withdrawals ?? raw.depositsWithdrawals),
+    vip: { supported: vipRaw.supported === true },
+    risk: asRecord(raw.risk),
+    messages: parseDossierSection(raw.messages),
+  };
+}
+
+export async function setOwnerPlayerBlocked(params: {
+  playerId: string;
+  blocked: boolean;
+  reason?: string | null;
+}): Promise<void> {
+  const { error } = await ownerSupabase.rpc('owner_set_player_blocked', {
+    p_player_id: params.playerId,
+    p_blocked: params.blocked,
+    p_reason: params.reason?.trim() || null,
+  });
+  if (error) throwRpc(error);
+}
+
+export async function setOwnerCashierFrozen(params: {
+  cashierId: string;
+  frozen: boolean;
+  reason?: string | null;
+}): Promise<void> {
+  const { error } = await ownerSupabase.rpc('owner_set_cashier_frozen', {
+    p_cashier_id: params.cashierId,
+    p_frozen: params.frozen,
+    p_reason: params.reason?.trim() || null,
+  });
+  if (error) throwRpc(error);
+}
+
+export async function fetchOwnerWithdrawals(params?: {
+  status?: string | null;
+  limit?: number;
+  offset?: number;
+}): Promise<{ rows: OwnerWithdrawalRow[]; total: number }> {
+  const { data, error } = await ownerSupabase.rpc('owner_list_withdrawals', {
+    p_status: params?.status?.trim() || null,
+    p_limit: params?.limit ?? 100,
+    p_offset: params?.offset ?? 0,
+  });
+  if (error) throwRpc(error);
+  const raw = asRecord(data);
+  const rowsSource = Array.isArray(raw.rows) ? raw.rows : asRows(data);
+  return {
+    rows: rowsSource.map((row) => {
+      const item = asRecord(row);
+      return {
+        id: str(item.id),
+        walletId: item.wallet_id == null && item.walletId == null ? null : str(item.wallet_id ?? item.walletId),
+        playerPublicId: str(item.player_public_id ?? item.playerPublicId),
+        amount: num(item.amount),
+        status: str(item.status, 'pending'),
+        cashierId: item.cashier_id == null && item.cashierId == null ? null : str(item.cashier_id ?? item.cashierId),
+        paidAt: item.paid_at == null && item.paidAt == null ? null : str(item.paid_at ?? item.paidAt),
+        createdAt: str(item.created_at ?? item.createdAt),
+      };
+    }),
+    total: num(raw.total) || rowsSource.length,
+  };
+}
+
+export async function sendOwnerMessage(params: {
+  targetType: 'player' | 'all';
+  targetPlayerId?: string | null;
+  title?: string | null;
+  body: string;
+}): Promise<void> {
+  const { error } = await ownerSupabase.rpc('owner_send_message', {
+    p_target_type: params.targetType,
+    p_target_player_id: params.targetType === 'player' ? (params.targetPlayerId ?? null) : null,
+    p_title: params.title?.trim() || null,
+    p_body: params.body,
+  });
+  if (error) throwRpc(error);
+}
+
+export function formatTmtmCompact(value: number | null | undefined): string {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMTM`;
+}
+
+export function formatDayLabel(isoDay: string): string {
+  const date = new Date(`${isoDay}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return isoDay;
+  return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+}
+
+export function cashierOpLabel(type: CashierOpType): string {
+  if (type === 'deposit') return 'Пополнение игрока по ID';
+  if (type === 'payout') return 'Выплата наличных по PIN';
+  if (type === 'topup') return 'Пополнение кассы менеджером';
+  return 'Сдача инкассации';
+}
+
+export function cashierOpRef(entry: CashierLedgerEntry): string {
+  if (entry.type === 'deposit' && entry.playerPublicId) return `ID ${entry.playerPublicId}`;
+  if (entry.type === 'payout' && entry.playerPublicId && entry.playerPublicId !== 'MANAGER') {
+    return `PIN / ${entry.receiptCode || entry.playerPublicId}`;
+  }
+  return entry.receiptCode || '—';
+}
+
+export function formatBackofficeDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${dd}.${mm}.${yyyy}, ${hh}:${min}`;
+}
+
+export function exportCashierLedgerCsv(cashier: BackofficeCashier, rows: CashierLedgerEntry[]) {
+  const header = ['Время', 'Тип', 'ID игрока / чек', 'Сумма', 'Баланс после', 'Статус'];
+  const body = rows.map((row) => [
+    formatBackofficeDateTime(row.createdAt),
+    cashierOpLabel(row.type),
+    cashierOpRef(row),
+    String(row.signedAmount),
+    row.floatAfter == null ? '' : String(row.floatAfter),
+    row.status === 'completed' ? 'Успешно' : 'Отменено',
+  ]);
+  const csv = [header, ...body]
+    .map((line) => line.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    .join('\n');
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `smena-${cashier.login}-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
