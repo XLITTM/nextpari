@@ -5,15 +5,19 @@ import {
   TrendingUp, User, UserCog, Users, Wallet, X,
 } from 'lucide-react';
 import { useOwnerAuth } from './auth/OwnerAuthProvider';
+import { isOperationalAccountActive } from '../shared/staff/financeGate';
 import { MessagesPanel } from './MessagesPanel';
 import { OwnerManagersPanel } from './OwnerManagersPanel';
 import { PlayersPanel } from './PlayersPanel';
+import { OwnerMoneyDialog, OwnerTreasuryPanel, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
 import {
   fetchOwnerCashierLedger,
+  fetchOwnerCashierOperationalMap,
   fetchOwnerCashiers,
   fetchOwnerDashboard,
   fetchOwnerRiskBets,
+  fetchOwnerTreasury,
   ledgerPeriodFrom,
   cashierOpLabel,
   cashierOpRef,
@@ -26,6 +30,7 @@ import {
   type CashierLedgerEntry,
   type DashboardKpis,
   type LedgerPeriod,
+  type OwnerManagerCashierRow,
   type OwnerStaffContext,
   type RiskBet,
   type VerticalKpi,
@@ -243,6 +248,7 @@ function FinancePanel() {
 
   return (
     <section>
+      <OwnerTreasuryPanel onAfterMoney={load} />
       <HeaderRow
         title="Финансовый дашборд"
         subtitle="Вся платформа"
@@ -444,16 +450,26 @@ function TrendChart({
 
 function AgentsPanel() {
   const [rows, setRows] = useState<BackofficeCashier[]>([]);
+  const [opsMap, setOpsMap] = useState<Record<string, OwnerManagerCashierRow>>({});
+  const [treasuryActive, setTreasuryActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [managerFilter, setManagerFilter] = useState('');
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [fund, setFund] = useState<OwnerMoneyDialogState | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setRows(await fetchOwnerCashiers());
+      const [cashiers, ops, treasury] = await Promise.all([
+        fetchOwnerCashiers(),
+        fetchOwnerCashierOperationalMap().catch(() => ({}) as Record<string, OwnerManagerCashierRow>),
+        fetchOwnerTreasury().catch(() => null),
+      ]);
+      setRows(cashiers);
+      setOpsMap(ops);
+      setTreasuryActive(ownerTreasuryIsActive(treasury));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить кассы');
       setRows([]);
@@ -485,8 +501,8 @@ function AgentsPanel() {
         onRefresh={() => void load()}
         loading={loading}
       />
-      <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-4">
-        Функция переводится на защищённое ядро — пополнение, инкассация и создание кассы недоступны. Заморозка работает через JWT.
+      <p className="text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 mb-4">
+        Прямое пополнение кассы идёт из казны владельца, минуя баланс менеджера. Инкассация по-прежнему недоступна здесь.
       </p>
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <select
@@ -519,7 +535,7 @@ function AgentsPanel() {
               <th className="px-4 py-3 whitespace-nowrap">Имя / название точки</th>
               <th className="px-4 py-3 whitespace-nowrap">Город и адрес</th>
               <th className="px-4 py-3 whitespace-nowrap">Менеджер</th>
-              <th className="px-4 py-3 text-right whitespace-nowrap">Остаток кассы</th>
+              <th className="px-4 py-3 text-right whitespace-nowrap">Операционный остаток</th>
               <th className="px-4 py-3 text-right whitespace-nowrap">Доход кассира</th>
               <th className="px-4 py-3 whitespace-nowrap">Статус</th>
               <th className="px-4 py-3 text-right whitespace-nowrap">Действия</th>
@@ -547,7 +563,9 @@ function AgentsPanel() {
                   </span>
                 </td>
                 <td className="px-4 py-3 align-top text-right font-extrabold tabular-nums whitespace-nowrap">
-                  {formatTmtmCompact(row.floatBalance)}
+                  {opsMap[row.id]?.operationalBalance == null
+                    ? 'недоступен'
+                    : formatTmtmCompact(opsMap[row.id].operationalBalance)}
                 </td>
                 <td className="px-4 py-3 align-top text-right font-semibold tabular-nums text-brand-700 whitespace-nowrap">
                   {formatTmtmCompact(row.commissionEarned)}
@@ -563,12 +581,39 @@ function AgentsPanel() {
                   <div className="flex justify-end gap-2">
                     <button
                       type="button"
-                      disabled
-                      title="Функция переводится на защищённое ядро"
-                      onClick={(e) => e.stopPropagation()}
-                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed"
+                      disabled={
+                        !treasuryActive
+                        || !isOperationalAccountActive({
+                          status: opsMap[row.id]?.operationalStatus,
+                          migrationState: opsMap[row.id]?.operationalMigrationState,
+                        })
+                      }
+                      title={
+                        treasuryActive
+                          && isOperationalAccountActive({
+                            status: opsMap[row.id]?.operationalStatus,
+                            migrationState: opsMap[row.id]?.operationalMigrationState,
+                          })
+                          ? 'Пополнить напрямую из казны'
+                          : 'Казна или касса не активны'
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFund({
+                          type: 'cashier',
+                          cashier: {
+                            cashierId: row.id,
+                            fullName: row.fullName,
+                            login: row.login,
+                            operationalBalance: opsMap[row.id]?.operationalBalance ?? null,
+                            operationalStatus: opsMap[row.id]?.operationalStatus ?? '',
+                            operationalMigrationState: opsMap[row.id]?.operationalMigrationState ?? '',
+                          },
+                        });
+                      }}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-ink-900 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                     >
-                      Пополнить
+                      Пополнить напрямую
                     </button>
                     <button
                       type="button"
@@ -615,8 +660,31 @@ function AgentsPanel() {
       {profile && (
         <CashierProfileDrawer
           cashier={profile}
+          ops={opsMap[profile.id] ?? null}
+          treasuryActive={treasuryActive}
           onClose={() => setProfileId(null)}
           onChanged={async () => {
+            await load();
+          }}
+          onFund={() => setFund({
+            type: 'cashier',
+            cashier: {
+              cashierId: profile.id,
+              fullName: profile.fullName,
+              login: profile.login,
+              operationalBalance: opsMap[profile.id]?.operationalBalance ?? null,
+              operationalStatus: opsMap[profile.id]?.operationalStatus ?? '',
+              operationalMigrationState: opsMap[profile.id]?.operationalMigrationState ?? '',
+            },
+          })}
+        />
+      )}
+      {fund && (
+        <OwnerMoneyDialog
+          state={fund}
+          treasuryActive={treasuryActive}
+          onClose={() => setFund(null)}
+          onSuccess={async () => {
             await load();
           }}
         />
@@ -627,12 +695,18 @@ function AgentsPanel() {
 
 function CashierProfileDrawer({
   cashier,
+  ops,
+  treasuryActive,
   onClose,
   onChanged,
+  onFund,
 }: {
   cashier: BackofficeCashier;
+  ops: OwnerManagerCashierRow | null;
+  treasuryActive: boolean;
   onClose: () => void;
   onChanged: () => Promise<void>;
+  onFund: () => void;
 }) {
   const [period, setPeriod] = useState<LedgerPeriod>('today');
   const [rows, setRows] = useState<CashierLedgerEntry[]>([]);
@@ -678,7 +752,10 @@ function CashierProfileDrawer({
             <InfoCell label="ФИО" value={cashier.fullName} />
             <InfoCell label="Логин" value={cashier.login} />
             <InfoCell label="Город / точка" value={`${cashier.city} · ${cashier.pointName}`} />
-            <InfoCell label="Баланс кассы (Float)" value={formatTmtmCompact(cashier.floatBalance)} />
+            <InfoCell
+              label="Операционный остаток"
+              value={ops?.operationalBalance == null ? 'недоступен' : formatTmtmCompact(ops.operationalBalance)}
+            />
             <InfoCell label="Комиссия" value={`${cashier.commissionRate.toFixed(2)}%`} />
             <div>
               <p className="text-[11px] text-gray-500 mb-1">Статус</p>
@@ -690,17 +767,31 @@ function CashierProfileDrawer({
             </div>
           </div>
 
-          <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-            Функция переводится на защищённое ядро — пополнение и инкассация недоступны.
+          <p className="text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+            Прямое пополнение идёт из казны владельца. Инкассация здесь недоступна.
           </p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              disabled
-              title="Функция переводится на защищённое ядро"
-              className="text-xs font-bold px-3 py-2 rounded-xl bg-slate-100 text-slate-400 cursor-not-allowed"
+              disabled={
+                !treasuryActive
+                || !isOperationalAccountActive({
+                  status: ops?.operationalStatus,
+                  migrationState: ops?.operationalMigrationState,
+                })
+              }
+              title={
+                treasuryActive && isOperationalAccountActive({
+                  status: ops?.operationalStatus,
+                  migrationState: ops?.operationalMigrationState,
+                })
+                  ? 'Пополнить напрямую из казны'
+                  : 'Казна или касса не активны'
+              }
+              onClick={onFund}
+              className="text-xs font-bold px-3 py-2 rounded-xl bg-ink-900 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
             >
-              Пополнить кассу
+              Пополнить напрямую
             </button>
             <button
               type="button"

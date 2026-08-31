@@ -534,6 +534,171 @@ export async function postOwnerManager(input: {
   return parseOwnerManager(asRecord(data));
 }
 
+export type OwnerFundTargetType = 'manager' | 'cashier' | 'player';
+
+export interface OwnerTreasurySnapshot {
+  currency: string;
+  availableBalance: number | null;
+  status: string;
+  migrationState: string;
+  version: number | null;
+}
+
+export interface OwnerTreasuryTransfer {
+  id: string;
+  transferNo: string;
+  transferType: string;
+  currency: string;
+  amount: number;
+  actorRole: string;
+  createdAt: string;
+  targetReference: string;
+}
+
+export interface OwnerTreasuryOverview {
+  treasury: OwnerTreasurySnapshot | null;
+  managers: { count: number; totalBalance: number | null };
+  cashiers: { count: number; totalBalance: number | null };
+  recentTransfers: OwnerTreasuryTransfer[];
+}
+
+export interface OwnerMoneyResult {
+  ok: boolean;
+  transferId: string;
+  isDuplicate: boolean;
+  amount: number;
+  currency: string;
+  fromBalanceAfter: number | null;
+  toBalanceAfter: number | null;
+  playerBalanceAfter: number | null;
+  managerId: string | null;
+  cashierId: string | null;
+  playerPublicId: string | null;
+}
+
+function nullableNum(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseTreasurySnapshot(raw: Record<string, unknown>): OwnerTreasurySnapshot | null {
+  if (Object.keys(raw).length === 0) return null;
+  const available = nullableNum(raw.available_balance ?? raw.availableBalance);
+  return {
+    currency: str(raw.currency, 'TMTM'),
+    availableBalance: available,
+    status: str(raw.status),
+    migrationState: str(raw.migration_state ?? raw.migrationState),
+    version: nullableNum(raw.version),
+  };
+}
+
+function parseTreasuryTransfer(raw: Record<string, unknown>): OwnerTreasuryTransfer {
+  return {
+    id: str(raw.id),
+    transferNo: str(raw.transfer_no ?? raw.transferNo),
+    transferType: str(raw.transfer_type ?? raw.transferType),
+    currency: str(raw.currency, 'TMTM'),
+    amount: nullableNum(raw.amount) ?? 0,
+    actorRole: str(raw.actor_role ?? raw.actorRole),
+    createdAt: str(raw.created_at ?? raw.createdAt),
+    targetReference: str(raw.target_reference ?? raw.targetReference ?? raw.transfer_no ?? raw.transferNo ?? raw.id),
+  };
+}
+
+function parseOwnerMoneyResult(raw: Record<string, unknown>): OwnerMoneyResult {
+  return {
+    ok: raw.ok !== false,
+    transferId: str(raw.transfer_id ?? raw.transferId),
+    isDuplicate: raw.is_duplicate === true || raw.isDuplicate === true,
+    amount: nullableNum(raw.amount) ?? 0,
+    currency: str(raw.currency, 'TMTM'),
+    fromBalanceAfter: nullableNum(raw.from_balance_after ?? raw.fromBalanceAfter),
+    toBalanceAfter: nullableNum(raw.to_balance_after ?? raw.toBalanceAfter),
+    playerBalanceAfter: nullableNum(raw.player_balance_after ?? raw.playerBalanceAfter),
+    managerId: raw.manager_id == null && raw.managerId == null ? null : str(raw.manager_id ?? raw.managerId),
+    cashierId: raw.cashier_id == null && raw.cashierId == null ? null : str(raw.cashier_id ?? raw.cashierId),
+    playerPublicId: raw.player_public_id == null && raw.playerPublicId == null
+      ? null
+      : str(raw.player_public_id ?? raw.playerPublicId),
+  };
+}
+
+export async function fetchOwnerTreasury(): Promise<OwnerTreasuryOverview> {
+  const data = await ownerData('/api/owner/treasury');
+  const rec = asRecord(data);
+  const managers = asRecord(rec.managers);
+  const cashiers = asRecord(rec.cashiers);
+  return {
+    treasury: parseTreasurySnapshot(asRecord(rec.treasury)),
+    managers: {
+      count: num(managers.count),
+      totalBalance: nullableNum(managers.total_balance ?? managers.totalBalance),
+    },
+    cashiers: {
+      count: num(cashiers.count),
+      totalBalance: nullableNum(cashiers.total_balance ?? cashiers.totalBalance),
+    },
+    recentTransfers: asRows(rec.recent_transfers ?? rec.recentTransfers).map((row) => (
+      parseTreasuryTransfer(asRecord(row))
+    )),
+  };
+}
+
+export async function postOwnerCapitalIn(input: {
+  amount: number;
+  idempotencyKey: string;
+  note: string;
+}): Promise<OwnerMoneyResult> {
+  const data = await ownerData('/api/owner/treasury', {
+    method: 'POST',
+    body: JSON.stringify({
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      note: input.note,
+    }),
+  });
+  return parseOwnerMoneyResult(asRecord(data));
+}
+
+export async function postOwnerFund(input: {
+  targetType: OwnerFundTargetType;
+  targetId: string;
+  amount: number;
+  idempotencyKey: string;
+  note?: string | null;
+}): Promise<OwnerMoneyResult> {
+  const data = await ownerData('/api/owner/fund', {
+    method: 'POST',
+    body: JSON.stringify({
+      targetType: input.targetType,
+      targetId: input.targetId,
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      note: input.note?.trim() || null,
+    }),
+  });
+  return parseOwnerMoneyResult(asRecord(data));
+}
+
+export async function fetchOwnerCashierOperationalMap(): Promise<Record<string, OwnerManagerCashierRow>> {
+  const managers = await fetchOwnerManagers();
+  const entries = await Promise.all(managers.map(async (row) => {
+    try {
+      const detail = await fetchOwnerManagerDetail(row.managerId);
+      return detail.cashiers;
+    } catch {
+      return [] as OwnerManagerCashierRow[];
+    }
+  }));
+  const map: Record<string, OwnerManagerCashierRow> = {};
+  for (const cashier of entries.flat()) {
+    if (cashier.cashierId) map[cashier.cashierId] = cashier;
+  }
+  return map;
+}
+
 export function formatTmtmCompact(value: number | null | undefined): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;

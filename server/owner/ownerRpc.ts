@@ -24,9 +24,13 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     return staffError(code, 401);
   }
   if (
-    code === 'LOGIN_TAKEN'
+    code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE'
+    || code === 'INSUFFICIENT_OPERATIONAL_BALANCE'
+    || code === 'IDEMPOTENCY_KEY_CONFLICT'
+    || code === 'LOGIN_TAKEN'
     || code === 'STAFF_AUTH_ALREADY_BOUND'
     || code === 'PLAYER_ACCOUNT_CANNOT_BECOME_STAFF'
+    || (code && code.endsWith('_NOT_ACTIVE'))
     || (code && code.endsWith('_BOUND'))
   ) {
     return staffError(code, 409);

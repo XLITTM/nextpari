@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Plus, RefreshCw } from 'lucide-react';
+import { isOperationalAccountActive } from '../shared/staff/financeGate';
+import { OwnerMoneyDialog, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
 import {
   fetchOwnerCashierLedger,
   fetchOwnerManagerDetail,
   fetchOwnerManagers,
+  fetchOwnerTreasury,
   formatTmtmCompact,
   postOwnerManager,
   type CashierLedgerEntry,
@@ -17,12 +20,19 @@ export function OwnerManagersPanel() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [fund, setFund] = useState<OwnerMoneyDialogState | null>(null);
+  const [treasuryActive, setTreasuryActive] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      setRows(await fetchOwnerManagers());
+      const [list, treasury] = await Promise.all([
+        fetchOwnerManagers(),
+        fetchOwnerTreasury().catch(() => null),
+      ]);
+      setRows(list);
+      setTreasuryActive(ownerTreasuryIsActive(treasury));
     } catch (err) {
       setRows([]);
       setError(err instanceof Error ? err.message : 'Не удалось загрузить менеджеров');
@@ -120,13 +130,37 @@ export function OwnerManagersPanel() {
                 </td>
                 <td className="px-4 py-3 font-semibold">{row.cashierCount}</td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    onClick={() => setOpenId(row.managerId)}
-                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-ink-900 text-white"
-                  >
-                    Открыть
-                  </button>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={
+                        !treasuryActive
+                        || !isOperationalAccountActive({
+                          status: row.operationalStatus,
+                          migrationState: row.operationalMigrationState,
+                        })
+                      }
+                      title={
+                        treasuryActive && isOperationalAccountActive({
+                          status: row.operationalStatus,
+                          migrationState: row.operationalMigrationState,
+                        })
+                          ? 'Пополнить'
+                          : 'Казна или менеджер не активны'
+                      }
+                      onClick={() => setFund({ type: 'manager', manager: row })}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-brand-600 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    >
+                      Пополнить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(row.managerId)}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-ink-900 text-white"
+                    >
+                      Открыть
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -140,6 +174,16 @@ export function OwnerManagersPanel() {
           </tbody>
         </table>
       </div>
+      {fund && (
+        <OwnerMoneyDialog
+          state={fund}
+          treasuryActive={treasuryActive}
+          onClose={() => setFund(null)}
+          onSuccess={async () => {
+            await load();
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -224,14 +268,20 @@ function OwnerManagerDetail({
   const [ledger, setLedger] = useState<CashierLedgerEntry[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [fund, setFund] = useState<OwnerMoneyDialogState | null>(null);
+  const [treasuryActive, setTreasuryActive] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const detail = await fetchOwnerManagerDetail(managerId);
+      const [detail, treasury] = await Promise.all([
+        fetchOwnerManagerDetail(managerId),
+        fetchOwnerTreasury().catch(() => null),
+      ]);
       setManager(detail.manager);
       setCashiers(detail.cashiers);
+      setTreasuryActive(ownerTreasuryIsActive(treasury));
     } catch (err) {
       setManager(null);
       setCashiers([]);
@@ -296,6 +346,28 @@ function OwnerManagerDetail({
           <p className="mt-1 text-xs font-semibold">
             Auth: {manager.authBound ? 'привязан' : 'нет привязки'}
           </p>
+          <button
+            type="button"
+            disabled={
+              !treasuryActive
+              || !isOperationalAccountActive({
+                status: manager.operationalStatus,
+                migrationState: manager.operationalMigrationState,
+              })
+            }
+            title={
+              treasuryActive && isOperationalAccountActive({
+                status: manager.operationalStatus,
+                migrationState: manager.operationalMigrationState,
+              })
+                ? 'Пополнить'
+                : 'Казна или менеджер не активны'
+            }
+            onClick={() => setFund({ type: 'manager', manager })}
+            className="mt-3 text-xs font-bold px-3 py-2 rounded-xl bg-brand-600 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+          >
+            Пополнить
+          </button>
         </div>
       )}
       <h3 className="text-lg font-bold mb-3">Кассы сети</h3>
@@ -307,6 +379,7 @@ function OwnerManagerDetail({
               <th className="px-4 py-3">Точка</th>
               <th className="px-4 py-3 text-right">Остаток</th>
               <th className="px-4 py-3">Статус</th>
+              <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody>
@@ -327,11 +400,48 @@ function OwnerManagerDetail({
                 <td className="px-4 py-3 text-xs">
                   {row.operationalStatus || '—'} · {row.operationalMigrationState || '—'}
                 </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    type="button"
+                    disabled={
+                      !treasuryActive
+                      || !isOperationalAccountActive({
+                        status: row.operationalStatus,
+                        migrationState: row.operationalMigrationState,
+                      })
+                    }
+                    title={
+                      treasuryActive && isOperationalAccountActive({
+                        status: row.operationalStatus,
+                        migrationState: row.operationalMigrationState,
+                      })
+                        ? 'Пополнить напрямую из казны'
+                        : 'Казна или касса не активны'
+                    }
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFund({
+                        type: 'cashier',
+                        cashier: {
+                          cashierId: row.cashierId,
+                          fullName: row.fullName,
+                          login: row.login,
+                          operationalBalance: row.operationalBalance,
+                          operationalStatus: row.operationalStatus,
+                          operationalMigrationState: row.operationalMigrationState,
+                        },
+                      });
+                    }}
+                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-ink-900 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  >
+                    Пополнить напрямую
+                  </button>
+                </td>
               </tr>
             ))}
             {cashiers.length === 0 && !loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-500">Касс в сети пока нет</td>
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Касс в сети пока нет</td>
               </tr>
             )}
           </tbody>
@@ -347,6 +457,38 @@ function OwnerManagerDetail({
               {' '}· {openCashier.operationalStatus} · {openCashier.operationalMigrationState}
             </span>
           </p>
+          <button
+            type="button"
+            disabled={
+              !treasuryActive
+              || !isOperationalAccountActive({
+                status: openCashier.operationalStatus,
+                migrationState: openCashier.operationalMigrationState,
+              })
+            }
+            title={
+              treasuryActive && isOperationalAccountActive({
+                status: openCashier.operationalStatus,
+                migrationState: openCashier.operationalMigrationState,
+              })
+                ? 'Пополнить напрямую из казны'
+                : 'Казна или касса не активны'
+            }
+            onClick={() => setFund({
+              type: 'cashier',
+              cashier: {
+                cashierId: openCashier.cashierId,
+                fullName: openCashier.fullName,
+                login: openCashier.login,
+                operationalBalance: openCashier.operationalBalance,
+                operationalStatus: openCashier.operationalStatus,
+                operationalMigrationState: openCashier.operationalMigrationState,
+              },
+            })}
+            className="mt-3 text-xs font-bold px-3 py-2 rounded-xl bg-ink-900 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+          >
+            Пополнить напрямую
+          </button>
           <h4 className="mt-4 text-sm font-bold">История кассы</h4>
           {ledger.length === 0 ? (
             <p className="text-xs text-gray-500 mt-2">Операций нет</p>
@@ -361,6 +503,16 @@ function OwnerManagerDetail({
             </div>
           )}
         </div>
+      )}
+      {fund && (
+        <OwnerMoneyDialog
+          state={fund}
+          treasuryActive={treasuryActive}
+          onClose={() => setFund(null)}
+          onSuccess={async () => {
+            await load();
+          }}
+        />
       )}
     </section>
   );

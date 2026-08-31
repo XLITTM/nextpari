@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Ban, RefreshCw, Search, Unlock, Users, Wallet, X } from 'lucide-react';
+import { OwnerMoneyDialog, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
 import {
   fetchOwnerPlayerDossier,
   fetchOwnerPlayers,
+  fetchOwnerTreasury,
   formatBackofficeDateTime,
   formatTmtmCompact,
   setOwnerPlayerBlocked,
@@ -42,14 +44,20 @@ export function PlayersPanel() {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [fund, setFund] = useState<OwnerMoneyDialogState | null>(null);
+  const [treasuryActive, setTreasuryActive] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const page = await fetchOwnerPlayers({ search, limit: 50, offset: 0 });
+      const [page, treasury] = await Promise.all([
+        fetchOwnerPlayers({ search, limit: 50, offset: 0 }),
+        fetchOwnerTreasury().catch(() => null),
+      ]);
       setRows(page.rows);
       setTotal(page.total);
+      setTreasuryActive(ownerTreasuryIsActive(treasury));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить игроков');
       setRows([]);
@@ -118,6 +126,7 @@ export function PlayersPanel() {
                 <th className="px-4 py-3">Кошелёк</th>
                 <th className="px-4 py-3">Статус</th>
                 <th className="px-4 py-3">Регистрация</th>
+                <th className="px-4 py-3 text-right">Действия</th>
               </tr>
             </thead>
             <tbody>
@@ -153,11 +162,26 @@ export function PlayersPanel() {
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                     {row.createdAt ? formatBackofficeDateTime(row.createdAt) : '—'}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      disabled={!treasuryActive || !row.publicId}
+                      title={
+                        treasuryActive && row.publicId
+                          ? 'Пополнить баланс из казны'
+                          : 'Казна не активна или нет public_id'
+                      }
+                      onClick={() => setFund({ type: 'player', publicId: row.publicId })}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-brand-600 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                    >
+                      Пополнить баланс
+                    </button>
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                  <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                     {search ? 'Игроки по запросу не найдены' : 'Профили игроков пока не загружены'}
                   </td>
                 </tr>
@@ -169,9 +193,21 @@ export function PlayersPanel() {
       {selectedId && (
         <PlayerDossierModal
           playerId={selectedId}
+          treasuryActive={treasuryActive}
           onClose={() => setSelectedId(null)}
           onNotice={setNotice}
           onChanged={load}
+          onFund={(publicId) => setFund({ type: 'player', publicId })}
+        />
+      )}
+      {fund && (
+        <OwnerMoneyDialog
+          state={fund}
+          treasuryActive={treasuryActive}
+          onClose={() => setFund(null)}
+          onSuccess={async () => {
+            await load();
+          }}
         />
       )}
     </section>
@@ -180,14 +216,18 @@ export function PlayersPanel() {
 
 function PlayerDossierModal({
   playerId,
+  treasuryActive,
   onClose,
   onNotice,
   onChanged,
+  onFund,
 }: {
   playerId: string;
+  treasuryActive: boolean;
   onClose: () => void;
   onNotice: (value: string) => void;
   onChanged: () => Promise<void>;
+  onFund: (publicId: string) => void;
 }) {
   const [dossier, setDossier] = useState<OwnerPlayerDossier | null>(null);
   const [error, setError] = useState('');
@@ -301,12 +341,13 @@ function PlayerDossierModal({
           </button>
           <button
             type="button"
-            disabled
-            title="Функция переводится на защищённое ядро"
-            className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-xl bg-slate-100 text-slate-400 cursor-not-allowed"
+            disabled={!treasuryActive || !publicId}
+            title={treasuryActive && publicId ? 'Пополнить баланс из казны' : 'Казна не активна'}
+            onClick={() => onFund(publicId)}
+            className="inline-flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-xl bg-brand-600 text-white disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
           >
             <Wallet className="w-4 h-4" />
-            Корректировка баланса
+            Пополнить баланс
           </button>
         </div>
       </div>
@@ -319,7 +360,6 @@ function DossierBody({ tab, dossier }: { tab: DossierTab; dossier: OwnerPlayerDo
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
         <InfoCell label="Public ID" value={String(dossier.profile.public_id ?? dossier.wallet.public_id ?? '—')} />
-        <InfoCell label="Wallet ID" value={String(dossier.wallet.wallet_id ?? '—')} />
         <InfoCell label="Email" value={String(dossier.profile.email || '—')} />
         <InfoCell label="Телефон" value={String(dossier.profile.phone || '—')} />
         <InfoCell label="Статус кошелька" value={String(dossier.wallet.status ?? '—')} />

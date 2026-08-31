@@ -525,3 +525,285 @@ describe('owner control center same-origin BFF', () => {
     assert.equal(JSON.stringify(failed.body).includes('temporary-pass-12'), false);
   });
 });
+
+describe('owner treasury and direct funding controls', () => {
+  const MANAGER_ID = 'ccc5f5ad-079e-4420-9080-e7ded4ff9496';
+  const FORBIDDEN_BODY = {
+    actorUserId: 'owner-uid',
+    fromAccountId: 'from-acc',
+    treasuryId: 'treasury-acc',
+    networkId: '11111111-1111-1111-1111-111111111111',
+    walletId: 'wallet-uuid',
+    operationalAccountId: 'ops-acc',
+  };
+
+  it('GET /api/owner/treasury maps to owner_treasury_overview', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/treasury');
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls.length, 1);
+    assert.equal(rpc.calls[0]?.name, 'owner_treasury_overview');
+    assert.equal(rpc.calls[0]?.token, ACCESS);
+    assert.equal(rpc.calls[0]?.args, undefined);
+  });
+
+  it('strips wallet UUID and from-account ids from treasury overview', async () => {
+    const rpc = createRpc();
+    rpc.rpcFactory = (accessToken) => ({
+      async invoke(name, args) {
+        rpc.calls.push({ token: accessToken, name, args });
+        return {
+          treasury: {
+            id: 'treasury-hidden',
+            currency: 'TMTM',
+            available_balance: 0,
+            status: 'active',
+            migration_state: 'active',
+          },
+          managers: { count: 1, total_balance: 0 },
+          cashiers: { count: 1, total_balance: 3550 },
+          recent_transfers: [{
+            id: 'tr-1',
+            transfer_no: 'OP-1',
+            transfer_type: 'TREASURY_TO_PLAYER',
+            amount: 10,
+            player_wallet_id: 'wallet-uuid-secret',
+            wallet_id: 'wallet-uuid-secret',
+            from_account_id: 'from-acc-secret',
+            to_account_id: 'to-acc',
+            network_id: 'net-secret',
+            actor_role: 'owner',
+            created_at: '2026-09-01T00:00:00.000Z',
+          }],
+        };
+      },
+    });
+    const { result } = await ownerGet('/api/owner/treasury', { rpc });
+    assert.equal(result.status, 200);
+    const dumped = JSON.stringify(result.body);
+    assert.equal(dumped.includes('wallet-uuid-secret'), false);
+    assert.equal(dumped.includes('from-acc-secret'), false);
+    assert.equal(dumped.includes('treasury-hidden'), false);
+    assert.match(dumped, /OP-1/);
+    assert.match(dumped, /TREASURY_TO_PLAYER/);
+  });
+
+  it('POST /api/owner/treasury maps only to owner_capital_in', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/treasury', {
+      amount: 100,
+      idempotencyKey: 'cap-1',
+      note: 'seed capital',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls.length, 1);
+    assert.equal(rpc.calls[0]?.name, 'owner_capital_in');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_amount: 100,
+      p_idempotency_key: 'cap-1',
+      p_note: 'seed capital',
+    });
+    assert.equal(rpc.calls.some((call) => call.name.startsWith('owner_fund_')), false);
+  });
+
+  it('manager funding maps only owner_fund_manager', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/fund', {
+      targetType: 'manager',
+      targetId: MANAGER_ID,
+      amount: 50,
+      idempotencyKey: 'mgr-1',
+      note: 'float',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls.length, 1);
+    assert.equal(rpc.calls[0]?.name, 'owner_fund_manager');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_manager_id: MANAGER_ID,
+      p_amount: 50,
+      p_idempotency_key: 'mgr-1',
+      p_note: 'float',
+    });
+    assert.equal(rpc.calls.some((call) => call.name === 'owner_fund_cashier'), false);
+    assert.equal(rpc.calls.some((call) => call.name === 'owner_fund_player'), false);
+    assert.equal(rpc.calls.some((call) => call.name === 'owner_capital_in'), false);
+  });
+
+  it('cashier direct funding maps owner_fund_cashier', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/fund', {
+      targetType: 'cashier',
+      targetId: CASHIER_ID,
+      amount: 25,
+      idempotencyKey: 'csh-1',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls.length, 1);
+    assert.equal(rpc.calls[0]?.name, 'owner_fund_cashier');
+    assert.equal(rpc.calls[0]?.args?.p_cashier_id, CASHIER_ID);
+    assert.equal(rpc.calls[0]?.args?.p_amount, 25);
+    assert.equal(rpc.calls[0]?.args?.p_idempotency_key, 'csh-1');
+    assert.equal(Object.keys(rpc.calls[0]?.args ?? {}).includes('p_manager_id'), false);
+    assert.equal(Object.keys(rpc.calls[0]?.args ?? {}).includes('p_from_account_id'), false);
+  });
+
+  it('player direct funding maps owner_fund_player with public_id', async () => {
+    const rpc = createRpc();
+    rpc.rpcFactory = (accessToken) => ({
+      async invoke(name, args) {
+        rpc.calls.push({ token: accessToken, name, args });
+        return {
+          ok: true,
+          transfer_id: 'tr-player',
+          amount: 15,
+          player_public_id: '110790',
+          wallet_id: 'wallet-uuid-secret',
+        };
+      },
+    });
+    const { result } = await ownerPost('/api/owner/fund', {
+      targetType: 'player',
+      targetId: '110790',
+      amount: 15,
+      idempotencyKey: 'pl-1',
+    }, { rpc });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls.length, 1);
+    assert.equal(rpc.calls[0]?.name, 'owner_fund_player');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_player_id: '110790',
+      p_amount: 15,
+      p_idempotency_key: 'pl-1',
+      p_note: null,
+    });
+    const dumped = JSON.stringify(result.body);
+    assert.equal(dumped.includes('wallet-uuid-secret'), false);
+    assert.match(dumped, /110790/);
+  });
+
+  it('browser cannot select treasury/from account/network/wallet', async () => {
+    const capital = await ownerPost('/api/owner/treasury', {
+      amount: 10,
+      idempotencyKey: 'cap-forbidden',
+      note: 'note',
+      ...FORBIDDEN_BODY,
+    });
+    assert.equal(capital.result.status, 400);
+    assert.equal(capital.result.body.error, 'FIELD_FORBIDDEN');
+    assert.equal(capital.rpc.calls.length, 0);
+
+    const fund = await ownerPost('/api/owner/fund', {
+      targetType: 'manager',
+      targetId: MANAGER_ID,
+      amount: 10,
+      idempotencyKey: 'fund-forbidden',
+      ...FORBIDDEN_BODY,
+    });
+    assert.equal(fund.result.status, 400);
+    assert.equal(fund.result.body.error, 'FIELD_FORBIDDEN');
+    assert.equal(fund.rpc.calls.length, 0);
+
+    const walletPlayer = await ownerPost('/api/owner/fund', {
+      targetType: 'player',
+      targetId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      amount: 10,
+      idempotencyKey: 'wallet-as-player',
+    });
+    assert.equal(walletPlayer.result.status, 400);
+    assert.equal(walletPlayer.result.body.error, 'PLAYER_WALLET_ID_FORBIDDEN');
+    assert.equal(walletPlayer.rpc.calls.length, 0);
+  });
+
+  it('duplicate unchanged retry reuses idempotency key; changed amount gets a new key', () => {
+    const { ownerCapitalFingerprint, ownerFundFingerprint } = {
+      ownerCapitalFingerprint: (amount: number, note: string) => `capital|${amount}|${note}`,
+      ownerFundFingerprint: (
+        targetType: 'manager' | 'cashier' | 'player',
+        targetId: string,
+        amount: number,
+        note: string,
+      ) => `fund|${targetType}|${targetId}|${amount}|${note}`,
+    };
+    const retainIdempotencyKey = (
+      slot: { key: string; fingerprint: string } | null,
+      fingerprint: string,
+    ) => {
+      if (slot && slot.fingerprint === fingerprint) return slot;
+      return { key: crypto.randomUUID(), fingerprint };
+    };
+    const capitalFp = ownerCapitalFingerprint(100, 'seed');
+    const first = retainIdempotencyKey(null, capitalFp);
+    const retry = retainIdempotencyKey(first, capitalFp);
+    assert.equal(retry.key, first.key);
+    const changed = retainIdempotencyKey(first, ownerCapitalFingerprint(200, 'seed'));
+    assert.notEqual(changed.key, first.key);
+
+    const fundFp = ownerFundFingerprint('cashier', CASHIER_ID, 25, '');
+    const fundFirst = retainIdempotencyKey(null, fundFp);
+    const fundRetry = retainIdempotencyKey(fundFirst, fundFp);
+    assert.equal(fundRetry.key, fundFirst.key);
+    const fundChanged = retainIdempotencyKey(
+      fundFirst,
+      ownerFundFingerprint('cashier', CASHIER_ID, 40, ''),
+    );
+    assert.notEqual(fundChanged.key, fundFirst.key);
+
+    const gate = readFileSync(join(root, 'src/shared/staff/financeGate.ts'), 'utf8');
+    const keys = readFileSync(join(root, 'src/owner/ownerMoney.ts'), 'utf8');
+    const ui = readFileSync(join(root, 'src/owner/OwnerMoneyControls.tsx'), 'utf8');
+    assert.match(gate, /if \(slot && slot.fingerprint === fingerprint\) return slot/);
+    assert.match(keys, /capital\|\$\{amount\}\|\$\{note\}/);
+    assert.match(ui, /retainIdempotencyKey\(idempotency, fingerprint\)/);
+    assert.match(ui, /ownerFundFingerprint/);
+  });
+
+  it('no service_role business authority and no legacy money RPC', () => {
+    const http = readFileSync(join(here, 'ownerControlHttp.ts'), 'utf8');
+    const rpcSrc = readFileSync(join(here, 'ownerRpc.ts'), 'utf8');
+    const services = readFileSync(join(root, 'src/owner/services.ts'), 'utf8');
+    const money = readFileSync(join(root, 'src/owner/OwnerMoneyControls.tsx'), 'utf8');
+    const dashboard = readFileSync(join(root, 'src/owner/ManagerDashboardScreen.tsx'), 'utf8');
+    const managers = readFileSync(join(root, 'src/owner/OwnerManagersPanel.tsx'), 'utf8');
+    const players = readFileSync(join(root, 'src/owner/PlayersPanel.tsx'), 'utf8');
+    const sources = `${http}\n${rpcSrc}\n${services}\n${money}\n${dashboard}\n${managers}\n${players}`;
+    assert.equal(http.includes('createServiceRoleClient'), false);
+    assert.equal(rpcSrc.includes('createServiceRoleClient'), false);
+    assert.equal(http.includes('service_role'), false);
+    assert.match(rpcSrc, /createUserJwtClient/);
+    for (const banned of [
+      'manager_adjust_player_balance',
+      'cashier_deposit_to_player',
+      'manager_create_cashier',
+    ]) {
+      assert.equal(sources.includes(banned), false, banned);
+    }
+    assert.equal(http.includes('.from(\'wallets\')'), false);
+    assert.equal(http.includes('float_balance'), false);
+    assert.equal(services.includes("from('wallets')"), false);
+    assert.equal(money.includes('fromAccountId'), false);
+    assert.equal(money.includes('treasuryId'), false);
+    assert.equal(money.includes('walletId'), false);
+    assert.match(services, /targetType: input.targetType/);
+    assert.match(services, /targetId: input.targetId/);
+    assert.equal(services.includes('walletId: input'), false);
+  });
+
+  it('active treasury enables UI; staging/blocked treasury disables UI', () => {
+    const money = readFileSync(join(root, 'src/owner/OwnerMoneyControls.tsx'), 'utf8');
+    const dashboard = readFileSync(join(root, 'src/owner/ManagerDashboardScreen.tsx'), 'utf8');
+    const managers = readFileSync(join(root, 'src/owner/OwnerManagersPanel.tsx'), 'utf8');
+    const players = readFileSync(join(root, 'src/owner/PlayersPanel.tsx'), 'utf8');
+    assert.match(money, /ownerTreasuryIsActive/);
+    assert.match(money, /isOperationalAccountActive/);
+    assert.match(money, /disabled=\{!treasuryActive\}/);
+    assert.match(money, /Казна не активна/);
+    assert.match(money, /Доступно в казне/);
+    assert.match(dashboard, /OwnerTreasuryPanel/);
+    assert.match(dashboard, /Пополнить напрямую/);
+    assert.match(managers, /Пополнить напрямую/);
+    assert.match(managers, /isOperationalAccountActive/);
+    assert.match(players, /Пополнить баланс/);
+    assert.equal(players.includes('Корректировка баланса'), false);
+    assert.match(players, /publicId: row.publicId/);
+    assert.equal(players.includes('walletId'), false);
+    assert.match(players, /onFund\(publicId\)/);
+    assert.match(money, /retainIdempotencyKey/);
+    assert.match(money, /disabled=\{!enabled\}/);
+  });
+});

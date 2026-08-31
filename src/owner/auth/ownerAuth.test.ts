@@ -121,6 +121,8 @@ export const OWNER_CONTROL_API_ROUTES = [
   '/api/owner/withdrawals',
   '/api/owner/messages',
   '/api/owner/managers',
+  '/api/owner/treasury',
+  '/api/owner/fund',
 ] as const;
 
 describe('Owner control center browser services use same-origin APIs', () => {

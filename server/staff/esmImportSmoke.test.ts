@@ -29,6 +29,8 @@ const RUNTIME_GRAPH = [
   'api/owner/messages.ts',
   'api/owner/managers.ts',
   'api/owner/managers/[managerId].ts',
+  'api/owner/treasury.ts',
+  'api/owner/fund.ts',
   'api/manager/me.ts',
   'api/manager/dashboard.ts',
   'api/manager/cashiers.ts',
@@ -152,6 +154,8 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/owner/withdrawals.js',
         'api/owner/messages.js',
         'api/owner/managers.js',
+        'api/owner/treasury.js',
+        'api/owner/fund.js',
       ];
       const managerControlEntries = [
         'api/manager/me.js',

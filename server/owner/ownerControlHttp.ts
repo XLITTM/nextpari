@@ -77,6 +77,162 @@ function requireBoolean(value: unknown, code: string): boolean {
   throw staffError(code, 400);
 }
 
+function requireAmount(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) throw staffError('AMOUNT_REQUIRED', 400);
+  if (n <= 0) throw staffError('AMOUNT_NOT_POSITIVE', 400);
+  return n;
+}
+
+function requireIdempotencyKey(value: unknown): string {
+  const key = String(value ?? '').trim();
+  if (!key) throw staffError('IDEMPOTENCY_KEY_REQUIRED', 400);
+  if (key.length > 250) throw staffError('IDEMPOTENCY_KEY_TOO_LONG', 400);
+  return key;
+}
+
+function optionalNote(value: unknown): string | null {
+  if (value == null) return null;
+  const note = String(value).trim();
+  if (!note) return null;
+  if (note.length > 500) throw staffError('NOTE_TOO_LONG', 400);
+  return note;
+}
+
+function requireNote(value: unknown): string {
+  const note = optionalNote(value);
+  if (!note) throw staffError('NOTE_REQUIRED', 400);
+  return note;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireUuid(value: unknown, requiredCode: string, invalidCode: string): string {
+  const id = String(value ?? '').trim();
+  if (!id) throw staffError(requiredCode, 400);
+  if (!UUID_RE.test(id)) throw staffError(invalidCode, 400);
+  return id;
+}
+
+function requirePlayerPublicId(value: unknown): string {
+  const id = String(value ?? '').trim();
+  if (!id) throw staffError('PLAYER_ID_REQUIRED', 400);
+  if (UUID_RE.test(id)) throw staffError('PLAYER_WALLET_ID_FORBIDDEN', 400);
+  return id;
+}
+
+const FORBIDDEN_FINANCE_KEYS = [
+  'actorUserId',
+  'actor_user_id',
+  'fromAccountId',
+  'from_account_id',
+  'treasuryId',
+  'treasury_id',
+  'networkId',
+  'network_id',
+  'walletId',
+  'wallet_id',
+  'operationalAccountId',
+  'operational_account_id',
+] as const;
+
+function rejectForbiddenFinanceFields(rec: Record<string, unknown>): void {
+  for (const key of FORBIDDEN_FINANCE_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(rec, key)) {
+      throw staffError('FIELD_FORBIDDEN', 400);
+    }
+  }
+}
+
+function asRows(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value == null) return [];
+  return [value];
+}
+
+function stripMoneySecrets(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripMoneySecrets);
+  if (!value || typeof value !== 'object') return value;
+  const rec = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(rec)) {
+    const compact = key.toLowerCase().replace(/_/g, '');
+    if (
+      compact === 'walletid'
+      || compact === 'playerwalletid'
+      || compact === 'accesstoken'
+      || compact === 'refreshtoken'
+    ) {
+      continue;
+    }
+    out[key] = stripMoneySecrets(nested);
+  }
+  return out;
+}
+
+function sanitizeTreasuryOverview(data: unknown): unknown {
+  const rec = asRecord(data);
+  if (!('treasury' in rec) && !('recent_transfers' in rec) && !('recentTransfers' in rec)) {
+    return stripMoneySecrets(data);
+  }
+  const treasuryRaw = asRecord(rec.treasury);
+  const treasury = Object.keys(treasuryRaw).length === 0
+    ? rec.treasury
+    : {
+        currency: treasuryRaw.currency,
+        available_balance: treasuryRaw.available_balance ?? treasuryRaw.availableBalance,
+        status: treasuryRaw.status,
+        migration_state: treasuryRaw.migration_state ?? treasuryRaw.migrationState,
+        version: treasuryRaw.version,
+      };
+  const transfers = asRows(rec.recent_transfers ?? rec.recentTransfers).map((row) => {
+    const item = asRecord(row);
+    return {
+      id: item.id,
+      transfer_no: item.transfer_no ?? item.transferNo,
+      transfer_type: item.transfer_type ?? item.transferType,
+      currency: item.currency,
+      amount: item.amount,
+      actor_role: item.actor_role ?? item.actorRole,
+      created_at: item.created_at ?? item.createdAt,
+      target_reference: item.transfer_no ?? item.transferNo ?? item.id ?? null,
+    };
+  });
+  return {
+    treasury,
+    managers: rec.managers,
+    cashiers: rec.cashiers,
+    recent_transfers: transfers,
+  };
+}
+
+function sanitizeMoneyResult(data: unknown): unknown {
+  const rec = asRecord(data);
+  if (!('transfer_id' in rec) && !('transferId' in rec)) {
+    return stripMoneySecrets(data);
+  }
+  const out: Record<string, unknown> = {
+    ok: rec.ok,
+    transfer_id: rec.transfer_id ?? rec.transferId,
+    is_duplicate: rec.is_duplicate ?? rec.isDuplicate,
+    amount: rec.amount,
+    currency: rec.currency,
+    from_balance_after: rec.from_balance_after ?? rec.fromBalanceAfter,
+    to_balance_after: rec.to_balance_after ?? rec.toBalanceAfter,
+    player_balance_after: rec.player_balance_after ?? rec.playerBalanceAfter,
+  };
+  if (rec.manager_id != null || rec.managerId != null) {
+    out.manager_id = rec.manager_id ?? rec.managerId;
+  }
+  if (rec.cashier_id != null || rec.cashierId != null) {
+    out.cashier_id = rec.cashier_id ?? rec.cashierId;
+  }
+  if (rec.player_public_id != null || rec.playerPublicId != null) {
+    out.player_public_id = rec.player_public_id ?? rec.playerPublicId;
+  }
+  return out;
+}
+
 type ControlAction =
   | { kind: 'me' }
   | { kind: 'dashboard' }
@@ -91,7 +247,10 @@ type ControlAction =
   | { kind: 'message' }
   | { kind: 'managers' }
   | { kind: 'createManager' }
-  | { kind: 'managerDetail'; managerId: string };
+  | { kind: 'managerDetail'; managerId: string }
+  | { kind: 'treasury' }
+  | { kind: 'capitalIn' }
+  | { kind: 'fund' };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -124,6 +283,12 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/owner/players') return m === 'GET' ? { kind: 'players' } : 'method';
   if (path === '/api/owner/withdrawals') return m === 'GET' ? { kind: 'withdrawals' } : 'method';
   if (path === '/api/owner/messages') return m === 'POST' ? { kind: 'message' } : 'method';
+  if (path === '/api/owner/treasury') {
+    if (m === 'GET') return { kind: 'treasury' };
+    if (m === 'POST') return { kind: 'capitalIn' };
+    return 'method';
+  }
+  if (path === '/api/owner/fund') return m === 'POST' ? { kind: 'fund' } : 'method';
   return null;
 }
 
@@ -198,6 +363,49 @@ async function runControl(
         p_body: bodyText,
       });
     }
+    case 'treasury':
+      return sanitizeTreasuryOverview(await rpc.invoke('owner_treasury_overview'));
+    case 'capitalIn': {
+      rejectForbiddenFinanceFields(rec);
+      return sanitizeMoneyResult(await rpc.invoke('owner_capital_in', {
+        p_amount: requireAmount(rec.amount),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+        p_note: requireNote(rec.note),
+      }));
+    }
+    case 'fund': {
+      rejectForbiddenFinanceFields(rec);
+      const amount = requireAmount(rec.amount);
+      const idempotencyKey = requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key);
+      const note = optionalNote(rec.note);
+      const targetType = String(rec.targetType ?? rec.target_type ?? '').trim();
+      const targetId = rec.targetId ?? rec.target_id;
+      if (targetType === 'manager') {
+        return sanitizeMoneyResult(await rpc.invoke('owner_fund_manager', {
+          p_manager_id: requireUuid(targetId, 'MANAGER_ID_REQUIRED', 'MANAGER_ID_INVALID'),
+          p_amount: amount,
+          p_idempotency_key: idempotencyKey,
+          p_note: note,
+        }));
+      }
+      if (targetType === 'cashier') {
+        return sanitizeMoneyResult(await rpc.invoke('owner_fund_cashier', {
+          p_cashier_id: requireUuid(targetId, 'CASHIER_ID_REQUIRED', 'CASHIER_ID_INVALID'),
+          p_amount: amount,
+          p_idempotency_key: idempotencyKey,
+          p_note: note,
+        }));
+      }
+      if (targetType === 'player') {
+        return sanitizeMoneyResult(await rpc.invoke('owner_fund_player', {
+          p_player_id: requirePlayerPublicId(targetId),
+          p_amount: amount,
+          p_idempotency_key: idempotencyKey,
+          p_note: note,
+        }));
+      }
+      throw staffError('TARGET_TYPE_INVALID', 400);
+    }
     default:
       throw staffError('NOT_FOUND', 404);
   }
@@ -267,7 +475,13 @@ export async function handleOwnerControlRequest(
         status: error.httpStatus,
         body: { ok: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405
-          ? { Allow: method === 'POST' ? 'GET' : 'POST' }
+          ? {
+              Allow: path === '/api/owner/treasury'
+                ? 'GET, POST'
+                : path === '/api/owner/fund'
+                  ? 'POST'
+                  : (method === 'POST' ? 'GET' : 'POST'),
+            }
           : undefined,
         cookies: error.httpStatus === 401 ? clearOwnerCookies(secure) : sessionCookies,
       };
