@@ -17,8 +17,8 @@ const COPY: Record<StaffRole, { title: string; hint: string; demo: string }> = {
   },
   AGENT: {
     title: 'Терминал кассира',
-    hint: 'Касса NextPari · Mobcash',
-    demo: 'agent01 / 1234',
+    hint: 'Вход по email и паролю',
+    demo: '',
   },
 };
 

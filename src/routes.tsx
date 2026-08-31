@@ -1,6 +1,7 @@
 import { ManagerOfficeLayout } from './pages/manager/ManagerOfficeLayout';
 import { ManagerAuthProvider } from './manager/auth/ManagerAuthProvider';
 import { OwnerAuthProvider } from './owner/auth/OwnerAuthProvider';
+import { CashierAuthProvider } from './cashier/auth/CashierAuthProvider';
 import { ManagerDashboardScreen } from './owner/ManagerDashboardScreen';
 import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
 import { isAgentTerminalPath } from './lib/cashier';
@@ -16,7 +17,13 @@ export function currentStaffPortal(): StaffPortal | null {
 }
 
 export function AppRoutes({ portal }: { portal: StaffPortal }) {
-  if (portal === 'agent') return <MobcashAgentScreen />;
+  if (portal === 'agent') {
+    return (
+      <CashierAuthProvider>
+        <MobcashAgentScreen />
+      </CashierAuthProvider>
+    );
+  }
   if (portal === 'owner') {
     return (
       <OwnerAuthProvider>
