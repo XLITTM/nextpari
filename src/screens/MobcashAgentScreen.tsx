@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowDownToLine, ArrowUpFromLine, Banknote, Clock3,
   History, LogOut, MapPin, User, Wallet,
 } from 'lucide-react';
 import { useCashierAuth } from '../cashier/auth/CashierAuthProvider';
 import { cashierAuthErrorMessage, type CashierStaffContext } from '../cashier/auth/cashierAuth';
+import {
+  fetchCashierFinance,
+  fetchCashierTransfers,
+  type CashierFinanceOverview,
+  type CashierTransferList,
+} from '../cashier/services';
 
 function formatTmtm(value: number): string {
   return `${value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TMTM`;
@@ -131,6 +137,67 @@ function AgentDesk({
   onLogout: () => void;
 }) {
   const [tab, setTab] = useState<AgentTab>('deposit');
+  const [finance, setFinance] = useState<CashierFinanceOverview | null>(null);
+  const [financeError, setFinanceError] = useState('');
+  const [financeLoading, setFinanceLoading] = useState(true);
+  const [transfers, setTransfers] = useState<CashierTransferList | null>(null);
+  const [transfersError, setTransfersError] = useState('');
+  const [transfersLoading, setTransfersLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setFinanceLoading(true);
+    setFinanceError('');
+    void fetchCashierFinance()
+      .then((next) => {
+        if (cancelled) return;
+        setFinance(next);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setFinance(null);
+        setFinanceError(err instanceof Error ? err.message : 'FINANCE_UNAVAILABLE');
+      })
+      .finally(() => {
+        if (!cancelled) setFinanceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [staff.legacyCashierId]);
+
+  useEffect(() => {
+    if (tab !== 'history') return undefined;
+    let cancelled = false;
+    setTransfersLoading(true);
+    setTransfersError('');
+    void fetchCashierTransfers()
+      .then((next) => {
+        if (cancelled) return;
+        setTransfers(next);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTransfers(null);
+        setTransfersError(err instanceof Error ? err.message : 'HISTORY_UNAVAILABLE');
+      })
+      .finally(() => {
+        if (!cancelled) setTransfersLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab]);
+
+  const displayName = finance?.cashier.fullName || staff.displayName || 'Кассир';
+  const point = [finance?.cashier.city, finance?.cashier.pointName].filter(Boolean).join(' · ');
+  const migrationState = finance?.operational.migrationState || 'staging';
+  const balance = finance?.operational.availableBalance ?? null;
+
+  let balanceLabel = '…';
+  if (!financeLoading && financeError) balanceLabel = 'недоступен';
+  else if (!financeLoading && balance == null) balanceLabel = 'недоступен';
+  else if (!financeLoading && balance != null) balanceLabel = formatTmtm(balance);
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-900 max-w-lg mx-auto relative">
@@ -143,12 +210,12 @@ function AgentDesk({
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-wider text-ink-400 font-bold">Mobcash</p>
-                <p className="text-sm font-extrabold truncate">{staff.displayName || 'Кассир'}</p>
+                <p className="text-sm font-extrabold truncate">{displayName}</p>
               </div>
             </div>
             <p className="mt-2 flex items-center gap-1 text-xs text-ink-300">
               <MapPin className="w-3.5 h-3.5 shrink-0 text-brand-400" />
-              <span className="truncate">Касса · staging</span>
+              <span className="truncate">{point || `Касса · ${migrationState}`}</span>
             </p>
           </div>
           <button
@@ -163,13 +230,18 @@ function AgentDesk({
         <div className="mt-3 bg-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <Wallet className="w-4 h-4 text-brand-400 shrink-0" />
-            <span className="text-xs text-ink-300 font-semibold">Баланс кассы</span>
+            <span className="text-xs text-ink-300 font-semibold">Операционный баланс</span>
           </div>
-          <p className="text-base font-extrabold tabular-nums text-white">{formatTmtm(0)}</p>
+          <p className="text-base font-extrabold tabular-nums text-white">{balanceLabel}</p>
         </div>
         <p className="mt-2 text-[11px] font-bold text-amber-200 bg-amber-500/15 rounded-lg px-3 py-2">
-          {FINANCE_PENDING}
+          State: {migrationState} · {FINANCE_PENDING}
         </p>
+        {financeError && (
+          <p className="mt-2 text-[11px] font-bold text-red-300 bg-red-500/15 rounded-lg px-3 py-2">
+            Баланс недоступен
+          </p>
+        )}
       </header>
 
       <div className="shrink-0 px-3 pt-3">
@@ -203,7 +275,13 @@ function AgentDesk({
       <div className="flex-1 overflow-y-auto px-3 py-3 pb-6">
         {tab === 'deposit' && <DepositTab />}
         {tab === 'payout' && <PayoutTab />}
-        {tab === 'history' && <HistoryTab />}
+        {tab === 'history' && (
+          <HistoryTab
+            loading={transfersLoading}
+            error={transfersError}
+            list={transfers}
+          />
+        )}
       </div>
     </div>
   );
@@ -309,13 +387,41 @@ function PayoutTab() {
   );
 }
 
-function HistoryTab() {
+function HistoryTab({
+  loading,
+  error,
+  list,
+}: {
+  loading: boolean;
+  error: string;
+  list: CashierTransferList | null;
+}) {
   return (
     <section>
       <div className="bg-white dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-3">
-        <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">История смены</h2>
-        <PendingBanner />
-        <p className="text-center text-sm text-gray-500 py-6">Операции кассы недоступны до активации</p>
+        <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">История операций</h2>
+        {loading && <p className="text-center text-sm text-gray-500 py-6">Загрузка…</p>}
+        {error && (
+          <p className="text-center text-sm text-red-600 py-6">История недоступна</p>
+        )}
+        {!loading && !error && (list?.total ?? 0) === 0 && (
+          <p className="text-center text-sm text-gray-500 py-6">Операций пока нет</p>
+        )}
+        {!loading && !error && (list?.rows.length ?? 0) > 0 && (
+          <div className="space-y-2">
+            {list?.rows.map((row) => (
+              <div key={row.id} className="flex justify-between gap-3 text-xs border-b border-gray-100 dark:border-gray-700 pb-2">
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white">{row.transferType}</p>
+                  <p className="text-gray-500">{row.createdAt}</p>
+                </div>
+                <p className="font-black tabular-nums">
+                  {row.amount == null ? '—' : formatTmtm(row.amount)}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

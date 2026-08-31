@@ -95,6 +95,7 @@ describe('cashier browser same-origin auth', () => {
     }
     const screen = readFileSync(join(repoRoot, 'src/screens/MobcashAgentScreen.tsx'), 'utf8');
     assert.match(screen, /useCashierAuth|loginCashierViaGateway/);
+    assert.match(screen, /fetchCashierFinance/);
     assert.equal(screen.includes('cashierLogin'), false);
     assert.equal(screen.includes('1234'), false);
     assert.equal(screen.includes('Financial activation pending'), true);

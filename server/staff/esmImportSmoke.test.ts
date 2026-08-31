@@ -35,6 +35,9 @@ const RUNTIME_GRAPH = [
   'api/manager/messages.ts',
   'api/manager/finance.ts',
   'api/manager/transfers.ts',
+  'api/cashier/me.ts',
+  'api/cashier/finance.ts',
+  'api/cashier/transfers.ts',
   'server/staff/vercelHandler.ts',
   'server/staff/httpHandler.ts',
   'server/staff/ownerAuthHttp.ts',
@@ -60,6 +63,9 @@ const RUNTIME_GRAPH = [
   'server/manager/managerRpc.ts',
   'server/manager/managerControlHttp.ts',
   'server/manager/vercelHandler.ts',
+  'server/cashier/cashierRpc.ts',
+  'server/cashier/cashierControlHttp.ts',
+  'server/cashier/vercelHandler.ts',
   'server/supabase/admin.ts',
 ] as const;
 
@@ -81,6 +87,7 @@ describe('staff onboarding Node ESM import graph', () => {
       ...listTsFiles(join(root, 'server/staff')),
       ...listTsFiles(join(root, 'server/owner')),
       ...listTsFiles(join(root, 'server/manager')),
+      ...listTsFiles(join(root, 'server/cashier')),
       join(root, 'server/supabase/admin.ts'),
     ].filter((path) => !path.endsWith('.test.ts'));
 
@@ -148,6 +155,11 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/manager/finance.js',
         'api/manager/transfers.js',
       ];
+      const cashierControlEntries = [
+        'api/cashier/me.js',
+        'api/cashier/finance.js',
+        'api/cashier/transfers.js',
+      ];
 
       for (const rel of staffEntries) {
         const compiled = readFileSync(join(outDir, rel), 'utf8');
@@ -165,7 +177,12 @@ describe('staff onboarding Node ESM import graph', () => {
         assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/manager\/vercelHandler\.js['"]/);
       }
 
-      for (const rel of [...staffEntries, ...authEntries, ...controlEntries, ...managerControlEntries]) {
+      for (const rel of cashierControlEntries) {
+        const compiled = readFileSync(join(outDir, rel), 'utf8');
+        assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/cashier\/vercelHandler\.js['"]/);
+      }
+
+      for (const rel of [...staffEntries, ...authEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries]) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,
