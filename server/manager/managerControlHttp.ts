@@ -144,7 +144,7 @@ async function runControl(
   staff: ManagerStaffContext,
 ): Promise<unknown> {
   const rec = asRecord(body);
-  const managerId = action.kind === 'me' ? '' : managerAccountId(staff);
+  const managerId = action.kind === 'me' || action.kind === 'risk' ? '' : managerAccountId(staff);
 
   switch (action.kind) {
     case 'me':
@@ -172,7 +172,12 @@ async function runControl(
       });
     }
     case 'risk':
-      return rpc.invoke('manager_list_risk_bets', { p_manager_id: managerId });
+      return {
+        rows: [],
+        total: 0,
+        available: false,
+        reason: 'NETWORK_SCOPE_PENDING',
+      };
     case 'players':
       return { rows: [], total: 0, available: false };
     case 'dossier':

@@ -1,10 +1,11 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { ClipboardList, LogOut, Shield, Store, User, UserCheck } from 'lucide-react';
+import { ClipboardList, LogOut, Shield, ShieldAlert, Store, User, UserCheck } from 'lucide-react';
 import { isManagerLoginPath } from '../../lib/backoffice';
 import { useManagerAuth } from '../../manager/auth/ManagerAuthProvider';
 import { ManagerAgentsPage } from './ManagerAgentsPage';
 import { ManagerFinancePage } from './ManagerFinancePage';
 import { ManagerPlayersPage } from './ManagerPlayersPage';
+import { ManagerRisksPage } from './ManagerRisksPage';
 import { goManagerLogin, goManagerOffice, managerOfficePage, type ManagerOfficePage } from './nav';
 
 function Loader({ label = 'Загрузка кабинета…' }: { label?: string }) {
@@ -157,6 +158,7 @@ function ManagerOfficeShell({
           <NavBtn active={page === 'agents'} onClick={() => go('agents')} icon={Store} label="Мои Кассы / Агенты" />
           <NavBtn active={page === 'reports'} onClick={() => go('reports')} icon={ClipboardList} label="Отчет по смене" />
           <NavBtn active={page === 'players'} onClick={() => go('players')} icon={UserCheck} label="Игроки" />
+          <NavBtn active={page === 'risks'} onClick={() => go('risks')} icon={ShieldAlert} label="Риски" />
         </nav>
         <div className="mt-auto p-3">
           <button
@@ -186,6 +188,7 @@ function ManagerOfficeShell({
           {page === 'agents' && <ManagerAgentsPage onNotice={setNotice} />}
           {page === 'reports' && <ManagerFinancePage />}
           {page === 'players' && <ManagerPlayersPage />}
+          {page === 'risks' && <ManagerRisksPage />}
         </main>
       </div>
     </div>

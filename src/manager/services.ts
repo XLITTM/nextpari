@@ -3,7 +3,6 @@ import type {
   CashierLedgerEntry,
   CashierOpType,
   DashboardKpis,
-  RiskBet,
   VerticalKpi,
 } from '../lib/backoffice';
 
@@ -11,7 +10,6 @@ export type {
   BackofficeCashier,
   CashierLedgerEntry,
   DashboardKpis,
-  RiskBet,
   VerticalKpi,
 };
 
@@ -126,27 +124,6 @@ function parseLedgerEntry(raw: Record<string, unknown>, cashierId?: string): Cas
   };
 }
 
-function parseRiskBet(raw: Record<string, unknown>): RiskBet {
-  const amount = num(raw.amount);
-  const odds = num(raw.odds ?? raw.total_odds);
-  const potential = num(raw.potential_win ?? raw.potentialWin) || amount * odds;
-  return {
-    id: str(raw.id),
-    matchId: str(raw.match_id ?? raw.matchId),
-    selection: str(raw.selection),
-    odds,
-    amount,
-    potentialWin: potential,
-    status: str(raw.status, 'accepted'),
-    homeTeam: str(raw.home_team ?? raw.homeTeam),
-    awayTeam: str(raw.away_team ?? raw.awayTeam),
-    type: str(raw.type, 'single'),
-    ticketCode: str(raw.ticket_code ?? raw.ticketCode),
-    createdAt: str(raw.created_at ?? raw.createdAt),
-    suspicious: Boolean(raw.suspicious) || amount >= 200 || potential >= 800 || odds >= 10,
-  };
-}
-
 export async function fetchManagerDashboard(): Promise<DashboardKpis> {
   const data = await managerData('/api/manager/dashboard');
   const raw = asRecord(data);
@@ -191,9 +168,22 @@ export async function fetchManagerCashierLedger(params: {
   return asRows(data).map((row) => parseLedgerEntry(asRecord(row), params.cashierId));
 }
 
-export async function fetchManagerRiskBets(): Promise<RiskBet[]> {
+export interface ManagerRiskBetsPage {
+  rows: unknown[];
+  total: number;
+  available: boolean;
+  reason: string;
+}
+
+export async function fetchManagerRiskBets(): Promise<ManagerRiskBetsPage> {
   const data = await managerData('/api/manager/risk-bets');
-  return asRows(data).map((row) => parseRiskBet(asRecord(row)));
+  const raw = asRecord(data);
+  return {
+    rows: Array.isArray(raw.rows) ? raw.rows : [],
+    total: num(raw.total),
+    available: raw.available === true,
+    reason: str(raw.reason, 'NETWORK_SCOPE_PENDING'),
+  };
 }
 
 export async function setManagerCashierFrozen(params: {

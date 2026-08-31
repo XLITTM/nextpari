@@ -104,11 +104,13 @@ function createRpc() {
       if (MONEY_RPC_DENYLIST.includes(name as typeof MONEY_RPC_DENYLIST[number])) {
         throw new Error(`money rpc invoked: ${name}`);
       }
+      if (name === 'manager_list_risk_bets') {
+        throw new Error('unscoped risk rpc invoked');
+      }
       if (name === 'manager_list_cashiers') {
         return [{ id: CASHIER_ID, network_id: NETWORK_ID, login: 'agent01' }];
       }
       if (name === 'manager_cashier_ledger') return [];
-      if (name === 'manager_list_risk_bets') return [];
       if (name === 'manager_dashboard_stats') {
         return { turnover: 0, ggr: 0, deposits: 0, payouts: 0, float_total: 0, series: [], verticals: {} };
       }
@@ -209,12 +211,63 @@ describe('manager control center same-origin BFF', () => {
     assert.equal(rpc.calls.some((call) => call.name === 'manager_set_cashier_frozen'), false);
   });
 
-  it('5. risk bets scoped correctly', async () => {
+  it('5. risk bets unavailable without calling unscoped RPC', async () => {
     const { result, rpc } = await managerGet('/api/manager/risk-bets');
     assert.equal(result.status, 200);
-    assert.equal(rpc.calls[0]?.name, 'manager_list_risk_bets');
-    assert.equal(rpc.calls[0]?.args?.p_manager_id, MANAGER_ID);
-    assert.equal('p_manager_id' in (rpc.calls[0]?.args ?? {}), true);
+    const data = result.body.data as {
+      rows: unknown[];
+      total: number;
+      available: boolean;
+      reason: string;
+    };
+    assert.deepEqual(data.rows, []);
+    assert.equal(data.total, 0);
+    assert.equal(data.available, false);
+    assert.equal(data.reason, 'NETWORK_SCOPE_PENDING');
+    assert.equal(rpc.calls.length, 0);
+    assert.equal(rpc.calls.some((call) => call.name === 'manager_list_risk_bets'), false);
+  });
+
+  it('5b. risk-bets missing session → 401', async () => {
+    const rpc = createRpc();
+    const result = await handleManagerControlRequest(
+      { method: 'GET', pathname: '/api/manager/risk-bets', cookieSecure: true },
+      { sessionPorts: createAuthPorts(), rpcFactory: rpc.rpcFactory },
+    );
+    assert.equal(result.status, 401);
+    assert.equal(rpc.calls.length, 0);
+  });
+
+  it('5c. risk-bets owner/player/cashier rejected', async () => {
+    const owner = await managerGet('/api/manager/risk-bets', { cookie: ownerCookieHeader() });
+    assert.equal(owner.result.status, 401);
+    assert.equal(owner.rpc.calls.length, 0);
+
+    const player = await managerGet('/api/manager/risk-bets', {
+      session: createAuthPorts({
+        context: { role: 'player', status: 'active', auth_user_id: 'player-uid' },
+      }),
+    });
+    assert.equal(player.result.status, 403);
+    assert.equal(player.rpc.calls.length, 0);
+
+    const cashier = await managerGet('/api/manager/risk-bets', {
+      session: createAuthPorts({
+        context: { role: 'cashier', status: 'active', auth_user_id: 'cashier-uid' },
+      }),
+    });
+    assert.equal(cashier.result.status, 403);
+    assert.equal(cashier.rpc.calls.length, 0);
+  });
+
+  it('5d. manager_list_risk_bets is never called', () => {
+    const http = readFileSync(join(here, 'managerControlHttp.ts'), 'utf8');
+    const rpc = readFileSync(join(here, 'managerRpc.ts'), 'utf8');
+    const services = readFileSync(join(root, 'src/manager/services.ts'), 'utf8');
+    assert.equal(http.includes('manager_list_risk_bets'), false);
+    assert.equal(http.includes("invoke('manager_list_risk_bets'"), false);
+    assert.equal(rpc.includes('manager_list_risk_bets'), false);
+    assert.equal(services.includes('manager_list_risk_bets'), false);
   });
 
   it('6. players scoped correctly', async () => {
@@ -349,6 +402,7 @@ describe('manager control center same-origin BFF', () => {
       join(root, 'src/pages/manager/ManagerFinancePage.tsx'),
       join(root, 'src/pages/manager/ManagerOfficeLayout.tsx'),
       join(root, 'src/pages/manager/ManagerAgentsPage.tsx'),
+      join(root, 'src/pages/manager/ManagerRisksPage.tsx'),
       join(root, 'src/manager/services.ts'),
     ];
     for (const file of files) {
@@ -360,6 +414,10 @@ describe('manager control center same-origin BFF', () => {
       assert.equal(source.includes('fetchDashboardKpis'), false, file);
       assert.equal(source.includes('createBackofficeCashier'), false, file);
     }
+    const risks = readFileSync(join(root, 'src/pages/manager/ManagerRisksPage.tsx'), 'utf8');
+    assert.match(risks, /Risk data temporarily unavailable while network scoping is being migrated/);
+    assert.equal(risks.includes('asRows'), false);
+    assert.equal(risks.includes('parseRiskBet'), false);
   });
 
   it('20. no cross-network access by URL tampering', async () => {
