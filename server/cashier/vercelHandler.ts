@@ -9,8 +9,27 @@ type VercelCashierReq = {
   query?: Record<string, string | string[] | undefined>;
 };
 
-export function vercelCashierControl(fallback: string) {
+function queryValue(
+  query: VercelCashierReq['query'],
+  key: string,
+): string {
+  const value = query?.[key];
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
+export function vercelCashierControl(
+  fallback: string | ((query: VercelCashierReq['query']) => string),
+) {
   return async function handler(req: VercelCashierReq, res: StaffJsonResponse): Promise<void> {
-    await handleVercelCashierControl(req, res, fallback);
+    const pathname = typeof fallback === 'function' ? fallback(req.query) : fallback;
+    await handleVercelCashierControl(req, res, pathname);
   };
+}
+
+export function vercelCashierParam(
+  key: string,
+  build: (id: string) => string,
+) {
+  return vercelCashierControl((query) => build(queryValue(query, key)));
 }

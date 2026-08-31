@@ -1,6 +1,15 @@
 export const CASHIER_ME_PATH = '/api/cashier/me';
 export const CASHIER_FINANCE_PATH = '/api/cashier/finance';
 export const CASHIER_TRANSFERS_PATH = '/api/cashier/transfers';
+export const CASHIER_DEPOSITS_PATH = '/api/cashier/deposits';
+
+export function cashierPayoutPath(code: string): string {
+  return `/api/cashier/payouts/${encodeURIComponent(code)}`;
+}
+
+export function cashierPayoutConfirmPath(code: string): string {
+  return `/api/cashier/payouts/${encodeURIComponent(code)}/confirm`;
+}
 
 export interface CashierOverviewCashier {
   cashierId: string;
@@ -157,4 +166,52 @@ export async function fetchCashierTransfers(
 
 export async function fetchCashierMe(fetchFn: CashierAuthFetch = fetch): Promise<Record<string, unknown>> {
   return cashierJson(fetchFn, CASHIER_ME_PATH);
+}
+
+export async function postCashierDeposit(
+  input: { playerPublicId: string; amount: number; idempotencyKey: string; note?: string },
+  fetchFn: CashierAuthFetch = fetch,
+): Promise<Record<string, unknown>> {
+  const res = await fetchFn(CASHIER_DEPOSITS_PATH, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      playerPublicId: input.playerPublicId,
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      note: input.note ?? null,
+    }),
+  });
+  const raw = await res.json().catch(() => ({}));
+  const rec = asRecord(raw);
+  if (!res.ok || rec.ok === false) {
+    throw new Error(str(rec.error, 'DEPOSIT_UNAVAILABLE'));
+  }
+  return rec;
+}
+
+export async function fetchCashierPayout(
+  code: string,
+  fetchFn: CashierAuthFetch = fetch,
+): Promise<Record<string, unknown>> {
+  return cashierJson(fetchFn, cashierPayoutPath(code));
+}
+
+export async function postCashierPayoutConfirm(
+  input: { code: string; idempotencyKey: string },
+  fetchFn: CashierAuthFetch = fetch,
+): Promise<Record<string, unknown>> {
+  const res = await fetchFn(cashierPayoutConfirmPath(input.code), {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ idempotencyKey: input.idempotencyKey }),
+  });
+  const raw = await res.json().catch(() => ({}));
+  const rec = asRecord(raw);
+  if (!res.ok || rec.ok === false) {
+    throw new Error(str(rec.error, 'PAYOUT_UNAVAILABLE'));
+  }
+  return rec;
 }

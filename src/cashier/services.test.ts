@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  CASHIER_DEPOSITS_PATH,
   CASHIER_FINANCE_PATH,
   CASHIER_TRANSFERS_PATH,
   fetchCashierFinance,
   parseCashierFinance,
 } from './services';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const services = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'services.ts'), 'utf8');
 
 describe('cashier browser finance client', () => {
   it('parses canonical 3550 balance from finance payload', () => {
@@ -36,6 +42,13 @@ describe('cashier browser finance client', () => {
     const fetchFn: typeof fetch = async () =>
       new Response(JSON.stringify({ ok: false, error: 'FINANCE_RPC_UNAVAILABLE' }), { status: 503 });
     await assert.rejects(() => fetchCashierFinance(fetchFn), /FINANCE_RPC_UNAVAILABLE/);
+  });
+
+  it('prepared deposit/payout clients exist but UI does not call them', () => {
+    assert.match(services, /CASHIER_DEPOSITS_PATH/);
+    assert.equal(CASHIER_DEPOSITS_PATH, '/api/cashier/deposits');
+    assert.match(services, /postCashierDeposit/);
+    assert.match(services, /postCashierPayoutConfirm/);
   });
 
   it('calls same-origin finance and transfers only', async () => {

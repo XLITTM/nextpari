@@ -28,6 +28,20 @@ export function mapCashierRpcError(error: { message?: string; code?: string }): 
   if (code === 'JWT_REQUIRED' || code === 'JWT_INVALID' || code === 'AUTH_REQUIRED') {
     return staffError(code, 401);
   }
+  if (
+    code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE'
+    || code === 'INSUFFICIENT_OPERATIONAL_BALANCE'
+    || code === 'INSUFFICIENT_LOCKED_BALANCE'
+    || code === 'INSUFFICIENT_AVAILABLE_BALANCE'
+    || code === 'IDEMPOTENCY_KEY_CONFLICT'
+    || code === 'PAYOUT_ALREADY_PAID'
+    || code === 'PAYOUT_EXPIRED'
+    || code === 'PAYOUT_CANCELLED'
+    || code === 'PAYOUT_NOT_PENDING'
+    || code === 'CASHIER_NOT_ACTIVE'
+  ) {
+    return staffError(code, 409);
+  }
   if (/Could not find the function|schema cache|PGRST202/i.test(text)) {
     return staffError('FINANCE_RPC_UNAVAILABLE', 503);
   }

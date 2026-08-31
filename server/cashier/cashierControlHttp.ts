@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
+  parseJsonPayload,
   readJsonBody,
   staffHttpLog,
   writeStaffJson,
@@ -12,10 +13,11 @@ import {
   resolveCashierSession,
   type CashierAuthGatewayPorts,
 } from '../staff/cashierAuthService.js';
-import { publicCashierStaff, type CashierStaffContext } from '../staff/cashierContext.js';
+import { publicCashierStaff } from '../staff/cashierContext.js';
 import { clearCashierCookies, requestIsSecure } from '../staff/cashierCookies.js';
 import type { StaffLog } from '../staff/types.js';
 import { createCashierJwtRpc, type CashierRpcPort } from './cashierRpc.js';
+import { assertCashierPayoutRateLimit } from './cashierPayoutRateLimit.js';
 
 export const CASHIER_MONEY_RPC_DENYLIST = [
   'cashier_deposit_to_player',
@@ -32,6 +34,12 @@ export const CASHIER_MONEY_RPC_DENYLIST = [
 export const CANONICAL_CASHIER_READ_RPCS = [
   'cashier_operational_overview',
   'cashier_list_operational_transfers',
+] as const;
+
+export const CANONICAL_CASHIER_MONEY_RPCS = [
+  'cashier_deposit_player',
+  'cashier_lookup_player_payout',
+  'cashier_confirm_player_payout',
 ] as const;
 
 export interface CashierControlDeps {
@@ -138,10 +146,59 @@ function mapTransfers(raw: unknown): Record<string, unknown> {
   };
 }
 
+function requireAmount(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) throw staffError('AMOUNT_REQUIRED', 400);
+  return n;
+}
+
+function requireIdempotencyKey(value: unknown): string {
+  const key = String(value ?? '').trim();
+  if (!key) throw staffError('IDEMPOTENCY_KEY_REQUIRED', 400);
+  if (key.length > 250) throw staffError('IDEMPOTENCY_KEY_TOO_LONG', 400);
+  return key;
+}
+
+function requirePlayerPublicId(value: unknown): string {
+  const id = String(value ?? '').trim();
+  if (!/^[0-9]{6}$/.test(id)) throw staffError('PLAYER_NOT_FOUND', 404);
+  return id;
+}
+
+function requirePayoutCode(value: unknown): string {
+  const code = String(value ?? '').trim().toLowerCase();
+  if (!/^[0-9a-f]{16}$/.test(code)) throw staffError('PAYOUT_CODE_INVALID', 400);
+  return code;
+}
+
+function optionalNote(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const note = String(value).trim();
+  return note || null;
+}
+
+function stripBrowserAuthority(rec: Record<string, unknown>): void {
+  delete rec.cashierId;
+  delete rec.cashier_id;
+  delete rec.networkId;
+  delete rec.network_id;
+  delete rec.operationalAccountId;
+  delete rec.operational_account_id;
+  delete rec.actorUserId;
+  delete rec.actor_user_id;
+  delete rec.actorRole;
+  delete rec.actor_role;
+  delete rec.walletId;
+  delete rec.wallet_id;
+}
+
 type ControlAction =
   | { kind: 'me' }
   | { kind: 'finance' }
-  | { kind: 'transfers' };
+  | { kind: 'transfers' }
+  | { kind: 'deposit' }
+  | { kind: 'payoutLookup'; code: string }
+  | { kind: 'payoutConfirm'; code: string };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -149,18 +206,34 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/cashier/me') return m === 'GET' ? { kind: 'me' } : 'method';
   if (path === '/api/cashier/finance') return m === 'GET' ? { kind: 'finance' } : 'method';
   if (path === '/api/cashier/transfers') return m === 'GET' ? { kind: 'transfers' } : 'method';
+  if (path === '/api/cashier/deposits') return m === 'POST' ? { kind: 'deposit' } : 'method';
+  const payoutConfirm = path.match(/^\/api\/cashier\/payouts\/([^/]+)\/confirm$/);
+  if (payoutConfirm) {
+    return m === 'POST' ? { kind: 'payoutConfirm', code: payoutConfirm[1] } : 'method';
+  }
+  const payoutLookup = path.match(/^\/api\/cashier\/payouts\/([^/]+)$/);
+  if (payoutLookup) {
+    return m === 'GET' ? { kind: 'payoutLookup', code: payoutLookup[1] } : 'method';
+  }
   return null;
+}
+
+function allowFor(path: string): string {
+  if (path === '/api/cashier/deposits' || path.endsWith('/confirm')) return 'POST';
+  return 'GET';
 }
 
 async function runControl(
   action: ControlAction,
   rpc: CashierRpcPort,
   query: URLSearchParams,
-  _staff: CashierStaffContext,
+  body: unknown,
 ): Promise<unknown> {
   if (query.get('cashierId') || query.get('cashier_id') || query.get('networkId') || query.get('network_id')) {
     /* ignored — authority is JWT only */
   }
+  const rec = asRecord(body);
+  stripBrowserAuthority(rec);
   switch (action.kind) {
     case 'me':
       return null;
@@ -171,6 +244,35 @@ async function runControl(
         p_limit: query.get('limit') ? Number(query.get('limit')) : 100,
         p_offset: query.get('offset') ? Number(query.get('offset')) : 0,
       }));
+    case 'deposit':
+      return rpc.invoke('cashier_deposit_player', {
+        p_player_public_id: requirePlayerPublicId(rec.playerPublicId ?? rec.player_public_id),
+        p_amount: requireAmount(rec.amount),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+        p_note: optionalNote(rec.note),
+      });
+    case 'payoutLookup':
+      return rpc.invoke('cashier_lookup_player_payout', {
+        p_code: requirePayoutCode(action.code),
+      });
+    case 'payoutConfirm': {
+      const confirmed = await rpc.invoke('cashier_confirm_player_payout', {
+        p_code: requirePayoutCode(action.code),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+      });
+      // SQL returns (does not RAISE) after lazy expiry+release so the
+      // WITHDRAWAL_RELEASE commits. Map that payload to HTTP 409 here.
+      if (
+        confirmed
+        && typeof confirmed === 'object'
+        && !Array.isArray(confirmed)
+        && (confirmed as { ok?: unknown }).ok === false
+      ) {
+        const code = String((confirmed as { error?: unknown }).error ?? 'PAYOUT_EXPIRED');
+        throw staffError(code, 409);
+      }
+      return confirmed;
+    }
     default:
       throw staffError('NOT_FOUND', 404);
   }
@@ -213,12 +315,19 @@ export async function handleCashierControlRequest(
       };
     }
 
+    if (matched.kind === 'payoutLookup') {
+      assertCashierPayoutRateLimit(resolved.staff.authUserId, 'lookup');
+    }
+    if (matched.kind === 'payoutConfirm') {
+      assertCashierPayoutRateLimit(resolved.staff.authUserId, 'confirm');
+    }
+
     const rpc = (deps.rpcFactory ?? createCashierJwtRpc)(resolved.accessToken);
     const data = await runControl(
       matched,
       rpc,
       queryOf(searchFrom(input.pathname, input.search)),
-      resolved.staff,
+      parseJsonPayload(input.body),
     );
     return {
       status: 200,
@@ -231,7 +340,7 @@ export async function handleCashierControlRequest(
         status: error.httpStatus,
         body: { ok: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405
-          ? { Allow: 'GET' }
+          ? { Allow: allowFor(path) }
           : undefined,
         cookies: error.httpStatus === 401 ? clearCashierCookies(secure) : sessionCookies,
       };
