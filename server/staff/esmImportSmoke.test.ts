@@ -24,6 +24,12 @@ const RUNTIME_GRAPH = [
   'api/owner/players.ts',
   'api/owner/withdrawals.ts',
   'api/owner/messages.ts',
+  'api/manager/me.ts',
+  'api/manager/dashboard.ts',
+  'api/manager/cashiers.ts',
+  'api/manager/risk-bets.ts',
+  'api/manager/players.ts',
+  'api/manager/messages.ts',
   'server/staff/vercelHandler.ts',
   'server/staff/httpHandler.ts',
   'server/staff/ownerAuthHttp.ts',
@@ -42,6 +48,9 @@ const RUNTIME_GRAPH = [
   'server/owner/ownerRpc.ts',
   'server/owner/ownerControlHttp.ts',
   'server/owner/vercelHandler.ts',
+  'server/manager/managerRpc.ts',
+  'server/manager/managerControlHttp.ts',
+  'server/manager/vercelHandler.ts',
   'server/supabase/admin.ts',
 ] as const;
 
@@ -62,6 +71,7 @@ describe('staff onboarding Node ESM import graph', () => {
       ...listTsFiles(join(root, 'api')),
       ...listTsFiles(join(root, 'server/staff')),
       ...listTsFiles(join(root, 'server/owner')),
+      ...listTsFiles(join(root, 'server/manager')),
       join(root, 'server/supabase/admin.ts'),
     ].filter((path) => !path.endsWith('.test.ts'));
 
@@ -116,6 +126,14 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/owner/withdrawals.js',
         'api/owner/messages.js',
       ];
+      const managerControlEntries = [
+        'api/manager/me.js',
+        'api/manager/dashboard.js',
+        'api/manager/cashiers.js',
+        'api/manager/risk-bets.js',
+        'api/manager/players.js',
+        'api/manager/messages.js',
+      ];
 
       for (const rel of staffEntries) {
         const compiled = readFileSync(join(outDir, rel), 'utf8');
@@ -128,7 +146,12 @@ describe('staff onboarding Node ESM import graph', () => {
         assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/owner\/vercelHandler\.js['"]/);
       }
 
-      for (const rel of [...staffEntries, ...authEntries, ...controlEntries]) {
+      for (const rel of managerControlEntries) {
+        const compiled = readFileSync(join(outDir, rel), 'utf8');
+        assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/manager\/vercelHandler\.js['"]/);
+      }
+
+      for (const rel of [...staffEntries, ...authEntries, ...controlEntries, ...managerControlEntries]) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin, ViteDevServer } from 'vite';
+import { attachManagerControlHttp } from '../server/manager/managerControlHttp';
 import { attachOwnerControlHttp } from '../server/owner/ownerControlHttp';
 import { attachManagerAuthHttp } from '../server/staff/managerAuthHttp';
 import { attachOwnerAuthHttp } from '../server/staff/ownerAuthHttp';
@@ -11,6 +12,10 @@ function attachOwnerStaff(server: ViteDevServer) {
       .then((handledAuth) => {
         if (handledAuth) return true;
         return attachManagerAuthHttp(req, res);
+      })
+      .then((handled) => {
+        if (handled) return true;
+        return attachManagerControlHttp(req, res);
       })
       .then((handled) => {
         if (handled) return true;

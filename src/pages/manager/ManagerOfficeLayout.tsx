@@ -1,19 +1,11 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { ClipboardList, LogOut, Shield, Store, User, UserCheck } from 'lucide-react';
-import { PlayersTab } from '../../components/backoffice/PlayersTab';
-import { isManagerLoginPath, type ManagerSession } from '../../lib/backoffice';
+import { isManagerLoginPath } from '../../lib/backoffice';
 import { useManagerAuth } from '../../manager/auth/ManagerAuthProvider';
-import { managerOfficeSession } from '../../manager/auth/managerAuth';
-import { useManagerNetwork } from '../../stores/backofficeStore';
 import { ManagerAgentsPage } from './ManagerAgentsPage';
 import { ManagerFinancePage } from './ManagerFinancePage';
+import { ManagerPlayersPage } from './ManagerPlayersPage';
 import { goManagerLogin, goManagerOffice, managerOfficePage, type ManagerOfficePage } from './nav';
-
-function formatTmt(value: number | null | undefined) {
-  const n = Number(value);
-  const safe = Number.isFinite(n) ? n : 0;
-  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMT`;
-}
 
 function Loader({ label = 'Загрузка кабинета…' }: { label?: string }) {
   return (
@@ -42,7 +34,7 @@ export function ManagerOfficeLayout() {
 
   return (
     <ManagerOfficeShell
-      session={managerOfficeSession(staff)}
+      displayName={staff.displayName || 'Менеджер'}
       onLogout={() => {
         void signOut().then(() => goManagerLogin());
       }}
@@ -127,18 +119,16 @@ function ManagerPortalLogin({ deniedMessage }: { deniedMessage: string }) {
 }
 
 function ManagerOfficeShell({
-  session,
+  displayName,
   onLogout,
 }: {
-  session: ManagerSession;
+  displayName: string;
   onLogout: () => void;
 }) {
   const [page, setPage] = useState<ManagerOfficePage>(() => managerOfficePage());
   const [notice, setNotice] = useState('');
-  const { currentManager, limit, hydrate } = useManagerNetwork(session);
 
   useEffect(() => {
-    hydrate();
     const sync = () => setPage(managerOfficePage());
     window.addEventListener('hashchange', sync);
     window.addEventListener('popstate', sync);
@@ -146,9 +136,7 @@ function ManagerOfficeShell({
       window.removeEventListener('hashchange', sync);
       window.removeEventListener('popstate', sync);
     };
-  }, [hydrate, session.id, session.login]);
-
-  const displayName = session?.fullName || currentManager?.fullName || session?.login || 'Менеджер';
+  }, []);
 
   const go = (next: ManagerOfficePage) => {
     setPage(next);
@@ -165,7 +153,7 @@ function ManagerOfficeShell({
             Кабинет менеджера
           </span>
         </div>
-        <nav className="p-3 flex flex-col gap-1">
+        <nav className="p-3 flex-col gap-1 flex">
           <NavBtn active={page === 'agents'} onClick={() => go('agents')} icon={Store} label="Мои Кассы / Агенты" />
           <NavBtn active={page === 'reports'} onClick={() => go('reports')} icon={ClipboardList} label="Отчет по смене" />
           <NavBtn active={page === 'players'} onClick={() => go('players')} icon={UserCheck} label="Игроки" />
@@ -186,7 +174,7 @@ function ManagerOfficeShell({
         <header className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="bg-ink-950 text-white text-sm font-semibold px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-2">
             <span>Управляющий: {displayName}</span>
-            <span className="tabular-nums">Доступный баланс сети: {formatTmt(limit)}</span>
+            <span className="tabular-nums text-amber-200">Операционный баланс: staging · 0 TMT</span>
           </div>
         </header>
         <main className="flex-1 min-w-0 p-6 overflow-x-auto">
@@ -195,9 +183,9 @@ function ManagerOfficeShell({
               {notice}
             </div>
           )}
-          {page === 'agents' && <ManagerAgentsPage session={session} onNotice={setNotice} />}
-          {page === 'reports' && <ManagerFinancePage session={session} />}
-          {page === 'players' && <PlayersTab session={session} onNotice={setNotice} />}
+          {page === 'agents' && <ManagerAgentsPage onNotice={setNotice} />}
+          {page === 'reports' && <ManagerFinancePage />}
+          {page === 'players' && <ManagerPlayersPage />}
         </main>
       </div>
     </div>
