@@ -104,34 +104,32 @@ describe('owner browser same-origin auth', () => {
 
   it('auth modules do not call Supabase from the browser', () => {
     const authDir = join(ownerRoot, 'auth');
-    for (const file of listFiles(authDir).filter((path) => !path.endsWith('.test.ts') && !path.endsWith('ownerSupabase.ts'))) {
+    for (const file of listFiles(authDir).filter((path) => !path.endsWith('.test.ts'))) {
       const source = readFileSync(file, 'utf8');
       assert.equal(source.includes('signInWithPassword'), false, file);
       assert.equal(source.includes('ownerSupabase'), false, file);
+      assert.equal(source.includes('createClient'), false, file);
     }
   });
 });
 
-export const REMAINING_OWNER_BROWSER_SUPABASE_RPCS = [
-  'current_staff_context',
-  'owner_dashboard_stats',
-  'owner_list_cashiers',
-  'owner_cashier_ledger',
-  'owner_list_risk_bets',
-  'owner_list_players',
-  'owner_player_dossier',
-  'owner_set_player_blocked',
-  'owner_set_cashier_frozen',
-  'owner_list_withdrawals',
-  'owner_send_message',
+export const OWNER_CONTROL_API_ROUTES = [
+  '/api/owner/dashboard',
+  '/api/owner/cashiers',
+  '/api/owner/risk-bets',
+  '/api/owner/players',
+  '/api/owner/withdrawals',
+  '/api/owner/messages',
 ] as const;
 
-describe('remaining Owner browser Supabase RPCs (next BFF)', () => {
-  it('lists services.ts RPCs that still call Supabase from the browser', () => {
+describe('Owner control center browser services use same-origin APIs', () => {
+  it('services.ts no longer calls Supabase RPCs from the browser', () => {
     const services = readFileSync(join(ownerRoot, 'services.ts'), 'utf8');
-    assert.match(services, /from '\.\/auth\/ownerSupabase'/);
-    for (const rpc of REMAINING_OWNER_BROWSER_SUPABASE_RPCS) {
-      assert.equal(services.includes(`ownerSupabase.rpc('${rpc}'`), true, rpc);
+    assert.equal(services.includes('ownerSupabase'), false);
+    assert.equal(services.includes('.rpc('), false);
+    assert.match(services, /credentials: 'same-origin'/);
+    for (const route of OWNER_CONTROL_API_ROUTES) {
+      assert.equal(services.includes(route), true, route);
     }
   });
 });

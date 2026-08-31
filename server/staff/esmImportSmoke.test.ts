@@ -14,6 +14,13 @@ const RUNTIME_GRAPH = [
   'api/owner/auth/login.ts',
   'api/owner/auth/session.ts',
   'api/owner/auth/logout.ts',
+  'api/owner/dashboard.ts',
+  'api/owner/me.ts',
+  'api/owner/cashiers.ts',
+  'api/owner/risk-bets.ts',
+  'api/owner/players.ts',
+  'api/owner/withdrawals.ts',
+  'api/owner/messages.ts',
   'server/staff/vercelHandler.ts',
   'server/staff/httpHandler.ts',
   'server/staff/ownerAuthHttp.ts',
@@ -25,6 +32,9 @@ const RUNTIME_GRAPH = [
   'server/staff/env.ts',
   'server/staff/errors.ts',
   'server/staff/types.ts',
+  'server/owner/ownerRpc.ts',
+  'server/owner/ownerControlHttp.ts',
+  'server/owner/vercelHandler.ts',
   'server/supabase/admin.ts',
 ] as const;
 
@@ -42,9 +52,9 @@ function listTsFiles(dir: string): string[] {
 describe('staff onboarding Node ESM import graph', () => {
   it('runtime sources use explicit .js relative specifiers', () => {
     const files = [
-      ...listTsFiles(join(root, 'api/owner/staff')),
-      ...listTsFiles(join(root, 'api/owner/auth')),
+      ...listTsFiles(join(root, 'api/owner')),
       ...listTsFiles(join(root, 'server/staff')),
+      ...listTsFiles(join(root, 'server/owner')),
       join(root, 'server/supabase/admin.ts'),
     ].filter((path) => !path.endsWith('.test.ts'));
 
@@ -83,6 +93,15 @@ describe('staff onboarding Node ESM import graph', () => {
 
       const staffEntries = ['api/owner/staff/manager.js', 'api/owner/staff/cashier.js'];
       const authEntries = ['api/owner/auth/login.js', 'api/owner/auth/session.js', 'api/owner/auth/logout.js'];
+      const controlEntries = [
+        'api/owner/dashboard.js',
+        'api/owner/me.js',
+        'api/owner/cashiers.js',
+        'api/owner/risk-bets.js',
+        'api/owner/players.js',
+        'api/owner/withdrawals.js',
+        'api/owner/messages.js',
+      ];
 
       for (const rel of staffEntries) {
         const compiled = readFileSync(join(outDir, rel), 'utf8');
@@ -90,7 +109,12 @@ describe('staff onboarding Node ESM import graph', () => {
         assert.match(compiled, /from ['"]\.\.\/\.\.\/\.\.\/server\/staff\/vercelHandler\.js['"]/);
       }
 
-      for (const rel of [...staffEntries, ...authEntries]) {
+      for (const rel of controlEntries) {
+        const compiled = readFileSync(join(outDir, rel), 'utf8');
+        assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/owner\/vercelHandler\.js['"]/);
+      }
+
+      for (const rel of [...staffEntries, ...authEntries, ...controlEntries]) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,

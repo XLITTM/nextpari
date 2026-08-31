@@ -1,5 +1,4 @@
 import { assertActiveOwnerContext, type OwnerStaffContext } from './auth/ownerAuth';
-import { ownerSupabase } from './auth/ownerSupabase';
 import type {
   BackofficeCashier,
   CashierLedgerEntry,
@@ -37,21 +36,36 @@ function num(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function rpcMessage(error: { message?: string } | null | undefined): string {
-  const raw = error?.message ?? 'Ошибка';
-  return raw
-    .replace(/^.*ERROR:\s*/i, '')
-    .replace(/\s+Where:[\s\S]*$/i, '')
-    .trim() || raw;
+function ownerQuery(params: Record<string, string | number | null | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === '') continue;
+    search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
 }
 
-function throwRpc(error: { message?: string }): never {
-  throw new Error(rpcMessage(error));
+async function ownerJson(path: string, init?: RequestInit): Promise<Record<string, unknown>> {
+  const res = await fetch(path, {
+    credentials: 'same-origin',
+    ...init,
+    headers: {
+      ...(init?.body != null ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
+  });
+  const raw = await res.json().catch(() => ({}));
+  const rec = asRecord(raw);
+  if (!res.ok || rec.ok === false) {
+    throw new Error(str(rec.error, 'Ошибка'));
+  }
+  return rec;
 }
 
-function firstRow(data: unknown): Record<string, unknown> {
-  if (Array.isArray(data)) return asRecord(data[0]);
-  return asRecord(data);
+async function ownerData(path: string, init?: RequestInit): Promise<unknown> {
+  const rec = await ownerJson(path, init);
+  return rec.data;
 }
 
 function asRows(data: unknown): unknown[] {
@@ -154,14 +168,12 @@ export function ledgerPeriodFrom(period: LedgerPeriod): string {
 }
 
 export async function getCurrentOwnerContext(): Promise<OwnerStaffContext> {
-  const { data, error } = await ownerSupabase.rpc('current_staff_context');
-  if (error) throwRpc(error);
-  return assertActiveOwnerContext(data);
+  const rec = await ownerJson('/api/owner/me');
+  return assertActiveOwnerContext(rec.staff);
 }
 
 export async function fetchOwnerDashboard(): Promise<DashboardKpis> {
-  const { data, error } = await ownerSupabase.rpc('owner_dashboard_stats');
-  if (error) throwRpc(error);
+  const data = await ownerData('/api/owner/dashboard');
   const raw = asRecord(data);
   const seriesRaw = Array.isArray(raw.series) ? raw.series : [];
   const verticalsRaw = asRecord(raw.verticals);
@@ -190,8 +202,7 @@ export async function fetchOwnerDashboard(): Promise<DashboardKpis> {
 }
 
 export async function fetchOwnerCashiers(): Promise<BackofficeCashier[]> {
-  const { data, error } = await ownerSupabase.rpc('owner_list_cashiers');
-  if (error) throwRpc(error);
+  const data = await ownerData('/api/owner/cashiers');
   return asRows(data).map((row) => parseCashier(asRecord(row)));
 }
 
@@ -199,17 +210,14 @@ export async function fetchOwnerCashierLedger(params: {
   cashierId: string;
   from?: string | null;
 }): Promise<CashierLedgerEntry[]> {
-  const { data, error } = await ownerSupabase.rpc('owner_cashier_ledger', {
-    p_cashier_id: params.cashierId,
-    p_from: params.from ?? null,
-  });
-  if (error) throwRpc(error);
+  const data = await ownerData(
+    `/api/owner/cashiers/${encodeURIComponent(params.cashierId)}/ledger${ownerQuery({ from: params.from ?? null })}`,
+  );
   return asRows(data).map((row) => parseLedgerEntry(asRecord(row), params.cashierId));
 }
 
 export async function fetchOwnerRiskBets(): Promise<RiskBet[]> {
-  const { data, error } = await ownerSupabase.rpc('owner_list_risk_bets');
-  if (error) throwRpc(error);
+  const data = await ownerData('/api/owner/risk-bets');
   return asRows(data).map((row) => parseRiskBet(asRecord(row)));
 }
 
@@ -318,12 +326,11 @@ export async function fetchOwnerPlayers(params?: {
   limit?: number;
   offset?: number;
 }): Promise<OwnerPlayerListPage> {
-  const { data, error } = await ownerSupabase.rpc('owner_list_players', {
-    p_search: params?.search?.trim() || null,
-    p_limit: params?.limit ?? 50,
-    p_offset: params?.offset ?? 0,
-  });
-  if (error) throwRpc(error);
+  const data = await ownerData(`/api/owner/players${ownerQuery({
+    search: params?.search?.trim() || null,
+    limit: params?.limit ?? 50,
+    offset: params?.offset ?? 0,
+  })}`);
   const raw = asRecord(data);
   const rowsSource = Array.isArray(raw.rows) ? raw.rows : asRows(data);
   return {
@@ -333,10 +340,7 @@ export async function fetchOwnerPlayers(params?: {
 }
 
 export async function fetchOwnerPlayerDossier(playerId: string): Promise<OwnerPlayerDossier> {
-  const { data, error } = await ownerSupabase.rpc('owner_player_dossier', {
-    p_player_id: playerId,
-  });
-  if (error) throwRpc(error);
+  const data = await ownerData(`/api/owner/players/${encodeURIComponent(playerId)}`);
   const raw = asRecord(data);
   const vipRaw = asRecord(raw.vip);
   return {
@@ -357,12 +361,13 @@ export async function setOwnerPlayerBlocked(params: {
   blocked: boolean;
   reason?: string | null;
 }): Promise<void> {
-  const { error } = await ownerSupabase.rpc('owner_set_player_blocked', {
-    p_player_id: params.playerId,
-    p_blocked: params.blocked,
-    p_reason: params.reason?.trim() || null,
+  await ownerData(`/api/owner/players/${encodeURIComponent(params.playerId)}/block`, {
+    method: 'POST',
+    body: JSON.stringify({
+      blocked: params.blocked,
+      reason: params.reason?.trim() || null,
+    }),
   });
-  if (error) throwRpc(error);
 }
 
 export async function setOwnerCashierFrozen(params: {
@@ -370,12 +375,13 @@ export async function setOwnerCashierFrozen(params: {
   frozen: boolean;
   reason?: string | null;
 }): Promise<void> {
-  const { error } = await ownerSupabase.rpc('owner_set_cashier_frozen', {
-    p_cashier_id: params.cashierId,
-    p_frozen: params.frozen,
-    p_reason: params.reason?.trim() || null,
+  await ownerData(`/api/owner/cashiers/${encodeURIComponent(params.cashierId)}/freeze`, {
+    method: 'POST',
+    body: JSON.stringify({
+      frozen: params.frozen,
+      reason: params.reason?.trim() || null,
+    }),
   });
-  if (error) throwRpc(error);
 }
 
 export async function fetchOwnerWithdrawals(params?: {
@@ -383,12 +389,11 @@ export async function fetchOwnerWithdrawals(params?: {
   limit?: number;
   offset?: number;
 }): Promise<{ rows: OwnerWithdrawalRow[]; total: number }> {
-  const { data, error } = await ownerSupabase.rpc('owner_list_withdrawals', {
-    p_status: params?.status?.trim() || null,
-    p_limit: params?.limit ?? 100,
-    p_offset: params?.offset ?? 0,
-  });
-  if (error) throwRpc(error);
+  const data = await ownerData(`/api/owner/withdrawals${ownerQuery({
+    status: params?.status?.trim() || null,
+    limit: params?.limit ?? 100,
+    offset: params?.offset ?? 0,
+  })}`);
   const raw = asRecord(data);
   const rowsSource = Array.isArray(raw.rows) ? raw.rows : asRows(data);
   return {
@@ -415,13 +420,15 @@ export async function sendOwnerMessage(params: {
   title?: string | null;
   body: string;
 }): Promise<void> {
-  const { error } = await ownerSupabase.rpc('owner_send_message', {
-    p_target_type: params.targetType,
-    p_target_player_id: params.targetType === 'player' ? (params.targetPlayerId ?? null) : null,
-    p_title: params.title?.trim() || null,
-    p_body: params.body,
+  await ownerData('/api/owner/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      targetType: params.targetType,
+      targetPlayerId: params.targetType === 'player' ? (params.targetPlayerId ?? null) : null,
+      title: params.title?.trim() || null,
+      body: params.body,
+    }),
   });
-  if (error) throwRpc(error);
 }
 
 export function formatTmtmCompact(value: number | null | undefined): string {
