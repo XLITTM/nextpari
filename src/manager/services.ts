@@ -221,6 +221,72 @@ export async function fetchManagerMessages(): Promise<{ rows: unknown[]; availab
   };
 }
 
+export interface ManagerOperationalAccount {
+  id: string;
+  currency: string;
+  availableBalance: number;
+  status: string;
+  migrationState: string;
+  version: number;
+}
+
+export interface ManagerOperationalCashier {
+  cashierId: string;
+  login: string;
+  fullName: string;
+  availableBalance: number;
+  status: string;
+  migrationState: string;
+  legacyFloatBalance: number;
+}
+
+export interface ManagerFinanceOverview {
+  manager: ManagerOperationalAccount | null;
+  cashiers: ManagerOperationalCashier[];
+  activationPending: boolean;
+}
+
+export async function fetchManagerFinance(): Promise<ManagerFinanceOverview> {
+  const data = await managerData('/api/manager/finance');
+  const raw = asRecord(data);
+  const managerRaw = asRecord(raw.manager);
+  const manager = managerRaw.id
+    ? {
+        id: str(managerRaw.id),
+        currency: str(managerRaw.currency, 'TMTM'),
+        availableBalance: num(managerRaw.available_balance ?? managerRaw.availableBalance),
+        status: str(managerRaw.status),
+        migrationState: str(managerRaw.migration_state ?? managerRaw.migrationState, 'staging'),
+        version: num(managerRaw.version),
+      }
+    : null;
+  return {
+    manager,
+    cashiers: asRows(raw.cashiers).map((row) => {
+      const item = asRecord(row);
+      return {
+        cashierId: str(item.cashier_id ?? item.cashierId),
+        login: str(item.login),
+        fullName: str(item.full_name ?? item.fullName),
+        availableBalance: num(item.available_balance ?? item.availableBalance),
+        status: str(item.status),
+        migrationState: str(item.migration_state ?? item.migrationState, 'staging'),
+        legacyFloatBalance: num(item.legacy_float_balance ?? item.legacyFloatBalance),
+      };
+    }),
+    activationPending: raw.activation_pending !== false && raw.activationPending !== false,
+  };
+}
+
+export async function fetchManagerTransfers(): Promise<{ rows: unknown[]; total: number }> {
+  const data = await managerData('/api/manager/transfers');
+  const raw = asRecord(data);
+  return {
+    rows: Array.isArray(raw.rows) ? raw.rows : [],
+    total: num(raw.total),
+  };
+}
+
 export function formatTmtmCompact(value: number | null | undefined): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;

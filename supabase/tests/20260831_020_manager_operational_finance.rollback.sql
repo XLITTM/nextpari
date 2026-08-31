@@ -1,0 +1,96 @@
+-- NEXTPARI PHASE 022A
+-- Controlled BEGIN/ROLLBACK test for Manager operational finance.
+--
+-- DO NOT RUN AGAINST PRODUCTION EXCEPT INSIDE A SINGLE
+-- BEGIN / ROLLBACK. This file is not a migration.
+-- Do NOT COMMIT. Do NOT persist capital or activation.
+--
+-- Fill the UUID variables from live catalog after 020 is applied.
+-- Expected live staging:
+--   manager01 operational account: staging / 0
+--   agent01 cashier op account: staging / 3550
+--   agent02 cashier op account: staging / 2800
+--   operational transfers: 0
+--
+-- Manager JWT for public wrappers:
+--   SET request.jwt.claim.sub / role so auth.uid() is the Manager.
+
+BEGIN;
+
+-- SELECT set_config('request.jwt.claim.sub', '<MANAGER_AUTH_USER_ID>', true);
+-- SELECT set_config('request.jwt.claim.role', 'authenticated', true);
+
+-- A. STAGING LIVE SAFETY (before any activation)
+-- SELECT public.manager_operational_overview();
+-- SELECT public.manager_fund_cashier('<agent01>', 10, 'stage-fund-1', 'staging');
+--   -- expect OPERATIONAL_ACCOUNT_NOT_ACTIVE
+-- SELECT public.manager_collect_cashier('<agent01>', 10, 'stage-collect-1', 'staging');
+--   -- expect OPERATIONAL_ACCOUNT_NOT_ACTIVE
+-- SELECT COUNT(*) FROM private.operational_transfers;
+--   -- expect 0
+
+-- B. TEMPORARY ACTIVATION (manager01 + agent01 ONLY; not agent02)
+-- UPDATE private.operational_accounts
+-- SET migration_state = 'active'
+-- WHERE account_type = 'manager'
+--   AND legacy_manager_account_id = '<MANAGER_LEGACY_ID>';
+--
+-- UPDATE private.operational_accounts
+-- SET migration_state = 'active'
+-- WHERE account_type = 'cashier'
+--   AND legacy_cashier_id = '<AGENT01_CASHIER_ID>';
+--
+-- UPDATE private.operational_accounts
+-- SET migration_state = 'active'
+-- WHERE account_type = 'company_treasury'
+--   AND currency = 'TMTM';
+--
+-- Engine-compatible Manager capital (system actor; rolls back):
+-- SELECT * FROM private.apply_operational_transfer(
+--   'CAPITAL_IN', 1000, 'TMTM', 'rollback:capital-in',
+--   NULL, '<TREASURY_ACCOUNT_ID>', NULL, NULL, 'system', '{}'::jsonb
+-- );
+-- SELECT * FROM private.apply_operational_transfer(
+--   'TREASURY_TO_MANAGER', 500, 'TMTM', 'rollback:treasury-to-manager',
+--   '<TREASURY_ACCOUNT_ID>', '<MANAGER_OP_ACCOUNT_ID>', NULL, NULL, 'system', '{}'::jsonb
+-- );
+--
+-- 1. Manager funds agent01
+-- SELECT public.manager_fund_cashier('<AGENT01>', 100, 'rollback:fund-1', 'test');
+--
+-- 2. exact duplicate → same transfer_id / is_duplicate=true
+-- SELECT public.manager_fund_cashier('<AGENT01>', 100, 'rollback:fund-1', 'test');
+--
+-- 3. duplicate does not create second audit
+-- SELECT COUNT(*) FROM private.staff_audit_log
+-- WHERE action_type = 'MANAGER_FUNDED_CASHIER'
+--   AND metadata ->> 'transfer_id' = '<TRANSFER_ID>';
+--
+-- 4. Manager collects from agent01
+-- SELECT public.manager_collect_cashier('<AGENT01>', 40, 'rollback:collect-1', 'test');
+--
+-- 5. foreign-network / agent02 rejected
+-- SELECT public.manager_fund_cashier('<AGENT02>', 10, 'rollback:fund-agent02', 'test');
+--   -- expect CASHIER_NOT_FOUND (do not leak)
+--
+-- 6. insufficient Manager balance rejected
+-- SELECT public.manager_fund_cashier('<AGENT01>', 999999, 'rollback:fund-overflow', 'test');
+--   -- expect INSUFFICIENT_OPERATIONAL_BALANCE
+--
+-- 7. excessive collection rejected
+-- SELECT public.manager_collect_cashier('<AGENT01>', 999999, 'rollback:collect-overflow', 'test');
+--   -- expect INSUFFICIENT_OPERATIONAL_BALANCE
+--
+-- 8. legacy agent01 float mirrors canonical cashier balance
+-- SELECT a.available_balance, c.float_balance
+-- FROM private.operational_accounts a
+-- JOIN public.cashiers c ON c.id = a.legacy_cashier_id
+-- WHERE a.legacy_cashier_id = '<AGENT01>' AND a.account_type = 'cashier';
+--
+-- 9. account versions change through existing trigger
+-- SELECT version FROM private.operational_accounts
+-- WHERE id IN ('<MANAGER_OP_ACCOUNT_ID>', '<AGENT01_OP_ACCOUNT_ID>');
+--
+-- 10. ROLLBACK restores balances / transfers / audit / migration_state
+
+ROLLBACK;

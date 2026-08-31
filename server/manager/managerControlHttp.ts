@@ -21,9 +21,15 @@ import { createManagerJwtRpc, type ManagerRpcPort } from './managerRpc.js';
 export const MONEY_RPC_DENYLIST = [
   'manager_create_cashier',
   'manager_topup_cashier',
-  'manager_collect_cashier',
   'manager_adjust_player_balance',
   'manager_settle_bet',
+] as const;
+
+export const CANONICAL_MANAGER_FINANCE_RPCS = [
+  'manager_operational_overview',
+  'manager_fund_cashier',
+  'manager_collect_cashier',
+  'manager_list_operational_transfers',
 ] as const;
 
 export interface ManagerControlDeps {
@@ -84,6 +90,33 @@ function requireBoolean(value: unknown, code: string): boolean {
   throw staffError(code, 400);
 }
 
+function requireAmount(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n)) throw staffError('AMOUNT_REQUIRED', 400);
+  if (n <= 0) throw staffError('AMOUNT_NOT_POSITIVE', 400);
+  return n;
+}
+
+function requireIdempotencyKey(value: unknown): string {
+  const key = String(value ?? '').trim();
+  if (!key) throw staffError('IDEMPOTENCY_KEY_REQUIRED', 400);
+  if (key.length > 250) throw staffError('IDEMPOTENCY_KEY_TOO_LONG', 400);
+  return key;
+}
+
+function optionalNote(value: unknown): string | null {
+  if (value == null) return null;
+  const note = String(value).trim();
+  if (!note) return null;
+  if (note.length > 500) throw staffError('REASON_TOO_LONG', 400);
+  return note;
+}
+
+function skipLegacyManagerId(kind: ControlAction['kind']): boolean {
+  return kind === 'me' || kind === 'risk' || kind === 'finance' || kind === 'fund'
+    || kind === 'collect' || kind === 'transfers';
+}
+
 function managerAccountId(staff: ManagerStaffContext): string {
   const id = staff.legacyManagerAccountId?.trim() ?? '';
   if (!id) throw staffError('LEGACY_MANAGER_ID_REQUIRED', 403);
@@ -106,6 +139,10 @@ type ControlAction =
   | { kind: 'cashiers' }
   | { kind: 'ledger'; cashierId: string }
   | { kind: 'freeze'; cashierId: string }
+  | { kind: 'fund'; cashierId: string }
+  | { kind: 'collect'; cashierId: string }
+  | { kind: 'finance' }
+  | { kind: 'transfers' }
   | { kind: 'risk' }
   | { kind: 'players' }
   | { kind: 'dossier'; playerId: string }
@@ -121,6 +158,12 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   const freeze = path.match(/^\/api\/manager\/cashiers\/([^/]+)\/freeze$/);
   if (freeze) return m === 'POST' ? { kind: 'freeze', cashierId: freeze[1] } : 'method';
 
+  const fund = path.match(/^\/api\/manager\/cashiers\/([^/]+)\/fund$/);
+  if (fund) return m === 'POST' ? { kind: 'fund', cashierId: fund[1] } : 'method';
+
+  const collect = path.match(/^\/api\/manager\/cashiers\/([^/]+)\/collect$/);
+  if (collect) return m === 'POST' ? { kind: 'collect', cashierId: collect[1] } : 'method';
+
   const dossier = path.match(/^\/api\/manager\/players\/([^/]+)$/);
   if (dossier) {
     if (m === 'GET') return { kind: 'dossier', playerId: dossier[1] };
@@ -130,6 +173,8 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/manager/me') return m === 'GET' ? { kind: 'me' } : 'method';
   if (path === '/api/manager/dashboard') return m === 'GET' ? { kind: 'dashboard' } : 'method';
   if (path === '/api/manager/cashiers') return m === 'GET' ? { kind: 'cashiers' } : 'method';
+  if (path === '/api/manager/finance') return m === 'GET' ? { kind: 'finance' } : 'method';
+  if (path === '/api/manager/transfers') return m === 'GET' ? { kind: 'transfers' } : 'method';
   if (path === '/api/manager/risk-bets') return m === 'GET' ? { kind: 'risk' } : 'method';
   if (path === '/api/manager/players') return m === 'GET' ? { kind: 'players' } : 'method';
   if (path === '/api/manager/messages') return m === 'GET' ? { kind: 'messages' } : 'method';
@@ -144,7 +189,7 @@ async function runControl(
   staff: ManagerStaffContext,
 ): Promise<unknown> {
   const rec = asRecord(body);
-  const managerId = action.kind === 'me' || action.kind === 'risk' ? '' : managerAccountId(staff);
+  const managerId = skipLegacyManagerId(action.kind) ? '' : managerAccountId(staff);
 
   switch (action.kind) {
     case 'me':
@@ -169,6 +214,31 @@ async function runControl(
         p_manager_id: managerId,
         p_cashier_id: cashierId,
         p_frozen: requireBoolean(rec.frozen, 'FROZEN_REQUIRED'),
+      });
+    }
+    case 'finance':
+      return rpc.invoke('manager_operational_overview');
+    case 'transfers':
+      return rpc.invoke('manager_list_operational_transfers', {
+        p_limit: query.get('limit') ? Number(query.get('limit')) : 100,
+        p_offset: query.get('offset') ? Number(query.get('offset')) : 0,
+      });
+    case 'fund': {
+      const cashierId = requireId(action.cashierId, 'CASHIER_ID_REQUIRED');
+      return rpc.invoke('manager_fund_cashier', {
+        p_cashier_id: cashierId,
+        p_amount: requireAmount(rec.amount),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+        p_note: optionalNote(rec.note),
+      });
+    }
+    case 'collect': {
+      const cashierId = requireId(action.cashierId, 'CASHIER_ID_REQUIRED');
+      return rpc.invoke('manager_collect_cashier', {
+        p_cashier_id: cashierId,
+        p_amount: requireAmount(rec.amount),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+        p_note: optionalNote(rec.note),
       });
     }
     case 'risk':

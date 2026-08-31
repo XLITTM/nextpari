@@ -30,6 +30,8 @@ const RUNTIME_GRAPH = [
   'api/manager/risk-bets.ts',
   'api/manager/players.ts',
   'api/manager/messages.ts',
+  'api/manager/finance.ts',
+  'api/manager/transfers.ts',
   'server/staff/vercelHandler.ts',
   'server/staff/httpHandler.ts',
   'server/staff/ownerAuthHttp.ts',
@@ -133,6 +135,8 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/manager/risk-bets.js',
         'api/manager/players.js',
         'api/manager/messages.js',
+        'api/manager/finance.js',
+        'api/manager/transfers.js',
       ];
 
       for (const rel of staffEntries) {

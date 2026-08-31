@@ -104,8 +104,8 @@ function createRpc() {
       if (MONEY_RPC_DENYLIST.includes(name as typeof MONEY_RPC_DENYLIST[number])) {
         throw new Error(`money rpc invoked: ${name}`);
       }
-      if (name === 'manager_list_risk_bets') {
-        throw new Error('unscoped risk rpc invoked');
+      if (name === 'apply_operational_transfer' || 'p_manager_id' in (args ?? {}) && (name === 'manager_fund_cashier' || name === 'manager_collect_cashier')) {
+        throw new Error(`forbidden rpc invoked: ${name}`);
       }
       if (name === 'manager_list_cashiers') {
         return [{ id: CASHIER_ID, network_id: NETWORK_ID, login: 'agent01' }];
@@ -387,11 +387,13 @@ describe('manager control center same-origin BFF', () => {
     assert.equal(rpc.calls.some((call) => call.name === 'manager_create_cashier'), false);
   });
 
-  it('18. topup/collect/adjust/settle disabled', async () => {
+  it('18. legacy topup path disabled; canonical collect requires idempotency', async () => {
     const topup = await managerPost(`/api/manager/cashiers/${CASHIER_ID}/topup`, { amount: 100 });
     assert.equal(topup.result.status, 404);
     const collect = await managerPost(`/api/manager/cashiers/${CASHIER_ID}/collect`, { amount: 100 });
-    assert.equal(collect.result.status, 404);
+    assert.equal(collect.result.status, 400);
+    assert.equal(collect.result.body.error, 'IDEMPOTENCY_KEY_REQUIRED');
+    assert.equal(collect.rpc.calls.length, 0);
     const settle = await managerPost('/api/manager/risk-bets', { betId: 'x' });
     assert.equal(settle.result.status, 405);
     assert.equal(topup.rpc.calls.some((call) => MONEY_RPC_DENYLIST.includes(call.name as typeof MONEY_RPC_DENYLIST[number])), false);

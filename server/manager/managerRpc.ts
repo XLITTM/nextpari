@@ -18,11 +18,25 @@ export function mapManagerRpcError(error: { message?: string; code?: string }): 
     || code === 'STAFF_ACCOUNT_NOT_FOUND'
     || code === 'STAFF_ACCOUNT_BLOCKED'
     || code === 'STAFF_ACCOUNT_DISABLED'
+    || code === 'NETWORK_SCOPE_VIOLATION'
+    || code === 'NETWORK_ID_REQUIRED'
+    || code === 'LEGACY_MANAGER_ID_REQUIRED'
   ) {
     return staffError(code, 403);
   }
   if (code === 'JWT_REQUIRED' || code === 'JWT_INVALID' || code === 'AUTH_REQUIRED') {
     return staffError(code, 401);
+  }
+  if (
+    code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE'
+    || code === 'INSUFFICIENT_OPERATIONAL_BALANCE'
+    || code === 'IDEMPOTENCY_KEY_CONFLICT'
+    || code === 'CASHIER_NOT_ACTIVE'
+  ) {
+    return staffError(code, 409);
+  }
+  if (/Could not find the function|schema cache|PGRST202/i.test(text)) {
+    return staffError('FINANCE_RPC_UNAVAILABLE', 503);
   }
   if (/не входит в вашу сеть/i.test(text)) {
     return staffError('CASHIER_NOT_FOUND', 404);
