@@ -1,4 +1,5 @@
 import { ManagerOfficeLayout } from './pages/manager/ManagerOfficeLayout';
+import { ManagerAuthProvider } from './manager/auth/ManagerAuthProvider';
 import { OwnerAuthProvider } from './owner/auth/OwnerAuthProvider';
 import { ManagerDashboardScreen } from './owner/ManagerDashboardScreen';
 import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
@@ -23,5 +24,9 @@ export function AppRoutes({ portal }: { portal: StaffPortal }) {
       </OwnerAuthProvider>
     );
   }
-  return <ManagerOfficeLayout />;
+  return (
+    <ManagerAuthProvider>
+      <ManagerOfficeLayout />
+    </ManagerAuthProvider>
+  );
 }

@@ -13,7 +13,8 @@
     "worker": "tsx --env-file=.env --tsconfig tsconfig.app.json scripts/run-sports-worker.ts",
     "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts server/staff/esmImportSmoke.test.ts",
     "owner:auth:test": "tsx --tsconfig tsconfig.server.json --test src/owner/auth/ownerAuth.test.ts server/staff/ownerAuthGateway.test.ts",
-    "owner:control:test": "tsx --tsconfig tsconfig.server.json --test server/owner/ownerControl.test.ts"
+    "owner:control:test": "tsx --tsconfig tsconfig.server.json --test server/owner/ownerControl.test.ts",
+    "manager:auth:test": "tsx --tsconfig tsconfig.server.json --test src/manager/auth/managerAuth.test.ts server/staff/managerAuthGateway.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",

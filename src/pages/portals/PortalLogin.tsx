@@ -13,7 +13,7 @@ const COPY: Record<StaffRole, { title: string; hint: string; demo: string }> = {
   MANAGER: {
     title: 'Кабинет менеджера',
     hint: 'Кассы региона и оборот',
-    demo: 'manager01 / 1111',
+    demo: '',
   },
   AGENT: {
     title: 'Терминал кассира',
@@ -87,9 +87,11 @@ export function PortalLogin({ portal }: { portal: StaffRole }) {
         >
           {busy ? 'Вход…' : 'Войти'}
         </button>
-        <p className="mt-4 text-[11px] text-gray-500">
-          Демо: <span className="font-bold text-gray-700">{copy.demo}</span>
-        </p>
+        {copy.demo ? (
+          <p className="mt-4 text-[11px] text-gray-500">
+            Демо: <span className="font-bold text-gray-700">{copy.demo}</span>
+          </p>
+        ) : null}
         <div className="mt-3 flex gap-2 text-[11px] font-semibold">
           {(['OWNER', 'MANAGER', 'AGENT'] as StaffRole[])
             .filter((role) => role !== portal)

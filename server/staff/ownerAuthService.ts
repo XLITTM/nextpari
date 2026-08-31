@@ -96,7 +96,12 @@ export function liveOwnerAuthPorts(): OwnerAuthGatewayPorts {
           throw staffError('JWT_INVALID', 401);
         }
         const code = extractErrorCode(text);
-        if (code) throw staffError(code, code.includes('OWNER') || code.startsWith('STAFF_') ? 403 : 401);
+        if (code) {
+          throw staffError(
+            code,
+            /OWNER|MANAGER|CASHIER|STAFF_/.test(code) ? 403 : 401,
+          );
+        }
         throw staffError('JWT_INVALID', 401);
       }
       return data;

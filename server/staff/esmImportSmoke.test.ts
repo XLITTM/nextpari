@@ -14,6 +14,9 @@ const RUNTIME_GRAPH = [
   'api/owner/auth/login.ts',
   'api/owner/auth/session.ts',
   'api/owner/auth/logout.ts',
+  'api/manager/auth/login.ts',
+  'api/manager/auth/session.ts',
+  'api/manager/auth/logout.ts',
   'api/owner/dashboard.ts',
   'api/owner/me.ts',
   'api/owner/cashiers.ts',
@@ -27,6 +30,10 @@ const RUNTIME_GRAPH = [
   'server/staff/ownerAuthService.ts',
   'server/staff/ownerCookies.ts',
   'server/staff/ownerContext.ts',
+  'server/staff/managerAuthHttp.ts',
+  'server/staff/managerAuthService.ts',
+  'server/staff/managerCookies.ts',
+  'server/staff/managerContext.ts',
   'server/staff/staffOnboardingService.ts',
   'server/staff/staffAuthAdmin.ts',
   'server/staff/env.ts',
@@ -52,7 +59,7 @@ function listTsFiles(dir: string): string[] {
 describe('staff onboarding Node ESM import graph', () => {
   it('runtime sources use explicit .js relative specifiers', () => {
     const files = [
-      ...listTsFiles(join(root, 'api/owner')),
+      ...listTsFiles(join(root, 'api')),
       ...listTsFiles(join(root, 'server/staff')),
       ...listTsFiles(join(root, 'server/owner')),
       join(root, 'server/supabase/admin.ts'),
@@ -92,7 +99,14 @@ describe('staff onboarding Node ESM import graph', () => {
       }
 
       const staffEntries = ['api/owner/staff/manager.js', 'api/owner/staff/cashier.js'];
-      const authEntries = ['api/owner/auth/login.js', 'api/owner/auth/session.js', 'api/owner/auth/logout.js'];
+      const authEntries = [
+        'api/owner/auth/login.js',
+        'api/owner/auth/session.js',
+        'api/owner/auth/logout.js',
+        'api/manager/auth/login.js',
+        'api/manager/auth/session.js',
+        'api/manager/auth/logout.js',
+      ];
       const controlEntries = [
         'api/owner/dashboard.js',
         'api/owner/me.js',

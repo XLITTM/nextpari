@@ -1,14 +1,9 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { ClipboardList, LogOut, Shield, Store, User, UserCheck } from 'lucide-react';
 import { PlayersTab } from '../../components/backoffice/PlayersTab';
-import {
-  clearNetworkManagerSession,
-  isManagerLoginPath,
-  loadNetworkManagerSession,
-  networkManagerLogin,
-  saveNetworkManagerSession,
-  type ManagerSession,
-} from '../../lib/backoffice';
+import { isManagerLoginPath, type ManagerSession } from '../../lib/backoffice';
+import { useManagerAuth } from '../../manager/auth/ManagerAuthProvider';
+import { managerOfficeSession } from '../../manager/auth/managerAuth';
 import { useManagerNetwork } from '../../stores/backofficeStore';
 import { ManagerAgentsPage } from './ManagerAgentsPage';
 import { ManagerFinancePage } from './ManagerFinancePage';
@@ -29,47 +24,35 @@ function Loader({ label = 'Загрузка кабинета…' }: { label?: st
 }
 
 export function ManagerOfficeLayout() {
-  const [session, setSession] = useState<ManagerSession | null>(null);
-  const [booting, setBooting] = useState(true);
+  const { loading, staff, deniedMessage, signOut } = useManagerAuth();
 
   useEffect(() => {
     document.title = 'NextPari — Кабинет управляющего сетью';
-    const saved = loadNetworkManagerSession();
-    if (saved) {
-      saveNetworkManagerSession(saved);
-    }
-    setSession(saved);
-    setBooting(false);
-    if (saved && isManagerLoginPath()) goManagerOffice('agents');
   }, []);
 
-  if (booting) return <Loader />;
+  useEffect(() => {
+    if (staff && isManagerLoginPath()) goManagerOffice('agents');
+  }, [staff]);
 
-  if (!session) {
-    return (
-      <ManagerPortalLogin
-        onSuccess={(next) => {
-          setSession(next);
-          goManagerOffice('agents');
-        }}
-      />
-    );
+  if (loading) return <Loader />;
+
+  if (!staff) {
+    return <ManagerPortalLogin deniedMessage={deniedMessage} />;
   }
 
   return (
     <ManagerOfficeShell
-      session={session}
+      session={managerOfficeSession(staff)}
       onLogout={() => {
-        clearNetworkManagerSession();
-        setSession(null);
-        goManagerLogin();
+        void signOut().then(() => goManagerLogin());
       }}
     />
   );
 }
 
-function ManagerPortalLogin({ onSuccess }: { onSuccess: (session: ManagerSession) => void }) {
-  const [login, setLogin] = useState('');
+function ManagerPortalLogin({ deniedMessage }: { deniedMessage: string }) {
+  const { signIn } = useManagerAuth();
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -78,13 +61,16 @@ function ManagerPortalLogin({ onSuccess }: { onSuccess: (session: ManagerSession
     setError('');
     setSubmitting(true);
     try {
-      onSuccess(await networkManagerLogin(login, password));
+      await signIn(email, password);
+      goManagerOffice('agents');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось войти');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const shownError = error || deniedMessage;
 
   return (
     <div className="min-h-screen bg-ink-950 flex items-center justify-center px-4">
@@ -94,32 +80,37 @@ function ManagerPortalLogin({ onSuccess }: { onSuccess: (session: ManagerSession
             <Shield className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold text-ink-900 leading-tight">NextPari · Кабинет Управляющего Сетью</h1>
+            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-gray-400">NextPari · Manager</p>
+            <h1 className="text-xl font-extrabold text-ink-900 leading-tight">Кабинет Управляющего Сетью</h1>
+            <p className="text-xs text-gray-500 mt-0.5">Вход по email и паролю</p>
           </div>
         </div>
-        {error && (
+        {shownError && (
           <p className="mb-4 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
-            {error}
+            {shownError}
           </p>
         )}
-        <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Логин менеджера</label>
+        <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Email</label>
         <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 mb-3">
           <User className="w-4 h-4 text-gray-400" />
           <input
-            value={login}
-            onChange={(e) => setLogin(e.target.value)}
-            placeholder="Логин менеджера"
+            type="email"
+            autoComplete="username"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="email"
             className="flex-1 bg-transparent py-3 text-sm font-semibold outline-none"
             onKeyDown={(e) => e.key === 'Enter' && void handleSubmit()}
           />
         </div>
-        <label className="text-xs font-semibold text-gray-500 mb-1.5 block">PIN / Пароль</label>
+        <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Пароль</label>
         <input
           type="password"
+          autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="••••"
-          className="w-full bg-gray-100 rounded-xl px-4 py-3 text-lg font-bold tracking-[0.4em] text-center outline-none mb-4"
+          placeholder="••••••••"
+          className="w-full bg-gray-100 rounded-xl px-4 py-3 text-sm font-semibold outline-none mb-4"
           onKeyDown={(e) => e.key === 'Enter' && void handleSubmit()}
         />
         <button

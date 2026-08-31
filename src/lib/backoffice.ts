@@ -687,15 +687,12 @@ export async function ownerLogin(_login: string, _pin: string): Promise<ManagerS
   throw new Error('Owner portal uses Supabase Auth');
 }
 
-export async function networkManagerLogin(login: string, pin: string): Promise<ManagerSession> {
-  const session = bindManagerSession(await authenticateStaff(login, pin));
-  if (session.role !== 'manager') throw new Error('Неверный логин или PIN-код');
-  saveNetworkManagerSession(session);
-  return session;
+export async function networkManagerLogin(_login: string, _pin: string): Promise<ManagerSession> {
+  throw new Error('Manager portal uses Supabase Auth');
 }
 
-export async function managerLogin(login: string, pin: string): Promise<ManagerSession> {
-  return networkManagerLogin(login, pin);
+export async function managerLogin(_login: string, _pin: string): Promise<ManagerSession> {
+  throw new Error('Manager portal uses Supabase Auth');
 }
 
 async function liveSeriesFromTables(session: ManagerSession): Promise<DashboardKpis['series']> {
