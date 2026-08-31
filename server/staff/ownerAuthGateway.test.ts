@@ -39,6 +39,8 @@ const OWNER_CTX = {
   auth_user_id: 'owner-uid',
   display_name: 'Owner',
   network_id: null,
+  legacy_manager_account_id: null,
+  legacy_cashier_id: null,
 };
 
 function cookieHeader(access?: string | null, refresh?: string | null): string {
@@ -424,6 +426,8 @@ describe('owner same-origin auth gateway', () => {
     const login = readFileSync(join(here, 'ownerAuthService.ts'), 'utf8');
     assert.match(login, /createAnonAuthClient/);
     assert.match(login, /createUserJwtClient/);
+    assert.match(login, /current_staff_binding_context/);
+    assert.equal(login.includes("rpc('current_staff_context')"), false);
     assert.equal(login.includes('createServiceRoleClient'), false);
     const src = listFiles(join(root, 'src/owner'))
       .filter((path) => path.endsWith('.ts') || path.endsWith('.tsx'))

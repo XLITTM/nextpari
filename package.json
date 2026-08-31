@@ -15,7 +15,7 @@
     "owner:auth:test": "tsx --tsconfig tsconfig.server.json --test src/owner/auth/ownerAuth.test.ts server/staff/ownerAuthGateway.test.ts",
     "owner:control:test": "tsx --tsconfig tsconfig.server.json --test server/owner/ownerControl.test.ts",
     "manager:auth:test": "tsx --tsconfig tsconfig.server.json --test src/manager/auth/managerAuth.test.ts server/staff/managerAuthGateway.test.ts",
-    "cashier:auth:test": "tsx --tsconfig tsconfig.server.json --test src/cashier/auth/cashierAuth.test.ts server/staff/cashierAuthGateway.test.ts",
+    "cashier:auth:test": "tsx --tsconfig tsconfig.server.json --test src/cashier/auth/cashierAuth.test.ts server/staff/cashierAuthGateway.test.ts server/staff/staffBindingContext.test.ts",
     "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts"
   },
   "dependencies": {

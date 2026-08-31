@@ -378,6 +378,8 @@ describe('manager same-origin auth gateway', () => {
     const login = readFileSync(join(here, 'managerAuthService.ts'), 'utf8');
     assert.match(login, /liveOwnerAuthPorts/);
     assert.equal(login.includes('createServiceRoleClient'), false);
+    const shared = readFileSync(join(here, 'ownerAuthService.ts'), 'utf8');
+    assert.match(shared, /current_staff_binding_context/);
   });
 
   it('15. no money RPC called', () => {

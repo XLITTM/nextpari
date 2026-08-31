@@ -89,7 +89,7 @@ export function liveOwnerAuthPorts(): OwnerAuthGatewayPorts {
     },
     async currentStaffContext(accessToken) {
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
-      const { data, error } = await client.rpc('current_staff_context');
+      const { data, error } = await client.rpc('current_staff_binding_context');
       if (error) {
         const text = rpcMessage(error);
         if (error.code === 'PGRST301' || /jwt|expired|unauthorized/i.test(text)) {
