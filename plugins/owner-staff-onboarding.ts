@@ -1,0 +1,26 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Plugin, ViteDevServer } from 'vite';
+import { attachOwnerStaffHttp } from '../server/staff/httpHandler';
+
+function attachOwnerStaff(server: ViteDevServer) {
+  server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
+    void attachOwnerStaffHttp(req, res)
+      .then((handled) => {
+        if (!handled) next();
+      })
+      .catch(() => {
+        if (res.writableEnded) return;
+        res.statusCode = 500;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify({ ok: false, error: 'INTERNAL_ERROR' }));
+      });
+  });
+}
+
+export function ownerStaffOnboardingPlugin(): Plugin {
+  return {
+    name: 'owner-staff-onboarding',
+    configureServer: attachOwnerStaff,
+    configurePreviewServer: attachOwnerStaff,
+  };
+}
