@@ -46,9 +46,7 @@ import { LeagueScreen } from './screens/LeagueScreen';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { subscribePlayerAuth } from './hooks/useAuth';
-import { clearDemoPlayerState, getPlayerSession, signOutPlayer } from './lib/playerAuth';
-import { bootstrapOwnPlayerAccount } from './lib/playerWallet';
+import { clearDemoPlayerState, fetchPlayerMe, signOutPlayer } from './lib/playerAuth';
 import { useUserStore } from './stores/userStore';
 import { useFavoritesStore } from './stores/favoritesStore';
 import { subscribeMatchSoundToast } from './services/matchSoundService';
@@ -156,27 +154,13 @@ function AppContent() {
   useEffect(() => {
     clearDemoPlayerState();
     let cancelled = false;
-    void getPlayerSession().then(async (session) => {
+    void fetchPlayerMe().then((snapshot) => {
       if (cancelled) return;
-      if (session?.user) {
-        try {
-          await bootstrapOwnPlayerAccount();
-        } catch {
-          /* Wallet unavailable is shown after entry. */
-        }
-        if (!cancelled) setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-      }
-      if (!cancelled) setAuthReady(true);
-    });
-    const unsubscribe = subscribePlayerAuth((ok) => {
-      setIsAuthenticated(ok);
+      setIsAuthenticated(Boolean(snapshot?.authenticated));
       setAuthReady(true);
     });
     return () => {
       cancelled = true;
-      unsubscribe();
     };
   }, []);
 

@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { supabase } from './lib/supabase';
-import { ensureOwnPlayerWallet } from './lib/playerWallet';
+import { fetchPlayerMe } from './lib/playerAuth';
 import { useUserStore } from './stores/userStore';
 
 interface WalletContextValue {
@@ -27,8 +26,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session?.user) {
+      const snapshot = await fetchPlayerMe();
+      if (!snapshot?.authenticated) {
         setBalance(0);
         setPublicId(null);
         setAvailable(false);
@@ -36,15 +35,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         resetUser();
         return;
       }
-      const wallet = await ensureOwnPlayerWallet();
-      setPublicId(wallet.publicId);
-      setBalance(wallet.balance);
+      setPublicId(snapshot.player.publicId);
+      setBalance(snapshot.wallet.balance);
       setAvailable(true);
       setError(null);
       hydrate({
-        publicId: wallet.publicId,
-        balance: wallet.balance,
-        walletId: wallet.walletId,
+        publicId: snapshot.player.publicId,
+        balance: snapshot.wallet.balance,
+        walletId: null,
       });
     } catch (err) {
       setAvailable(false);
@@ -56,12 +54,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh();
-    const { data } = supabase.auth.onAuthStateChange(() => {
-      void refresh();
-    });
-    return () => {
-      data.subscription.unsubscribe();
-    };
   }, [refresh]);
 
   const applyBalance = useCallback((_next: number) => {

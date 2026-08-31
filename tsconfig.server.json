@@ -14,5 +14,5 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server/**/*.ts", "api/owner/**/*.ts", "api/manager/**/*.ts", "api/cashier/**/*.ts"]
+  "include": ["server/**/*.ts", "api/owner/**/*.ts", "api/manager/**/*.ts", "api/cashier/**/*.ts", "api/player/**/*.ts"]
 }

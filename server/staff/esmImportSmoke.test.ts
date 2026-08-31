@@ -20,6 +20,11 @@ const RUNTIME_GRAPH = [
   'api/cashier/auth/login.ts',
   'api/cashier/auth/session.ts',
   'api/cashier/auth/logout.ts',
+  'api/player/auth/login.ts',
+  'api/player/auth/register.ts',
+  'api/player/auth/logout.ts',
+  'api/player/me.ts',
+  'api/player/wallet.ts',
   'api/owner/dashboard.ts',
   'api/owner/me.ts',
   'api/owner/cashiers.ts',
@@ -59,6 +64,10 @@ const RUNTIME_GRAPH = [
   'server/staff/cashierAuthService.ts',
   'server/staff/cashierCookies.ts',
   'server/staff/cashierContext.ts',
+  'server/player/playerAuthHttp.ts',
+  'server/player/playerAuthService.ts',
+  'server/player/playerCookies.ts',
+  'server/player/playerValidators.ts',
   'server/staff/staffOnboardingService.ts',
   'server/staff/staffHierarchyService.ts',
   'server/staff/staffAuthAdmin.ts',
@@ -94,6 +103,7 @@ describe('staff onboarding Node ESM import graph', () => {
     const files = [
       ...listTsFiles(join(root, 'api')),
       ...listTsFiles(join(root, 'server/staff')),
+      ...listTsFiles(join(root, 'server/player')),
       ...listTsFiles(join(root, 'server/owner')),
       ...listTsFiles(join(root, 'server/manager')),
       ...listTsFiles(join(root, 'server/cashier')),
@@ -145,6 +155,13 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/cashier/auth/session.js',
         'api/cashier/auth/logout.js',
       ];
+      const playerAuthEntries = [
+        'api/player/auth/login.js',
+        'api/player/auth/register.js',
+        'api/player/auth/logout.js',
+        'api/player/me.js',
+        'api/player/wallet.js',
+      ];
       const controlEntries = [
         'api/owner/dashboard.js',
         'api/owner/me.js',
@@ -194,7 +211,12 @@ describe('staff onboarding Node ESM import graph', () => {
         assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/cashier\/vercelHandler\.js['"]/);
       }
 
-      for (const rel of [...staffEntries, ...authEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries]) {
+      for (const rel of playerAuthEntries) {
+        const compiled = readFileSync(join(outDir, rel), 'utf8');
+        assert.match(compiled, /from ['"]\.\.\/(?:\.\.\/)?\.\.\/server\/player\/playerAuthHttp\.js['"]/);
+      }
+
+      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries]) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   ChevronLeft, Save, Phone, Mail, CheckCircle2, Clock3,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
 import { useToast } from '../ToastContext';
 import { useProfile } from '../ProfileContext';
 import type { PersonalData } from '../types';
@@ -134,17 +133,9 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
       passport: passport.trim(),
     };
 
-    const { error } = await supabase.from('personal_data').insert(payload);
+    void payload;
     setSaving(false);
-
-    if (error) {
-      showToast('Ошибка при сохранении');
-      return;
-    }
-
-    showToast('Данные сохранены');
-    refresh();
-    onBack();
+    showToast('Сохранение временно недоступно');
   };
 
   return (

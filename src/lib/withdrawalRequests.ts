@@ -1,4 +1,3 @@
-import { supabase } from './supabase';
 import type { WithdrawalMethod, WithdrawalRequest, WithdrawalStatus } from '../types';
 
 const LOCAL_KEY = 'nextpari.withdrawal_requests.v1';
@@ -36,43 +35,7 @@ function normalizeRow(row: Record<string, unknown>): WithdrawalRequest {
 }
 
 export async function listWithdrawalRequests(): Promise<WithdrawalRequest[]> {
-  const local = loadLocal();
-  const { data, error } = await supabase
-    .from('withdrawal_requests')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) {
-    console.error('Failed to load withdrawals:', error.message);
-    return local;
-  }
-  const remote = (data ?? []).map((row) => normalizeRow(row as Record<string, unknown>));
-  const remoteIds = new Set(remote.map((row) => row.id));
-  const merged = [...remote, ...local.filter((row) => !remoteIds.has(row.id))];
-  // Prefer local pin/city/point overlays for matching ids / pins.
-  const byPin = new Map(
-    local
-      .filter((row) => row.pin_code)
-      .map((row) => [row.pin_code as string, row] as const),
-  );
-  const hydrated = merged.map((row) => {
-    const localMatch =
-      local.find((item) => item.id === row.id) ||
-      (row.pin_code ? byPin.get(row.pin_code) : undefined) ||
-      (row.method_label?.includes('Mobcash')
-        ? local.find((item) => item.method_label === row.method_label && item.amount === row.amount)
-        : undefined);
-    if (!localMatch) return row;
-    return {
-      ...row,
-      pin_code: row.pin_code || localMatch.pin_code,
-      city: row.city || localMatch.city,
-      point: row.point || localMatch.point,
-      player_id: row.player_id || localMatch.player_id,
-      status: localMatch.status === 'approved' ? 'approved' : row.status,
-    };
-  });
-  hydrated.sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
-  return hydrated;
+  return loadLocal();
 }
 
 export async function createWithdrawalRequest(params: {
@@ -84,43 +47,15 @@ export async function createWithdrawalRequest(params: {
   point?: string;
   playerId?: string;
 }): Promise<WithdrawalRequest> {
-  const payload = {
+  const base: WithdrawalRequest = {
+    id: crypto.randomUUID(),
     method: params.method,
     method_label: params.methodLabel,
     amount: params.amount,
-    status: 'pending' as const,
+    status: 'pending',
+    rejection_reason: null,
+    created_at: new Date().toISOString(),
   };
-
-  let { data, error } = await supabase
-    .from('withdrawal_requests')
-    .insert(payload)
-    .select('*')
-    .maybeSingle();
-
-  // Older schemas reject method='cash' — keep Mobcash label on ewallet.
-  if (error && params.method === 'cash') {
-    ({ data, error } = await supabase
-      .from('withdrawal_requests')
-      .insert({ ...payload, method: 'ewallet' })
-      .select('*')
-      .maybeSingle());
-  }
-
-  const base: WithdrawalRequest = !error && data
-    ? normalizeRow(data as Record<string, unknown>)
-    : {
-        id: crypto.randomUUID(),
-        method: params.method,
-        method_label: params.methodLabel,
-        amount: params.amount,
-        status: 'pending',
-        rejection_reason: null,
-        created_at: new Date().toISOString(),
-      };
-
-  if (error) {
-    console.error('Failed to insert withdrawal_requests:', error.message);
-  }
 
   const row: WithdrawalRequest = {
     ...base,
@@ -145,15 +80,4 @@ export function markWithdrawalPaidByPin(pinCode: string): void {
   );
   saveLocal(rows);
 
-  const matched = rows.find((row) => row.pin_code === pinCode);
-  if (!matched) return;
-  // Remote table may not have pin_code — update the matching row by id when available.
-  void supabase
-    .from('withdrawal_requests')
-    .update({ status: 'approved' })
-    .eq('id', matched.id)
-    .eq('status', 'pending')
-    .then(({ error }) => {
-      if (error) console.error('Failed to update withdrawal status:', error.message);
-    });
 }

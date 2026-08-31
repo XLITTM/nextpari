@@ -1,5 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { supabase } from './lib/supabase';
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
 import type { PersonalData } from './types';
 
 const EMPTY_DATA: PersonalData = {
@@ -25,24 +24,12 @@ const ProfileContext = createContext<ProfileContextValue | null>(null);
 
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const [personalData, setPersonalData] = useState<PersonalData>(EMPTY_DATA);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
-    const { data } = await supabase
-      .from('personal_data')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (data) {
-      setPersonalData(data as PersonalData);
-    }
+    setPersonalData(EMPTY_DATA);
     setLoading(false);
   }, []);
-
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
 
   const isProfileComplete = Boolean(
     personalData.last_name &&

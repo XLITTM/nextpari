@@ -627,6 +627,20 @@ async function insertMobcashOrder(params: {
 }
 
 export async function playerCreateCashPayout(
+  _amount: number,
+  _pickup?: { city: string; point: string; pinCode?: string },
+): Promise<{
+  code: string;
+  amount: number;
+  playerPublicId: string;
+  newBalance: number;
+  city?: string;
+  point?: string;
+}> {
+  throw new Error('Вывод через кассу временно недоступен.');
+}
+
+async function _gatedPlayerCreateCashPayout(
   amount: number,
   pickup?: { city: string; point: string; pinCode?: string },
 ): Promise<{
@@ -765,6 +779,10 @@ export async function playerCreateCashPayout(
 }
 
 export async function playerListCashPayouts(): Promise<PlayerCashPayout[]> {
+  return [];
+}
+
+async function _gatedPlayerListCashPayouts(): Promise<PlayerCashPayout[]> {
   const { data, error } = await supabase.rpc('player_list_cash_payouts');
   if (error && isMissingRpc(error)) {
     const fromTable = await supabase

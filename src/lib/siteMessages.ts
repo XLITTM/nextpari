@@ -1,5 +1,3 @@
-import { supabase } from './supabase';
-
 export const SITE_MESSAGES_KEY = 'site_messages';
 export const SITE_MESSAGES_EVENT = 'messages_updated';
 
@@ -124,25 +122,6 @@ function persistLocalMessage(message: SiteMessage) {
 }
 
 export async function fetchSiteMessages(playerId: string): Promise<SiteMessage[]> {
-  try {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (!error && Array.isArray(data) && data.length > 0) {
-      const mapped = data
-        .map((row) => asMessage(row))
-        .filter((row): row is SiteMessage => Boolean(row));
-
-      // Keep local mirror in sync for offline / badge
-      localStorage.setItem('site_messages', JSON.stringify(mapped.slice(0, 200)));
-      return filterMessagesForPlayer(mapped, playerId);
-    }
-  } catch (err) {
-    console.error('fetchSiteMessages supabase', err);
-  }
-
   return filterMessagesForPlayer(readSiteMessages(), playerId);
 }
 
@@ -174,35 +153,6 @@ export async function sendSiteMessage(params: {
     localStorage.setItem('site_messages', JSON.stringify([newMessage]));
   }
   notifyMessagesUpdated();
-
-  try {
-    const { data, error } = await supabase
-      .from('messages')
-      .insert([
-        {
-          recipient_id: recipientId || 'all',
-          title,
-          content,
-          created_at: createdAt.toISOString(),
-          is_read: false,
-        },
-      ])
-      .select('*')
-      .maybeSingle();
-
-    if (!error && data) {
-      const remote = asMessage(data);
-      if (remote) {
-        persistLocalMessage(remote);
-        return remote;
-      }
-    } else if (error) {
-      console.error('sendSiteMessage supabase', error.message);
-    }
-  } catch (err) {
-    console.error('sendSiteMessage supabase', err);
-  }
-
   return newMessage;
 }
 
@@ -212,13 +162,6 @@ export async function markMessageRead(messageId: string | number): Promise<SiteM
   );
   localStorage.setItem('site_messages', JSON.stringify(next.slice(0, 200)));
   notifyMessagesUpdated();
-
-  try {
-    await supabase.from('messages').update({ is_read: true }).eq('id', messageId);
-  } catch (err) {
-    console.error('markMessageRead supabase', err);
-  }
-
   return next;
 }
 

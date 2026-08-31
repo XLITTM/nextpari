@@ -12,7 +12,6 @@ import {
   tournamentLine,
 } from '../lib/betTicket';
 import { fetchMatchSnapshots, snapshotFromMatch, type MatchLiveSnapshot } from '../lib/liveMatches';
-import { supabase } from '../lib/supabase';
 import { SportIcon } from '../components/SportIcon';
 import type { BetEvent, BetHistoryEntry, BetStatus } from '../types';
 
@@ -54,25 +53,6 @@ export function BetDetailsScreen({ betId, onBack }: BetDetailsScreenProps) {
     }, 8000);
     return () => window.clearInterval(timer);
   }, [loadSnapshots, idsKey]);
-
-  useEffect(() => {
-    if (!idsKey) return undefined;
-    const ids = idsKey.split(',');
-    const channel = supabase
-      .channel(`bet-details-${betId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'matches' },
-        (payload) => {
-          const id = String((payload.new as { id?: string } | null)?.id ?? '');
-          if (id && ids.includes(id)) void loadSnapshots();
-        },
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [betId, idsKey, loadSnapshots]);
 
   const liveById = useMemo(
     () =>

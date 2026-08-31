@@ -9,7 +9,7 @@ import { useToast } from '../ToastContext';
 import { useProfile } from '../ProfileContext';
 import { useWallet } from '../WalletContext';
 import { RestrictionModal } from '../components/RestrictionModal';
-import { playerCreateCashPayout, playerListCashPayouts, type PlayerCashPayout } from '../lib/cashier';
+import { playerCreateCashPayout, playerListCashPayouts, type PlayerCashPayout } from '../lib/playerCashPayout';
 import {
   MOBCASH_CITIES,
   MOBCASH_MIN_WITHDRAWAL,

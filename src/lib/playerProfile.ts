@@ -24,7 +24,7 @@ export async function syncPlayerWallet(): Promise<{
   return {
     publicId: wallet.publicId,
     balance: wallet.balance,
-    walletId: wallet.walletId,
+    walletId: null,
   };
 }
 

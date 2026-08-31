@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Eye, EyeOff, Mail, Phone, Lock, Check } from 'lucide-react';
 import { signInPlayer, signUpPlayer } from '../lib/playerAuth';
-import { bootstrapOwnPlayerAccount } from '../lib/playerWallet';
 
 interface AuthScreenProps {
   onAuthSuccess: () => void;
@@ -30,11 +29,6 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         setError('invalid credentials');
         return;
       }
-      try {
-        await bootstrapOwnPlayerAccount();
-      } catch {
-        /* Wallet bootstrap is retried after entry. */
-      }
       onAuthSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'invalid credentials');
@@ -57,19 +51,20 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         password: regPassword,
         phone: regPhone,
       });
-      if (!result.session?.user) {
+      if (result.needsEmailConfirmation || !result.session?.user) {
         setNotice('Подтвердите email, затем войдите.');
         setTab('login');
         return;
       }
-      try {
-        await bootstrapOwnPlayerAccount();
-      } catch {
-        /* Wallet bootstrap is retried after entry. */
-      }
       onAuthSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'invalid credentials');
+      const message = err instanceof Error ? err.message : 'invalid credentials';
+      if (message === 'email confirmation required') {
+        setNotice('Подтвердите email, затем войдите.');
+        setTab('login');
+        return;
+      }
+      setError(message);
     } finally {
       setBusy(false);
     }

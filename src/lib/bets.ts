@@ -1,4 +1,3 @@
-import { supabase } from './supabase';
 import { tournamentLine } from './betTicket';
 import { blockedSportsBet, SPORTS_BET_GATE_MESSAGE } from './playerMoneyGate';
 import { ensureOwnPlayerWallet } from './playerWallet';
@@ -15,7 +14,7 @@ export async function fetchWallet(): Promise<WalletRow | null> {
   try {
     const wallet = await ensureOwnPlayerWallet();
     return {
-      id: wallet.walletId,
+      id: '',
       balance: wallet.balance,
       publicId: wallet.publicId,
     };
@@ -52,66 +51,7 @@ function mapStatus(value: string | undefined): BetStatus {
 }
 
 export async function fetchBets(): Promise<BetHistoryEntry[]> {
-  const { data, error } = await supabase.from('bets').select('*').order('created_at', { ascending: false });
-  if (error) {
-    console.error('Failed to load bets:', error.message);
-    return [];
-  }
-
-  const rows = (data ?? []) as Record<string, unknown>[];
-  const ids = rows.map((row) => String(row.id));
-  const itemsByBet = new Map<string, BetHistoryEntry['events']>();
-
-  if (ids.length) {
-    const { data: items } = await supabase.from('bet_items').select('*').in('bet_id', ids);
-    for (const raw of (items ?? []) as Record<string, unknown>[]) {
-      const betId = String(raw.bet_id ?? '');
-      const list = itemsByBet.get(betId) ?? [];
-      list.push(mapItem(raw));
-      itemsByBet.set(betId, list);
-    }
-  }
-
-  return rows.map((row) => {
-    const fromItems = itemsByBet.get(String(row.id));
-    const fromJson = parseEventsJson(row.events);
-    const fallback = [
-      {
-        matchId: row.match_id ? String(row.match_id) : undefined,
-        matchLabel: [row.home_team, row.away_team].filter(Boolean).join(' — ') || String(row.selection ?? ''),
-        market: String(row.market ?? ''),
-        outcome: String(row.selection ?? ''),
-        selection: String(row.selection ?? ''),
-        odds: Number(row.odds ?? row.total_odds ?? 0),
-        homeTeam: row.home_team ? String(row.home_team) : undefined,
-        awayTeam: row.away_team ? String(row.away_team) : undefined,
-        matchStatus: 'Принята',
-      },
-    ];
-    const events = fromItems && fromItems.length > 0 ? fromItems : fromJson.length > 0 ? fromJson : fallback;
-
-    const created = row.created_at ? new Date(String(row.created_at)) : new Date();
-    const type = events.length > 1 || row.type === 'express' ? 'express' : 'single';
-    const totalOdds = Number(row.total_odds ?? row.odds ?? 0);
-    const amount = Number(row.amount ?? row.stake ?? 0);
-
-    return {
-      id: String(row.id),
-      type,
-      events,
-      totalOdds,
-      amount,
-      payout: Number(row.potential_win ?? row.payout ?? 0),
-      status: mapStatus(String(row.status ?? '')),
-      date: created.toLocaleString('ru-RU', {
-        day: 'numeric',
-        month: 'short',
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      ticketCode: row.ticket_code ? String(row.ticket_code) : undefined,
-    };
-  });
+  return [];
 }
 
 function mapEvent(raw: Record<string, unknown>): BetEvent {

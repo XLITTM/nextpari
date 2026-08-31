@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   clearDemoPlayerState,
+  fetchPlayerMe,
   mapPlayerAuthError,
   signInPlayer,
   signOutPlayer,
@@ -24,7 +25,6 @@ import { persistLocalBalance, readPlayerBalance, syncPlayerWallet } from './play
 import { ensureOwnPlayerWallet } from './playerWallet';
 import { persistWalletBalance } from '../games/blackjack/wallet';
 import { placeBet } from './bets';
-import { supabase } from './supabase';
 import { useUserStore } from '../stores/userStore';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -56,6 +56,37 @@ const playerMoneyFiles = [
   'App.tsx',
 ];
 
+const sameOriginPlayerFiles = [
+  'App.tsx',
+  'screens/AuthScreen.tsx',
+  'WalletContext.tsx',
+  'lib/playerAuth.ts',
+  'lib/playerWallet.ts',
+  'hooks/useAuth.ts',
+];
+
+const PLAYER_ME = {
+  ok: true,
+  authenticated: true,
+  player: { publicId: '110790', email: 'player@nextpari.test' },
+  wallet: { balance: 0, currency: 'TMTM', status: 'active', migrationState: 'active' },
+};
+
+function mockFetch(handler: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> | Response) {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => handler(input, init)) as typeof fetch;
+  return () => {
+    globalThis.fetch = original;
+  };
+}
+
+function jsonResponse(status: number, body: unknown) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
 describe('player auth validation', () => {
   it('rejects empty and invalid email', () => {
     assert.equal(validatePlayerEmail(''), 'invalid email');
@@ -79,76 +110,70 @@ describe('player auth validation', () => {
   it('maps safe auth errors', () => {
     assert.equal(mapPlayerAuthError({ message: 'Invalid login credentials' }), 'invalid credentials');
     assert.equal(mapPlayerAuthError({ message: 'Email not confirmed' }), 'email confirmation required');
+    assert.equal(mapPlayerAuthError({ code: 'EMAIL_CONFIRMATION_REQUIRED' }), 'email confirmation required');
     assert.equal(mapPlayerAuthError({ message: 'Password should be at least 8 characters' }), 'password too short');
     assert.equal(mapPlayerAuthError({ message: 'Unable to validate email address' }), 'invalid email');
   });
 });
 
-describe('player auth uses Supabase only', () => {
-  it('fake a/a does not login and does not call Supabase', async () => {
+describe('player auth uses same-origin BFF', () => {
+  it('fake a/a does not login and does not fetch', async () => {
     let called = false;
-    const original = supabase.auth.signInWithPassword;
-    supabase.auth.signInWithPassword = async () => {
+    const restore = mockFetch(async () => {
       called = true;
-      return { data: { session: null, user: null }, error: null } as never;
-    };
+      return jsonResponse(200, PLAYER_ME);
+    });
     try {
       await assert.rejects(() => signInPlayer('a', 'a'), /invalid email/);
       assert.equal(called, false);
     } finally {
-      supabase.auth.signInWithPassword = original;
+      restore();
     }
   });
 
-  it('valid signIn uses supabase.auth.signInWithPassword', async () => {
-    const calls: Array<{ email: string; password: string }> = [];
-    const original = supabase.auth.signInWithPassword;
-    supabase.auth.signInWithPassword = async (creds) => {
-      calls.push({ email: creds.email, password: creds.password });
-      return {
-        data: {
-          session: { user: { id: 'user-1' }, access_token: 'tok' },
-          user: { id: 'user-1' },
-        },
-        error: null,
-      } as never;
-    };
+  it('valid signIn posts /api/player/auth/login with credentials', async () => {
+    const calls: Array<{ url: string; method: string; credentials?: RequestCredentials; body?: unknown }> = [];
+    const restore = mockFetch(async (input, init) => {
+      calls.push({
+        url: String(input),
+        method: String(init?.method ?? 'GET'),
+        credentials: init?.credentials,
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      });
+      return jsonResponse(200, PLAYER_ME);
+    });
     try {
       const session = await signInPlayer('player@nextpari.test', 'password1');
-      assert.equal(session.user.id, 'user-1');
-      assert.deepEqual(calls, [{ email: 'player@nextpari.test', password: 'password1' }]);
+      assert.equal(session.user.email, 'player@nextpari.test');
+      assert.deepEqual(calls, [{
+        url: '/api/player/auth/login',
+        method: 'POST',
+        credentials: 'same-origin',
+        body: { email: 'player@nextpari.test', password: 'password1' },
+      }]);
     } finally {
-      supabase.auth.signInWithPassword = original;
+      restore();
     }
   });
 
-  it('does not call onAuthSuccess path without a session', async () => {
-    const original = supabase.auth.signInWithPassword;
-    supabase.auth.signInWithPassword = async () => ({
-      data: { session: null, user: null },
-      error: null,
-    }) as never;
+  it('does not treat a failed login as a session', async () => {
+    const restore = mockFetch(async () => jsonResponse(401, { ok: false, error: 'AUTH_FAILED' }));
     try {
       await assert.rejects(() => signInPlayer('player@nextpari.test', 'password1'), /invalid credentials/);
     } finally {
-      supabase.auth.signInWithPassword = original;
+      restore();
     }
   });
 
-  it('registration uses supabase.auth.signUp', async () => {
-    const calls: Array<{ email: string; password: string; phone?: string }> = [];
-    const original = supabase.auth.signUp;
-    supabase.auth.signUp = async (creds) => {
+  it('registration posts /api/player/auth/register', async () => {
+    const calls: Array<{ url: string; body?: unknown }> = [];
+    const restore = mockFetch(async (input, init) => {
       calls.push({
-        email: creds.email,
-        password: creds.password,
-        phone: (creds.options?.data as { phone?: string } | undefined)?.phone,
+        url: String(input),
+        body: init?.body ? JSON.parse(String(init.body)) : undefined,
       });
-      return {
-        data: { session: null, user: { id: 'user-2' } },
-        error: null,
-      } as never;
-    };
+      return jsonResponse(409, { ok: false, error: 'EMAIL_CONFIRMATION_REQUIRED' });
+    });
     try {
       const result = await signUpPlayer({
         email: 'new@nextpari.test',
@@ -157,124 +182,84 @@ describe('player auth uses Supabase only', () => {
       });
       assert.equal(result.needsEmailConfirmation, true);
       assert.equal(result.session, null);
-      assert.equal(calls[0]?.email, 'new@nextpari.test');
-      assert.equal(calls[0]?.phone, '+99365123456');
+      assert.equal(calls[0]?.url, '/api/player/auth/register');
+      assert.deepEqual(calls[0]?.body, {
+        email: 'new@nextpari.test',
+        password: 'password1',
+        phone: '+99365123456',
+      });
     } finally {
-      supabase.auth.signUp = original;
+      restore();
     }
   });
 
-  it('logout calls supabase.auth.signOut', async () => {
-    let signedOut = false;
-    const original = supabase.auth.signOut;
-    supabase.auth.signOut = async () => {
-      signedOut = true;
-      return { error: null } as never;
-    };
+  it('logout posts /api/player/auth/logout', async () => {
+    let path = '';
+    const restore = mockFetch(async (input, init) => {
+      path = String(input);
+      assert.equal(init?.method, 'POST');
+      assert.equal(init?.credentials, 'same-origin');
+      return jsonResponse(200, { ok: true });
+    });
     try {
       await signOutPlayer();
-      assert.equal(signedOut, true);
+      assert.equal(path, '/api/player/auth/logout');
     } finally {
-      supabase.auth.signOut = original;
+      restore();
     }
   });
 });
 
 describe('player wallet bootstrap', () => {
-  it('ensure_player_account is called only after a real session', async () => {
-    const originalSession = supabase.auth.getSession;
-    const originalRpc = supabase.rpc;
-    let rpcCalled = false;
-    supabase.auth.getSession = async () => ({ data: { session: null }, error: null }) as never;
-    supabase.rpc = async () => {
-      rpcCalled = true;
-      return { data: null, error: null } as never;
-    };
+  it('/api/player/me is required and no access without a session', async () => {
+    const calls: string[] = [];
+    const restore = mockFetch(async (input) => {
+      calls.push(String(input));
+      return jsonResponse(401, { ok: false, authenticated: false, error: 'JWT_REQUIRED' });
+    });
     try {
       await assert.rejects(() => ensureOwnPlayerWallet(), /AUTH_REQUIRED/);
-      assert.equal(rpcCalled, false);
+      assert.equal(await fetchPlayerMe(), null);
+      assert.deepEqual(calls, ['/api/player/me', '/api/player/me']);
     } finally {
-      supabase.auth.getSession = originalSession;
-      supabase.rpc = originalRpc;
+      restore();
     }
   });
 
-  it('new player bootstrap balance is 0 and reads only own wallet by id', async () => {
-    const originalSession = supabase.auth.getSession;
-    const originalRpc = supabase.rpc;
-    const originalFrom = supabase.from;
-    const filters: string[] = [];
-    supabase.auth.getSession = async () => ({
-      data: { session: { user: { id: 'user-1' } } },
-      error: null,
-    }) as never;
-    supabase.rpc = async (name: string) => {
-      assert.equal(name, 'ensure_player_account');
-      return {
-        data: { wallet_id: 'wallet-own', public_id: '110790', legacy_balance: 0, migration_state: 'active' },
-        error: null,
-      } as never;
-    };
-    supabase.from = ((table: string) => {
-      assert.equal(table, 'wallets');
-      return {
-        select() {
-          return this;
-        },
-        eq(column: string, value: string) {
-          filters.push(`${column}:${value}`);
-          return this;
-        },
-        maybeSingle: async () => ({
-          data: { id: 'wallet-own', balance: 0, public_id: '110790' },
-          error: null,
-        }),
-      };
-    }) as typeof supabase.from;
+  it('new player bootstrap balance is 0 and never exposes a wallet UUID', async () => {
+    const restore = mockFetch(async (input) => {
+      assert.equal(String(input), '/api/player/me');
+      return jsonResponse(200, {
+        ...PLAYER_ME,
+        wallet: { ...PLAYER_ME.wallet, balance: 0 },
+      });
+    });
     try {
       const wallet = await ensureOwnPlayerWallet();
       assert.equal(wallet.balance, 0);
-      assert.equal(wallet.walletId, 'wallet-own');
-      assert.deepEqual(filters, ['id:wallet-own']);
+      assert.equal(wallet.publicId, '110790');
+      assert.equal('walletId' in wallet, false);
     } finally {
-      supabase.auth.getSession = originalSession;
-      supabase.rpc = originalRpc;
-      supabase.from = originalFrom;
+      restore();
     }
   });
 
   it('local demo values cannot override server balance', async () => {
     persistLocalBalance(1000);
     assert.equal(readPlayerBalance(1000), 0);
-    useUserStore.getState().hydrate({ publicId: '110790', balance: 0, walletId: 'wallet-own' });
+    useUserStore.getState().hydrate({ publicId: '110790', balance: 0, walletId: null });
     useUserStore.getState().credit(500);
     useUserStore.getState().setBalance(1000);
     assert.equal(useUserStore.getState().debit(10), false);
     assert.equal(useUserStore.getState().balance, 0);
 
-    const originalSession = supabase.auth.getSession;
-    const originalRpc = supabase.rpc;
-    const originalFrom = supabase.from;
-    supabase.auth.getSession = async () => ({
-      data: { session: { user: { id: 'user-1' } } },
-      error: null,
-    }) as never;
-    supabase.rpc = async () => ({
-      data: { wallet_id: 'wallet-own', public_id: '110790', legacy_balance: 0 },
-      error: null,
-    }) as never;
-    supabase.from = (() => ({
-      select() { return this; },
-      eq() { return this; },
-      maybeSingle: async () => ({ data: { id: 'wallet-own', balance: 0, public_id: '110790' }, error: null }),
-    })) as typeof supabase.from;
+    const restore = mockFetch(async () => jsonResponse(200, PLAYER_ME));
     try {
       const snapshot = await syncPlayerWallet();
       assert.equal(snapshot.balance, 0);
+      assert.equal(snapshot.walletId, null);
     } finally {
-      supabase.auth.getSession = originalSession;
-      supabase.rpc = originalRpc;
-      supabase.from = originalFrom;
+      restore();
     }
   });
 });
@@ -344,12 +329,13 @@ describe('betting and game money gates', () => {
 });
 
 describe('player money source scans', () => {
-  it('opening the site without a session shows AuthScreen', () => {
+  it('opening the site without a session shows AuthScreen via /api/player/me', () => {
     const app = read('App.tsx');
     const hook = read('hooks/useAuth.ts');
-    assert.match(app, /getPlayerSession\(/);
-    assert.match(app, /subscribePlayerAuth/);
-    assert.match(hook, /onAuthStateChange/);
+    assert.match(app, /fetchPlayerMe\(/);
+    assert.match(app, /\/api\/player\/me|fetchPlayerMe/);
+    assert.equal(app.includes('supabase.auth'), false);
+    assert.equal(hook.includes('onAuthStateChange'), false);
     assert.match(app, /if \(!isAuthenticated\)/);
     assert.match(app, /<AuthScreen/);
     assert.equal(app.includes('bootstrapGuestSession()'), false);
@@ -360,11 +346,12 @@ describe('player money source scans', () => {
     assert.equal(auth.includes('Продолжить как гость'), false);
     assert.match(auth, /placeholder="Email"/);
     assert.match(auth, /placeholder="Пароль"/);
-    assert.match(auth, /signInWithPassword|signInPlayer/);
+    assert.match(auth, /signInPlayer/);
     assert.match(auth, /signUpPlayer/);
-    assert.match(auth, /ensure_player_account|bootstrapOwnPlayerAccount/);
+    assert.match(auth, /email confirmation required|Подтвердите email/);
     assert.equal(auth.includes('walletId'), false);
     assert.equal(auth.includes('publicId'), false);
+    assert.equal(auth.includes('supabase'), false);
   });
 
   it('removes demo balance authority from player money paths', () => {
@@ -399,16 +386,28 @@ describe('player money source scans', () => {
       assert.equal(/from\('wallets'\)[\s\S]{0,200}\.insert\(/.test(source), false, `${file} insert`);
       assert.equal(/from\('wallets'\)[\s\S]{0,240}\.update\(/.test(source), false, `${file} update`);
       assert.equal(/order\('created_at'[\s\S]{0,80}limit\(1\)/.test(source), false, `${file} first wallet`);
+      assert.equal(source.includes("rpc('ensure_player_account')"), false, `${file} browser rpc`);
     }
     const wallet = read('lib/playerWallet.ts');
-    assert.match(wallet, /rpc\('ensure_player_account'\)/);
-    assert.match(wallet, /\.eq\('id', walletId\)/);
+    assert.match(wallet, /fetchPlayerMe/);
+    assert.equal(wallet.includes('supabase'), false);
   });
 
-  it('logout uses supabase signOut', () => {
+  it('logout uses same-origin /api/player/auth/logout', () => {
     const app = read('App.tsx');
     assert.match(app, /signOutPlayer/);
-    assert.equal(read('lib/playerAuth.ts').includes('supabase.auth.signOut()'), true);
+    assert.match(read('lib/playerAuth.ts'), /\/api\/player\/auth\/logout/);
+  });
+
+  it('player production files never call *.supabase.co or supabase.auth', () => {
+    for (const file of sameOriginPlayerFiles) {
+      const source = read(file);
+      assert.equal(source.includes('supabase.co'), false, file);
+      assert.equal(source.includes('supabase.auth'), false, file);
+      assert.equal(source.includes("from './supabase'"), false, file);
+      assert.equal(source.includes("from '../lib/supabase'"), false, file);
+      assert.equal(source.includes('createClient'), false, file);
+    }
   });
 
   it('Header and Menu show unavailable instead of fake money', () => {

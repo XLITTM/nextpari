@@ -1,5 +1,4 @@
-import { clearDemoPlayerState, getPlayerSession, signOutPlayer } from '../lib/playerAuth';
-import { supabase } from '../lib/supabase';
+import { clearDemoPlayerState, fetchPlayerMe, signOutPlayer } from '../lib/playerAuth';
 
 export const AUTH_KEY = 'nextpari-auth';
 
@@ -12,7 +11,7 @@ export function isAuthenticatedSession(): boolean {
 }
 
 export function signInSession() {
-  /* Player entry requires a real Supabase session. */
+  /* Player entry requires a real same-origin session. */
 }
 
 export function signOutSession() {
@@ -25,16 +24,16 @@ export function readGuestPublicId(): string {
 
 export async function restorePlayerSession() {
   clearDemoPlayerState();
-  return getPlayerSession();
+  return fetchPlayerMe();
 }
 
 export function subscribePlayerAuth(
   onSession: (authenticated: boolean) => void,
 ) {
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-    onSession(Boolean(session?.user));
+  void fetchPlayerMe().then((snapshot) => {
+    onSession(Boolean(snapshot?.authenticated));
   });
   return () => {
-    data.subscription.unsubscribe();
+    /* same-origin session has no browser auth subscription */
   };
 }
