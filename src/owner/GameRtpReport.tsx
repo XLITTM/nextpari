@@ -18,15 +18,10 @@ function money(value: number): string {
   return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function rtpTargetLabel(game: {
-  rtpModel: string;
-  theoreticalRtpTarget: number | null;
-  houseEdge?: number | null;
-}): string {
+function rtpTargetLabel(game: { rtpModel: string; theoreticalRtpTarget: number | null }): string {
   if (game.rtpModel === 'progressive') return 'Прогрессивный';
   if (game.rtpModel === 'unconfigured' || game.theoreticalRtpTarget == null) return 'Не настроен';
-  const edge = game.houseEdge == null ? 1 - game.theoreticalRtpTarget : game.houseEdge;
-  return `${pct(game.theoreticalRtpTarget)} RTP · ${pct(edge)} house`;
+  return pct(game.theoreticalRtpTarget);
 }
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -154,8 +149,7 @@ export function GameRtpReportPanel() {
       {report && (
         <>
           <p className="text-[11px] text-gray-500 mb-3 leading-relaxed">
-            Целевой RTP Pharaoh / Crystal / Aviator: {(report.controlledGameTargetRtp * 100).toFixed(1)}%.
-            Dice и Blackjack показывают отдельные точные модели в таблице (не 87.5%).
+            Целевой RTP контролируемых игр: {(report.controlledGameTargetRtp * 100).toFixed(1)}%.
             Apple of Fortune использует отдельную прогрессивную модель.
             Календарный день — окно отчёта, а не повод менять исходы.
             Дневной hold колеблется из‑за дисперсии.
@@ -172,7 +166,7 @@ export function GameRtpReportPanel() {
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400">
                   <th className="py-2 pr-3 font-semibold">Игра</th>
-                  <th className="py-2 pr-3 font-semibold">Теорет. RTP / house edge</th>
+                  <th className="py-2 pr-3 font-semibold">Цель RTP</th>
                   <th className="py-2 pr-3 font-semibold">Ставки</th>
                   <th className="py-2 pr-3 font-semibold">Выплаты</th>
                   <th className="py-2 pr-3 font-semibold">Раунды</th>

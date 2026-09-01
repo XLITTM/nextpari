@@ -19,7 +19,7 @@
     "cashier:control:test": "tsx --tsconfig tsconfig.server.json --test server/cashier/cashierControl.test.ts src/cashier/services.test.ts server/cashier/cashierPlayerFinance.test.ts server/staff/staffHierarchy.test.ts",
     "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts server/staff/staffHierarchy.test.ts",
     "player:auth:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test src/lib/playerAuth.security.test.ts server/player/playerAuth.test.ts",
-    "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts server/games/dice.cutover.test.ts",
+    "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts",
     "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts"
   },
   "dependencies": {

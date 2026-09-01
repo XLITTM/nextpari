@@ -1,4 +1,4 @@
--- NEXTPARI PHASE 033 behavior probe.
+-- NEXTPARI PHASE 033 Apples-only behavior probe.
 -- NOT a migration. Do NOT COMMIT. Do NOT execute against production.
 -- Requires 033 already applied on the database you test.
 -- Test-only fixtures live inside this transaction and are discarded by ROLLBACK.
@@ -50,21 +50,6 @@ AS $q$
 $q$;
 
 SELECT pg_temp.np_assert(
-    (SELECT config->>'mathVersion' FROM private.game_catalog WHERE game_code = 'dice') = 'dice-v3-win2'
-    AND (SELECT (config->>'winMultiplier')::NUMERIC FROM private.game_catalog WHERE game_code = 'dice') = 2.00,
-    'Dice catalog x2.00 v3'
-);
-
-SELECT pg_temp.np_assert(
-    (SELECT config->>'mathVersion' FROM private.game_catalog WHERE game_code = 'blackjack')
-        = 'blackjack-v4-visible-banker-ties-chase-win2'
-    AND (SELECT (config->>'winPayout')::NUMERIC FROM private.game_catalog WHERE game_code = 'blackjack') = 2.00
-    AND (SELECT config->>'tieRule' FROM private.game_catalog WHERE game_code = 'blackjack') = 'banker'
-    AND (SELECT config->>'dealerRule' FROM private.game_catalog WHERE game_code = 'blackjack') = 'chasePlayer',
-    'Blackjack catalog v4 banker-chase x2.00'
-);
-
-SELECT pg_temp.np_assert(
     (SELECT config->>'mathVersion' FROM private.game_catalog WHERE game_code = 'apples') = 'apples-v1-progressive'
     AND strpos((SELECT config::TEXT FROM private.game_catalog WHERE game_code = 'apples'), '"multiplier":1.23') > 0
     AND strpos((SELECT config::TEXT FROM private.game_catalog WHERE game_code = 'apples'), '"multiplier":349.00') > 0,
@@ -83,60 +68,6 @@ SELECT pg_temp.np_assert(
     'Apples start uses array_append'
 );
 
-SELECT pg_temp.np_assert(
-    (private.game_report_rtp_meta('dice')->>'theoreticalRtpTarget')::NUMERIC = 1
-    AND (private.game_report_rtp_meta('blackjack')->>'theoreticalRtpTarget')::NUMERIC > 0.85
-    AND (private.game_report_rtp_meta('blackjack')->>'theoreticalRtpTarget')::NUMERIC < 0.90
-    AND (private.game_report_rtp_meta('blackjack')->>'houseEdge')::NUMERIC >= 0.10
-    AND (private.game_report_rtp_meta('blackjack')->>'houseEdge')::NUMERIC <= 0.15
-    AND (private.game_report_rtp_meta('pharaoh')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
-    AND (private.game_report_rtp_meta('crystal')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
-    AND (private.game_report_rtp_meta('aviator')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
-    AND (private.game_report_rtp_meta('apples')->>'theoreticalRtpTarget') IS NULL
-    AND (private.game_report_rtp_meta('apples')->>'rtpModel') = 'progressive',
-    'active reporting metadata is version-accurate'
-);
-
-SELECT pg_temp.np_assert(
-    private.game_dice_win_multiplier_for_version('dice-v2-rtp875') = 1.72
-    AND private.game_dice_win_multiplier_for_version('dice-v3-win2') = 2.00,
-    'Dice version-safe win multipliers'
-);
-
-SELECT pg_temp.np_assert(
-    private.game_bj_payout_for_version(10, 'win', 'blackjack-v2-rtp875') = 18.40
-    AND private.game_bj_payout_for_version(10, 'win', 'blackjack-v3-visible-dealer-rtp875') = 17.00
-    AND private.game_bj_payout_for_version(10, 'win', 'blackjack-v4-visible-banker-ties-chase-win2') = 20.00,
-    'Blackjack version-safe win payouts'
-);
-
-SELECT pg_temp.np_assert(
-    private.game_bj_dealer_should_draw(17, 20, 'blackjack-v2-rtp875') IS FALSE
-    AND private.game_bj_dealer_should_draw(17, 20, 'blackjack-v3-visible-dealer-rtp875') IS FALSE
-    AND private.game_bj_dealer_should_draw(17, 20, 'blackjack-v4-visible-banker-ties-chase-win2') IS TRUE
-    AND private.game_bj_dealer_should_draw(17, 12, 'blackjack-v4-visible-banker-ties-chase-win2') IS FALSE,
-    'v2/v3 stand at 17; v4 chases player total'
-);
-
-SELECT pg_temp.np_assert(
-    private.game_bj_resolve_for_version(
-        '[{"value":10,"isHidden":false},{"value":8,"isHidden":false}]'::jsonb,
-        '[{"value":9,"isHidden":false},{"value":9,"isHidden":false}]'::jsonb,
-        'blackjack-v3-visible-dealer-rtp875'
-    ) = 'push'
-    AND private.game_bj_resolve_for_version(
-        '[{"value":10,"isHidden":false},{"value":8,"isHidden":false}]'::jsonb,
-        '[{"value":9,"isHidden":false},{"value":9,"isHidden":false}]'::jsonb,
-        'blackjack-v2-rtp875'
-    ) = 'push'
-    AND private.game_bj_resolve_for_version(
-        '[{"value":10,"isHidden":false},{"value":8,"isHidden":false}]'::jsonb,
-        '[{"value":9,"isHidden":false},{"value":9,"isHidden":false}]'::jsonb,
-        'blackjack-v4-visible-banker-ties-chase-win2'
-    ) = 'lose',
-    'v4 banker wins equal totals; v2/v3 still push'
-);
-
 SELECT pg_temp.np_set_jwt('bc5d66cd-5e18-4352-b7f8-ea99029758e0');
 
 CREATE TEMP TABLE np_snap ON COMMIT DROP AS
@@ -152,7 +83,6 @@ SELECT pg_temp.np_assert(
     'player 110790 wallet is active'
 );
 
--- Controlled Wallet Core credit. Discarded by ROLLBACK.
 SELECT e.ledger_id
 FROM private.apply_wallet_entry(
     '3ea1677a-d664-47c3-b019-0635b643d6e5'::UUID,
