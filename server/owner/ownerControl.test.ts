@@ -380,6 +380,7 @@ describe('owner control center same-origin BFF', () => {
     assert.match(services, /\/api\/owner\/players/);
     assert.match(services, /\/api\/owner\/withdrawals/);
     assert.match(services, /\/api\/owner\/messages/);
+    assert.match(services, /\/api\/owner\/games\/report/);
     assert.equal(services.includes('ownerSupabase.rpc'), false);
   });
 
@@ -536,6 +537,52 @@ describe('owner treasury and direct funding controls', () => {
     walletId: 'wallet-uuid',
     operationalAccountId: 'ops-acc',
   };
+
+  it('GET /api/owner/games/report maps to owner_game_rtp_report', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/games/report', {
+      search: '?period=today&timezone=Asia%2FAshgabat',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls.length, 1);
+    assert.equal(rpc.calls[0]?.name, 'owner_game_rtp_report');
+    assert.equal(rpc.calls[0]?.token, ACCESS);
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_period: 'today',
+      p_from: null,
+      p_to: null,
+      p_timezone: 'Asia/Ashgabat',
+    });
+  });
+
+  it('custom game report period forwards from/to and rejects bad dates', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/games/report', {
+      search: '?period=custom&from=2026-08-01&to=2026-08-31&timezone=UTC',
+    });
+    assert.equal(result.status, 200);
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_period: 'custom',
+      p_from: '2026-08-01',
+      p_to: '2026-08-31',
+      p_timezone: 'UTC',
+    });
+
+    const bad = await ownerGet('/api/owner/games/report', {
+      search: '?period=custom&from=not-a-date',
+    });
+    assert.equal(bad.result.status, 400);
+    assert.equal(bad.result.body.error, 'PERIOD_INVALID');
+    assert.equal(bad.rpc.calls.length, 0);
+  });
+
+  it('unauthenticated game report is rejected and POST is not allowed', async () => {
+    const missing = await ownerGet('/api/owner/games/report', { cookie: '' });
+    assert.equal(missing.result.status, 401);
+    assert.equal(missing.rpc.calls.length, 0);
+
+    const posted = await ownerPost('/api/owner/games/report', { period: 'today' });
+    assert.equal(posted.result.status, 405);
+    assert.equal(posted.rpc.calls.length, 0);
+  });
 
   it('GET /api/owner/treasury maps to owner_treasury_overview', async () => {
     const { result, rpc } = await ownerGet('/api/owner/treasury');

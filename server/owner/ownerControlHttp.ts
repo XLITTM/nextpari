@@ -250,7 +250,8 @@ type ControlAction =
   | { kind: 'managerDetail'; managerId: string }
   | { kind: 'treasury' }
   | { kind: 'capitalIn' }
-  | { kind: 'fund' };
+  | { kind: 'fund' }
+  | { kind: 'gameReport' };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -289,6 +290,7 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
     return 'method';
   }
   if (path === '/api/owner/fund') return m === 'POST' ? { kind: 'fund' } : 'method';
+  if (path === '/api/owner/games/report') return m === 'GET' ? { kind: 'gameReport' } : 'method';
   return null;
 }
 
@@ -405,6 +407,22 @@ async function runControl(
         }));
       }
       throw staffError('TARGET_TYPE_INVALID', 400);
+    }
+    case 'gameReport': {
+      const period = (query.get('period') ?? 'today').trim() || 'today';
+      const timezone = query.get('timezone')?.trim() || null;
+      if (timezone && timezone.length > 64) throw staffError('TIMEZONE_INVALID', 400);
+      const from = query.get('from')?.trim() || null;
+      const to = query.get('to')?.trim() || null;
+      const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+      if (from && !dateRe.test(from)) throw staffError('PERIOD_INVALID', 400);
+      if (to && !dateRe.test(to)) throw staffError('PERIOD_INVALID', 400);
+      return rpc.invoke('owner_game_rtp_report', {
+        p_period: period,
+        p_from: from,
+        p_to: to,
+        p_timezone: timezone,
+      });
     }
     default:
       throw staffError('NOT_FOUND', 404);

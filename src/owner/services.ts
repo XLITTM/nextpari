@@ -201,6 +201,113 @@ export async function fetchOwnerDashboard(): Promise<DashboardKpis> {
   };
 }
 
+export type GameRtpPeriodKind = 'today' | '7d' | '30d' | 'custom';
+
+export interface GameRtpMetrics {
+  totalWagered: number;
+  totalPayouts: number;
+  rounds: number;
+  winningRounds: number;
+  ggr: number;
+  realizedRtp: number | null;
+  realizedHold: number | null;
+}
+
+export interface GameRtpGameRow extends GameRtpMetrics {
+  gameCode: string;
+  displayName: string;
+  status?: string;
+}
+
+export interface GameRtpDayRow {
+  date: string;
+  totals: GameRtpMetrics;
+  games: GameRtpGameRow[];
+}
+
+export interface GameRtpReport {
+  timezone: string;
+  theoreticalRtp: number;
+  primaryWindow: string;
+  period: {
+    kind: GameRtpPeriodKind;
+    from: string;
+    to: string;
+    startAt: string;
+    endAt: string;
+  };
+  totals: GameRtpMetrics;
+  games: GameRtpGameRow[];
+  days: GameRtpDayRow[];
+  note: string;
+}
+
+function parseMetrics(raw: Record<string, unknown>): GameRtpMetrics {
+  const rtp = raw.realizedRtp ?? raw.realized_rtp;
+  const hold = raw.realizedHold ?? raw.realized_hold;
+  return {
+    totalWagered: num(raw.totalWagered ?? raw.total_wagered),
+    totalPayouts: num(raw.totalPayouts ?? raw.total_payouts),
+    rounds: num(raw.rounds),
+    winningRounds: num(raw.winningRounds ?? raw.winning_rounds),
+    ggr: num(raw.ggr),
+    realizedRtp: rtp == null ? null : num(rtp),
+    realizedHold: hold == null ? null : num(hold),
+  };
+}
+
+function parseGameRow(raw: Record<string, unknown>): GameRtpGameRow {
+  return {
+    gameCode: str(raw.gameCode ?? raw.game_code),
+    displayName: str(raw.displayName ?? raw.display_name),
+    status: raw.status == null ? undefined : str(raw.status),
+    ...parseMetrics(raw),
+  };
+}
+
+export async function fetchOwnerGameRtpReport(params: {
+  period?: GameRtpPeriodKind;
+  from?: string | null;
+  to?: string | null;
+  timezone?: string | null;
+}): Promise<GameRtpReport> {
+  const data = await ownerData('/api/owner/games/report' + ownerQuery({
+    period: params.period ?? 'today',
+    from: params.from ?? null,
+    to: params.to ?? null,
+    timezone: params.timezone ?? null,
+  }));
+  const raw = asRecord(data);
+  const periodRaw = asRecord(raw.period);
+  const kindRaw = str(periodRaw.kind, 'today');
+  const kind: GameRtpPeriodKind = kindRaw === '7d' || kindRaw === '30d' || kindRaw === 'custom'
+    ? kindRaw
+    : 'today';
+  return {
+    timezone: str(raw.timezone, 'Asia/Ashgabat'),
+    theoreticalRtp: num(raw.theoreticalRtp ?? raw.theoretical_rtp) || 0.875,
+    primaryWindow: str(raw.primaryWindow ?? raw.primary_window, 'today'),
+    period: {
+      kind,
+      from: str(periodRaw.from).slice(0, 10),
+      to: str(periodRaw.to).slice(0, 10),
+      startAt: str(periodRaw.startAt ?? periodRaw.start_at),
+      endAt: str(periodRaw.endAt ?? periodRaw.end_at),
+    },
+    totals: parseMetrics(asRecord(raw.totals)),
+    games: asRows(raw.games).map((row) => parseGameRow(asRecord(row))),
+    days: asRows(raw.days).map((item) => {
+      const day = asRecord(item);
+      return {
+        date: str(day.date).slice(0, 10),
+        totals: parseMetrics(asRecord(day.totals)),
+        games: asRows(day.games).map((row) => parseGameRow(asRecord(row))),
+      };
+    }),
+    note: str(raw.note),
+  };
+}
+
 export async function fetchOwnerCashiers(): Promise<BackofficeCashier[]> {
   const data = await ownerData('/api/owner/cashiers');
   return asRows(data).map((row) => parseCashier(asRecord(row)));

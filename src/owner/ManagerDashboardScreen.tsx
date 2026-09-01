@@ -10,6 +10,7 @@ import { MessagesPanel } from './MessagesPanel';
 import { OwnerManagersPanel } from './OwnerManagersPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { OwnerMoneyDialog, OwnerTreasuryPanel, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
+import { GameRtpReportPanel } from './GameRtpReport';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
 import {
   fetchOwnerCashierLedger,
@@ -297,6 +298,7 @@ function FinancePanel() {
           </article>
         </div>
       )}
+      <GameRtpReportPanel />
       <div className="mt-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
         <h3 className="text-sm font-bold text-ink-900 mb-1">Динамика по дням</h3>
         <p className="text-xs text-gray-500 mb-4">Депозиты Мобкеш и оборот ставок</p>

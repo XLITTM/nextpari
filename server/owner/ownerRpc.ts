@@ -35,7 +35,7 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
   ) {
     return staffError(code, 409);
   }
-  if (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED'))) {
+  if (code === 'PERIOD_TOO_LONG' || (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED')))) {
     return staffError(code, 400);
   }
   if (code && code.endsWith('_NOT_FOUND')) {

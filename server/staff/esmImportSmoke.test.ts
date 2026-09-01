@@ -37,6 +37,7 @@ const RUNTIME_GRAPH = [
   'api/owner/managers/[managerId].ts',
   'api/owner/treasury.ts',
   'api/owner/fund.ts',
+  'api/owner/games/report.ts',
   'api/manager/me.ts',
   'api/manager/dashboard.ts',
   'api/manager/cashiers.ts',
