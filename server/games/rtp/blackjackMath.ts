@@ -1,18 +1,24 @@
 export const BLACKJACK_V2_MATH_VERSION = 'blackjack-v2-rtp875';
 export const BLACKJACK_V2_WIN_PAYOUT = 1.84;
 export const BLACKJACK_V2_EXACT_RTP = 0.875492820201475;
-export const BLACKJACK_MATH_VERSION = 'blackjack-v3-visible-dealer-rtp875';
-export const BLACKJACK_WIN_PAYOUT = 1.7;
+export const BLACKJACK_V3_MATH_VERSION = 'blackjack-v3-visible-dealer-rtp875';
+export const BLACKJACK_V3_WIN_PAYOUT = 1.7;
+export const BLACKJACK_MATH_VERSION = 'blackjack-v4-visible-dealer-win2';
+export const BLACKJACK_WIN_PAYOUT = 2;
 export const BLACKJACK_GOLDEN_PAYOUT = 2;
 export const BLACKJACK_PUSH_PAYOUT = 1;
 export const BLACKJACK_VISIBLE_THEORETICAL_WIN_PAYOUT = 1.6952395194023846;
 export const BLACKJACK_VISIBLE_EXACT_RTP = 0.8771651467167154;
+export const BLACKJACK_V4_EXACT_RTP = 1.0136234940440312;
+export const BLACKJACK_V4_HOUSE_EDGE = -0.013623494044031181;
 export const BLACKJACK_EVAL_ROUNDS = 25_000;
 export const BLACKJACK_EVAL_SEED = 21031;
 export const BLACKJACK_V2_METHOD =
   'Exact finite-shoe DP: 36-card shoe (4 of each rank), composition-dependent hit/stand, unknown dealer hole mixed into remaining counts, dealer draws to 17, no soft-Ace, AA golden.';
-export const BLACKJACK_METHOD =
+export const BLACKJACK_V3_METHOD =
   'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×1.70 golden×2 push×1.';
+export const BLACKJACK_METHOD =
+  'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×2.00 golden×2 push×1. Product decision does not preserve 87.5% RTP.';
 
 const RANKS = 9;
 const VALUES = [6, 7, 8, 9, 10, 2, 3, 4, 11] as const;
@@ -234,7 +240,7 @@ function valueKnownDealer(solver: Solver, player: number, dealerTotal: number, c
 
 /**
  * Optimal RTP when the player sees both initial dealer cards.
- * Active v3 model. Normal-win payout is the only calibrated economic parameter.
+ * Active v4 model. Normal-win payout is an explicit product decision, not an 87.5% calibration.
  */
 export function evaluateBlackjackExactVisibleDealer(
   winPayout = BLACKJACK_WIN_PAYOUT,

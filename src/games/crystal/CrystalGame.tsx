@@ -115,6 +115,7 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
   const [wonRound, setWonRound] = useState(false);
   const [roundOver, setRoundOver] = useState(false);
   const [lastStake, setLastStake] = useState(MIN_BET);
+  const [lastPayout, setLastPayout] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [instant, setInstant] = useState(false);
   const [autoLeft, setAutoLeft] = useState(0);
@@ -188,6 +189,7 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
     setWonRound(false);
     setWinLines([]);
     setRoundAccum(0);
+    setLastPayout(null);
     setLastStake(amount);
 
     try {
@@ -238,10 +240,12 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
         setWonRound(true);
         setRoundAccum(round.payout);
         setWinLines(allLines);
+        setLastPayout(round.payout);
       } else {
         setRoundAccum(0);
         setWinLines([]);
         setWonRound(false);
+        setLastPayout(round.payout);
       }
     } catch (error) {
       const code = error instanceof PlayerGameError ? error.code : '';
@@ -280,11 +284,13 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
     setWonRound(false);
     setWinLines([]);
     setRoundAccum(0);
+    setLastPayout(null);
   };
 
   const maxBet = Math.max(MIN_BET, Number(balance.toFixed(2)));
   const locked = busy;
   const showResultButtons = roundOver && !busy && autoLeft === 0;
+  const showCrystalLoss = roundOver && !busy && lastPayout === 0 && winLines.length === 0;
 
   return (
     <div
@@ -351,6 +357,11 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
                 ))}
               </div>
             </>
+          ) : showCrystalLoss ? (
+            <div data-crystal-loss="1" className="text-center">
+              <p className="text-2xl font-black tracking-wide text-rose-400 drop-shadow-lg">ПРОИГРЫШ</p>
+              <p className="mt-1 text-sm font-semibold text-rose-200/90">Нет выигрышных комбинаций</p>
+            </div>
           ) : null}
         </div>
       </div>

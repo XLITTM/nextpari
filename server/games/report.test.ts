@@ -104,11 +104,11 @@ describe('Apples theoretical RTP reporting exception', () => {
     assert.match(services, /rtpModel: GameRtpModel/);
     assert.match(ui, /Прогрессивный/);
     assert.match(ui, /Не настроен/);
-    assert.match(ui, /Целевой RTP контролируемых игр/);
+    assert.match(ui, /Целевой RTP Pharaoh \/ Crystal \/ Aviator/);
     assert.match(ui, /Apple of Fortune использует отдельную прогрессивную модель/);
   });
 
-  it('keeps the five controlled games on a 0.875 fixed target', () => {
+  it('keeps Pharaoh Crystal Aviator on 0.875 and uses exact Dice/Blackjack models', () => {
     assert.deepEqual([...CONTROLLED_GAME_CODES], [
       'pharaoh',
       'dice',
@@ -116,14 +116,24 @@ describe('Apples theoretical RTP reporting exception', () => {
       'crystal',
       'aviator',
     ]);
-    for (const code of CONTROLLED_GAME_CODES) {
+    for (const code of ['pharaoh', 'crystal', 'aviator'] as const) {
       assert.deepEqual(gameRtpReportingMeta(code), {
         theoreticalRtpTarget: 0.875,
         rtpModel: 'fixed-target',
       });
     }
+    assert.deepEqual(gameRtpReportingMeta('dice'), {
+      theoreticalRtpTarget: 1,
+      rtpModel: 'fixed-target',
+    });
+    assert.equal(gameRtpReportingMeta('blackjack').rtpModel, 'fixed-target');
+    assert.ok((gameRtpReportingMeta('blackjack').theoreticalRtpTarget ?? 0) > 1);
     assert.match(rollback, /five controlled games target 0\.875/);
     assert.match(migration, /p_game_code IN \('pharaoh', 'dice', 'blackjack', 'crystal', 'aviator'\)/);
+    const sql034 = read('supabase/migrations/20260902_034_dice_blackjack_win2.sql');
+    assert.match(sql034, /theoreticalRtpTarget', 1\.000000000000000000/);
+    assert.match(sql034, /theoreticalRtpTarget', 1\.0136234940440312/);
+    assert.match(sql034, /p_game_code IN \('pharaoh', 'crystal', 'aviator'\)/);
   });
 
   it('does not assign 0.875 to an unconfigured future game', () => {

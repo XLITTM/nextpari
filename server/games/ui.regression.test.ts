@@ -50,13 +50,13 @@ describe('phase 031 frontend regressions', () => {
     assert.match(ui, /220 \+ index \* 140/);
   });
 
-  it('Dice uses CSS roll without an 80ms React RNG loop and shows x1.72', () => {
+  it('Dice uses CSS roll without an 80ms React RNG loop and shows x2.00', () => {
     const ui = read('src/games/dice/DiceGame.tsx');
     assert.equal(ui.includes('setInterval(() =>'), false);
     assert.equal(ui.includes(', 80)'), false);
     assert.equal(ui.includes('Math.random'), false);
-    assert.match(ui, /DICE_WIN_MULTIPLIER = 1.72/);
-    assert.match(ui, /ставка × \{DICE_WIN_MULTIPLIER\}/);
+    assert.match(ui, /DICE_WIN_MULTIPLIER = 2/);
+    assert.match(ui, /ставка × \{DICE_WIN_MULTIPLIER\.toFixed\(2\)\}/);
   });
 
   it('Blackjack defaults min stake, disables PLAY below min, displays server payout', () => {
@@ -135,7 +135,7 @@ describe('phase 032 visual restore', () => {
     assert.match(ui, /Number\(round\.payout\)/);
     assert.equal(ui.includes('stake * DICE_WIN_MULTIPLIER'), false);
     assert.equal(ui.includes('Math.random'), false);
-    assert.match(ui, /DICE_WIN_MULTIPLIER = 1.72/);
+    assert.match(ui, /DICE_WIN_MULTIPLIER = 2/);
   });
 
   it('Blackjack presents both initial dealer cards face-up', () => {
@@ -145,9 +145,12 @@ describe('phase 032 visual restore', () => {
     assert.match(ui, /parseDealerCards\(round\.publicResult\.dealerHand, round\.mathVersion\)/);
     assert.match(ui, /round\.mathVersion/);
     assert.match(parse, /BLACKJACK_V3_MATH_VERSION/);
+    assert.match(parse, /BLACKJACK_V4_MATH_VERSION/);
     assert.match(parse, /forceFaceUp \? false : card\.isHidden === true/);
     assert.equal(parse.includes('isHidden: false,'), false);
-    assert.match(ui, /×1.70 от ставки/);
+    assert.match(ui, /×2.00 от ставки/);
+    assert.match(ui, /×2.00/);
+    assert.match(ui, /×1.00/);
     assert.match(card, /data-face=\{faceDown \? 'down' : 'up'\}/);
     assert.match(ui, /dealerDraws/);
     assert.match(ui, /payout=\{serverPayout\}/);
@@ -190,5 +193,45 @@ describe('phase 033 apples start error', () => {
     assert.match(ui, /Недостаточно средств/);
     assert.match(ui, /Не удалось запустить игру/);
     assert.equal(ui.includes('Не удалось списать ставку'), false);
+  });
+});
+
+describe('phase 034 loss feedback and payout copy', () => {
+  it('Crystal shows ПРОИГРЫШ only after a finished zero-payout round', () => {
+    const game = read('src/games/crystal/CrystalGame.tsx');
+    assert.match(game, /roundOver && !busy && lastPayout === 0 && winLines.length === 0/);
+    assert.match(game, /data-crystal-loss="1"/);
+    assert.match(game, /ПРОИГРЫШ/);
+    assert.match(game, /Нет выигрышных комбинаций/);
+    assert.match(game, /Победа!/);
+    assert.equal(game.includes('window.alert'), false);
+    assert.equal(game.includes('confirm('), false);
+    assert.match(game, /const continueAuto = finishRound\(\)/);
+    assert.match(game, /void runSpin\(\)/);
+  });
+
+  it('Apples shows ПРОИГРЫШ only while phase is lost', () => {
+    const ui = read('src/games/apples/ApplesGame.tsx');
+    assert.match(ui, /phase === 'lost' \? \(/);
+    assert.match(ui, /data-apples-loss="1"/);
+    assert.match(ui, /ПРОИГРЫШ/);
+    assert.match(ui, /Новая игра/);
+    assert.equal(ui.includes('window.alert'), false);
+    assert.equal(ui.includes('apples-v2'), false);
+  });
+
+  it('keeps existing Dice Blackjack Pharaoh Aviator loss copy', () => {
+    const dice = read('src/games/dice/DiceGame.tsx');
+    const blackjack = read('src/games/blackjack/BlackjackGame.tsx');
+    const engine = read('src/games/blackjack/engine.ts');
+    const pharaoh = read('src/games/pharaoh/PharaohTreasure.tsx');
+    const aviator = read('src/games/aviator/AviatorGame.tsx');
+    assert.match(dice, /ПОРАЖЕНИЕ/);
+    assert.match(dice, /Проигрыш/);
+    assert.match(blackjack, /Проигрыш/);
+    assert.match(engine, /Перебор/);
+    assert.match(engine, /Проигрыш/);
+    assert.match(pharaoh, /ВЫ ПРОИГРАЛИ/);
+    assert.match(aviator, /проигрыш/);
   });
 });

@@ -5,7 +5,7 @@ export const CHIP_VALUES = [1, 5, 10, 25, 50, 100] as const;
 export const MIN_STAKE = 6;
 export const DEALER_STANDS_AT = 17;
 export const DEALER_DRAW_DELAY_MS = 280;
-export const BLACKJACK_WIN_PAYOUT = 1.7;
+export const BLACKJACK_WIN_PAYOUT = 2;
 export const BLACKJACK_GOLDEN_PAYOUT = 2;
 
 export interface TableState {

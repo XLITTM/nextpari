@@ -273,13 +273,18 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
             ЗАБРАТЬ {cashoutValue.toFixed(2)} TMTM
           </button>
         ) : phase === 'lost' ? (
-          <button
-            type="button"
-            onClick={resetAfterLoss}
-            className="w-full rounded-2xl bg-black/45 py-3 text-sm font-black uppercase tracking-wide ring-1 ring-white/15 active:scale-[0.98]"
-          >
-            Новая игра
-          </button>
+          <>
+            <div data-apples-loss="1" className="rounded-2xl bg-rose-950/55 py-2.5 text-center ring-1 ring-rose-400/40">
+              <p className="text-lg font-black tracking-wide text-rose-300">ПРОИГРЫШ</p>
+            </div>
+            <button
+              type="button"
+              onClick={resetAfterLoss}
+              className="w-full rounded-2xl bg-black/45 py-3 text-sm font-black uppercase tracking-wide ring-1 ring-white/15 active:scale-[0.98]"
+            >
+              Новая игра
+            </button>
+          </>
         ) : phase === 'playing' ? (
           <button
             type="button"

@@ -604,3 +604,82 @@ describe('phase 033 apples start array_append fix', () => {
     assert.equal(rollback033.includes('blackjack-v4'), false);
   });
 });
+
+describe('phase 034 dice blackjack win2', () => {
+  const sql032 = read('supabase/migrations/20260901_032_blackjack_visible_dealer_rtp.sql');
+  const sql034 = read('supabase/migrations/20260902_034_dice_blackjack_win2.sql');
+  const dice031 = extractFn(
+    read('supabase/migrations/20260901_031_game_stability_shared_aviator_rtp.sql'),
+    'private.game_adapter_dice_start',
+  );
+
+  it('is a write-only Dice/Blackjack BEGIN/COMMIT migration without historical round rewrites', () => {
+    assert.match(sql034, /^BEGIN;/m);
+    assert.match(sql034, /^COMMIT;/m);
+    assert.equal(/UPDATE private\.game_rounds[\s\S]{0,120}math_version/.test(sql034), false);
+    assert.equal(sql034.includes('CREATE OR REPLACE FUNCTION private.apply_wallet_entry'), false);
+    assert.equal(sql034.includes('game_adapter_pharaoh'), false);
+    assert.equal(sql034.includes('game_adapter_crystal'), false);
+    assert.equal(sql034.includes('game_adapter_aviator'), false);
+    assert.equal(sql034.includes('game_adapter_apples'), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'apples'/.test(sql034), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'pharaoh'/.test(sql034), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'crystal'/.test(sql034), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'aviator'/.test(sql034), false);
+  });
+
+  it('installs Dice v3 catalog and version-safe settlement', () => {
+    const helper = extractFn(sql034, 'private.game_dice_win_multiplier_for_version');
+    const start = extractFn(sql034, 'private.game_adapter_dice_start');
+    assert.match(sql034, /dice-v3-win2/);
+    assert.match(sql034, /winMultiplier', 2.00/);
+    assert.match(helper, /dice-v2-rtp875/);
+    assert.match(helper, /RETURN 1\.72/);
+    assert.match(helper, /dice-v3-win2/);
+    assert.match(helper, /RETURN 2\.00/);
+    assert.match(helper, /DICE_MATH_VERSION_UNSUPPORTED/);
+    assert.match(helper, /DICE_MATH_VERSION_MISSING/);
+    assert.equal(helper.includes("c.config->>'winMultiplier'"), false);
+    assert.match(start, /private\.game_dice_win_multiplier_for_version\(v_round\.math_version\)/);
+    assert.match(start, /'mathVersion', v_round\.math_version/);
+    assert.equal(start.includes("'mathVersion', 'dice-v2-rtp875'"), false);
+    assert.equal(start.includes("c.config->>'winMultiplier'"), false);
+    assert.match(start, /private\.game_next_int\(p_round_id, 6\)/);
+    assert.match(dice031, /private\.game_next_int\(p_round_id, 6\)/);
+    assert.match(sql034, /REVOKE ALL ON FUNCTION private\.game_dice_win_multiplier_for_version/);
+  });
+
+  it('extends Blackjack version-safe payout with v4 ×2.00 and keeps existing rules', () => {
+    const helper = extractFn(sql034, 'private.game_bj_payout_for_version');
+    const finish032 = extractFn(sql032, 'private.game_adapter_blackjack_finish');
+    assert.match(sql034, /blackjack-v4-visible-dealer-win2/);
+    assert.match(sql034, /winPayout', 2.00/);
+    assert.match(helper, /blackjack-v2-rtp875/);
+    assert.match(helper, /v_win := 1\.84/);
+    assert.match(helper, /blackjack-v3-visible-dealer-rtp875/);
+    assert.match(helper, /v_win := 1\.70/);
+    assert.match(helper, /blackjack-v4-visible-dealer-win2/);
+    assert.match(helper, /v_win := 2\.00/);
+    assert.equal(helper.includes("c.config->>'winPayout'"), false);
+    assert.match(helper, /BLACKJACK_MATH_VERSION_UNSUPPORTED/);
+    assert.match(helper, /WHEN p_result = 'push' THEN private\.game_money\(p_stake\)/);
+    assert.equal(sql034.includes('game_adapter_blackjack_finish'), false);
+    assert.equal(sql034.includes('game_adapter_blackjack_start'), false);
+    assert.equal(sql034.includes('chasePlayer'), false);
+    assert.equal(sql034.includes('banker'), false);
+    assert.match(finish032, /WHILE private\.game_bj_score\(v_dealer\) < 17 LOOP/);
+    assert.match(finish032, /private\.game_bj_resolve\(p_player, v_dealer\)/);
+    assert.match(finish032, /private\.game_bj_payout_for_version\(v_round\.stake, v_result, v_round\.math_version\)/);
+  });
+
+  it('updates Dice/Blackjack reporting metadata and keeps Apples progressive', () => {
+    const meta = extractFn(sql034, 'private.game_report_rtp_meta');
+    assert.match(meta, /p_game_code = 'dice'/);
+    assert.match(meta, /theoreticalRtpTarget', 1\.000000000000000000/);
+    assert.match(meta, /p_game_code = 'blackjack'/);
+    assert.match(meta, /theoreticalRtpTarget', 1\.0136234940440312/);
+    assert.match(meta, /p_game_code IN \('pharaoh', 'crystal', 'aviator'\)/);
+    assert.match(meta, /rtpModel', 'progressive'/);
+    assert.match(meta, /theoreticalRtpTarget', NULL/);
+  });
+});

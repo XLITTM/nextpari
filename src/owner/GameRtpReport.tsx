@@ -149,7 +149,8 @@ export function GameRtpReportPanel() {
       {report && (
         <>
           <p className="text-[11px] text-gray-500 mb-3 leading-relaxed">
-            Целевой RTP контролируемых игр: {(report.controlledGameTargetRtp * 100).toFixed(1)}%.
+            Целевой RTP Pharaoh / Crystal / Aviator: {(report.controlledGameTargetRtp * 100).toFixed(1)}%.
+            Dice и Blackjack показывают отдельные точные модели в таблице (не 87.5%).
             Apple of Fortune использует отдельную прогрессивную модель.
             Календарный день — окно отчёта, а не повод менять исходы.
             Дневной hold колеблется из‑за дисперсии.
