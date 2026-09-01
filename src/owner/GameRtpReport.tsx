@@ -18,10 +18,15 @@ function money(value: number): string {
   return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function rtpTargetLabel(game: { rtpModel: string; theoreticalRtpTarget: number | null }): string {
+function rtpTargetLabel(game: {
+  rtpModel: string;
+  theoreticalRtpTarget: number | null;
+  houseEdge?: number | null;
+}): string {
   if (game.rtpModel === 'progressive') return 'Прогрессивный';
   if (game.rtpModel === 'unconfigured' || game.theoreticalRtpTarget == null) return 'Не настроен';
-  return pct(game.theoreticalRtpTarget);
+  const edge = game.houseEdge == null ? 1 - game.theoreticalRtpTarget : game.houseEdge;
+  return `${pct(game.theoreticalRtpTarget)} RTP · ${pct(edge)} house`;
 }
 
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -167,7 +172,7 @@ export function GameRtpReportPanel() {
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400">
                   <th className="py-2 pr-3 font-semibold">Игра</th>
-                  <th className="py-2 pr-3 font-semibold">Цель RTP</th>
+                  <th className="py-2 pr-3 font-semibold">Теорет. RTP / house edge</th>
                   <th className="py-2 pr-3 font-semibold">Ставки</th>
                   <th className="py-2 pr-3 font-semibold">Выплаты</th>
                   <th className="py-2 pr-3 font-semibold">Раунды</th>

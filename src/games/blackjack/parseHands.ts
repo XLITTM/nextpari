@@ -2,7 +2,7 @@ import type { CardType } from './types';
 
 export const BLACKJACK_V2_MATH_VERSION = 'blackjack-v2-rtp875';
 export const BLACKJACK_V3_MATH_VERSION = 'blackjack-v3-visible-dealer-rtp875';
-export const BLACKJACK_V4_MATH_VERSION = 'blackjack-v4-visible-dealer-win2';
+export const BLACKJACK_V4_MATH_VERSION = 'blackjack-v4-visible-banker-ties-chase-win2';
 
 function parseCard(raw: unknown, forceFaceUp: boolean): CardType {
   const card = raw as { suit?: string; rank?: string; value?: number; isHidden?: boolean };

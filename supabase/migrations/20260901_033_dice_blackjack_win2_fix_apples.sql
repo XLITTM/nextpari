@@ -1,7 +1,7 @@
 BEGIN;
 
 -- NEXTPARI PHASE 033
--- Dice ×2.00, Blackjack ×2.00 (visible dealer), Apples start array_append fix.
+-- Dice ×2.00, Blackjack v4 transparent banker rules + ×2.00, Apples start array_append fix.
 -- WRITE ONLY. Do not execute against production in this task.
 -- Does not UPDATE historical settled rounds.
 -- Does not change Pharaoh, Crystal, or Aviator math.
@@ -24,11 +24,13 @@ WHERE game_code = 'dice';
 UPDATE private.game_catalog
 SET
     config = COALESCE(config, '{}'::jsonb) || jsonb_build_object(
-        'rtpTarget', 1.0136234940440312,
-        'mathVersion', 'blackjack-v4-visible-dealer-win2',
+        'rtpTarget', 0.8789735622567584,
+        'mathVersion', 'blackjack-v4-visible-banker-ties-chase-win2',
         'winPayout', 2.00,
         'goldenPayout', 2.00,
-        'pushPayout', 1.00
+        'pushPayout', 1.00,
+        'tieRule', 'banker',
+        'dealerRule', 'chasePlayer'
     ),
     updated_at = pg_catalog.now()
 WHERE game_code = 'blackjack';
@@ -131,7 +133,7 @@ BEGIN
         v_win := 1.84;
     ELSIF p_math_version = 'blackjack-v3-visible-dealer-rtp875' THEN
         v_win := 1.70;
-    ELSIF p_math_version = 'blackjack-v4-visible-dealer-win2' THEN
+    ELSIF p_math_version = 'blackjack-v4-visible-banker-ties-chase-win2' THEN
         v_win := 2.00;
     ELSE
         RAISE EXCEPTION 'BLACKJACK_MATH_VERSION_UNSUPPORTED';
@@ -142,6 +144,110 @@ BEGIN
         WHEN p_result = 'push' THEN private.game_money(p_stake)
         ELSE 0
     END;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION private.game_bj_dealer_should_draw(
+    p_dealer_score INTEGER,
+    p_player_score INTEGER,
+    p_math_version TEXT
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SET search_path = ''
+AS $fn$
+BEGIN
+    IF p_math_version IS NULL OR btrim(p_math_version) = '' THEN
+        RAISE EXCEPTION 'BLACKJACK_MATH_VERSION_MISSING';
+    END IF;
+    IF p_math_version IN ('blackjack-v2-rtp875', 'blackjack-v3-visible-dealer-rtp875') THEN
+        RETURN COALESCE(p_dealer_score, 0) < 17;
+    END IF;
+    IF p_math_version = 'blackjack-v4-visible-banker-ties-chase-win2' THEN
+        RETURN COALESCE(p_dealer_score, 0) < 21
+            AND COALESCE(p_dealer_score, 0) < GREATEST(17, COALESCE(p_player_score, 0));
+    END IF;
+    RAISE EXCEPTION 'BLACKJACK_MATH_VERSION_UNSUPPORTED';
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION private.game_bj_resolve_for_version(
+    p_player JSONB,
+    p_dealer JSONB,
+    p_math_version TEXT
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+STABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_result TEXT;
+BEGIN
+    IF p_math_version IS NULL OR btrim(p_math_version) = '' THEN
+        RAISE EXCEPTION 'BLACKJACK_MATH_VERSION_MISSING';
+    END IF;
+    IF p_math_version NOT IN (
+        'blackjack-v2-rtp875',
+        'blackjack-v3-visible-dealer-rtp875',
+        'blackjack-v4-visible-banker-ties-chase-win2'
+    ) THEN
+        RAISE EXCEPTION 'BLACKJACK_MATH_VERSION_UNSUPPORTED';
+    END IF;
+    v_result := private.game_bj_resolve(p_player, p_dealer);
+    IF p_math_version = 'blackjack-v4-visible-banker-ties-chase-win2' AND v_result = 'push' THEN
+        RETURN 'lose';
+    END IF;
+    RETURN v_result;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION private.game_adapter_blackjack_finish(
+    p_round_id UUID,
+    p_player JSONB,
+    p_dealer JSONB,
+    p_deck JSONB,
+    p_actor UUID
+)
+RETURNS private.game_rounds
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_round private.game_rounds%ROWTYPE;
+    v_dealer JSONB := private.game_bj_reveal(p_dealer);
+    v_player_score INTEGER := private.game_bj_score(p_player);
+    v_drawn JSONB;
+    v_draws JSONB := '[]'::jsonb;
+    v_result TEXT;
+    v_pub JSONB;
+BEGIN
+    SELECT r.* INTO v_round FROM private.game_rounds AS r WHERE r.id = p_round_id FOR UPDATE;
+    WHILE private.game_bj_dealer_should_draw(
+        private.game_bj_score(v_dealer),
+        v_player_score,
+        v_round.math_version
+    ) LOOP
+        v_drawn := private.game_bj_draw(p_deck, false);
+        v_dealer := v_dealer || jsonb_build_array(v_drawn->'card');
+        v_draws := v_draws || jsonb_build_array(v_drawn->'card');
+        p_deck := v_drawn->'deck';
+    END LOOP;
+    v_result := private.game_bj_resolve_for_version(p_player, v_dealer, v_round.math_version);
+    v_pub := private.game_bj_public(p_player, v_dealer, 'gameOver', v_result)
+        || jsonb_build_object(
+            'dealerDraws', v_draws,
+            'mathVersion', v_round.math_version
+        );
+    RETURN private.game_settle_win(
+        p_round_id,
+        private.game_bj_payout_for_version(v_round.stake, v_result, v_round.math_version),
+        v_pub,
+        jsonb_build_object('deck', p_deck, 'playerHand', p_player, 'dealerHand', v_dealer, 'result', v_result, 'dealerDraws', v_draws),
+        p_actor
+    );
 END;
 $fn$;
 
@@ -229,6 +335,7 @@ BEGIN
     IF p_game_code = 'apples' THEN
         RETURN jsonb_build_object(
             'theoreticalRtpTarget', NULL,
+            'houseEdge', NULL,
             'rtpModel', 'progressive'
         );
     END IF;
@@ -236,13 +343,15 @@ BEGIN
     IF p_game_code = 'dice' THEN
         RETURN jsonb_build_object(
             'theoreticalRtpTarget', 1.000000000000000000,
+            'houseEdge', 0,
             'rtpModel', 'fixed-target'
         );
     END IF;
 
     IF p_game_code = 'blackjack' THEN
         RETURN jsonb_build_object(
-            'theoreticalRtpTarget', 1.0136234940440312,
+            'theoreticalRtpTarget', 0.8789735622567584,
+            'houseEdge', 0.12102643774324162,
             'rtpModel', 'fixed-target'
         );
     END IF;
@@ -255,12 +364,14 @@ BEGIN
 
         RETURN jsonb_build_object(
             'theoreticalRtpTarget', COALESCE(v_theo, 0.875000),
+            'houseEdge', ROUND(1 - COALESCE(v_theo, 0.875000), 6),
             'rtpModel', 'fixed-target'
         );
     END IF;
 
     RETURN jsonb_build_object(
         'theoreticalRtpTarget', NULL,
+        'houseEdge', NULL,
         'rtpModel', 'unconfigured'
     );
 END;
@@ -268,5 +379,7 @@ $fn$;
 
 REVOKE ALL ON FUNCTION private.game_dice_win_multiplier_for_version(TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.game_bj_payout_for_version(NUMERIC, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.game_bj_dealer_should_draw(INTEGER, INTEGER, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.game_bj_resolve_for_version(JSONB, JSONB, TEXT) FROM PUBLIC, anon, authenticated;
 
 COMMIT;

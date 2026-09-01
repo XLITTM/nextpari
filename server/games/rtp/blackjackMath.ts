@@ -3,14 +3,19 @@ export const BLACKJACK_V2_WIN_PAYOUT = 1.84;
 export const BLACKJACK_V2_EXACT_RTP = 0.875492820201475;
 export const BLACKJACK_V3_MATH_VERSION = 'blackjack-v3-visible-dealer-rtp875';
 export const BLACKJACK_V3_WIN_PAYOUT = 1.7;
-export const BLACKJACK_MATH_VERSION = 'blackjack-v4-visible-dealer-win2';
+export const BLACKJACK_MATH_VERSION = 'blackjack-v4-visible-banker-ties-chase-win2';
 export const BLACKJACK_WIN_PAYOUT = 2;
 export const BLACKJACK_GOLDEN_PAYOUT = 2;
 export const BLACKJACK_PUSH_PAYOUT = 1;
 export const BLACKJACK_VISIBLE_THEORETICAL_WIN_PAYOUT = 1.6952395194023846;
 export const BLACKJACK_VISIBLE_EXACT_RTP = 0.8771651467167154;
-export const BLACKJACK_V4_EXACT_RTP = 1.0136234940440312;
-export const BLACKJACK_V4_HOUSE_EDGE = -0.013623494044031181;
+export const BLACKJACK_V4_TIE_RULE = 'banker' as const;
+export const BLACKJACK_V4_DEALER_RULE = 'chasePlayer' as const;
+export const BLACKJACK_V4_EXACT_RTP = 0.8789735622567584;
+export const BLACKJACK_V4_HOUSE_EDGE = 0.12102643774324162;
+export const BLACKJACK_V4_PLAYER_WIN_PROBABILITY = 0.4394867811283792;
+export const BLACKJACK_V4_BANKER_WIN_PROBABILITY = 0.5605132188716218;
+export const BLACKJACK_V4_PUSH_PROBABILITY = 0;
 export const BLACKJACK_EVAL_ROUNDS = 25_000;
 export const BLACKJACK_EVAL_SEED = 21031;
 export const BLACKJACK_V2_METHOD =
@@ -18,7 +23,7 @@ export const BLACKJACK_V2_METHOD =
 export const BLACKJACK_V3_METHOD =
   'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×1.70 golden×2 push×1.';
 export const BLACKJACK_METHOD =
-  'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×2.00 golden×2 push×1. Product decision does not preserve 87.5% RTP.';
+  'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws while total < max(17, player) and < 21, banker wins ties, AA golden, win×2.00 golden×2.';
 
 const RANKS = 9;
 const VALUES = [6, 7, 8, 9, 10, 2, 3, 4, 11] as const;
@@ -394,4 +399,231 @@ export function simulateBlackjackOptimal(rounds = BLACKJACK_EVAL_ROUNDS, seed = 
     dealerStates: solver.dealerMemo.size,
     stateCount: solver.valueMemo.size + solver.dealerMemo.size,
   };
+}
+
+export type BlackjackTieRule = 'push' | 'banker';
+export type BlackjackDealerRule = 'stand17' | 'stand18' | 'stand19' | 'chasePlayer';
+
+export interface BlackjackVisibleRules {
+  tieRule: BlackjackTieRule;
+  dealerRule: BlackjackDealerRule;
+  winPayout: number;
+  goldenPayout: number;
+}
+
+type Mass = {
+  ev: number;
+  pPlayer: number;
+  pBanker: number;
+  pPush: number;
+};
+
+const ZERO: Mass = { ev: 0, pPlayer: 0, pBanker: 0, pPush: 0 };
+const PLAYER_WIN = (win: number): Mass => ({ ev: win, pPlayer: 1, pBanker: 0, pPush: 0 });
+const BANKER_WIN: Mass = { ev: 0, pPlayer: 0, pBanker: 1, pPush: 0 };
+const PUSH: Mass = { ev: 1, pPlayer: 0, pBanker: 0, pPush: 1 };
+
+function addMass(acc: Mass, weight: number, child: Mass): void {
+  acc.ev += weight * child.ev;
+  acc.pPlayer += weight * child.pPlayer;
+  acc.pBanker += weight * child.pBanker;
+  acc.pPush += weight * child.pPush;
+}
+
+function resolveMass(player: number, dealer: number, rules: BlackjackVisibleRules): Mass {
+  if (player > 21) return BANKER_WIN;
+  if (dealer > 21) return PLAYER_WIN(rules.winPayout);
+  if (player > dealer) return PLAYER_WIN(rules.winPayout);
+  if (player === dealer) return rules.tieRule === 'banker' ? BANKER_WIN : PUSH;
+  return BANKER_WIN;
+}
+
+function dealerShouldDraw(dealerTotal: number, player: number, dealerRule: BlackjackDealerRule): boolean {
+  if (dealerTotal >= 21) return false;
+  if (dealerRule === 'stand17') return dealerTotal < 17;
+  if (dealerRule === 'stand18') return dealerTotal < 18;
+  if (dealerRule === 'stand19') return dealerTotal < 19;
+  return dealerTotal < Math.max(17, player);
+}
+
+type RuleSolver = {
+  valueMemo: Map<number, Mass>;
+  dealerMemo: Map<number, Mass>;
+  rules: BlackjackVisibleRules;
+};
+
+function dealerPlayRules(solver: RuleSolver, dealerTotal: number, counts: Uint8Array, player: number): Mass {
+  if (dealerTotal > 21) return PLAYER_WIN(solver.rules.winPayout);
+  if (!dealerShouldDraw(dealerTotal, player, solver.rules.dealerRule)) {
+    return resolveMass(player, dealerTotal, solver.rules);
+  }
+  const packed = pack(counts);
+  const k = keyDealer(packed, dealerTotal, player);
+  const hit = solver.dealerMemo.get(k);
+  if (hit !== undefined) return hit;
+  const n = totalCards(counts);
+  const acc: Mass = { ...ZERO };
+  if (n <= 0) {
+    Object.assign(acc, resolveMass(player, dealerTotal, solver.rules));
+  } else {
+    for (let r = 0; r < RANKS; r += 1) {
+      const c = counts[r];
+      if (!c) continue;
+      counts[r] = c - 1;
+      addMass(acc, c / n, dealerPlayRules(solver, dealerTotal + VALUES[r], counts, player));
+      counts[r] = c;
+    }
+  }
+  solver.dealerMemo.set(k, acc);
+  return acc;
+}
+
+function hitKnownRules(solver: RuleSolver, player: number, dealerTotal: number, counts: Uint8Array): Mass {
+  const n = totalCards(counts);
+  if (n <= 0) return dealerPlayRules(solver, dealerTotal, counts, player);
+  const acc: Mass = { ...ZERO };
+  for (let r = 0; r < RANKS; r += 1) {
+    const c = counts[r];
+    if (!c) continue;
+    counts[r] = c - 1;
+    const next = player + VALUES[r];
+    addMass(
+      acc,
+      c / n,
+      next > 21 ? BANKER_WIN : valueKnownRules(solver, next, dealerTotal, counts),
+    );
+    counts[r] = c;
+  }
+  return acc;
+}
+
+function valueKnownRules(solver: RuleSolver, player: number, dealerTotal: number, counts: Uint8Array): Mass {
+  if (player > 21) return BANKER_WIN;
+  const packed = pack(counts);
+  const k = keyValueKnown(packed, player, dealerTotal);
+  const cached = solver.valueMemo.get(k);
+  if (cached !== undefined) return cached;
+  const stand = dealerPlayRules(solver, dealerTotal, counts, player);
+  let best = stand;
+  if (player < 21) {
+    const hit = hitKnownRules(solver, player, dealerTotal, counts);
+    if (hit.ev > stand.ev) best = hit;
+  }
+  solver.valueMemo.set(k, best);
+  return best;
+}
+
+export function evaluateBlackjackExactVisibleRules(rules: BlackjackVisibleRules) {
+  const solver: RuleSolver = {
+    valueMemo: new Map(),
+    dealerMemo: new Map(),
+    rules,
+  };
+  const counts = new Uint8Array(RANKS).fill(4);
+  const acc: Mass = { ...ZERO };
+  let pGolden = 0;
+  for (let p1 = 0; p1 < RANKS; p1 += 1) {
+    const w1 = counts[p1];
+    if (!w1) continue;
+    counts[p1] = w1 - 1;
+    for (let d1 = 0; d1 < RANKS; d1 += 1) {
+      const w2 = counts[d1];
+      if (!w2) continue;
+      counts[d1] = w2 - 1;
+      for (let p2 = 0; p2 < RANKS; p2 += 1) {
+        const w3 = counts[p2];
+        if (!w3) continue;
+        counts[p2] = w3 - 1;
+        for (let d2 = 0; d2 < RANKS; d2 += 1) {
+          const w4 = counts[d2];
+          if (!w4) continue;
+          const w = w1 * w2 * w3 * w4;
+          counts[d2] = w4 - 1;
+          if (p1 === ACE && p2 === ACE) {
+            addMass(acc, w, PLAYER_WIN(rules.goldenPayout));
+            pGolden += w;
+          } else if (d1 === ACE && d2 === ACE) {
+            addMass(acc, w, BANKER_WIN);
+          } else {
+            addMass(
+              acc,
+              w,
+              valueKnownRules(solver, VALUES[p1] + VALUES[p2], VALUES[d1] + VALUES[d2], counts),
+            );
+          }
+          counts[d2] = w4;
+        }
+        counts[p2] = w3;
+      }
+      counts[d1] = w2;
+    }
+    counts[p1] = w1;
+  }
+  const denom = VISIBLE_PREFIXES;
+  const rtp = acc.ev / denom;
+  return {
+    tieRule: rules.tieRule,
+    dealerRule: rules.dealerRule,
+    winPayout: rules.winPayout,
+    goldenPayout: rules.goldenPayout,
+    playerWinProbability: acc.pPlayer / denom,
+    bankerWinProbability: acc.pBanker / denom,
+    pushProbability: acc.pPush / denom,
+    goldenProbability: pGolden / denom,
+    rtp,
+    houseEdge: 1 - rtp,
+    prefixes: denom,
+    valueStates: solver.valueMemo.size,
+    dealerStates: solver.dealerMemo.size,
+    usesOptimalStrategyForRules: true,
+  };
+}
+
+export const BLACKJACK_RULE_CANDIDATES: Array<{
+  tieRule: BlackjackTieRule;
+  dealerRule: BlackjackDealerRule;
+}> = [
+  { tieRule: 'push', dealerRule: 'stand17' },
+  { tieRule: 'push', dealerRule: 'stand18' },
+  { tieRule: 'push', dealerRule: 'stand19' },
+  { tieRule: 'push', dealerRule: 'chasePlayer' },
+  { tieRule: 'banker', dealerRule: 'stand17' },
+  { tieRule: 'banker', dealerRule: 'stand18' },
+  { tieRule: 'banker', dealerRule: 'stand19' },
+  { tieRule: 'banker', dealerRule: 'chasePlayer' },
+];
+
+const DEALER_RULE_DEVIATION: Record<BlackjackDealerRule, number> = {
+  stand17: 0,
+  stand18: 1,
+  stand19: 2,
+  chasePlayer: 3,
+};
+
+export function searchBlackjackBankerRules(winPayout = 2, goldenPayout = 2) {
+  const rows = BLACKJACK_RULE_CANDIDATES.map((candidate) =>
+    evaluateBlackjackExactVisibleRules({
+      ...candidate,
+      winPayout,
+      goldenPayout,
+    }),
+  );
+  const matches = rows.filter(
+    (row) =>
+      row.bankerWinProbability >= 0.55
+      && row.bankerWinProbability <= 0.60
+      && row.houseEdge >= 0.10
+      && row.houseEdge <= 0.15
+      && row.winPayout === 2,
+  );
+  matches.sort((a, b) => {
+    const edge = Math.abs(a.houseEdge - 0.125) - Math.abs(b.houseEdge - 0.125);
+    if (edge !== 0) return edge;
+    const banker = Math.abs(a.bankerWinProbability - 0.575) - Math.abs(b.bankerWinProbability - 0.575);
+    if (banker !== 0) return banker;
+    const tieDev = (a.tieRule === 'push' ? 0 : 1) - (b.tieRule === 'push' ? 0 : 1);
+    if (tieDev !== 0) return tieDev;
+    return DEALER_RULE_DEVIATION[a.dealerRule] - DEALER_RULE_DEVIATION[b.dealerRule];
+  });
+  return { rows, selected: matches[0] ?? null };
 }

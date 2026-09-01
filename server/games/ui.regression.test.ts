@@ -149,8 +149,8 @@ describe('phase 032 visual restore', () => {
     assert.match(parse, /forceFaceUp \? false : card\.isHidden === true/);
     assert.equal(parse.includes('isHidden: false,'), false);
     assert.match(ui, /×2.00 от ставки/);
-    assert.match(ui, /×2.00/);
-    assert.match(ui, /×1.00/);
+    assert.match(ui, /При равенстве очков побеждает банкир/);
+    assert.match(ui, /Банкир добирает карты, пока не достигнет очков игрока/);
     assert.match(card, /data-face=\{faceDown \? 'down' : 'up'\}/);
     assert.match(ui, /dealerDraws/);
     assert.match(ui, /payout=\{serverPayout\}/);

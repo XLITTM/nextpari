@@ -94,6 +94,7 @@ describe('Apples theoretical RTP reporting exception', () => {
   it('marks Apples as progressive with a null theoretical target', () => {
     assert.deepEqual(gameRtpReportingMeta('apples'), {
       theoreticalRtpTarget: null,
+      houseEdge: null,
       rtpModel: 'progressive',
     });
     assert.match(migration, /rtpModel', 'progressive'/);
@@ -119,26 +120,32 @@ describe('Apples theoretical RTP reporting exception', () => {
     for (const code of ['pharaoh', 'crystal', 'aviator'] as const) {
       assert.deepEqual(gameRtpReportingMeta(code), {
         theoreticalRtpTarget: 0.875,
+        houseEdge: 0.125,
         rtpModel: 'fixed-target',
       });
     }
     assert.deepEqual(gameRtpReportingMeta('dice'), {
       theoreticalRtpTarget: 1,
+      houseEdge: 0,
       rtpModel: 'fixed-target',
     });
     assert.equal(gameRtpReportingMeta('blackjack').rtpModel, 'fixed-target');
-    assert.ok((gameRtpReportingMeta('blackjack').theoreticalRtpTarget ?? 0) > 1);
+    const bj = gameRtpReportingMeta('blackjack');
+    assert.ok((bj.theoreticalRtpTarget ?? 0) > 0.85 && (bj.theoreticalRtpTarget ?? 0) < 0.90);
+    assert.ok((bj.houseEdge ?? 0) >= 0.10 && (bj.houseEdge ?? 0) <= 0.15);
     assert.match(rollback, /five controlled games target 0\.875/);
     assert.match(migration, /p_game_code IN \('pharaoh', 'dice', 'blackjack', 'crystal', 'aviator'\)/);
     const sql033 = read('supabase/migrations/20260901_033_dice_blackjack_win2_fix_apples.sql');
     assert.match(sql033, /theoreticalRtpTarget', 1\.000000000000000000/);
-    assert.match(sql033, /theoreticalRtpTarget', 1\.0136234940440312/);
+    assert.match(sql033, /theoreticalRtpTarget', 0\.8789735622567584/);
     assert.match(sql033, /p_game_code IN \('pharaoh', 'crystal', 'aviator'\)/);
+    assert.match(ui, /Теорет\. RTP \/ house edge/);
   });
 
   it('does not assign 0.875 to an unconfigured future game', () => {
     assert.deepEqual(gameRtpReportingMeta('game7_test'), {
       theoreticalRtpTarget: null,
+      houseEdge: null,
       rtpModel: 'unconfigured',
     });
     assert.match(migration, /rtpModel', 'unconfigured'/);

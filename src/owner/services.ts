@@ -220,6 +220,7 @@ export interface GameRtpGameRow extends GameRtpMetrics {
   displayName: string;
   status?: string;
   theoreticalRtpTarget: number | null;
+  houseEdge: number | null;
   rtpModel: GameRtpModel;
 }
 
@@ -280,12 +281,18 @@ function parseRtpModel(raw: Record<string, unknown>): GameRtpModel {
 function parseGameRow(raw: Record<string, unknown>): GameRtpGameRow {
   const rtpModel = parseRtpModel(raw);
   const targetRaw = raw.theoreticalRtpTarget ?? raw.theoretical_rtp_target;
+  const houseRaw = raw.houseEdge ?? raw.house_edge;
   return {
     gameCode: str(raw.gameCode ?? raw.game_code),
     displayName: str(raw.displayName ?? raw.display_name),
     status: raw.status == null ? undefined : str(raw.status),
     theoreticalRtpTarget: rtpModel === 'fixed-target'
       ? (targetRaw == null ? 0.875 : num(targetRaw))
+      : null,
+    houseEdge: rtpModel === 'fixed-target'
+      ? (houseRaw == null
+        ? Number((1 - (targetRaw == null ? 0.875 : num(targetRaw))).toFixed(6))
+        : num(houseRaw))
       : null,
     rtpModel,
     ...parseMetrics(raw),

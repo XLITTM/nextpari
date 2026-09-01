@@ -592,18 +592,33 @@ describe('phase 033 dice blackjack win2 and apples start fix', () => {
     assert.match(sql033, /REVOKE ALL ON FUNCTION private\.game_dice_win_multiplier_for_version/);
   });
 
-  it('extends Blackjack version-safe payout with v4 ×2.00', () => {
+  it('extends Blackjack with version-safe v4 banker-chase rules and ×2.00', () => {
     const helper = extractFn(sql033, 'private.game_bj_payout_for_version');
-    assert.match(sql033, /blackjack-v4-visible-dealer-win2/);
+    const draw = extractFn(sql033, 'private.game_bj_dealer_should_draw');
+    const resolve = extractFn(sql033, 'private.game_bj_resolve_for_version');
+    const finish = extractFn(sql033, 'private.game_adapter_blackjack_finish');
+    assert.match(sql033, /blackjack-v4-visible-banker-ties-chase-win2/);
+    assert.equal(sql033.includes('blackjack-v4-visible-dealer-win2'), false);
     assert.match(sql033, /winPayout', 2.00/);
+    assert.match(sql033, /tieRule', 'banker'/);
+    assert.match(sql033, /dealerRule', 'chasePlayer'/);
     assert.match(helper, /blackjack-v2-rtp875/);
     assert.match(helper, /v_win := 1\.84/);
     assert.match(helper, /blackjack-v3-visible-dealer-rtp875/);
     assert.match(helper, /v_win := 1\.70/);
-    assert.match(helper, /blackjack-v4-visible-dealer-win2/);
+    assert.match(helper, /blackjack-v4-visible-banker-ties-chase-win2/);
     assert.match(helper, /v_win := 2\.00/);
     assert.equal(helper.includes("c.config->>'winPayout'"), false);
-    assert.match(helper, /BLACKJACK_MATH_VERSION_UNSUPPORTED/);
+    assert.match(draw, /blackjack-v2-rtp875/);
+    assert.match(draw, /COALESCE\(p_dealer_score, 0\) < 17/);
+    assert.match(draw, /GREATEST\(17, COALESCE\(p_player_score, 0\)\)/);
+    assert.match(resolve, /v_result = 'push' THEN/);
+    assert.match(resolve, /RETURN 'lose'/);
+    assert.match(finish, /private\.game_bj_dealer_should_draw/);
+    assert.match(finish, /private\.game_bj_resolve_for_version\(p_player, v_dealer, v_round\.math_version\)/);
+    assert.match(finish, /private\.game_bj_payout_for_version\(v_round\.stake, v_result, v_round\.math_version\)/);
+    assert.match(finish, /'mathVersion', v_round\.math_version/);
+    assert.equal(finish.includes('WHILE private.game_bj_score(v_dealer) < 17'), false);
   });
 
   it('fixes Apples start array concatenation without changing math', () => {
@@ -625,7 +640,8 @@ describe('phase 033 dice blackjack win2 and apples start fix', () => {
     assert.match(meta, /p_game_code = 'dice'/);
     assert.match(meta, /theoreticalRtpTarget', 1\.000000000000000000/);
     assert.match(meta, /p_game_code = 'blackjack'/);
-    assert.match(meta, /theoreticalRtpTarget', 1\.0136234940440312/);
+    assert.match(meta, /theoreticalRtpTarget', 0\.8789735622567584/);
+    assert.match(meta, /houseEdge', 0\.12102643774324162/);
     assert.match(meta, /p_game_code IN \('pharaoh', 'crystal', 'aviator'\)/);
     assert.match(meta, /rtpModel', 'progressive'/);
     assert.match(meta, /theoreticalRtpTarget', NULL/);
@@ -642,5 +658,7 @@ describe('phase 033 dice blackjack win2 and apples start fix', () => {
     assert.match(rollback033, /bet ledger is created inside transaction/);
     assert.match(rollback033, /wallet balance decreases inside transaction/);
     assert.match(rollback033, /array_append/);
+    assert.match(rollback033, /v4 banker wins equal totals/);
+    assert.match(rollback033, /v4 chases player total/);
   });
 });

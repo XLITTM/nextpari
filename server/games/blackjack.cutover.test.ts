@@ -5,6 +5,11 @@ import {
   blackjackPayoutForVersion,
 } from './blackjackPayout.js';
 import {
+  blackjackDealerShouldDraw,
+  blackjackResolveForVersion,
+  blackjackRulesForVersion,
+} from './blackjackRules.js';
+import {
   BLACKJACK_V2_MATH_VERSION,
   BLACKJACK_V3_MATH_VERSION,
   BLACKJACK_V4_MATH_VERSION,
@@ -63,11 +68,36 @@ describe('blackjack v2/v3/v4 cutover', () => {
     assert.equal(blackjackPayoutForVersion(10, 'lose', BLACKJACK_V3_MATH_VERSION), 0);
   });
 
-  it('pays v4 ×2.00 with golden ×2.00 and push ×1.00', () => {
+  it('pays v4 ×2.00; equal totals settle as a banker win (lose)', () => {
     assert.equal(blackjackPayoutForVersion(10, 'win', BLACKJACK_V4_MATH_VERSION), 20);
     assert.equal(blackjackPayoutForVersion(10, 'golden', BLACKJACK_V4_MATH_VERSION), 20);
-    assert.equal(blackjackPayoutForVersion(10, 'push', BLACKJACK_V4_MATH_VERSION), 10);
     assert.equal(blackjackPayoutForVersion(10, 'lose', BLACKJACK_V4_MATH_VERSION), 0);
+    assert.equal(blackjackResolveForVersion(18, 18, BLACKJACK_V4_MATH_VERSION), 'lose');
+  });
+
+  it('keeps v2/v3 stand-17 push rules and does not inherit v4 chase/ties', () => {
+    assert.deepEqual(blackjackRulesForVersion(BLACKJACK_V2_MATH_VERSION), {
+      tieRule: 'push',
+      dealerRule: 'stand17',
+    });
+    assert.deepEqual(blackjackRulesForVersion(BLACKJACK_V3_MATH_VERSION), {
+      tieRule: 'push',
+      dealerRule: 'stand17',
+    });
+    assert.deepEqual(blackjackRulesForVersion(BLACKJACK_V4_MATH_VERSION), {
+      tieRule: 'banker',
+      dealerRule: 'chasePlayer',
+    });
+    assert.equal(blackjackDealerShouldDraw(17, 20, BLACKJACK_V2_MATH_VERSION), false);
+    assert.equal(blackjackDealerShouldDraw(17, 20, BLACKJACK_V3_MATH_VERSION), false);
+    assert.equal(blackjackDealerShouldDraw(17, 20, BLACKJACK_V4_MATH_VERSION), true);
+    assert.equal(blackjackDealerShouldDraw(16, 12, BLACKJACK_V4_MATH_VERSION), true);
+    assert.equal(blackjackDealerShouldDraw(17, 12, BLACKJACK_V4_MATH_VERSION), false);
+    assert.equal(blackjackDealerShouldDraw(20, 21, BLACKJACK_V4_MATH_VERSION), true);
+    assert.equal(blackjackDealerShouldDraw(21, 21, BLACKJACK_V4_MATH_VERSION), false);
+    assert.equal(blackjackResolveForVersion(18, 18, BLACKJACK_V2_MATH_VERSION), 'push');
+    assert.equal(blackjackResolveForVersion(18, 18, BLACKJACK_V3_MATH_VERSION), 'push');
+    assert.equal(blackjackResolveForVersion(18, 18, BLACKJACK_V4_MATH_VERSION), 'lose');
   });
 
   it('does not silently use a catalog payout for unknown or null versions', () => {
