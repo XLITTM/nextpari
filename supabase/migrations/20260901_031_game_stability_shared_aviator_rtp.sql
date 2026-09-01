@@ -1057,9 +1057,6 @@ EXCEPTION
 END;
 $fn$;
 
-END;
-$fn$;
-
 CREATE OR REPLACE FUNCTION private.game_engine_action(
     p_round_id UUID,
     p_action TEXT,

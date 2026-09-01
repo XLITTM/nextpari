@@ -469,4 +469,44 @@ describe('phase 031 stability and shared Aviator', () => {
     assert.match(rollback031, /AVIATOR_ADVISORY/);
     assert.match(rollback031, /Lock order: AVIATOR_ADVISORY then wallet \/ round \/ session then Wallet Core/);
   });
+
+  it('has balanced SQL dollar-quote delimiters and no duplicate function closures', () => {
+    const sql = sql031.replace(/\r\n/g, '\n');
+    const rollback = rollback031.replace(/\r\n/g, '\n');
+    const trimmed = sql.trim();
+    assert.ok(trimmed.startsWith('BEGIN;'));
+    assert.ok(trimmed.endsWith('COMMIT;'));
+    assert.equal(/END;\n\$fn\$;\n+END;\n\$fn\$;/.test(sql), false);
+
+    const fnOpens = sql.match(/^AS \$fn\$/gm) ?? [];
+    const fnCloses = sql.match(/^\$fn\$;/gm) ?? [];
+    assert.equal(fnOpens.length, fnCloses.length, `$fn$ open ${fnOpens.length} close ${fnCloses.length}`);
+
+    const creates = [...sql.matchAll(/^CREATE OR REPLACE FUNCTION ([^\s(]+)/gm)].map((m) => m[1]);
+    assert.ok(creates.length >= 20);
+    assert.equal(new Set(creates).size, creates.length, 'duplicate CREATE OR REPLACE FUNCTION name');
+
+    const startClose = sql.indexOf('CREATE OR REPLACE FUNCTION private.game_engine_action');
+    const beforeAction = sql.slice(0, startClose);
+    assert.match(beforeAction, /CREATE OR REPLACE FUNCTION private\.game_engine_start\(/);
+    assert.match(beforeAction, /\nEND;\n\$fn\$;\n+$/);
+    assert.equal(/END;\n\$fn\$;\n+END;\n\$fn\$;\n+$/.test(beforeAction), false);
+
+    let depth = 0;
+    let doFk = 0;
+    for (const line of sql.split('\n')) {
+      if (line === 'DO $fk$') doFk += 1;
+      if (line === '$fk$;') doFk -= 1;
+      if (line === 'AS $fn$') depth += 1;
+      if (line === '$fn$;') depth -= 1;
+      assert.ok(depth >= 0, 'orphan $fn$;');
+      assert.ok(doFk >= 0, 'orphan $fk$;');
+    }
+    assert.equal(depth, 0, 'unfinished $fn$ body');
+    assert.equal(doFk, 0, 'unfinished DO $fk$ block');
+
+    assert.match(rollback, /^BEGIN;/m);
+    assert.ok(rollback.trim().endsWith('ROLLBACK;'));
+    assert.equal(rollback.includes('COMMIT;'), false);
+  });
 });
