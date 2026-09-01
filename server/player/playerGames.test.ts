@@ -21,12 +21,27 @@ function cookieHeader(access = 'player-access-token', refresh = 'player-refresh-
   return `${PLAYER_ACCESS_COOKIE}=${encodeURIComponent(access)}; ${PLAYER_REFRESH_COOKIE}=${encodeURIComponent(refresh)}`;
 }
 
-function createPorts(init?: { staff?: boolean; rpcError?: string; rpcPayload?: Record<string, unknown> }): PlayerGameGatewayPorts & {
+function createPorts(init?: {
+  staff?: boolean;
+  rpcError?: string;
+  rpcPayload?: Record<string, unknown>;
+  expireFirstRpc?: boolean;
+  refreshFail?: boolean;
+}): PlayerGameGatewayPorts & {
   rpcs: Array<{ token: string; name: string; args?: Record<string, unknown> }>;
+  snapshotCalls: string[];
+  refreshes: number;
 } {
   const rpcs: Array<{ token: string; name: string; args?: Record<string, unknown> }> = [];
-  return {
+  const snapshotCalls: string[] = [];
+  let refreshes = 0;
+  let rpcAttempts = 0;
+  const ports = {
     rpcs,
+    snapshotCalls,
+    get refreshes() {
+      return refreshes;
+    },
     async signInWithPassword() {
       throw staffError('AUTH_FAILED', 401);
     },
@@ -34,13 +49,17 @@ function createPorts(init?: { staff?: boolean; rpcError?: string; rpcPayload?: R
       throw staffError('AUTH_FAILED', 401);
     },
     async refreshSession() {
-      throw staffError('JWT_INVALID', 401);
+      refreshes += 1;
+      if (init?.refreshFail) throw staffError('JWT_INVALID', 401);
+      return { accessToken: 'player-access-rotated', refreshToken: 'player-refresh-rotated' };
     },
-    async getAuthUser(accessToken) {
+    async getAuthUser(accessToken: string) {
+      snapshotCalls.push('getAuthUser');
       if (!accessToken) throw staffError('AUTH_REQUIRED', 401);
       return { id: 'player-1', email: 'player@nextpari.test' };
     },
     async ensurePlayerAccount() {
+      snapshotCalls.push('ensurePlayerAccount');
       if (init?.staff) throw staffError('STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER', 403);
       return {
         walletId: '11111111-2222-3333-4444-555555555555',
@@ -50,14 +69,26 @@ function createPorts(init?: { staff?: boolean; rpcError?: string; rpcPayload?: R
       };
     },
     async loadOwnWallet() {
+      snapshotCalls.push('loadOwnWallet');
       return { balance: 50, currency: 'TMTM', status: 'active', publicId: '110790' };
     },
     async savePlayerProfile() {},
-    gameRpc(accessToken) {
+    gameRpc(accessToken: string) {
       return {
-        async invoke(name, args) {
+        async invoke(name: string, args?: Record<string, unknown>) {
           rpcs.push({ token: accessToken, name, args });
-          if (init?.rpcError) throw staffError(init.rpcError, init.rpcError === 'STAFF_CANNOT_PLAY' ? 403 : 409);
+          rpcAttempts += 1;
+          if (init?.expireFirstRpc && rpcAttempts === 1) {
+            throw staffError('JWT_INVALID', 401);
+          }
+          if (init?.rpcError) {
+            const status = init.rpcError === 'STAFF_CANNOT_PLAY'
+              ? 403
+              : init.rpcError === 'JWT_INVALID'
+                ? 401
+                : 409;
+            throw staffError(init.rpcError, status);
+          }
           return init?.rpcPayload ?? {
             ok: true,
             isDuplicate: false,
@@ -78,6 +109,7 @@ function createPorts(init?: { staff?: boolean; rpcError?: string; rpcPayload?: R
       };
     },
   };
+  return ports;
 }
 
 describe('player games BFF', () => {
@@ -109,19 +141,6 @@ describe('player games BFF', () => {
   });
 
   it('rejects staff through session resolution and maps STAFF_CANNOT_PLAY', async () => {
-    const staffPorts = createPorts({ staff: true });
-    const staff = await handlePlayerGamesRequest(
-      {
-        method: 'POST',
-        pathname: PLAYER_GAMES_START_PATH,
-        cookie: cookieHeader(),
-        body: { gameCode: 'dice', stake: 10, idempotencyKey: 'k1' },
-      },
-      staffPorts,
-    );
-    assert.equal(staff.status, 403);
-    assert.equal(staff.body.error, 'STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER');
-
     const playPorts = createPorts({ rpcError: 'STAFF_CANNOT_PLAY' });
     const play = await handlePlayerGamesRequest(
       {
@@ -134,6 +153,7 @@ describe('player games BFF', () => {
     );
     assert.equal(play.status, 403);
     assert.equal(play.body.error, 'STAFF_CANNOT_PLAY');
+    assert.equal(playPorts.snapshotCalls.length, 0);
   });
 
   it('starts a game with player JWT and strips injected money fields', async () => {
@@ -169,6 +189,45 @@ describe('player games BFF', () => {
     assert.equal(options.autoCashout, 2);
     assert.equal(args.p_user_id, undefined);
     assert.equal(args.p_wallet_id, undefined);
+    assert.equal(ports.snapshotCalls.length, 0);
+    assert.equal(ports.rpcs.length, 1);
+    assert.match(String(result.headers?.['Cache-Control'] ?? ''), /no-store/);
+    assert.match(String(result.headers?.['Server-Timing'] ?? ''), /game;dur=/);
+  });
+
+  it('refreshes access once then retries the original game RPC once', async () => {
+    const ports = createPorts({ expireFirstRpc: true });
+    const result = await handlePlayerGamesRequest(
+      {
+        method: 'POST',
+        pathname: PLAYER_GAMES_START_PATH,
+        cookie: cookieHeader(),
+        body: { gameCode: 'dice', stake: 10, idempotencyKey: 'k-refresh' },
+      },
+      ports,
+    );
+    assert.equal(result.status, 200);
+    assert.equal(ports.refreshes, 1);
+    assert.equal(ports.rpcs.length, 2);
+    assert.equal(ports.rpcs[1]?.token, 'player-access-rotated');
+    assert.equal(ports.snapshotCalls.length, 0);
+    assert.match(String(result.headers?.['Server-Timing'] ?? ''), /refresh;desc="1"/);
+  });
+
+  it('fails when refresh is invalid', async () => {
+    const ports = createPorts({ expireFirstRpc: true, refreshFail: true });
+    const result = await handlePlayerGamesRequest(
+      {
+        method: 'POST',
+        pathname: PLAYER_GAMES_START_PATH,
+        cookie: cookieHeader(),
+        body: { gameCode: 'dice', stake: 10, idempotencyKey: 'k-bad-refresh' },
+      },
+      ports,
+    );
+    assert.equal(result.status, 401);
+    assert.equal(result.body.error, 'JWT_INVALID');
+    assert.equal(ports.rpcs.length, 1);
   });
 
   it('maps insufficient balance and disabled/maintenance games', async () => {

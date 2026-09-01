@@ -306,3 +306,58 @@ describe('029A pre-production hardening', () => {
     assert.equal(behavior.includes('COMMIT;'), false);
   });
 });
+
+describe('phase 031 stability and shared Aviator', () => {
+  const sql031 = read('supabase/migrations/20260901_031_game_stability_shared_aviator_rtp.sql');
+  const rollback031 = read('supabase/tests/20260901_031_game_stability_shared_aviator_rtp.rollback.sql');
+  const bff = read('server/player/playerGamesService.ts');
+  const cache = read('server/games/httpCache.ts');
+
+  it('does not depend on unapplied migration 028', () => {
+    assert.match(sql031, /Does not depend on unapplied migration 028/);
+    assert.equal(/20260901_028/.test(sql031), false);
+  });
+
+  it('adds math_version and shared sessions without rewriting historical rounds', () => {
+    assert.match(sql031, /math_version TEXT/);
+    assert.match(sql031, /CREATE TABLE IF NOT EXISTS private.game_sessions/);
+    assert.match(sql031, /session_id UUID/);
+    assert.equal(/UPDATE private\.game_rounds[\s\S]{0,80}math_version =/.test(sql031.split('CREATE OR REPLACE')[0] ?? ''), false);
+    assert.match(sql031, /pharaoh-v2-rtp875/);
+    assert.match(sql031, /dice-v2-rtp875/);
+    assert.match(sql031, /blackjack-v2-rtp875/);
+    assert.match(sql031, /crystal-v2-rtp875/);
+    assert.match(sql031, /aviator-v2-rtp875/);
+  });
+
+  it('keeps Apples financial config and 030B report on game_rounds', () => {
+    assert.equal(sql031.includes('game_adapter_apples_start'), false);
+    assert.match(sql031, /apples-v1-progressive/);
+    assert.match(sql031, /Does not change Apples financial math/);
+    assert.match(read('supabase/migrations/20260901_030_game_rtp_daily_report.sql'), /owner_game_rtp_report/);
+  });
+
+  it('pays Dice x1.72 and uses shared Aviator advisory lock', () => {
+    assert.match(sql031, /winMultiplier', 1.72/);
+    assert.match(sql031, /v_win NUMERIC := 1.72/);
+    assert.match(sql031, /pg_advisory_xact_lock/);
+    assert.match(sql031, /player_game_session_get/);
+    assert.match(sql031, /game_aviator_multiplier/);
+  });
+
+  it('keeps lightweight JWT game auth, no-store, and Server-Timing', () => {
+    assert.match(bff, /runPlayerGameRpc/);
+    assert.equal(bff.includes('ensurePlayerAccount('), false);
+    assert.match(cache, /no-store/);
+    assert.match(cache, /Server-Timing|auth;dur=/);
+    assert.match(http, /PLAYER_GAMES_AVIATOR_SESSION_PATH|session\/aviator/);
+  });
+
+  it('rollback probe is write-only BEGIN/ROLLBACK', () => {
+    assert.match(rollback031, /^BEGIN;/m);
+    assert.match(rollback031, /^ROLLBACK;/m);
+    assert.equal(rollback031.includes('COMMIT;'), false);
+    assert.match(rollback031, /1.72/);
+    assert.match(rollback031, /pg_advisory_xact_lock/);
+  });
+});

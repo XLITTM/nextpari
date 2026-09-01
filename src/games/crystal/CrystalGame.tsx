@@ -1,11 +1,12 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, Settings, Zap, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { PlayerGameError, startGame } from '@/lib/playerGames';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
-import { CrystalBoard } from './CrystalBoard';
+import { CrystalBoard, type CrystalMotion } from './CrystalBoard';
+import { reducedMotionPreferred } from './cascade';
 import { CRYSTAL_BG, GEM_SRC } from './crystalAssets';
 import {
   idleBoard,
@@ -40,12 +41,6 @@ function parseAmount(raw: string): number {
 
 function formatMoney(value: number): string {
   return value.toFixed(2);
-}
-
-function wait(ms: number) {
-  return new Promise<void>((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
 }
 
 interface ServerStep {
@@ -84,16 +79,17 @@ function parseSteps(value: unknown): ServerStep[] {
   });
 }
 
-function winLinesFromSteps(stake: number, steps: ServerStep[]): WinLine[] {
+function winLinesFromSteps(steps: ServerStep[]): WinLine[] {
   const lines: WinLine[] = [];
   steps.forEach((step, stepIndex) => {
     step.clusters.forEach((cluster, clusterIndex) => {
+      const share = step.clusters.length > 0 ? step.stepWin / step.clusters.length : step.stepWin;
       lines.push({
         id: `${stepIndex}-${clusterIndex}-${cluster.kind}`,
         kind: cluster.kind,
         clusterMult: cluster.multiplier,
         comboMult: step.combo,
-        amount: Number((stake * cluster.multiplier * step.combo).toFixed(2)),
+        amount: Number(share.toFixed(2)),
       });
     });
   });
@@ -106,6 +102,8 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
   const [betInput, setBetInput] = useState(DEFAULT_BET);
   const [board, setBoard] = useState<CrystalCell[]>(() => idleBoard());
   const [exploding, setExploding] = useState<boolean[]>(EMPTY_BOOM);
+  const [nextBoard, setNextBoard] = useState<CrystalCell[] | undefined>(undefined);
+  const [motion, setMotion] = useState<CrystalMotion>('idle');
   const [roundAccum, setRoundAccum] = useState(0);
   const [winLines, setWinLines] = useState<WinLine[]>([]);
   const [wonRound, setWonRound] = useState(false);
@@ -119,8 +117,21 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
   const busyRef = useRef(false);
   const instantRef = useRef(false);
   const autoLeftRef = useRef(0);
+  const timersRef = useRef<number[]>([]);
   balanceRef.current = balance;
   instantRef.current = instant;
+
+  const clearTimers = () => {
+    timersRef.current.forEach((id) => window.clearTimeout(id));
+    timersRef.current = [];
+  };
+
+  useEffect(() => () => clearTimers(), []);
+
+  const waitTracked = (ms: number) => new Promise<void>((resolve) => {
+    const id = window.setTimeout(resolve, ms);
+    timersRef.current.push(id);
+  });
 
   const setBet = (value: number) => {
     if (busyRef.current) return;
@@ -178,9 +189,12 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
       applyServerBalance(round.balanceAfter);
       const steps = parseSteps(round.publicResult.steps);
       const startBoard = parseBoard(round.publicResult.startBoard);
-      const allLines = winLinesFromSteps(amount, steps);
+      const allLines = winLinesFromSteps(steps);
+      const reduced = reducedMotionPreferred();
       setBoard(startBoard);
       setExploding(EMPTY_BOOM);
+      setNextBoard(undefined);
+      setMotion('idle');
 
       let accum = 0;
       let revealed = 0;
@@ -190,13 +204,18 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
           revealed += step.clusters.length;
           setBoard(step.board);
           setExploding(step.exploding);
+          setNextBoard(step.nextBoard);
+          setMotion('explode');
           setRoundAccum(accum);
           setWinLines(allLines.slice(0, revealed));
           if (accum > 0) setWonRound(true);
-          await wait(460);
+          await waitTracked(reduced ? 90 : 300);
+          setMotion('fall');
+          await waitTracked(reduced ? 90 : 260);
           setExploding(EMPTY_BOOM);
           setBoard(step.nextBoard);
-          await wait(300);
+          setNextBoard(undefined);
+          setMotion('idle');
         }
       } else if (steps.length > 0) {
         const last = steps[steps.length - 1];
@@ -228,7 +247,7 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
 
     const continueAuto = finishRound();
     if (continueAuto) {
-      await wait(instantRef.current ? 700 : 1100);
+      await waitTracked(instantRef.current || reducedMotionPreferred() ? 300 : 400);
       void runSpin();
     }
   }, [applyServerBalance, betInput, refresh, showToast]);
@@ -295,7 +314,13 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
         )}
 
         <div className="relative shrink-0">
-          <CrystalBoard board={board} exploding={exploding} />
+          <CrystalBoard
+            board={board}
+            exploding={exploding}
+            nextBoard={nextBoard}
+            motion={motion}
+            reducedMotion={reducedMotionPreferred()}
+          />
         </div>
 
         <div className="my-3 flex min-h-[140px] w-full flex-col justify-center rounded-2xl border border-white/10 bg-black/50 p-4 backdrop-blur-md">

@@ -26,6 +26,10 @@ const RUNTIME_GRAPH = [
   'api/player/me.ts',
   'api/player/wallet.ts',
   'api/player/profile.ts',
+  'api/player/games/start.ts',
+  'api/player/games/session/aviator.ts',
+  'api/player/games/[roundId].ts',
+  'api/player/games/[roundId]/action.ts',
   'api/owner/dashboard.ts',
   'api/owner/me.ts',
   'api/owner/cashiers.ts',
@@ -70,6 +74,11 @@ const RUNTIME_GRAPH = [
   'server/player/playerAuthService.ts',
   'server/player/playerCookies.ts',
   'server/player/playerValidators.ts',
+  'server/player/vercelGamesHandler.ts',
+  'server/player/playerGamesHttp.ts',
+  'server/player/playerGamesService.ts',
+  'server/player/playerGameRpc.ts',
+  'server/games/httpCache.ts',
   'server/staff/staffOnboardingService.ts',
   'server/staff/staffHierarchyService.ts',
   'server/staff/staffAuthAdmin.ts',
@@ -165,6 +174,12 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/player/wallet.js',
         'api/player/profile.js',
       ];
+      const playerGameEntries = [
+        'api/player/games/start.js',
+        'api/player/games/session/aviator.js',
+        'api/player/games/[roundId].js',
+        'api/player/games/[roundId]/action.js',
+      ];
       const controlEntries = [
         'api/owner/dashboard.js',
         'api/owner/me.js',
@@ -219,7 +234,12 @@ describe('staff onboarding Node ESM import graph', () => {
         assert.match(compiled, /from ['"]\.\.\/(?:\.\.\/)?\.\.\/server\/player\/playerAuthHttp\.js['"]/);
       }
 
-      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries]) {
+      for (const rel of playerGameEntries) {
+        const compiled = readFileSync(join(outDir, rel), 'utf8');
+        assert.match(compiled, /from ['"].*server\/player\/(?:playerGamesHttp|vercelGamesHandler)\.js['"]/);
+      }
+
+      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries]) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,

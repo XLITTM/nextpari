@@ -25,6 +25,7 @@ import { PersonalDataScreen } from './screens/PersonalDataScreen';
 import { GameListScreen } from './screens/GameListScreen';
 import { SportsListScreen } from './screens/SportsListScreen';
 import type { Screen, SportId, MainTab } from './types';
+import { setArcadeSportsPaused } from './lib/sportsPollGate';
 import { ChampionshipsScreen } from './screens/ChampionshipsScreen';
 import { SlotsScreen } from './screens/SlotsScreen';
 import { LiveCasinoScreen } from './screens/LiveCasinoScreen';
@@ -213,6 +214,11 @@ function AppContent() {
     screen.name === 'crystal' ||
     screen.name === 'dice' ||
     screen.name === 'pharaoh';
+
+  useEffect(() => {
+    setArcadeSportsPaused(isArcade);
+    return () => setArcadeSportsPaused(false);
+  }, [isArcade]);
   const isGamesHub = screen.name === 'games';
   const isVipCashback = screen.name === 'vip-cashback';
 

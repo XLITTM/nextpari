@@ -25,7 +25,19 @@ export const PHARAOH_SYMBOLS = [
 
 export const SYMBOLS = PHARAOH_SYMBOLS;
 
-type SymbolId = (typeof PHARAOH_SYMBOLS)[number]['id'];
+export const PHARAOH_ASSETS = [
+  '/assets/games/pharaoh/bg.png',
+  '/assets/games/pharaoh/tile_back.png',
+  ...PHARAOH_SYMBOLS.map((item) => item.img),
+];
+
+export function preloadPharaohAssets(): void {
+  if (typeof document === 'undefined') return;
+  for (const src of PHARAOH_ASSETS) {
+    const img = new Image();
+    img.src = src;
+  }
+}
 type SymbolDef = (typeof PHARAOH_SYMBOLS)[number];
 type Phase = 'idle' | 'opening' | 'won' | 'lost';
 
@@ -34,20 +46,6 @@ const MAX_BET = 2293.67;
 const DEFAULT_BET = 10;
 const BET_STEPS = [6, 10, 20, 50, 100, 250, 500, 1000, 2293.67];
 const AUTO_SPIN_OPTIONS = [10, 25, 50, 100] as const;
-
-const WEIGHTS: Record<SymbolId, number> = {
-  cat: 1,
-  scroll: 2,
-  nemes: 3,
-  pyramid: 5,
-  ring: 8,
-  ankh: 12,
-  canopic: 16,
-  lotus: 20,
-  cylinder: 24,
-  harp: 28,
-  sistrum: 32,
-};
 
 interface PharaohTreasureProps {
   onBack: () => void;
@@ -152,7 +150,10 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
     timersRef.current = [];
   };
 
-  useEffect(() => () => clearTimers(), []);
+  useEffect(() => {
+    preloadPharaohAssets();
+    return () => clearTimers();
+  }, []);
 
   const finishRound = useCallback(
     (prizeSymbol: SymbolDef, tiles: SymbolDef[], payout: number) => {
@@ -213,7 +214,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
       setPrize(prizeSymbol);
       setBoard(tiles.slice(0, 6));
 
-      const prizeTimer = window.setTimeout(() => setPrizeFlipped(true), 280);
+      const prizeTimer = window.setTimeout(() => setPrizeFlipped(true), 120);
       timersRef.current.push(prizeTimer);
 
       tiles.slice(0, 6).forEach((_, index) => {
@@ -226,10 +227,10 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
           if (index === 5) {
             const done = window.setTimeout(() => {
               finishRound(prizeSymbol, tiles.slice(0, 6), round.payout);
-            }, 450);
+            }, 280);
             timersRef.current.push(done);
           }
-        }, 700 + index * 420);
+        }, 220 + index * 140);
         timersRef.current.push(t);
       });
     } catch (error) {
@@ -276,7 +277,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
       if (busyRef.current) return;
       setAutoSpinsLeft((prev) => Math.max(0, prev - 1));
       handlePlay();
-    }, 1500);
+    }, 500);
     return () => window.clearTimeout(timer);
   }, [autoSpinsLeft, isPlaying, handlePlay]);
 

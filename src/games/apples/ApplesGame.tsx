@@ -69,6 +69,7 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
   const [activeLevel, setActiveLevel] = useState(1);
   const [lastWonLevel, setLastWonLevel] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [pendingCellId, setPendingCellId] = useState<string | null>(null);
   const [cashoutValue, setCashoutValue] = useState(0);
   const balanceRef = useRef(balance);
   balanceRef.current = balance;
@@ -83,8 +84,11 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
     setCashoutValue(Number(result.cashoutValue ?? 0));
     const nextPhase = String(result.phase ?? 'playing');
     if (nextPhase === 'lost') setPhase('lost');
-    else if (nextPhase === 'cleared' || nextPhase === 'cashed') setPhase(nextPhase === 'cashed' ? 'betting' : 'cleared');
+    else if (nextPhase === 'cleared') setPhase('cleared');
+    else if (nextPhase === 'cashed') setPhase('betting');
     else if (nextPhase === 'playing') setPhase('playing');
+    else if (nextPhase === 'betting') setPhase('betting');
+    else setPhase(nextPhase as ApplePhase);
   };
 
   const startRound = async () => {
@@ -108,7 +112,6 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
       const round = await startGame({ gameCode: 'apples', stake: amount });
       setStake(amount);
       applyRound(round);
-      setPhase(String(round.publicResult.phase ?? 'playing') === 'playing' ? 'playing' : 'playing');
     } catch (error) {
       const code = error instanceof PlayerGameError ? error.code : '';
       showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
@@ -119,10 +122,10 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
   };
 
   const handleSelectCell = async (colIndex: number) => {
-    if (phase !== 'playing' || busy || !roundId) return;
+    if (phase !== 'playing' || !roundId) return;
     const cell = rows[activeLevel - 1]?.cells[colIndex];
-    if (!cell || cell.revealed) return;
-    setBusy(true);
+    if (!cell || cell.revealed || pendingCellId === cell.id) return;
+    setPendingCellId(cell.id);
     try {
       const round = await gameAction({ roundId, action: 'pick', options: { col: colIndex } });
       applyRound(round);
@@ -131,7 +134,7 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
       showToast(code || 'Действие недоступно');
       await refresh();
     } finally {
-      setBusy(false);
+      setPendingCellId(null);
     }
   };
 
@@ -225,7 +228,8 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
                       cell={cell}
                       clover={isActiveRow && !cell.revealed}
                       inactive={!isActiveRow && !cell.revealed}
-                      clickable={clickable && !cell.revealed}
+                      pending={pendingCellId === cell.id}
+                      clickable={clickable && !cell.revealed && pendingCellId !== cell.id}
                       onClick={() => handleSelectCell(colIndex)}
                     />
                   ))}
@@ -303,12 +307,14 @@ function AppleButton({
   cell,
   clover,
   inactive,
+  pending,
   clickable,
   onClick,
 }: {
   cell: AppleCell;
   clover: boolean;
   inactive: boolean;
+  pending: boolean;
   clickable: boolean;
   onClick: () => void;
 }) {
@@ -322,7 +328,7 @@ function AppleButton({
       disabled={!clickable}
       className={`relative z-20 flex h-11 w-11 shrink-0 items-center justify-center bg-transparent p-0 ${
         clickable ? 'cursor-pointer' : 'pointer-events-none cursor-default'
-      }`}
+      } ${pending ? 'apple-cell-pending scale-95 opacity-80' : ''}`}
     >
       {openedGood ? (
         <span className="flex h-9 w-9 animate-bounce items-center justify-center text-[22px] leading-none">🍏</span>

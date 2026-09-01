@@ -4,7 +4,9 @@ import type { CardType, GameResult } from './types';
 export const CHIP_VALUES = [1, 5, 10, 25, 50, 100] as const;
 export const MIN_STAKE = 6;
 export const DEALER_STANDS_AT = 17;
-export const DEALER_DRAW_DELAY_MS = 600;
+export const DEALER_DRAW_DELAY_MS = 280;
+export const BLACKJACK_WIN_PAYOUT = 1.84;
+export const BLACKJACK_GOLDEN_PAYOUT = 2;
 
 export interface TableState {
   deck: CardType[];
@@ -65,8 +67,9 @@ export function resolveResult(playerHand: CardType[], dealerHand: CardType[]): G
 }
 
 export function payoutAmount(stake: number, result: GameResult): number {
-  if (result === 'golden' || result === 'blackjack' || result === 'win') {
-    return Number((stake * 2).toFixed(2));
+  if (result === 'golden') return Number((stake * BLACKJACK_GOLDEN_PAYOUT).toFixed(2));
+  if (result === 'blackjack' || result === 'win') {
+    return Number((stake * BLACKJACK_WIN_PAYOUT).toFixed(2));
   }
   if (result === 'push') return Number(stake.toFixed(2));
   return 0;
@@ -74,7 +77,7 @@ export function payoutAmount(stake: number, result: GameResult): number {
 
 export function resultCopy(result: GameResult, bust: boolean): { title: string; subtitle: string } {
   if (result === 'golden') return { title: 'Золотое очко!', subtitle: 'Два туза — мгновенная победа' };
-  if (result === 'blackjack' || result === 'win') return { title: 'Победа!', subtitle: 'Выплата 1:1' };
+  if (result === 'blackjack' || result === 'win') return { title: 'Победа!', subtitle: `Выплата ×${BLACKJACK_WIN_PAYOUT}` };
   if (result === 'push') return { title: 'Ничья', subtitle: 'Ставка возвращена' };
   if (bust) return { title: 'Перебор', subtitle: 'Проигрыш' };
   return { title: 'Проигрыш', subtitle: 'Банк забирает ставку' };

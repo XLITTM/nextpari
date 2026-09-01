@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { formatMultiplier } from './crashMath';
+import { formatMultiplier, multiplierAt } from './crashMath';
 
 export type FlightPhase = 'waiting' | 'flying' | 'crashed';
 
@@ -10,6 +10,10 @@ interface AviatorCanvasProps {
   multiplier: number;
   countdown: number;
   crashPoint: number | null;
+  startsAtMs: number | null;
+  bettingClosesAtMs: number | null;
+  clockOffsetMs: number;
+  onVisualMultiplier?: (value: number) => void;
 }
 
 interface Star {
@@ -345,7 +349,16 @@ function drawGoldMultiplier(ctx: CanvasRenderingContext2D, w: number, h: number,
   ctx.restore();
 }
 
-export function AviatorCanvas({ phase, multiplier, countdown, crashPoint }: AviatorCanvasProps) {
+export function AviatorCanvas({
+  phase,
+  multiplier,
+  countdown,
+  crashPoint,
+  startsAtMs,
+  bettingClosesAtMs,
+  clockOffsetMs,
+  onVisualMultiplier,
+}: AviatorCanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const starsRef = useRef<Star[]>([]);
@@ -356,8 +369,27 @@ export function AviatorCanvas({ phase, multiplier, countdown, crashPoint }: Avia
   const sizeRef = useRef({ w: 360, h: 280 });
   const lastTimeRef = useRef(0);
   const lastPhaseRef = useRef(phase);
-  const propsRef = useRef({ phase, multiplier, countdown, crashPoint });
-  propsRef.current = { phase, multiplier, countdown, crashPoint };
+  const lastEmitRef = useRef(0);
+  const propsRef = useRef({
+    phase,
+    multiplier,
+    countdown,
+    crashPoint,
+    startsAtMs,
+    bettingClosesAtMs,
+    clockOffsetMs,
+    onVisualMultiplier,
+  });
+  propsRef.current = {
+    phase,
+    multiplier,
+    countdown,
+    crashPoint,
+    startsAtMs,
+    bettingClosesAtMs,
+    clockOffsetMs,
+    onVisualMultiplier,
+  };
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -403,11 +435,31 @@ export function AviatorCanvas({ phase, multiplier, countdown, crashPoint }: Avia
 
     const loop = (now: number) => {
       if (!running) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        raf = window.setTimeout(() => {
+          raf = requestAnimationFrame(loop);
+        }, 400);
+        return;
+      }
       const { w, h } = sizeRef.current;
       const dt = lastTimeRef.current ? Math.min(0.05, (now - lastTimeRef.current) / 1000) : 0.016;
       lastTimeRef.current = now;
       const t = now / 1000;
-      const { phase: p, multiplier: m } = propsRef.current;
+      const snapshot = propsRef.current;
+      const corrected = Date.now() + snapshot.clockOffsetMs;
+      let m = snapshot.multiplier;
+      if (snapshot.phase === 'flying' && snapshot.startsAtMs) {
+        m = multiplierAt(Math.max(0, (corrected - snapshot.startsAtMs) / 1000));
+      } else if (snapshot.phase === 'crashed') {
+        m = snapshot.crashPoint ?? snapshot.multiplier;
+      } else {
+        m = 1;
+      }
+      if (now - lastEmitRef.current > 200) {
+        lastEmitRef.current = now;
+        snapshot.onVisualMultiplier?.(m);
+      }
+      const p = snapshot.phase;
 
       if (lastPhaseRef.current !== p) {
         if (p === 'crashed') flyAwayRef.current = 0;
@@ -589,6 +641,7 @@ export function AviatorCanvas({ phase, multiplier, countdown, crashPoint }: Avia
     return () => {
       running = false;
       cancelAnimationFrame(raf);
+      window.clearTimeout(raf);
       observer.disconnect();
       window.removeEventListener('resize', resize);
     };

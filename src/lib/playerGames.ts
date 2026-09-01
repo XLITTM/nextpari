@@ -11,6 +11,8 @@ export interface PlayerGameRound {
   serverSeedHash: string;
   serverSeed: string | null;
   nonce: number;
+  sessionId: string | null;
+  mathVersion: string | null;
   publicResult: Record<string, unknown>;
   allowedActions: string[];
   createdAt?: string;
@@ -78,6 +80,12 @@ function mapRound(body: Record<string, unknown>): PlayerGameRound {
       ? null
       : String(body.serverSeed ?? body.server_seed),
     nonce: Number(body.nonce ?? 0),
+    sessionId: body.sessionId == null && body.session_id == null
+      ? null
+      : String(body.sessionId ?? body.session_id),
+    mathVersion: body.mathVersion == null && body.math_version == null
+      ? null
+      : String(body.mathVersion ?? body.math_version),
     publicResult: asRecord(body.publicResult ?? body.public_result),
     allowedActions: asStringArray(body.allowedActions ?? body.allowed_actions),
     createdAt: body.createdAt == null && body.created_at == null
@@ -92,9 +100,12 @@ function mapRound(body: Record<string, unknown>): PlayerGameRound {
 async function requestRound(url: string, init?: RequestInit): Promise<PlayerGameRound> {
   const res = await fetch(url, {
     credentials: 'same-origin',
+    cache: 'no-store',
     ...init,
     headers: {
       ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+      'Cache-Control': 'no-store',
+      Pragma: 'no-cache',
       ...init?.headers,
     },
   });
@@ -140,4 +151,17 @@ export async function gameAction(input: {
 
 export async function getGameRound(roundId: string): Promise<PlayerGameRound> {
   return requestRound(`/api/player/games/${encodeURIComponent(roundId)}`);
+}
+
+export async function getAviatorSession(): Promise<Record<string, unknown>> {
+  const res = await fetch('/api/player/games/session/aviator', {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-store', Pragma: 'no-cache' },
+  });
+  const body = await readJson(res);
+  if (!res.ok || body.ok === false) {
+    throw new PlayerGameError(String(body.error ?? 'GAME_RPC_FAILED'), res.status);
+  }
+  return body;
 }

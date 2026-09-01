@@ -12,14 +12,17 @@ import { requestIsSecure } from './playerCookies.js';
 import {
   actPlayerGame,
   getPlayerGame,
+  getPlayerGameSession,
   livePlayerGamePorts,
   playerGameHttpError,
   startPlayerGame,
   type PlayerGameGatewayPorts,
 } from './playerGamesService.js';
+import { GAME_NO_STORE_HEADERS } from '../games/httpCache.js';
 import type { StaffLog } from '../staff/types.js';
 
 export const PLAYER_GAMES_START_PATH = '/api/player/games/start';
+export const PLAYER_GAMES_AVIATOR_SESSION_PATH = '/api/player/games/session/aviator';
 
 const ROUND_RE = /^\/api\/player\/games\/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})(?:\/(action))?$/i;
 
@@ -29,7 +32,9 @@ function normalizePath(pathname: string): string {
 
 export function isPlayerGamesPath(pathname: string): boolean {
   const path = normalizePath(pathname);
-  return path === PLAYER_GAMES_START_PATH || ROUND_RE.test(path);
+  return path === PLAYER_GAMES_START_PATH
+    || path === PLAYER_GAMES_AVIATOR_SESSION_PATH
+    || ROUND_RE.test(path);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -71,6 +76,13 @@ export async function handlePlayerGamesRequest(
       return await startPlayerGame(ports, input.cookie, asRecord(parseJsonPayload(input.body)), secure);
     }
 
+    if (path === PLAYER_GAMES_AVIATOR_SESSION_PATH) {
+      if (method !== 'GET') {
+        throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
+      }
+      return await getPlayerGameSession(ports, input.cookie, 'aviator', secure);
+    }
+
     const match = path.match(ROUND_RE);
     if (!match) {
       throw new StaffOnboardingError('NOT_FOUND', 404);
@@ -92,9 +104,12 @@ export async function handlePlayerGamesRequest(
       return {
         status: error.httpStatus,
         body: { ok: false, error: error.code, ...error.payload },
-        headers: error.httpStatus === 405
-          ? { Allow: path === PLAYER_GAMES_START_PATH || /\/action$/.test(path) ? 'POST' : 'GET' }
-          : undefined,
+        headers: {
+          ...GAME_NO_STORE_HEADERS,
+          ...(error.httpStatus === 405
+            ? { Allow: path === PLAYER_GAMES_START_PATH || /\/action$/.test(path) ? 'POST' : 'GET' }
+            : {}),
+        },
       };
     }
     log.error('player_games_unhandled', {

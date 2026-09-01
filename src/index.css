@@ -418,14 +418,20 @@ body {
 }
 
 @keyframes crystal-pop {
-  0% { transform: scale(1); filter: brightness(1); opacity: 1; }
-  35% { transform: scale(1.22); filter: brightness(2.4); opacity: 1; }
-  100% { transform: scale(0.15); filter: brightness(3); opacity: 0; }
+  0% { transform: scale(1); opacity: 1; }
+  40% { transform: scale(1.16); opacity: 1; }
+  100% { transform: scale(0.12); opacity: 0; }
 }
 
 @keyframes crystal-drop {
-  from { transform: translateY(-110%); opacity: 0.15; }
-  to { transform: translateY(0); opacity: 1; }
+  from { transform: translate3d(0, -110%, 0); opacity: 0.15; }
+  to { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+
+@keyframes crystal-land {
+  0% { transform: scale(1); }
+  55% { transform: scale(1.08); }
+  100% { transform: scale(1); }
 }
 
 @keyframes crystal-spark {
@@ -434,11 +440,23 @@ body {
 }
 
 .crystal-pop {
-  animation: crystal-pop 0.42s ease-in forwards;
+  animation: crystal-pop 0.3s ease-in forwards;
+}
+
+.crystal-pop-reduced {
+  animation: crystal-pop 0.08s linear forwards;
 }
 
 .crystal-drop {
-  animation: crystal-drop 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation: crystal-drop 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.crystal-land {
+  animation: crystal-land 0.14s ease-out;
+}
+
+.crystal-board[data-cascade='fall'] img {
+  will-change: transform;
 }
 
 .crystal-spark {

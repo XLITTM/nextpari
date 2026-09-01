@@ -4,6 +4,10 @@ import { useSportsStore } from '@/stores/sportsStore';
 import { isLineEvent, isLive, type BetsEvent } from '@/lib/betsapi';
 import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
 import type { ParsedMarket } from '@/lib/odds-parser';
+import {
+  isArcadeSportsPaused,
+  subscribeArcadeSportsPause,
+} from '@/lib/sportsPollGate';
 
 export type EventTab = 'live' | 'line';
 
@@ -90,21 +94,74 @@ export function useEventsList(tab: EventTab, _sportId = '1') {
   }, [loadLine, loadLive]);
 
   useEffect(() => {
-    setLoading(true);
-    void Promise.all([loadLive(), loadLine()]).finally(() => setLoading(false));
-    const liveTimer = window.setInterval(() => {
-      void loadLive();
-    }, 3_000);
-    const lineTimer = window.setInterval(() => {
-      void loadLine();
-    }, 30_000);
+    let stopped = false;
+    const liveMs = 3_000;
+    const lineMs = 30_000;
+    let liveTimer = 0;
+    let lineTimer = 0;
+
+    const hidden = () => typeof document !== 'undefined' && document.visibilityState !== 'visible';
+    const paused = () => isArcadeSportsPaused() || hidden();
+
+    const startTimers = () => {
+      window.clearInterval(liveTimer);
+      window.clearInterval(lineTimer);
+      if (paused() || stopped) return;
+      liveTimer = window.setInterval(() => {
+        if (!paused()) void loadLive();
+      }, liveMs);
+      lineTimer = window.setInterval(() => {
+        if (!paused()) void loadLine();
+      }, lineMs);
+    };
+
+    const boot = async () => {
+      if (paused()) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      await Promise.all([loadLive(), loadLine()]).finally(() => setLoading(false));
+    };
+
+    void boot();
+    startTimers();
+
+    const onVisibility = () => {
+      if (paused()) {
+        window.clearInterval(liveTimer);
+        window.clearInterval(lineTimer);
+        liveAbort.current?.abort();
+        lineAbort.current?.abort();
+        return;
+      }
+      void boot();
+      startTimers();
+    };
+
+    const unsubArcade = subscribeArcadeSportsPause(() => {
+      if (paused()) {
+        window.clearInterval(liveTimer);
+        window.clearInterval(lineTimer);
+        liveAbort.current?.abort();
+        lineAbort.current?.abort();
+        return;
+      }
+      void boot();
+      startTimers();
+    });
+
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
+      stopped = true;
       window.clearInterval(liveTimer);
       window.clearInterval(lineTimer);
       liveAbort.current?.abort();
       lineAbort.current?.abort();
       liveAbort.current = null;
       lineAbort.current = null;
+      document.removeEventListener('visibilitychange', onVisibility);
+      unsubArcade();
     };
   }, [loadLine, loadLive]);
 

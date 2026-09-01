@@ -13,5 +13,5 @@
 }
 
 .dice-cube.is-rolling {
-  animation: dice-tumble 0.28s linear infinite;
+  animation: dice-tumble 0.8s cubic-bezier(0.22, 0.7, 0.35, 1) both;
 }

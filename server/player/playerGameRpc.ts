@@ -34,6 +34,8 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'WALLET_BLOCKED'
     || code === 'WALLET_CLOSED'
     || code === 'PLAYER_WALLET_NOT_ACTIVE'
+    || code === 'BETTING_WINDOW_CLOSED'
+    || code === 'AVIATOR_SESSION_CLOSED'
   ) {
     return staffError(code, 409);
   }

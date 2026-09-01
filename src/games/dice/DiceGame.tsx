@@ -7,6 +7,9 @@ import { PlayerGameError, startGame } from '@/lib/playerGames';
 import './dice.css';
 
 export const DICE_BG = '/images/26164.png';
+export const DICE_WIN_MULTIPLIER = 1.72;
+export const DICE_DRAW_MULTIPLIER = 1;
+export const DICE_ROLL_MS = 800;
 
 interface DiceGameProps {
   onBack: () => void;
@@ -14,7 +17,6 @@ interface DiceGameProps {
 
 const MIN_STAKE = 6;
 const DEFAULT_STAKE = 12;
-const ROLL_MS = 1600;
 const IDLE_STATUS = "Для начала игры нажмите 'Play'";
 
 type Outcome = 'idle' | 'rolling' | 'win' | 'draw' | 'lose';
@@ -27,10 +29,6 @@ const PIP_MAP: Record<number, number[]> = {
   5: [0, 2, 4, 6, 8],
   6: [0, 2, 3, 5, 6, 8],
 };
-
-function rollDie(): number {
-  return Math.floor(Math.random() * 6) + 1;
-}
 
 function roundMoney(value: number): number {
   return Number(Math.max(0, value).toFixed(2));
@@ -98,7 +96,10 @@ export function DiceGame({ onBack }: DiceGameProps) {
 
   useEffect(() => {
     return () => {
-      timers.current.forEach((id) => window.clearInterval(id));
+      timers.current.forEach((id) => {
+        window.clearInterval(id);
+        window.clearTimeout(id);
+      });
     };
   }, []);
 
@@ -123,12 +124,7 @@ export function DiceGame({ onBack }: DiceGameProps) {
     setOutcome('rolling');
     setStatus('Идёт бросок...');
 
-    const tick = window.setInterval(() => {
-      setPlayerDice([rollDie(), rollDie()]);
-      setRivalDice([rollDie(), rollDie()]);
-    }, 80);
-    timers.current.push(tick);
-
+    const startedAt = performance.now();
     try {
       const round = await startGame({ gameCode: 'dice', stake });
       applyServerBalance(round.balanceAfter);
@@ -138,27 +134,26 @@ export function DiceGame({ onBack }: DiceGameProps) {
       const rival = Array.isArray(round.publicResult.rivalDice)
         ? round.publicResult.rivalDice.map((n) => Number(n))
         : [1, 1];
-      window.setTimeout(() => {
-        window.clearInterval(tick);
-        timers.current = timers.current.filter((id) => id !== tick);
-        setPlayerDice([player[0] ?? 1, player[1] ?? 1]);
-        setRivalDice([rival[0] ?? 1, rival[1] ?? 1]);
-        const nextOutcome = String(round.publicResult.outcome ?? 'lose');
-        if (nextOutcome === 'win') {
-          setOutcome('win');
-          setStatus('Вы победили!');
-        } else if (nextOutcome === 'draw') {
-          setOutcome('draw');
-          setStatus('Ничья');
-        } else {
-          setOutcome('lose');
-          setStatus('Вы проиграли');
-        }
-        rollingRef.current = false;
-      }, ROLL_MS);
+      const remain = Math.max(0, DICE_ROLL_MS - (performance.now() - startedAt));
+      await new Promise<void>((resolve) => {
+        const id = window.setTimeout(resolve, remain);
+        timers.current.push(id);
+      });
+      setPlayerDice([player[0] ?? 1, player[1] ?? 1]);
+      setRivalDice([rival[0] ?? 1, rival[1] ?? 1]);
+      const nextOutcome = String(round.publicResult.outcome ?? 'lose');
+      if (nextOutcome === 'win') {
+        setOutcome('win');
+        setStatus('Вы победили!');
+      } else if (nextOutcome === 'draw') {
+        setOutcome('draw');
+        setStatus('Ничья');
+      } else {
+        setOutcome('lose');
+        setStatus('Вы проиграли');
+      }
+      rollingRef.current = false;
     } catch (error) {
-      window.clearInterval(tick);
-      timers.current = timers.current.filter((id) => id !== tick);
       rollingRef.current = false;
       setOutcome('idle');
       setStatus(IDLE_STATUS);
@@ -327,8 +322,8 @@ export function DiceGame({ onBack }: DiceGameProps) {
               <li>2. Мин. ставка 6 TMTM.</li>
               <li>3. Ваши кубики красного цвета, противника — чёрного.</li>
               <li>4. Ваша задача выбросить больше очков.</li>
-              <li>5. Вы побеждаете при большем количестве очков. Выигрыш — ставка × 2.</li>
-              <li>6. При ничьей ставка возвращается.</li>
+              <li>5. Вы побеждаете при большем количестве очков. Выигрыш — ставка × {DICE_WIN_MULTIPLIER}.</li>
+              <li>6. При ничьей ставка возвращается (×{DICE_DRAW_MULTIPLIER}).</li>
             </ol>
           </div>
         </div>
