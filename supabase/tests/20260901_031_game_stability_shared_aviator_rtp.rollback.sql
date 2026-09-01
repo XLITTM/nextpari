@@ -1,6 +1,14 @@
--- NEXTPARI PHASE 031 / 031A behavior probe.
+-- NEXTPARI PHASE 031 / 031A / 031B behavior probe.
 -- NOT a migration. Do NOT COMMIT. Do NOT execute against production.
 -- Test-only fixtures live inside this transaction and are discarded by ROLLBACK.
+--
+-- 031B lock-order contract:
+--   AVIATOR_ADVISORY
+--       ↓
+--   wallet / round / session locks as required
+--       ↓
+--   Wallet Core settlement
+-- The global Aviator advisory lock is the outer serialization boundary.
 --
 -- Live IDs (test file only — never in production functions):
 --   player A auth/profile     bc5d66cd-5e18-4352-b7f8-ea99029758e0
@@ -136,8 +144,40 @@ SELECT pg_temp.np_assert(
 );
 
 SELECT pg_temp.np_assert(
-    pg_get_functiondef('private.game_aviator_get_or_create_current_session()'::regprocedure) ILIKE '%pg_advisory_xact_lock%',
-    'shared Aviator session uses advisory lock'
+    pg_get_functiondef('private.game_aviator_lock_current()'::regprocedure) ILIKE '%nextpari:aviator:current%'
+    AND pg_get_functiondef('private.game_aviator_lock_current()'::regprocedure) ILIKE '%pg_advisory_xact_lock%'
+    AND strpos(
+        pg_get_functiondef('private.game_aviator_get_or_create_current_session()'::regprocedure),
+        'game_aviator_lock_current'
+    ) > 0
+    AND strpos(
+        pg_get_functiondef('private.game_aviator_get_or_create_current_session()'::regprocedure),
+        'game_aviator_lock_current'
+    ) < strpos(
+        pg_get_functiondef('private.game_aviator_get_or_create_current_session()'::regprocedure),
+        'FOR UPDATE'
+    ),
+    'canonical Aviator advisory lock is held before game_sessions FOR UPDATE'
+);
+
+SELECT pg_temp.np_assert(
+    strpos(pg_get_functiondef('private.game_engine_start(text,numeric,text,jsonb)'::regprocedure), 'game_aviator_lock_current')
+        < strpos(pg_get_functiondef('private.game_engine_start(text,numeric,text,jsonb)'::regprocedure), 'game_require_player_context')
+    AND strpos(pg_get_functiondef('private.game_engine_action(uuid,text,text,jsonb)'::regprocedure), 'game_aviator_lock_current')
+        < strpos(pg_get_functiondef('private.game_engine_action(uuid,text,text,jsonb)'::regprocedure), 'game_require_player_context')
+    AND strpos(pg_get_functiondef('private.game_engine_action(uuid,text,text,jsonb)'::regprocedure), 'game_aviator_lock_current')
+        < strpos(pg_get_functiondef('private.game_engine_action(uuid,text,text,jsonb)'::regprocedure), 'game_lock_round_owned')
+    AND strpos(pg_get_functiondef('private.game_engine_get(uuid)'::regprocedure), 'game_aviator_lock_current')
+        < strpos(pg_get_functiondef('private.game_engine_get(uuid)'::regprocedure), 'game_require_player_context')
+    AND strpos(pg_get_functiondef('private.game_engine_get(uuid)'::regprocedure), 'game_aviator_lock_current')
+        < strpos(pg_get_functiondef('private.game_engine_get(uuid)'::regprocedure), 'game_lock_round_owned'),
+    'AVIATOR_ADVISORY is acquired before wallet/round locks on start/action/get'
+);
+
+SELECT pg_temp.np_assert(
+    pg_get_functiondef('private.game_adapter_dice_start(uuid,uuid)'::regprocedure) NOT ILIKE '%game_aviator_lock_current%'
+    AND pg_get_functiondef('private.game_adapter_pharaoh_start(uuid,uuid)'::regprocedure) NOT ILIKE '%game_aviator_lock_current%',
+    'non-Aviator games are not serialized on the Aviator advisory lock'
 );
 
 SELECT pg_temp.np_assert(
@@ -483,6 +523,7 @@ $staff$;
 
 -- Two panels / two players join the SAME flight because start always
 -- calls game_aviator_get_or_create_current_session under advisory lock.
+-- Lock order: AVIATOR_ADVISORY then wallet / round / session then Wallet Core.
 -- Independent stakes, one cashout each, retry idempotent, crash shared.
 -- Historical settled rounds keep session_id NULL (no backfill UPDATE).
 -- Dice draw returns x1; win x1.72; settle goes through game_settle_win once.

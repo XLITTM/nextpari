@@ -6,6 +6,7 @@ BEGIN;
 -- Does not depend on unapplied migration 028.
 -- Does not UPDATE historical settled rounds.
 -- Does not change Apples financial math.
+-- 031B: Aviator advisory lock is acquired before wallet/round/session FOR UPDATE.
 
 ALTER TABLE private.game_rounds
     ADD COLUMN IF NOT EXISTS math_version TEXT,
@@ -545,6 +546,36 @@ BEGIN
 END;
 $fn$;
 
+-- AVIATOR LOCK ORDER CONTRACT (031B)
+-- AVIATOR_ADVISORY
+--     ↓
+-- wallet / round / session locks as required
+--     ↓
+-- Wallet Core settlement
+-- The global Aviator advisory lock is the outer serialization boundary.
+-- This prevents an Aviator transaction holding wallet/round while
+-- waiting for a session lock that another Aviator transaction holds.
+-- Non-Aviator wallet operations may still contend on wallet rows,
+-- but they never wait for the Aviator advisory lock, so they cannot
+-- form the reverse Aviator lock cycle.
+CREATE OR REPLACE FUNCTION private.game_aviator_lock_current()
+RETURNS VOID
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = ''
+AS $fn$
+BEGIN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(
+            'nextpari:aviator:current',
+            0
+        )
+    );
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.game_aviator_lock_current() FROM PUBLIC, anon, authenticated;
+
 CREATE OR REPLACE FUNCTION private.game_aviator_settle_session_bets(p_session_id UUID, p_actor UUID)
 RETURNS VOID
 LANGUAGE plpgsql
@@ -558,6 +589,7 @@ DECLARE
     v_auto NUMERIC;
     v_payout NUMERIC;
 BEGIN
+    PERFORM private.game_aviator_lock_current();
     SELECT s.* INTO v_session FROM private.game_sessions AS s WHERE s.id = p_session_id FOR UPDATE;
     v_crash := (v_session.private_state->>'crashPoint')::NUMERIC;
     FOR v_round IN
@@ -614,6 +646,7 @@ AS $fn$
 DECLARE
     v_session private.game_sessions%ROWTYPE := p_session;
 BEGIN
+    PERFORM private.game_aviator_lock_current();
     IF v_session.state = 'betting' AND p_now >= v_session.betting_closes_at THEN
         UPDATE private.game_sessions
         SET state = 'flying', updated_at = p_now
@@ -656,7 +689,7 @@ DECLARE
     v_close TIMESTAMPTZ;
     v_crash_at TIMESTAMPTZ;
 BEGIN
-    PERFORM pg_catalog.pg_advisory_xact_lock(hashtextextended('nextpari:aviator:current', 0));
+    PERFORM private.game_aviator_lock_current();
     SELECT s.*
     INTO v_session
     FROM private.game_sessions AS s
@@ -713,6 +746,7 @@ DECLARE
     v_auto NUMERIC(20,2);
     v_now TIMESTAMPTZ := pg_catalog.now();
 BEGIN
+    PERFORM private.game_aviator_lock_current();
     SELECT r.* INTO v_round FROM private.game_rounds AS r WHERE r.id = p_round_id FOR UPDATE;
     v_session := private.game_aviator_get_or_create_current_session();
     IF v_session.state IS DISTINCT FROM 'betting' THEN
@@ -766,6 +800,7 @@ DECLARE
     v_elapsed NUMERIC;
     v_mult NUMERIC;
 BEGIN
+    PERFORM private.game_aviator_lock_current();
     SELECT r.* INTO v_round FROM private.game_rounds AS r WHERE r.id = p_round_id FOR UPDATE;
     IF v_round.session_id IS NULL THEN
         RETURN v_round;
@@ -844,6 +879,7 @@ DECLARE
     v_elapsed NUMERIC;
     v_mult NUMERIC;
 BEGIN
+    PERFORM private.game_aviator_lock_current();
     v_round := private.game_adapter_aviator_progress(p_round_id, p_actor);
     IF v_round.state IS DISTINCT FROM 'open' THEN
         RETURN v_round;
@@ -909,7 +945,14 @@ DECLARE
     v_json JSONB;
     v_session UUID;
     v_math TEXT;
+    v_code TEXT;
 BEGIN
+    -- Aviator only: AVIATOR_ADVISORY before wallet/round/session locks.
+    -- Pharaoh/Dice/Blackjack/Apples/Crystal skip this lock.
+    v_code := NULLIF(BTRIM(LOWER(COALESCE(p_game_code, ''))), '');
+    IF v_code = 'aviator' THEN
+        PERFORM private.game_aviator_lock_current();
+    END IF;
     SELECT * INTO v_ctx FROM private.game_require_player_context();
     v_cat := private.game_require_catalog(p_game_code);
     v_key := private.game_require_idempotency_key(p_idempotency_key);
@@ -1014,6 +1057,134 @@ EXCEPTION
 END;
 $fn$;
 
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION private.game_engine_action(
+    p_round_id UUID,
+    p_action TEXT,
+    p_idempotency_key TEXT,
+    p_options JSONB
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_ctx RECORD;
+    v_key TEXT;
+    v_opts JSONB;
+    v_fp TEXT;
+    v_action TEXT;
+    v_round private.game_rounds%ROWTYPE;
+    v_existing private.game_actions%ROWTYPE;
+    v_seq BIGINT;
+    v_json JSONB;
+    v_peek_code TEXT;
+BEGIN
+    -- Non-locking game_code peek decides Aviator advisory only.
+    -- Not used for ownership, financial authority, or any returned field.
+    SELECT r.game_code
+    INTO v_peek_code
+    FROM private.game_rounds AS r
+    WHERE r.id = p_round_id;
+    IF v_peek_code = 'aviator' THEN
+        PERFORM private.game_aviator_lock_current();
+    END IF;
+
+    SELECT * INTO v_ctx FROM private.game_require_player_context();
+    v_key := private.game_require_idempotency_key(p_idempotency_key);
+    v_action := NULLIF(BTRIM(LOWER(COALESCE(p_action, ''))), '');
+    IF v_action IS NULL THEN
+        RAISE EXCEPTION 'ACTION_REQUIRED';
+    END IF;
+    v_opts := private.game_sanitize_options(p_options);
+    v_fp := private.game_fingerprint(jsonb_build_object(
+        'action', v_action,
+        'options', v_opts
+    ));
+
+    v_round := private.game_lock_round_owned(p_round_id, v_ctx.user_id);
+
+    SELECT a.*
+    INTO v_existing
+    FROM private.game_actions AS a
+    WHERE a.round_id = v_round.id
+      AND a.idempotency_key = v_key
+    FOR UPDATE;
+
+    IF FOUND THEN
+        IF v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN
+            RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT';
+        END IF;
+        RETURN v_existing.response_payload;
+    END IF;
+
+    -- Do not pre-progress Aviator here. Crash/auto/cashout belong to
+    -- game_adapter_aviator_action under this locked round. Raising after
+    -- a legitimate same-transaction settlement would roll back Wallet Core.
+    IF v_round.state IS DISTINCT FROM 'open' THEN
+        IF v_round.game_code IS DISTINCT FROM 'aviator' THEN
+            RAISE EXCEPTION 'GAME_ROUND_NOT_OPEN';
+        END IF;
+        v_json := private.game_round_json(
+            v_round,
+            private.game_current_balance(v_round.wallet_id),
+            false,
+            private.game_allowed_actions(v_round)
+        );
+        SELECT COALESCE(MAX(a.seq), 0) + 1
+        INTO v_seq
+        FROM private.game_actions AS a
+        WHERE a.round_id = v_round.id;
+        INSERT INTO private.game_actions (
+            round_id, seq, action_type, idempotency_key, request_fingerprint, request_payload, response_payload
+        ) VALUES (
+            v_round.id, v_seq, v_action, v_key, v_fp, jsonb_build_object('action', v_action, 'options', v_opts), v_json
+        );
+        RETURN v_json;
+    END IF;
+
+    v_round := private.game_adapter_action(v_round.id, v_round.game_code, v_action, v_opts, v_ctx.user_id);
+    v_json := private.game_round_json(
+        v_round,
+        private.game_current_balance(v_round.wallet_id),
+        false,
+        private.game_allowed_actions(v_round)
+    );
+
+    SELECT COALESCE(MAX(a.seq), 0) + 1
+    INTO v_seq
+    FROM private.game_actions AS a
+    WHERE a.round_id = v_round.id;
+
+    INSERT INTO private.game_actions (
+        round_id, seq, action_type, idempotency_key, request_fingerprint, request_payload, response_payload
+    ) VALUES (
+        v_round.id, v_seq, v_action, v_key, v_fp, jsonb_build_object('action', v_action, 'options', v_opts), v_json
+    );
+
+    RETURN v_json;
+EXCEPTION
+    WHEN unique_violation THEN
+        SELECT a.*
+        INTO v_existing
+        FROM private.game_actions AS a
+        WHERE a.round_id = p_round_id
+          AND a.idempotency_key = v_key
+        FOR UPDATE;
+        IF FOUND THEN
+            IF v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN
+                RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT';
+            END IF;
+            RETURN v_existing.response_payload;
+        END IF;
+        RAISE;
+END;
+$fn$;
+
 CREATE OR REPLACE FUNCTION private.game_engine_get(p_round_id UUID)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1024,7 +1195,17 @@ AS $fn$
 DECLARE
     v_ctx RECORD;
     v_round private.game_rounds%ROWTYPE;
+    v_peek_code TEXT;
 BEGIN
+    -- Non-locking game_code peek decides Aviator advisory only.
+    -- Not used for ownership, financial authority, or any returned field.
+    SELECT r.game_code
+    INTO v_peek_code
+    FROM private.game_rounds AS r
+    WHERE r.id = p_round_id;
+    IF v_peek_code = 'aviator' THEN
+        PERFORM private.game_aviator_lock_current();
+    END IF;
     SELECT * INTO v_ctx FROM private.game_require_player_context();
     v_round := private.game_lock_round_owned(p_round_id, v_ctx.user_id);
     IF v_round.game_code = 'aviator' AND v_round.state = 'open' THEN

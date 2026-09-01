@@ -33,6 +33,12 @@ function extractFn(sql: string, name: string): string {
   assert.ok(match, `missing function ${name}`);
   return match[0];
 }
+
+function idx(src: string, needle: string) {
+  const i = src.indexOf(needle);
+  assert.ok(i >= 0, `missing ${needle}`);
+  return i;
+}
 const http = read('server/player/playerGamesHttp.ts');
 const rpc = read('server/player/playerGameRpc.ts');
 const client = read('src/lib/playerGames.ts');
@@ -419,5 +425,48 @@ describe('phase 031 stability and shared Aviator', () => {
     assert.match(rollback031, /public\.player_game_session_get/);
     assert.match(rollback031, /crashAt/);
     assert.equal(rollback031.includes('COMMIT;'), false);
+  });
+
+  it('acquires the canonical Aviator advisory lock before wallet, round, and session locks', () => {
+    const helper = extractFn(sql031, 'private.game_aviator_lock_current');
+    const start = extractFn(sql031, 'private.game_engine_start');
+    const action = extractFn(sql031, 'private.game_engine_action');
+    const getter = extractFn(sql031, 'private.game_engine_get');
+    const create = extractFn(sql031, 'private.game_aviator_get_or_create_current_session');
+    const sessGet = extractFn(sql031, 'public.player_game_session_get');
+    assert.match(helper, /pg_catalog\.pg_advisory_xact_lock/);
+    assert.match(helper, /pg_catalog\.hashtextextended\(\s*'nextpari:aviator:current',\s*0\s*\)/);
+    assert.equal((sql031.match(/'nextpari:aviator:current'/g) || []).length, 1);
+    assert.match(sql031, /AVIATOR_ADVISORY/);
+    assert.match(sql031, /REVOKE ALL ON FUNCTION private\.game_aviator_lock_current/);
+    assert.equal(sql031.includes('GRANT EXECUTE ON FUNCTION private.game_aviator_lock_current'), false);
+
+    assert.ok(idx(start, 'game_aviator_lock_current') < idx(start, 'game_require_player_context'));
+    assert.match(start, /IF v_code = 'aviator' THEN\s+PERFORM private\.game_aviator_lock_current\(\)/);
+    assert.ok(idx(start, 'game_aviator_lock_current') < idx(start, 'FOR UPDATE'));
+
+    assert.ok(idx(action, 'INTO v_peek_code') < idx(action, 'game_aviator_lock_current'));
+    assert.ok(idx(action, 'game_aviator_lock_current') < idx(action, 'game_require_player_context'));
+    assert.ok(idx(action, 'game_aviator_lock_current') < idx(action, 'game_lock_round_owned'));
+    assert.equal(
+      action.slice(idx(action, 'INTO v_peek_code'), idx(action, 'game_aviator_lock_current')).includes('FOR UPDATE'),
+      false,
+    );
+    assert.match(action, /Not used for ownership/);
+    assert.match(action, /Do not pre-progress Aviator/);
+
+    assert.ok(idx(getter, 'INTO v_peek_code') < idx(getter, 'game_aviator_lock_current'));
+    assert.ok(idx(getter, 'game_aviator_lock_current') < idx(getter, 'game_require_player_context'));
+    assert.ok(idx(getter, 'game_aviator_lock_current') < idx(getter, 'game_lock_round_owned'));
+
+    assert.ok(idx(create, 'game_aviator_lock_current') < idx(create, 'FOR UPDATE'));
+    assert.equal(create.includes('hashtextextended'), false);
+    assert.ok(idx(sessGet, 'game_require_session_viewer') < idx(sessGet, 'game_aviator_get_or_create_current_session'));
+
+    assert.equal(extractFn(sql031, 'private.game_adapter_dice_start').includes('game_aviator_lock_current'), false);
+    assert.equal(extractFn(sql031, 'private.game_adapter_pharaoh_start').includes('game_aviator_lock_current'), false);
+    assert.equal(sql031.includes('CREATE OR REPLACE FUNCTION private.apply_wallet_entry'), false);
+    assert.match(rollback031, /AVIATOR_ADVISORY/);
+    assert.match(rollback031, /Lock order: AVIATOR_ADVISORY then wallet \/ round \/ session then Wallet Core/);
   });
 });

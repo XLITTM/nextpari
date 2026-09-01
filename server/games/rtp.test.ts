@@ -67,6 +67,7 @@ describe('audited RTP harness', () => {
     assertBand(exact.rtp, 'blackjack exact');
     assertBand(sim.rtp, 'blackjack sim');
     assert.ok(Math.abs(exact.rtp - sim.rtp) < 0.02, 'sim should track exact RTP');
+    assert.ok(Math.abs(exact.rtp - 0.875492820201475) < 1e-12, 'blackjack exact RTP unchanged');
   });
 
   it('prints APPLES unchanged progressive model', () => {
