@@ -18,6 +18,12 @@ function money(value: number): string {
   return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function rtpTargetLabel(game: { rtpModel: string; theoreticalRtpTarget: number | null }): string {
+  if (game.rtpModel === 'progressive') return 'Прогрессивный';
+  if (game.rtpModel === 'unconfigured' || game.theoreticalRtpTarget == null) return 'Не настроен';
+  return pct(game.theoreticalRtpTarget);
+}
+
 function Metric({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <article className="bg-slate-50 rounded-xl border border-slate-200 p-3">
@@ -175,9 +181,7 @@ export function GameRtpReportPanel() {
                   <tr key={game.gameCode} className="border-t border-slate-100">
                     <td className="py-2 pr-3 font-bold text-ink-900">{game.displayName}</td>
                     <td className="py-2 pr-3 text-xs font-semibold text-ink-700">
-                      {game.rtpModel === 'progressive' || game.theoreticalRtpTarget == null
-                        ? 'Прогрессивный'
-                        : pct(game.theoreticalRtpTarget)}
+                      {rtpTargetLabel(game)}
                     </td>
                     <td className="py-2 pr-3 tabular-nums">{money(game.totalWagered)}</td>
                     <td className="py-2 pr-3 tabular-nums">{money(game.totalPayouts)}</td>

@@ -1,4 +1,4 @@
-import { THEORETICAL_CONTROLLED_GAME_RTP } from './registry.js';
+import { CONTROLLED_GAME_CODES, THEORETICAL_CONTROLLED_GAME_RTP } from './registry.js';
 
 export const DEFAULT_REPORT_TIMEZONE = 'Asia/Ashgabat';
 
@@ -6,7 +6,7 @@ export const GAME_RTP_PERIODS = ['today', '7d', '30d', 'custom'] as const;
 
 export type GameRtpPeriod = (typeof GAME_RTP_PERIODS)[number];
 
-export type GameRtpModel = 'fixed-target' | 'progressive';
+export type GameRtpModel = 'fixed-target' | 'progressive' | 'unconfigured';
 
 export const WINNING_ROUND_OUTCOMES = ['win', 'golden', 'blackjack'] as const;
 export const NON_WINNING_ROUND_OUTCOMES = ['draw', 'push', 'lose', 'cancelled', 'refund'] as const;
@@ -33,10 +33,13 @@ export function gameRtpReportingMeta(gameCode: string): {
   if (gameCode === 'apples') {
     return { theoreticalRtpTarget: null, rtpModel: 'progressive' };
   }
-  return {
-    theoreticalRtpTarget: THEORETICAL_CONTROLLED_GAME_RTP,
-    rtpModel: 'fixed-target',
-  };
+  if ((CONTROLLED_GAME_CODES as readonly string[]).includes(gameCode)) {
+    return {
+      theoreticalRtpTarget: THEORETICAL_CONTROLLED_GAME_RTP,
+      rtpModel: 'fixed-target',
+    };
+  }
+  return { theoreticalRtpTarget: null, rtpModel: 'unconfigured' };
 }
 
 const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;

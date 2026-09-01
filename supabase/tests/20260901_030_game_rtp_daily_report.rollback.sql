@@ -294,11 +294,22 @@ SELECT pg_temp.np_assert(
     (private.game_report_rtp_meta('apples')->>'rtpModel') = 'progressive'
     AND (private.game_report_rtp_meta('apples')->>'theoreticalRtpTarget') IS NULL
     AND (private.game_report_rtp_meta('pharaoh')->>'rtpModel') = 'fixed-target'
+    AND (private.game_report_rtp_meta('pharaoh')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
+    AND (private.game_report_rtp_meta('dice')->>'rtpModel') = 'fixed-target'
     AND (private.game_report_rtp_meta('dice')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
+    AND (private.game_report_rtp_meta('blackjack')->>'rtpModel') = 'fixed-target'
     AND (private.game_report_rtp_meta('blackjack')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
+    AND (private.game_report_rtp_meta('crystal')->>'rtpModel') = 'fixed-target'
     AND (private.game_report_rtp_meta('crystal')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
+    AND (private.game_report_rtp_meta('aviator')->>'rtpModel') = 'fixed-target'
     AND (private.game_report_rtp_meta('aviator')->>'theoreticalRtpTarget')::NUMERIC = 0.875000,
     'Apples is progressive with null target; five controlled games target 0.875'
+);
+
+SELECT pg_temp.np_assert(
+    (private.game_report_rtp_meta('game7_test')->>'rtpModel') = 'unconfigured'
+    AND (private.game_report_rtp_meta('game7_test')->>'theoreticalRtpTarget') IS NULL,
+    'future game7_test is unconfigured with a null theoretical target'
 );
 
 INSERT INTO private.game_rounds (

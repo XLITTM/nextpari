@@ -14,6 +14,8 @@ BEGIN;
 -- Theoretical RTP for CONTROLLED games (pharaoh, dice, blackjack,
 -- crystal, aviator) is approximately 87.5%. Metadata only.
 -- APPLES uses a separate progressive model and has NO 87.5% target.
+-- Future/unknown catalog games are rtpModel=unconfigured with a null
+-- target until their math is explicitly calibrated and registered.
 -- Mixed-catalog theoretical RTP is not 87.5%; it depends on game mix.
 --
 -- winningRounds counts actual wins (outcome/result in win, golden,
@@ -191,6 +193,8 @@ AS $fn$
 DECLARE
     v_theo NUMERIC(8,6);
 BEGIN
+    -- Only explicitly calibrated games receive a theoretical target.
+    -- Future Game #7+ stays unconfigured until its math is registered.
     IF p_game_code = 'apples' THEN
         RETURN jsonb_build_object(
             'theoreticalRtpTarget', NULL,
@@ -198,14 +202,21 @@ BEGIN
         );
     END IF;
 
-    SELECT s.theoretical_rtp
-    INTO v_theo
-    FROM private.game_report_settings AS s
-    WHERE s.id = 1;
+    IF p_game_code IN ('pharaoh', 'dice', 'blackjack', 'crystal', 'aviator') THEN
+        SELECT s.theoretical_rtp
+        INTO v_theo
+        FROM private.game_report_settings AS s
+        WHERE s.id = 1;
+
+        RETURN jsonb_build_object(
+            'theoreticalRtpTarget', COALESCE(v_theo, 0.875000),
+            'rtpModel', 'fixed-target'
+        );
+    END IF;
 
     RETURN jsonb_build_object(
-        'theoreticalRtpTarget', COALESCE(v_theo, 0.875000),
-        'rtpModel', 'fixed-target'
+        'theoreticalRtpTarget', NULL,
+        'rtpModel', 'unconfigured'
     );
 END;
 $fn$;

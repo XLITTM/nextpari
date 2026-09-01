@@ -213,7 +213,7 @@ export interface GameRtpMetrics {
   realizedHold: number | null;
 }
 
-export type GameRtpModel = 'fixed-target' | 'progressive';
+export type GameRtpModel = 'fixed-target' | 'progressive' | 'unconfigured';
 
 export interface GameRtpGameRow extends GameRtpMetrics {
   gameCode: string;
@@ -260,12 +260,21 @@ function parseMetrics(raw: Record<string, unknown>): GameRtpMetrics {
   };
 }
 
+const CONTROLLED_REPORT_GAMES = new Set([
+  'pharaoh',
+  'dice',
+  'blackjack',
+  'crystal',
+  'aviator',
+]);
+
 function parseRtpModel(raw: Record<string, unknown>): GameRtpModel {
   const model = str(raw.rtpModel ?? raw.rtp_model);
-  if (model === 'progressive' || str(raw.gameCode ?? raw.game_code) === 'apples') {
-    return 'progressive';
-  }
-  return 'fixed-target';
+  const code = str(raw.gameCode ?? raw.game_code);
+  if (model === 'progressive' || code === 'apples') return 'progressive';
+  if (model === 'unconfigured') return 'unconfigured';
+  if (model === 'fixed-target' || CONTROLLED_REPORT_GAMES.has(code)) return 'fixed-target';
+  return 'unconfigured';
 }
 
 function parseGameRow(raw: Record<string, unknown>): GameRtpGameRow {
@@ -275,9 +284,9 @@ function parseGameRow(raw: Record<string, unknown>): GameRtpGameRow {
     gameCode: str(raw.gameCode ?? raw.game_code),
     displayName: str(raw.displayName ?? raw.display_name),
     status: raw.status == null ? undefined : str(raw.status),
-    theoreticalRtpTarget: rtpModel === 'progressive'
-      ? null
-      : (targetRaw == null ? 0.875 : num(targetRaw)),
+    theoreticalRtpTarget: rtpModel === 'fixed-target'
+      ? (targetRaw == null ? 0.875 : num(targetRaw))
+      : null,
     rtpModel,
     ...parseMetrics(raw),
   };

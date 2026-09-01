@@ -103,6 +103,7 @@ describe('Apples theoretical RTP reporting exception', () => {
     assert.match(rollback, /Apples is progressive with null target/);
     assert.match(services, /rtpModel: GameRtpModel/);
     assert.match(ui, /Прогрессивный/);
+    assert.match(ui, /Не настроен/);
     assert.match(ui, /Целевой RTP контролируемых игр/);
     assert.match(ui, /Apple of Fortune использует отдельную прогрессивную модель/);
   });
@@ -122,6 +123,18 @@ describe('Apples theoretical RTP reporting exception', () => {
       });
     }
     assert.match(rollback, /five controlled games target 0\.875/);
+    assert.match(migration, /p_game_code IN \('pharaoh', 'dice', 'blackjack', 'crystal', 'aviator'\)/);
+  });
+
+  it('does not assign 0.875 to an unconfigured future game', () => {
+    assert.deepEqual(gameRtpReportingMeta('game7_test'), {
+      theoreticalRtpTarget: null,
+      rtpModel: 'unconfigured',
+    });
+    assert.match(migration, /rtpModel', 'unconfigured'/);
+    assert.match(rollback, /future game7_test is unconfigured with a null theoretical target/);
+    assert.match(ui, /Не настроен/);
+    assert.match(services, /unconfigured/);
   });
 });
 
