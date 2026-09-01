@@ -7,7 +7,7 @@ import { PlayerGameError, startGame } from '@/lib/playerGames';
 import './dice.css';
 
 export const DICE_BG = '/images/26164.png';
-export const DICE_WIN_MULTIPLIER = 1.72;
+export const DICE_WIN_MULTIPLIER = 2;
 export const DICE_DRAW_MULTIPLIER = 1;
 export const DICE_ROLL_MS = 800;
 
@@ -342,7 +342,7 @@ export function DiceGame({ onBack }: DiceGameProps) {
               <li>2. Мин. ставка 6 TMTM.</li>
               <li>3. Ваши кубики красного цвета, противника — чёрного.</li>
               <li>4. Ваша задача выбросить больше очков.</li>
-              <li>5. Вы побеждаете при большем количестве очков. Выигрыш — ставка × {DICE_WIN_MULTIPLIER}.</li>
+              <li>5. Вы побеждаете при большем количестве очков. Выигрыш — ставка × {DICE_WIN_MULTIPLIER.toFixed(2)}.</li>
               <li>6. При ничьей ставка возвращается (×{DICE_DRAW_MULTIPLIER}).</li>
             </ol>
           </div>

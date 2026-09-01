@@ -50,13 +50,13 @@ describe('phase 031 frontend regressions', () => {
     assert.match(ui, /220 \+ index \* 140/);
   });
 
-  it('Dice uses CSS roll without an 80ms React RNG loop and shows x1.72', () => {
+  it('Dice uses CSS roll without an 80ms React RNG loop and shows x2.00', () => {
     const ui = read('src/games/dice/DiceGame.tsx');
     assert.equal(ui.includes('setInterval(() =>'), false);
     assert.equal(ui.includes(', 80)'), false);
     assert.equal(ui.includes('Math.random'), false);
-    assert.match(ui, /DICE_WIN_MULTIPLIER = 1.72/);
-    assert.match(ui, /ставка × \{DICE_WIN_MULTIPLIER\}/);
+    assert.match(ui, /DICE_WIN_MULTIPLIER = 2/);
+    assert.match(ui, /ставка × \{DICE_WIN_MULTIPLIER\.toFixed\(2\)\}/);
   });
 
   it('Blackjack defaults min stake, disables PLAY below min, displays server payout', () => {
@@ -135,7 +135,7 @@ describe('phase 032 visual restore', () => {
     assert.match(ui, /Number\(round\.payout\)/);
     assert.equal(ui.includes('stake * DICE_WIN_MULTIPLIER'), false);
     assert.equal(ui.includes('Math.random'), false);
-    assert.match(ui, /DICE_WIN_MULTIPLIER = 1.72/);
+    assert.match(ui, /DICE_WIN_MULTIPLIER = 2/);
   });
 
   it('Blackjack presents both initial dealer cards face-up', () => {
@@ -145,9 +145,12 @@ describe('phase 032 visual restore', () => {
     assert.match(ui, /parseDealerCards\(round\.publicResult\.dealerHand, round\.mathVersion\)/);
     assert.match(ui, /round\.mathVersion/);
     assert.match(parse, /BLACKJACK_V3_MATH_VERSION/);
+    assert.match(parse, /BLACKJACK_V4_MATH_VERSION/);
     assert.match(parse, /forceFaceUp \? false : card\.isHidden === true/);
     assert.equal(parse.includes('isHidden: false,'), false);
-    assert.match(ui, /×1.70 от ставки/);
+    assert.match(ui, /×2.00 от ставки/);
+    assert.match(ui, /×2.00/);
+    assert.match(ui, /×1.00/);
     assert.match(card, /data-face=\{faceDown \? 'down' : 'up'\}/);
     assert.match(ui, /dealerDraws/);
     assert.match(ui, /payout=\{serverPayout\}/);
@@ -180,5 +183,15 @@ describe('phase 032 visual restore', () => {
     assert.match(game, /setNextBoard\(undefined\)/);
     assert.equal(game.includes('resolveSpin'), false);
     assert.equal(game.includes('Math.random'), false);
+  });
+});
+
+describe('phase 033 payout copy and apples start error', () => {
+  it('Apples generic start failure is launch, not debit', () => {
+    const ui = read('src/games/apples/ApplesGame.tsx');
+    assert.match(ui, /INSUFFICIENT_AVAILABLE_BALANCE/);
+    assert.match(ui, /Недостаточно средств/);
+    assert.match(ui, /Не удалось запустить игру/);
+    assert.equal(ui.includes('Не удалось списать ставку'), false);
   });
 });

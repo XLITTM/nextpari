@@ -114,7 +114,7 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
       applyRound(round);
     } catch (error) {
       const code = error instanceof PlayerGameError ? error.code : '';
-      showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
+      showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось запустить игру');
       await refresh();
     } finally {
       setBusy(false);

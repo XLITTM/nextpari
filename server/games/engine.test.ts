@@ -550,3 +550,97 @@ describe('phase 032 blackjack visible-dealer calibration', () => {
     assert.match(sql032, /FROM PUBLIC, anon, authenticated/);
   });
 });
+
+describe('phase 033 dice blackjack win2 and apples start fix', () => {
+  const sql033 = read('supabase/migrations/20260901_033_dice_blackjack_win2_fix_apples.sql');
+  const rollback033 = read('supabase/tests/20260901_033_dice_blackjack_win2_fix_apples.rollback.sql');
+  const apples029 = extractFn(
+    read('supabase/migrations/20260901_029_canonical_games_engine.sql'),
+    'private.game_adapter_apples_start',
+  );
+
+  it('is a write-only BEGIN/COMMIT migration without historical round rewrites', () => {
+    assert.match(sql033, /^BEGIN;/m);
+    assert.match(sql033, /^COMMIT;/m);
+    assert.equal(/UPDATE private\.game_rounds[\s\S]{0,120}math_version/.test(sql033), false);
+    assert.equal(sql033.includes('CREATE OR REPLACE FUNCTION private.apply_wallet_entry'), false);
+    assert.equal(sql033.includes('game_adapter_pharaoh'), false);
+    assert.equal(sql033.includes('game_adapter_crystal'), false);
+    assert.equal(sql033.includes('game_adapter_aviator'), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'apples'/.test(sql033), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'pharaoh'/.test(sql033), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'crystal'/.test(sql033), false);
+    assert.equal(/UPDATE private\.game_catalog[\s\S]{0,500}game_code = 'aviator'/.test(sql033), false);
+  });
+
+  it('installs Dice v3 catalog and version-safe settlement', () => {
+    const helper = extractFn(sql033, 'private.game_dice_win_multiplier_for_version');
+    const start = extractFn(sql033, 'private.game_adapter_dice_start');
+    assert.match(sql033, /dice-v3-win2/);
+    assert.match(sql033, /winMultiplier', 2.00/);
+    assert.match(helper, /dice-v2-rtp875/);
+    assert.match(helper, /RETURN 1\.72/);
+    assert.match(helper, /dice-v3-win2/);
+    assert.match(helper, /RETURN 2\.00/);
+    assert.match(helper, /DICE_MATH_VERSION_UNSUPPORTED/);
+    assert.match(helper, /DICE_MATH_VERSION_MISSING/);
+    assert.equal(helper.includes("c.config->>'winMultiplier'"), false);
+    assert.match(start, /private\.game_dice_win_multiplier_for_version\(v_round\.math_version\)/);
+    assert.match(start, /'mathVersion', v_round\.math_version/);
+    assert.equal(start.includes("'mathVersion', 'dice-v2-rtp875'"), false);
+    assert.equal(start.includes("c.config->>'winMultiplier'"), false);
+    assert.match(sql033, /REVOKE ALL ON FUNCTION private\.game_dice_win_multiplier_for_version/);
+  });
+
+  it('extends Blackjack version-safe payout with v4 ×2.00', () => {
+    const helper = extractFn(sql033, 'private.game_bj_payout_for_version');
+    assert.match(sql033, /blackjack-v4-visible-dealer-win2/);
+    assert.match(sql033, /winPayout', 2.00/);
+    assert.match(helper, /blackjack-v2-rtp875/);
+    assert.match(helper, /v_win := 1\.84/);
+    assert.match(helper, /blackjack-v3-visible-dealer-rtp875/);
+    assert.match(helper, /v_win := 1\.70/);
+    assert.match(helper, /blackjack-v4-visible-dealer-win2/);
+    assert.match(helper, /v_win := 2\.00/);
+    assert.equal(helper.includes("c.config->>'winPayout'"), false);
+    assert.match(helper, /BLACKJACK_MATH_VERSION_UNSUPPORTED/);
+  });
+
+  it('fixes Apples start array concatenation without changing math', () => {
+    const start = extractFn(sql033, 'private.game_adapter_apples_start');
+    assert.match(apples029, /v_kinds := v_kinds \|\| 'good'/);
+    assert.match(apples029, /v_kinds := v_kinds \|\| 'bad'/);
+    assert.equal(start.includes("v_kinds := v_kinds || 'good'"), false);
+    assert.equal(start.includes("v_kinds := v_kinds || 'bad'"), false);
+    assert.match(start, /v_kinds := array_append\(v_kinds, 'good'\)/);
+    assert.match(start, /v_kinds := array_append\(v_kinds, 'bad'\)/);
+    assert.match(start, /private\.game_next_int\(p_round_id, v_k\)/);
+    assert.equal(sql033.includes('apples-v1-progressive'), false);
+    assert.equal(sql033.includes('"good":4'), false);
+    assert.equal(sql033.includes('multiplier":1.23'), false);
+  });
+
+  it('updates Dice/Blackjack reporting metadata and keeps Apples progressive', () => {
+    const meta = extractFn(sql033, 'private.game_report_rtp_meta');
+    assert.match(meta, /p_game_code = 'dice'/);
+    assert.match(meta, /theoreticalRtpTarget', 1\.000000000000000000/);
+    assert.match(meta, /p_game_code = 'blackjack'/);
+    assert.match(meta, /theoreticalRtpTarget', 1\.0136234940440312/);
+    assert.match(meta, /p_game_code IN \('pharaoh', 'crystal', 'aviator'\)/);
+    assert.match(meta, /rtpModel', 'progressive'/);
+    assert.match(meta, /theoreticalRtpTarget', NULL/);
+  });
+
+  it('rollback probe is write-only BEGIN/ROLLBACK and covers Apples start', () => {
+    assert.match(rollback033, /^BEGIN;/m);
+    assert.ok(rollback033.trim().endsWith('ROLLBACK;'));
+    assert.equal(rollback033.includes('COMMIT;'), false);
+    assert.match(rollback033, /no longer raises malformed array literal/);
+    assert.match(rollback033, /player_game_start\('apples'/);
+    assert.match(rollback033, /five cells exist at first level/);
+    assert.match(rollback033, /hidden public result does not leak bad\/good kinds/);
+    assert.match(rollback033, /bet ledger is created inside transaction/);
+    assert.match(rollback033, /wallet balance decreases inside transaction/);
+    assert.match(rollback033, /array_append/);
+  });
+});
