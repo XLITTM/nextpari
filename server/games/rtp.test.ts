@@ -1,14 +1,24 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { APPLES_LEVELS, APPLES_MATH_UNCHANGED, APPLES_MATH_VERSION, APPLES_MODEL } from './rtp/applesMath.js';
-import { AVIATOR_FIXED_CASHOUTS, AVIATOR_MATH_VERSION, aviatorFixedCashoutExactRtp, aviatorSimulatedFixedRtp } from './rtp/aviatorMath.js';
 import {
   BLACKJACK_GOLDEN_PAYOUT,
   BLACKJACK_MATH_VERSION,
   BLACKJACK_METHOD,
   BLACKJACK_WIN_PAYOUT,
+  evaluateBlackjackExact,
   simulateBlackjackOptimal,
 } from './rtp/blackjackMath.js';
+import {
+  AVIATOR_FIXED_CASHOUTS,
+  AVIATOR_MATH_VERSION,
+  aviatorCrashFromSessionSeed,
+  aviatorFixedCashoutExactRtp,
+  aviatorServerSeedHash,
+  aviatorSessionPublic,
+  aviatorSimulatedFixedRtp,
+  aviatorPublicLeaksCrashBeforeReveal,
+} from './rtp/aviatorMath.js';
 import { CRYSTAL_MATH_VERSION, CRYSTAL_SIM_ROUNDS, CRYSTAL_SIM_SEED, simulateCrystalRtp } from './rtp/crystalMath.js';
 import { DICE_MATH_VERSION, diceExactRtp } from './rtp/diceMath.js';
 import { PHARAOH_MATH_VERSION, PHARAOH_PRIZES, pharaohExactRtp } from './rtp/pharaohMath.js';
@@ -41,14 +51,22 @@ describe('audited RTP harness', () => {
   });
 
   it('prints BLACKJACK optimal-strategy RTP', () => {
-    const row = simulateBlackjackOptimal();
+    const exact = evaluateBlackjackExact();
+    const sim = simulateBlackjackOptimal();
     console.log('BLACKJACK');
     console.log('mathVersion:', BLACKJACK_MATH_VERSION);
     console.log('method:', BLACKJACK_METHOD);
-    console.log('optimalPlayerRtp:', row.rtp);
-    console.log('houseEdge:', row.houseEdge);
+    console.log('prefixes:', exact.prefixes);
+    console.log('valueStates:', exact.valueStates);
+    console.log('dealerStates:', exact.dealerStates);
+    console.log('stateCount:', exact.stateCount);
+    console.log('optimalPlayerRtp:', exact.rtp);
+    console.log('houseEdge:', exact.houseEdge);
+    console.log('simRtp:', sim.rtp);
     console.log('paytable:', `win=${BLACKJACK_WIN_PAYOUT} golden=${BLACKJACK_GOLDEN_PAYOUT} push=1`);
-    assertBand(row.rtp, 'blackjack');
+    assertBand(exact.rtp, 'blackjack exact');
+    assertBand(sim.rtp, 'blackjack sim');
+    assert.ok(Math.abs(exact.rtp - sim.rtp) < 0.02, 'sim should track exact RTP');
   });
 
   it('prints APPLES unchanged progressive model', () => {
@@ -83,5 +101,67 @@ describe('audited RTP harness', () => {
       assertBand(exact, `aviator ${x} exact`);
       assertBand(sim, `aviator ${x} sim`);
     }
+  });
+
+  it('hides Aviator crash proof until crashed and keeps session seed consistent', () => {
+    const seed = 'a'.repeat(64);
+    const hash = aviatorServerSeedHash(seed);
+    const crash = aviatorCrashFromSessionSeed(seed);
+    const flying = aviatorSessionPublic({
+      sessionId: 's1',
+      state: 'flying',
+      serverNow: 't1',
+      bettingClosesAt: 't0',
+      startsAt: 't0',
+      crashAt: 'secret-crash-at',
+      serverSeedHash: hash,
+      mathVersion: AVIATOR_MATH_VERSION,
+      currentMultiplier: 1.5,
+      crashPoint: crash,
+      serverSeed: seed,
+    });
+    const bettingInput = {
+      sessionId: 's1',
+      state: 'betting' as const,
+      serverNow: 't1',
+      bettingClosesAt: 't0',
+      startsAt: 't0',
+      crashAt: 'secret-crash-at',
+      serverSeedHash: hash,
+      mathVersion: AVIATOR_MATH_VERSION,
+      currentMultiplier: 1,
+      crashPoint: crash,
+      serverSeed: seed,
+    };
+    const betting = aviatorSessionPublic(bettingInput);
+    const crashed = aviatorSessionPublic({
+      sessionId: 's1',
+      state: 'crashed',
+      serverNow: 't2',
+      bettingClosesAt: 't0',
+      startsAt: 't0',
+      crashAt: 'secret-crash-at',
+      serverSeedHash: hash,
+      mathVersion: AVIATOR_MATH_VERSION,
+      currentMultiplier: crash,
+      crashPoint: crash,
+      serverSeed: seed,
+    });
+    assert.equal(flying.crashAt, null);
+    assert.equal(flying.crashPoint, null);
+    assert.equal(flying.serverSeed, null);
+    assert.equal(betting.crashAt, null);
+    assert.equal(betting.crashPoint, null);
+    assert.equal(betting.serverSeed, null);
+    assert.equal(crashed.crashAt, 'secret-crash-at');
+    assert.equal(crashed.crashPoint, crash);
+    assert.equal(crashed.serverSeed, seed);
+    assert.equal(aviatorPublicLeaksCrashBeforeReveal(flying), false);
+    assert.equal(aviatorPublicLeaksCrashBeforeReveal(betting), false);
+    const betA = { sessionId: 's1', serverSeedHash: hash };
+    const betB = { sessionId: 's1', serverSeedHash: hash };
+    assert.equal(betA.serverSeedHash, betB.serverSeedHash);
+    assert.equal(aviatorCrashFromSessionSeed(seed), crash);
+    assert.ok(crash >= 1);
   });
 });

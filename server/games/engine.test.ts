@@ -360,4 +360,64 @@ describe('phase 031 stability and shared Aviator', () => {
     assert.match(rollback031, /1.72/);
     assert.match(rollback031, /pg_advisory_xact_lock/);
   });
+
+  it('never exposes Aviator crashAt, crashPoint, or session seed before crash', () => {
+    const pub = extractFn(sql031, 'private.game_aviator_session_public');
+    assert.match(pub, /v_reveal := p_session\.state = 'crashed'/);
+    assert.match(pub, /'crashAt', CASE WHEN v_reveal THEN p_session\.crash_at ELSE NULL END/);
+    assert.match(pub, /'crashPoint', CASE WHEN v_reveal THEN v_crash ELSE NULL END/);
+    assert.match(pub, /'serverSeed', CASE WHEN v_reveal THEN p_session\.server_seed ELSE NULL END/);
+    assert.equal(pub.includes("'crashAt', p_session.crash_at"), false);
+    assert.equal(pub.includes('LEAST(v_crash'), false);
+    const progress = extractFn(sql031, 'private.game_adapter_aviator_progress');
+    assert.equal(progress.includes('LEAST(v_crash'), false);
+    assert.equal(/'crashPoint',\s*v_crash/.test(progress), false);
+    const action = extractFn(sql031, 'private.game_adapter_aviator_action');
+    assert.equal(/phase', 'cashed'[\s\S]*'crashPoint'/.test(action), false);
+    assert.match(pub, /Never cap the public multiplier by the hidden crash point/);
+  });
+
+  it('uses the shared session seed as Aviator proof and hides it until crash', () => {
+    const roundJson = extractFn(sql031, 'private.game_round_json');
+    assert.match(roundJson, /p_round\.game_code = 'aviator' AND p_round\.session_id IS NOT NULL/);
+    assert.match(roundJson, /v_hash := v_session\.server_seed_hash/);
+    assert.match(roundJson, /WHEN v_session\.state = 'crashed' THEN v_session\.server_seed/);
+    assert.match(roundJson, /Historical session_id NULL rounds/);
+    assert.match(sql031, /session:crash:1/);
+    const start = extractFn(sql031, 'private.game_adapter_aviator_start');
+    assert.match(start, /'serverSeedHash', v_session\.server_seed_hash/);
+    assert.equal(start.includes('v_round.server_seed_hash'), false);
+  });
+
+  it('session GET uses read-only viewer context without wallet locks', () => {
+    const getter = extractFn(sql031, 'public.player_game_session_get');
+    const viewer = extractFn(sql031, 'private.game_require_session_viewer');
+    const start = extractFn(sql031, 'private.game_engine_start');
+    assert.match(getter, /game_require_session_viewer/);
+    assert.equal(getter.includes('game_require_player_context'), false);
+    assert.equal(viewer.includes('FOR UPDATE'), false);
+    assert.equal(viewer.includes('wallet_accounts'), false);
+    assert.match(viewer, /STAFF_CANNOT_PLAY/);
+    assert.match(viewer, /PLAYER_PROFILE_MISSING/);
+    assert.match(viewer, /auth\.uid\(\)/);
+    assert.match(start, /game_require_player_context/);
+    assert.match(extractFn(sql031, 'private.game_engine_get'), /game_require_player_context/);
+  });
+
+  it('rollback fixture proves shared-session behavior without COMMIT', () => {
+    assert.match(rollback031, /player A bet 1 joins session S/);
+    assert.match(rollback031, /player A bet 2 joins same session S/);
+    assert.match(rollback031, /player B bet joins same session S/);
+    assert.match(rollback031, /same session_id/);
+    assert.match(rollback031, /one serverSeedHash/);
+    assert.match(rollback031, /independent stake/);
+    assert.match(rollback031, /repeated cashout cannot create duplicate payout/);
+    assert.match(rollback031, /same action idempotency returns same settlement/);
+    assert.match(rollback031, /advisory lock/);
+    assert.match(rollback031, /historical settled rows are not modified/);
+    assert.match(rollback031, /np_force_session_flying/);
+    assert.match(rollback031, /public\.player_game_session_get/);
+    assert.match(rollback031, /crashAt/);
+    assert.equal(rollback031.includes('COMMIT;'), false);
+  });
 });

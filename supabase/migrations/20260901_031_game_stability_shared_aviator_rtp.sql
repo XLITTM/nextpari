@@ -150,7 +150,30 @@ LANGUAGE plpgsql
 STABLE
 SET search_path = ''
 AS $fn$
+DECLARE
+    v_hash TEXT := p_round.server_seed_hash;
+    v_seed TEXT := CASE
+        WHEN p_round.state = 'settled' THEN p_round.server_seed
+        ELSE NULL
+    END;
+    v_session private.game_sessions%ROWTYPE;
 BEGIN
+    -- Shared Aviator: public proof is the SESSION seed/hash, not the
+    -- unrelated per-round seed created at insert. Reveal the session seed
+    -- only after the flight has crashed. Historical session_id NULL rounds
+    -- keep the legacy per-round seed fields.
+    IF p_round.game_code = 'aviator' AND p_round.session_id IS NOT NULL THEN
+        SELECT s.* INTO v_session
+        FROM private.game_sessions AS s
+        WHERE s.id = p_round.session_id;
+        IF FOUND THEN
+            v_hash := v_session.server_seed_hash;
+            v_seed := CASE
+                WHEN v_session.state = 'crashed' THEN v_session.server_seed
+                ELSE NULL
+            END;
+        END IF;
+    END IF;
     RETURN jsonb_build_object(
         'ok', true,
         'isDuplicate', COALESCE(p_duplicate, false),
@@ -161,11 +184,8 @@ BEGIN
         'totalStake', p_round.total_stake,
         'payout', p_round.payout,
         'balanceAfter', private.game_money(p_balance),
-        'serverSeedHash', p_round.server_seed_hash,
-        'serverSeed', CASE
-            WHEN p_round.state = 'settled' THEN p_round.server_seed
-            ELSE NULL
-        END,
+        'serverSeedHash', v_hash,
+        'serverSeed', v_seed,
         'nonce', p_round.nonce,
         'sessionId', p_round.session_id,
         'mathVersion', p_round.math_version,
@@ -500,10 +520,12 @@ BEGIN
     v_crash := (p_session.private_state->>'crashPoint')::NUMERIC;
     v_reveal := p_session.state = 'crashed';
     v_elapsed := EXTRACT(EPOCH FROM (p_now - p_session.starts_at));
+    -- Never cap the public multiplier by the hidden crash point: that would
+    -- leak crash timing while the flight is still betting/flying.
     v_mult := CASE
         WHEN p_session.state = 'betting' THEN 1
         WHEN v_reveal THEN v_crash
-        ELSE LEAST(v_crash, private.game_aviator_multiplier(v_elapsed))
+        ELSE private.game_aviator_multiplier(GREATEST(0, v_elapsed))
     END;
     RETURN jsonb_build_object(
         'ok', true,
@@ -513,7 +535,7 @@ BEGIN
         'serverNow', p_now,
         'bettingClosesAt', p_session.betting_closes_at,
         'startsAt', p_session.starts_at,
-        'crashAt', p_session.crash_at,
+        'crashAt', CASE WHEN v_reveal THEN p_session.crash_at ELSE NULL END,
         'serverSeedHash', p_session.server_seed_hash,
         'mathVersion', p_session.math_version,
         'currentMultiplier', v_mult,
@@ -599,12 +621,15 @@ BEGIN
         RETURNING * INTO v_session;
     END IF;
     IF v_session.state = 'flying' AND p_now >= v_session.crash_at THEN
+        -- Mark crashed on the in-memory row first so session_public may reveal
+        -- crashAt / crashPoint / serverSeed. Never publish those while flying.
+        v_session.state := 'crashed';
+        v_session.settled_at := p_now;
         UPDATE private.game_sessions
         SET
             state = 'crashed',
             settled_at = p_now,
-            public_result = private.game_aviator_session_public(v_session, p_now)
-                || jsonb_build_object('crashPoint', (v_session.private_state->>'crashPoint')::NUMERIC),
+            public_result = private.game_aviator_session_public(v_session, p_now),
             updated_at = p_now
         WHERE id = v_session.id
         RETURNING * INTO v_session;
@@ -767,7 +792,6 @@ BEGIN
             jsonb_build_object(
                 'phase', 'cashed',
                 'sessionId', v_session.id,
-                'crashPoint', v_crash,
                 'cashedAt', v_auto,
                 'currentMultiplier', v_auto,
                 'outcome', 'win',
@@ -788,7 +812,10 @@ BEGIN
             'bettingClosesAt', v_session.betting_closes_at,
             'serverNow', v_now,
             'autoCashout', v_auto,
-            'currentMultiplier', CASE WHEN v_session.state = 'betting' THEN 1 ELSE LEAST(v_crash, v_mult) END,
+            'currentMultiplier', CASE
+                WHEN v_session.state = 'betting' THEN 1
+                ELSE v_mult
+            END,
             'serverSeedHash', v_session.server_seed_hash
         ),
         updated_at = v_now
@@ -835,7 +862,7 @@ BEGIN
         RETURN private.game_settle_win(
             p_round_id, 0,
             jsonb_build_object(
-                'phase', 'crashed', 'sessionId', v_session.id, 'crashPoint', v_crash,
+                'phase', 'crashed', 'sessionId', v_session.id,
                 'currentMultiplier', v_crash, 'outcome', 'lose',
                 'startedAt', v_session.starts_at, 'serverNow', v_now
             ),
@@ -846,7 +873,7 @@ BEGIN
         p_round_id,
         private.game_money(v_round.stake * v_mult),
         jsonb_build_object(
-            'phase', 'cashed', 'sessionId', v_session.id, 'crashPoint', v_crash,
+            'phase', 'cashed', 'sessionId', v_session.id,
             'cashedAt', v_mult, 'currentMultiplier', v_mult, 'outcome', 'win',
             'startedAt', v_session.starts_at, 'serverNow', v_now
         ),
@@ -1012,6 +1039,48 @@ BEGIN
 END;
 $fn$;
 
+-- Read-only eligibility for shared-flight observers. Auth + staff rejection +
+-- profile existence only. Never locks wallet_accounts, never mutates balances,
+-- and never grants financial authority. Start/action keep game_require_player_context.
+CREATE OR REPLACE FUNCTION private.game_require_session_viewer()
+RETURNS UUID
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_uid UUID;
+    v_staff UUID;
+    v_profile UUID;
+BEGIN
+    v_uid := auth.uid();
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'AUTH_REQUIRED';
+    END IF;
+
+    SELECT s.auth_user_id
+    INTO v_staff
+    FROM private.staff_accounts AS s
+    WHERE s.auth_user_id = v_uid
+    LIMIT 1;
+    IF v_staff IS NOT NULL THEN
+        RAISE EXCEPTION 'STAFF_CANNOT_PLAY';
+    END IF;
+
+    SELECT p.id
+    INTO v_profile
+    FROM public.profiles AS p
+    WHERE p.id = v_uid;
+
+    IF v_profile IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_PROFILE_MISSING';
+    END IF;
+
+    RETURN v_uid;
+END;
+$fn$;
+
 CREATE OR REPLACE FUNCTION public.player_game_session_get(p_game_code TEXT)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1020,14 +1089,10 @@ SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
-    v_ctx RECORD;
     v_session private.game_sessions%ROWTYPE;
     v_now TIMESTAMPTZ := pg_catalog.now();
 BEGIN
-    IF auth.uid() IS NULL THEN
-        RAISE EXCEPTION 'AUTH_REQUIRED';
-    END IF;
-    SELECT * INTO v_ctx FROM private.game_require_player_context();
+    PERFORM private.game_require_session_viewer();
     IF COALESCE(p_game_code, '') IS DISTINCT FROM 'aviator' THEN
         RAISE EXCEPTION 'GAME_NOT_FOUND';
     END IF;
@@ -1039,6 +1104,9 @@ $fn$;
 REVOKE ALL ON FUNCTION public.player_game_session_get(TEXT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.player_game_session_get(TEXT) FROM anon;
 GRANT EXECUTE ON FUNCTION public.player_game_session_get(TEXT) TO authenticated;
+
+COMMENT ON FUNCTION private.game_require_session_viewer() IS
+'Read-only Aviator observer eligibility. Auth + staff rejection + profile existence. No wallet FOR UPDATE, no balance mutation, no financial authority.';
 
 COMMENT ON FUNCTION public.player_game_session_get(TEXT) IS
 'Authenticated shared game session snapshot. Aviator: one canonical flight. Hides crash point until crashed.';

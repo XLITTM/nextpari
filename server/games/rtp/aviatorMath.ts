@@ -1,3 +1,5 @@
+import { createHash, createHmac } from 'node:crypto';
+
 export const AVIATOR_MATH_VERSION = 'aviator-v2-rtp875';
 export const AVIATOR_RTP_TARGET = 0.875;
 export const AVIATOR_MIN_CRASH = 1;
@@ -10,6 +12,77 @@ export function aviatorCrashFromUnit(unit: number): number {
   const u = Math.min(Math.max(unit, 1e-12), 0.999999999999);
   const raw = Math.floor((AVIATOR_RTP_TARGET / u) * 100) / 100;
   return Math.min(AVIATOR_MAX_CRASH, Math.max(AVIATOR_MIN_CRASH, raw));
+}
+
+export function aviatorCrashFromSessionSeed(serverSeed: string): number {
+  const hex = createHmac('sha256', serverSeed).update('session:crash:1').digest('hex').slice(0, 13);
+  const bits = Number.parseInt(hex, 16);
+  const e = Math.min(bits / 2 ** 52, 0.999999999999);
+  return aviatorCrashFromUnit(Math.max(e, 1e-12));
+}
+
+export function aviatorServerSeedHash(serverSeed: string): string {
+  return createHash('sha256').update(serverSeed, 'utf8').digest('hex');
+}
+
+export const AVIATOR_PUBLIC_LIVE_KEYS = [
+  'ok',
+  'sessionId',
+  'gameCode',
+  'state',
+  'serverNow',
+  'bettingClosesAt',
+  'startsAt',
+  'serverSeedHash',
+  'mathVersion',
+  'currentMultiplier',
+] as const;
+
+export const AVIATOR_REVEAL_ONLY_KEYS = ['crashAt', 'crashPoint', 'serverSeed'] as const;
+
+export type AviatorSessionState = 'betting' | 'flying' | 'crashed';
+
+export interface AviatorSessionPublicInput {
+  sessionId: string;
+  state: AviatorSessionState;
+  serverNow: string;
+  bettingClosesAt: string;
+  startsAt: string;
+  crashAt: string | null;
+  serverSeedHash: string;
+  mathVersion: string;
+  currentMultiplier: number;
+  crashPoint: number | null;
+  serverSeed: string | null;
+}
+
+export function aviatorSessionPublic(input: AviatorSessionPublicInput): Record<string, unknown> {
+  const reveal = input.state === 'crashed';
+  return {
+    ok: true,
+    sessionId: input.sessionId,
+    gameCode: 'aviator',
+    state: input.state,
+    serverNow: input.serverNow,
+    bettingClosesAt: input.bettingClosesAt,
+    startsAt: input.startsAt,
+    crashAt: reveal ? input.crashAt : null,
+    serverSeedHash: input.serverSeedHash,
+    mathVersion: input.mathVersion,
+    currentMultiplier: input.currentMultiplier,
+    crashPoint: reveal ? input.crashPoint : null,
+    serverSeed: reveal ? input.serverSeed : null,
+  };
+}
+
+export function aviatorPublicLeaksCrashBeforeReveal(body: Record<string, unknown>): boolean {
+  if (body.state === 'crashed') return false;
+  if (body.crashAt != null) return true;
+  if (body.crashPoint != null) return true;
+  if (body.serverSeed != null) return true;
+  if (body.timeToCrash != null) return true;
+  if (body.crash_at != null) return true;
+  return false;
 }
 
 export function aviatorSurvivalExact(cashout: number): number {
