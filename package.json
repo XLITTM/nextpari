@@ -20,10 +20,15 @@
     "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts server/staff/staffHierarchy.test.ts",
     "player:auth:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test src/lib/playerAuth.security.test.ts server/player/playerAuth.test.ts",
     "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts server/games/dice.cutover.test.ts",
-    "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts"
+    "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts",
+    "lsports:test": "tsx --tsconfig tsconfig.server.json --test server/lsports/lsports.test.ts",
+    "lsports:probe:inplay": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-probe.ts inplay",
+    "lsports:probe:prematch": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-probe.ts prematch",
+    "lsports:probe:both": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-probe.ts both"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
+    "amqplib": "^2.0.1",
     "lucide-react": "^0.446.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

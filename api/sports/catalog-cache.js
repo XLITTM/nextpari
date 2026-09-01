@@ -3,7 +3,6 @@ import { ensureOddsList } from './odds-fallback.js';
 
 const PRIMARY = 'https://api.b365api.com';
 const FALLBACK = 'https://api.betsapi.com';
-const FALLBACK_TOKEN = '264390-ZTbtCqHFCvyhXS';
 const SPORT_ID = '1';
 const CLOSED = new Set(['3', '4', '5', '8']);
 const PAUSE_429_MS = 30_000;
@@ -15,7 +14,7 @@ const cache = {
 };
 
 function resolveToken() {
-  return getBetsApiGatewayToken() || FALLBACK_TOKEN;
+  return getBetsApiGatewayToken();
 }
 
 function parsePayload(body) {
