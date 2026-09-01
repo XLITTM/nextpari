@@ -472,13 +472,16 @@ $fn$;
 CREATE OR REPLACE FUNCTION private.game_require_catalog(p_game_code TEXT)
 RETURNS private.game_catalog
 LANGUAGE plpgsql
-VOLATILE
+STABLE
 SET search_path = ''
 AS $fn$
 DECLARE
     v_code TEXT;
     v_row private.game_catalog%ROWTYPE;
 BEGIN
+    -- Catalog is configuration (active/disabled/maintenance).
+    -- Do not FOR UPDATE this row: that would serialize every start
+    -- of the same game. Per-wager locks are wallet + round + idempotency.
     v_code := NULLIF(BTRIM(LOWER(COALESCE(p_game_code, ''))), '');
     IF v_code IS NULL THEN
         RAISE EXCEPTION 'GAME_CODE_REQUIRED';
@@ -487,8 +490,7 @@ BEGIN
     SELECT c.*
     INTO v_row
     FROM private.game_catalog AS c
-    WHERE c.game_code = v_code
-    FOR UPDATE;
+    WHERE c.game_code = v_code;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'GAME_NOT_FOUND';
@@ -1917,6 +1919,8 @@ DECLARE
     v_mult NUMERIC;
     v_now TIMESTAMPTZ := pg_catalog.now();
 BEGIN
+    -- Owns authoritative progress + cashout. Progress may settle auto/crash;
+    -- return that settlement. Never raise after a committed settle.
     v_round := private.game_adapter_aviator_progress(p_round_id, p_actor);
     IF v_round.state IS DISTINCT FROM 'open' THEN
         RETURN v_round;
@@ -2213,12 +2217,29 @@ BEGIN
         RETURN v_existing.response_payload;
     END IF;
 
-    IF v_round.game_code = 'aviator' THEN
-        v_round := private.game_adapter_aviator_progress(v_round.id, v_ctx.user_id);
-    END IF;
-
+    -- Do not pre-progress Aviator here. Crash/auto/cashout belong to
+    -- game_adapter_aviator_action under this locked round. Raising after
+    -- a legitimate same-transaction settlement would roll back Wallet Core.
     IF v_round.state IS DISTINCT FROM 'open' THEN
-        RAISE EXCEPTION 'GAME_ROUND_NOT_OPEN';
+        IF v_round.game_code IS DISTINCT FROM 'aviator' THEN
+            RAISE EXCEPTION 'GAME_ROUND_NOT_OPEN';
+        END IF;
+        v_json := private.game_round_json(
+            v_round,
+            private.game_current_balance(v_round.wallet_id),
+            false,
+            private.game_allowed_actions(v_round)
+        );
+        SELECT COALESCE(MAX(a.seq), 0) + 1
+        INTO v_seq
+        FROM private.game_actions AS a
+        WHERE a.round_id = v_round.id;
+        INSERT INTO private.game_actions (
+            round_id, seq, action_type, idempotency_key, request_fingerprint, request_payload, response_payload
+        ) VALUES (
+            v_round.id, v_seq, v_action, v_key, v_fp, jsonb_build_object('action', v_action, 'options', v_opts), v_json
+        );
+        RETURN v_json;
     END IF;
 
     v_round := private.game_adapter_action(v_round.id, v_round.game_code, v_action, v_opts, v_ctx.user_id);

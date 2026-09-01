@@ -22,7 +22,17 @@ function listFiles(dir: string): string[] {
 
 const migration = read('supabase/migrations/20260901_029_canonical_games_engine.sql');
 const rollback = read('supabase/tests/20260901_029_canonical_games_engine.rollback.sql');
+const behavior = read('supabase/tests/20260901_029_canonical_games_engine.behavior.rollback.sql');
 const bff = read('server/player/playerGamesService.ts');
+
+function extractFn(sql: string, name: string): string {
+  const re = new RegExp(
+    `CREATE OR REPLACE FUNCTION ${name.replace(/[.]/g, '\\.')}[\\s\\S]*?\\n\\$fn\\$;`,
+  );
+  const match = sql.match(re);
+  assert.ok(match, `missing function ${name}`);
+  return match[0];
+}
 const http = read('server/player/playerGamesHttp.ts');
 const rpc = read('server/player/playerGameRpc.ts');
 const client = read('src/lib/playerGames.ts');
@@ -216,5 +226,83 @@ describe('static source inventory', () => {
     const sqlFiles = listFiles(join(root, 'supabase/migrations')).filter((file) => file.endsWith('029_canonical_games_engine.sql'));
     assert.equal(sqlFiles.length, 1);
     assert.equal(migration.includes('CREATE OR REPLACE FUNCTION private.apply_wallet_entry'), false);
+  });
+});
+
+describe('029A pre-production hardening', () => {
+  it('does not let generic game_engine_action roll back an Aviator settlement', () => {
+    const action = extractFn(migration, 'private.game_engine_action');
+    const adapter = extractFn(migration, 'private.game_adapter_aviator_action');
+    const getter = extractFn(migration, 'private.game_engine_get');
+    assert.equal(action.includes('game_adapter_aviator_progress'), false);
+    assert.match(action, /game_adapter_action/);
+    assert.match(action, /Do not pre-progress Aviator/);
+    assert.match(adapter, /game_adapter_aviator_progress/);
+    assert.match(adapter, /IF v_round\.state IS DISTINCT FROM 'open' THEN\s+RETURN v_round/);
+    assert.match(getter, /game_adapter_aviator_progress/);
+  });
+
+  it('does not exclusive-lock game_catalog on every start', () => {
+    const catalog = extractFn(migration, 'private.game_require_catalog');
+    assert.equal(/WHERE c\.game_code = v_code\s+FOR UPDATE/.test(catalog), false);
+    assert.match(catalog, /FROM private\.game_catalog AS c/);
+    assert.match(catalog, /WHERE c\.game_code = v_code;/);
+    assert.match(catalog, /GAME_DISABLED/);
+    assert.match(catalog, /GAME_MAINTENANCE/);
+    assert.match(catalog, /status IS DISTINCT FROM 'active'/);
+  });
+
+  it('keeps per-round and per-wallet FOR UPDATE locks', () => {
+    const ctx = extractFn(migration, 'private.game_require_player_context');
+    const lock = extractFn(migration, 'private.game_lock_round_owned');
+    assert.match(ctx, /FROM private\.wallet_accounts AS a[\s\S]*FOR UPDATE/);
+    assert.match(lock, /FROM private\.game_rounds AS r[\s\S]*FOR UPDATE/);
+  });
+
+  it('keeps sports gated off and games enabled on this branch', () => {
+    assert.match(gate, /CANONICAL_SPORTS_BET_ENABLED = false/);
+    assert.match(gate, /CANONICAL_GAMES_WAGER_ENABLED = true/);
+  });
+
+  it('does not update wallet balances outside Wallet Core', () => {
+    assert.equal(migration.includes('UPDATE public.wallets'), false);
+    assert.equal(/UPDATE\s+private\.wallet_accounts/.test(migration), false);
+    assert.equal(/SET\s+available_balance\s*=/.test(migration), false);
+    assert.match(migration, /private\.apply_wallet_entry\(/);
+  });
+
+  it('keeps financial RNG off the six browser game UIs', () => {
+    for (const file of gameUi) {
+      const source = read(file);
+      assert.match(source, /startGame/, file);
+      assert.equal(source.includes('persistWalletBalance'), false, file);
+    }
+    assert.equal(read('src/games/pharaoh/PharaohTreasure.tsx').includes('Math.random'), false);
+    assert.equal(read('src/games/pharaoh/PharaohTreasure.tsx').includes('pickWeighted'), false);
+    assert.equal(read('src/games/blackjack/BlackjackGame.tsx').includes('freshShuffledDeck'), false);
+    assert.equal(read('src/games/apples/ApplesGame.tsx').includes('buildBoard'), false);
+    assert.equal(read('src/games/crystal/CrystalGame.tsx').includes('resolveSpin'), false);
+    assert.equal(read('src/games/aviator/AviatorGame.tsx').includes('resolveCrashRound'), false);
+  });
+
+  it('adds a real BEGIN/ROLLBACK behavioral probe that is not executed here', () => {
+    assert.match(behavior, /^BEGIN;/m);
+    assert.match(behavior, /^ROLLBACK;/m);
+    assert.match(behavior, /Do NOT run against production/);
+    assert.match(behavior, /public\.player_game_start/);
+    assert.match(behavior, /public\.player_game_action/);
+    assert.match(behavior, /public\.player_game_get/);
+    assert.match(behavior, /duplicate start idempotency does not double debit/);
+    assert.match(behavior, /IDEMPOTENCY_KEY_CONFLICT/);
+    assert.match(behavior, /losing round creates CASINO_BET only/);
+    assert.match(behavior, /winning round creates CASINO_BET \+ CASINO_WIN/);
+    assert.match(behavior, /game round belongs only to the JWT player/);
+    assert.match(behavior, /WALLET_BLOCKED/);
+    assert.match(behavior, /np_force_aviator_elapsed/);
+    assert.match(behavior, /cashout after crash settles as a loss/);
+    assert.match(behavior, /crash settlement remains committed/);
+    assert.match(behavior, /later action cannot undo or double-settle auto cashout/);
+    assert.match(behavior, /private\.apply_wallet_entry\(/);
+    assert.equal(behavior.includes('COMMIT;'), false);
   });
 });
