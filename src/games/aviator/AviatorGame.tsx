@@ -2,19 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ChevronLeft, History, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
-import { persistWalletBalance } from '@/games/blackjack/wallet';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
+import { gameAction, getGameRound, PlayerGameError, startGame } from '@/lib/playerGames';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { AviatorCanvas, WAITING_TIME, type FlightPhase } from './AviatorCanvas';
 import {
   formatMultiplier,
   historyTone,
   multiplierAt,
-  randomHex,
-  resolveCrashRound,
-  timeToReach,
-  type CrashRound,
-  type FairSeeds,
 } from './crashMath';
 import {
   applyCashouts,
@@ -38,6 +33,7 @@ interface BetPanelState {
   status: PanelStatus;
   cashedAt: number | null;
   payout: number;
+  roundId: string | null;
 }
 
 interface WinAlert {
@@ -47,7 +43,6 @@ interface WinAlert {
 
 const MIN_BET = 1;
 const DEFAULT_AMOUNT = '10';
-const CLIENT_SEED_KEY = 'nextpari-aviator-client-seed';
 const MY_BETS_KEY = 'nextpari-aviator-my-bets';
 
 function emptyPanel(): BetPanelState {
@@ -58,6 +53,7 @@ function emptyPanel(): BetPanelState {
     status: 'idle',
     cashedAt: null,
     payout: 0,
+    roundId: null,
   };
 }
 
@@ -93,13 +89,13 @@ function saveMyBets(rows: MyBetRecord[]) {
 }
 
 export function AviatorGame({ onBack }: AviatorGameProps) {
-  const { balance, applyBalance, refresh } = useWallet();
+  const { balance, applyServerBalance, refresh } = useWallet();
   const { showToast } = useToast();
   const [phase, setPhase] = useState<FlightPhase>('waiting');
   const [countdown, setCountdown] = useState(WAITING_TIME);
   const [multiplier, setMultiplier] = useState(1);
   const [history, setHistory] = useState<number[]>([]);
-  const [round, setRound] = useState<CrashRound | null>(null);
+  const [revealedCrash, setRevealedCrash] = useState<number | null>(null);
   const [panels, setPanels] = useState<[BetPanelState, BetPanelState]>([emptyPanel(), emptyPanel()]);
   const [winAlert, setWinAlert] = useState<WinAlert | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -111,10 +107,8 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
   const multiplierRef = useRef(1);
   const panelsRef = useRef(panels);
   const liveRef = useRef(liveBets);
-  const roundRef = useRef<CrashRound | null>(null);
-  const nonceRef = useRef(1);
-  const clientSeedRef = useRef('');
   const paidRef = useRef(false);
+  const flyStartedRef = useRef(0);
 
   useEffect(() => {
     balanceRef.current = balance;
@@ -130,36 +124,10 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
   }, [liveBets]);
 
   useEffect(() => {
-    const saved = sessionStorage.getItem(CLIENT_SEED_KEY);
-    clientSeedRef.current = saved || randomHex(16);
-    sessionStorage.setItem(CLIENT_SEED_KEY, clientSeedRef.current);
-  }, []);
-
-  useEffect(() => {
     if (!winAlert) return;
     const id = window.setTimeout(() => setWinAlert(null), 3000);
     return () => window.clearTimeout(id);
   }, [winAlert]);
-
-  const setBalance = useCallback(
-    async (next: number) => {
-      const safe = Number(Math.max(0, next).toFixed(2));
-      const previous = balanceRef.current;
-      balanceRef.current = safe;
-      applyBalance(safe);
-      const saved = await persistWalletBalance(safe);
-      if (!saved.ok) {
-        balanceRef.current = previous;
-        applyBalance(previous);
-        await refresh();
-        return false;
-      }
-      balanceRef.current = saved.balance;
-      applyBalance(saved.balance);
-      return true;
-    },
-    [applyBalance, refresh],
-  );
 
   const updatePanel = (index: 0 | 1, patch: Partial<BetPanelState>) => {
     setPanels((prev) => {
@@ -179,73 +147,80 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
   }, []);
 
   const cashOut = useCallback(
-    async (index: 0 | 1, at: number) => {
+    async (index: 0 | 1) => {
       const panel = panelsRef.current[index];
-      if (panel.status !== 'live') return;
-      const stake = parseAmount(panel.amount);
-      const payout = Number((stake * at).toFixed(2));
-      updatePanel(index, { status: 'won', cashedAt: at, payout });
-      setLiveBets((prev) => {
-        const next = prev.map((row) =>
-          row.id === `me-${index}` ? { ...row, cashedAt: at, payout } : row,
-        );
-        liveRef.current = next;
-        return next;
-      });
-      pushMyBet({
-        id: `${Date.now()}-${index}`,
-        at: Date.now(),
-        stake,
-        multiplier: at,
-        result: 'win',
-        payout,
-      });
-      setWinAlert({ amount: payout, multiplier: at });
-      await setBalance(balanceRef.current + payout);
+      if (panel.status !== 'live' || !panel.roundId) return;
+      try {
+        const round = await gameAction({ roundId: panel.roundId, action: 'cashout' });
+        applyServerBalance(round.balanceAfter);
+        const at = Number(round.publicResult.cashedAt ?? round.publicResult.currentMultiplier ?? 1);
+        const payout = Number(round.payout);
+        if (round.publicResult.outcome === 'win' && payout > 0) {
+          updatePanel(index, { status: 'won', cashedAt: at, payout });
+          setLiveBets((prev) => {
+            const next = prev.map((row) =>
+              row.id === `me-${index}` ? { ...row, cashedAt: at, payout } : row,
+            );
+            liveRef.current = next;
+            return next;
+          });
+          pushMyBet({
+            id: `${Date.now()}-${index}`,
+            at: Date.now(),
+            stake: parseAmount(panel.amount),
+            multiplier: at,
+            result: 'win',
+            payout,
+          });
+          setWinAlert({ amount: payout, multiplier: at });
+        } else {
+          updatePanel(index, { status: 'lost', cashedAt: null, payout: 0 });
+        }
+        const crash = Number(round.publicResult.crashPoint);
+        if (Number.isFinite(crash) && crash > 0) setRevealedCrash(crash);
+      } catch (error) {
+        const code = error instanceof PlayerGameError ? error.code : '';
+        if (code !== 'GAME_ROUND_NOT_OPEN') showToast(code || 'Не удалось забрать');
+      }
     },
-    [pushMyBet, setBalance],
+    [applyServerBalance, pushMyBet, showToast],
   );
 
   const startRoundRef = useRef<() => Promise<void>>(async () => {});
   const startRound = useCallback(async () => {
-    const seeds: FairSeeds = {
-      serverSeed: randomHex(32),
-      clientSeed: clientSeedRef.current || randomHex(16),
-      nonce: nonceRef.current,
-    };
-    nonceRef.current += 1;
-    const nextRound = await resolveCrashRound(seeds);
-    roundRef.current = nextRound;
-    setRound(nextRound);
     paidRef.current = false;
-
+    setRevealedCrash(null);
     const queued = panelsRef.current
       .map((panel, index) => ({ panel, index: index as 0 | 1 }))
       .filter(({ panel }) => panel.status === 'queued');
-    const total = queued.reduce((sum, row) => sum + parseAmount(row.panel.amount), 0);
-    if (total > 0) {
-      const blocked = blockedGamesWager();
-      if (blocked) {
-        showToast(blocked);
-        queued.forEach(({ index }) => updatePanel(index, { status: 'idle' }));
-      } else if (total > balanceRef.current) {
-        showToast('Недостаточно средств');
-        queued.forEach(({ index }) => updatePanel(index, { status: 'idle' }));
-      } else {
-        const ok = await setBalance(balanceRef.current - total);
-        if (!ok) {
-          showToast('Не удалось списать ставку');
-          queued.forEach(({ index }) => updatePanel(index, { status: 'idle' }));
-        } else {
-          queued.forEach(({ index }) => updatePanel(index, { status: 'live', cashedAt: null, payout: 0 }));
+    const blocked = blockedGamesWager();
+    if (blocked && queued.length > 0) {
+      showToast(blocked);
+      queued.forEach(({ index }) => updatePanel(index, { status: 'idle', roundId: null }));
+    } else {
+      for (const { panel, index } of queued) {
+        const stake = parseAmount(panel.amount);
+        try {
+          const options: Record<string, unknown> = {};
+          const autoAt = parseAmount(panel.autoAt);
+          if (panel.auto && autoAt >= 1.01) options.autoCashout = autoAt;
+          const round = await startGame({ gameCode: 'aviator', stake, options });
+          applyServerBalance(round.balanceAfter);
+          updatePanel(index, { status: 'live', cashedAt: null, payout: 0, roundId: round.roundId });
+        } catch (error) {
+          const code = error instanceof PlayerGameError ? error.code : '';
+          showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
+          updatePanel(index, { status: 'idle', roundId: null });
+          await refresh();
         }
       }
     }
 
+    flyStartedRef.current = performance.now();
     setMultiplier(1);
     multiplierRef.current = 1;
     setPhase('flying');
-  }, [setBalance, showToast]);
+  }, [applyServerBalance, refresh, showToast]);
   startRoundRef.current = startRound;
 
   useEffect(() => {
@@ -278,52 +253,87 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
   }, [phase]);
 
   useEffect(() => {
-    if (phase !== 'flying' || !round) return;
-    const crashAt = round.crashPoint;
-    const duration = timeToReach(crashAt);
-    const began = performance.now();
+    if (phase !== 'flying') return;
+    const began = flyStartedRef.current || performance.now();
     let raf = 0;
+    let poll = 0;
+    let stopped = false;
 
     const tick = (now: number) => {
-      const t = (now - began) / 1000;
-      const current = t >= duration ? crashAt : multiplierAt(t);
+      if (stopped) return;
+      const current = multiplierAt((now - began) / 1000);
       multiplierRef.current = current;
       setMultiplier(current);
-
-      const resolved = applyCashouts(liveRef.current, current, crashAt);
+      const resolved = applyCashouts(liveRef.current, current, Number.POSITIVE_INFINITY);
       if (resolved !== liveRef.current) {
         liveRef.current = resolved;
         setLiveBets(resolved);
       }
-
-      panelsRef.current.forEach((panel, index) => {
-        if (panel.status !== 'live' || !panel.auto) return;
-        const target = parseAmount(panel.autoAt);
-        if (target >= 1.01 && current >= target && current < crashAt) {
-          void cashOut(index as 0 | 1, target);
-        }
-      });
-
-      if (current >= crashAt) {
-        setMultiplier(crashAt);
-        setPhase('crashed');
-        return;
-      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [phase, round, cashOut]);
+
+    const pollServer = async () => {
+      const live = panelsRef.current
+        .map((panel, index) => ({ panel, index: index as 0 | 1 }))
+        .filter(({ panel }) => panel.status === 'live' && panel.roundId);
+      if (live.length === 0) {
+        if ((performance.now() - began) / 1000 >= 8) {
+          setRevealedCrash(2);
+          setPhase('crashed');
+        }
+        return;
+      }
+      for (const { panel, index } of live) {
+        try {
+          const round = await getGameRound(panel.roundId as string);
+          applyServerBalance(round.balanceAfter);
+          if (round.state !== 'settled') continue;
+          const crash = Number(round.publicResult.crashPoint);
+          if (Number.isFinite(crash) && crash > 0) setRevealedCrash(crash);
+          if (round.publicResult.outcome === 'win' && round.payout > 0) {
+            const at = Number(round.publicResult.cashedAt ?? round.publicResult.currentMultiplier ?? 1);
+            updatePanel(index, { status: 'won', cashedAt: at, payout: round.payout });
+            pushMyBet({
+              id: `${Date.now()}-${index}`,
+              at: Date.now(),
+              stake: parseAmount(panel.amount),
+              multiplier: at,
+              result: 'win',
+              payout: round.payout,
+            });
+            setWinAlert({ amount: round.payout, multiplier: at });
+          } else {
+            updatePanel(index, { status: 'lost', cashedAt: null, payout: 0 });
+          }
+        } catch {
+          /* keep animating until next poll */
+        }
+      }
+      if (panelsRef.current.every((panel) => panel.status !== 'live')) {
+        setPhase('crashed');
+      }
+    };
+
+    poll = window.setInterval(() => {
+      void pollServer();
+    }, 400);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+      window.clearInterval(poll);
+    };
+  }, [applyServerBalance, phase, pushMyBet]);
 
   useEffect(() => {
     if (phase !== 'crashed' || paidRef.current) return;
     paidRef.current = true;
-    const crashAt = roundRef.current?.crashPoint ?? multiplierRef.current;
+    const crashAt = revealedCrash ?? multiplierRef.current;
     setHistory((prev) => [crashAt, ...prev].slice(0, 24));
     panelsRef.current.forEach((panel, index) => {
       if (panel.status !== 'live') return;
       const stake = parseAmount(panel.amount);
-      updatePanel(index as 0 | 1, { status: 'lost', cashedAt: null, payout: 0 });
+      updatePanel(index as 0 | 1, { status: 'lost', cashedAt: null, payout: 0, roundId: null });
       pushMyBet({
         id: `${Date.now()}-loss-${index}`,
         at: Date.now(),
@@ -340,6 +350,7 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
           status: 'idle' as const,
           cashedAt: null,
           payout: 0,
+          roundId: null,
         })) as [BetPanelState, BetPanelState];
         panelsRef.current = reset;
         return reset;
@@ -347,7 +358,7 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
       setPhase('waiting');
     }, 2800);
     return () => window.clearTimeout(id);
-  }, [phase, pushMyBet]);
+  }, [phase, pushMyBet, revealedCrash]);
 
   const queueBet = (index: 0 | 1) => {
     if (phase !== 'waiting') {
@@ -457,7 +468,7 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
           phase={phase}
           multiplier={multiplier}
           countdown={countdown}
-          crashPoint={round?.crashPoint ?? null}
+          crashPoint={phase === 'crashed' ? revealedCrash : null}
         />
       </div>
 
@@ -475,7 +486,7 @@ export function AviatorGame({ onBack }: AviatorGameProps) {
             onMul={(n) => adjustAmount(index as 0 | 1, (v) => (n < 1 ? Math.max(MIN_BET, v * n) : v * n))}
             onBet={() => queueBet(index as 0 | 1)}
             onCancel={() => cancelBet(index as 0 | 1)}
-            onCashOut={() => void cashOut(index as 0 | 1, multiplierRef.current)}
+            onCashOut={() => void cashOut(index as 0 | 1)}
           />
         ))}
       </div>

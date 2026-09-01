@@ -1,13 +1,13 @@
-import { useCallback, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
-import { persistWalletBalance } from '@/games/blackjack/wallet';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
+import { gameAction, PlayerGameError, startGame } from '@/lib/playerGames';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { APPLE_CLOVER_PNG, APPLE_RED_PNG } from './appleAssets';
 import { APPLE_LEVELS } from './appleConfig';
-import { buildBoard, formatMult, revealBoard } from './board';
+import { formatMult } from './board';
 import type { AppleCell, ApplePhase, AppleRow } from './types';
 
 interface ApplesGameProps {
@@ -22,42 +22,70 @@ function parseAmount(raw: string): number {
   return Number.isFinite(n) ? Number(n.toFixed(2)) : 0;
 }
 
+function hiddenRows(): AppleRow[] {
+  return APPLE_LEVELS.map((cfg) => ({
+    level: cfg.level,
+    multiplier: cfg.multiplier,
+    cells: Array.from({ length: cfg.goodApples + cfg.badApples }, (_, index) => ({
+      id: `${cfg.level}-${index}`,
+      kind: 'good' as const,
+      revealed: false,
+      picked: false,
+    })),
+  }));
+}
+
+function rowsFromPublic(result: Record<string, unknown>): AppleRow[] {
+  const rows = Array.isArray(result.rows) ? result.rows : [];
+  if (rows.length === 0) return hiddenRows();
+  return rows.map((raw, index) => {
+    const row = raw as { level?: number; multiplier?: number; cells?: unknown[] };
+    const cells = Array.isArray(row.cells) ? row.cells : [];
+    return {
+      level: Number(row.level ?? index + 1),
+      multiplier: Number(row.multiplier ?? APPLE_LEVELS[index]?.multiplier ?? 1),
+      cells: cells.map((entry, col) => {
+        const cell = entry as { id?: string; kind?: string; revealed?: boolean; picked?: boolean };
+        const kind = cell.kind === 'bad' ? 'bad' : 'good';
+        return {
+          id: String(cell.id ?? `${index}-${col}`),
+          kind,
+          revealed: cell.revealed === true,
+          picked: cell.picked === true,
+        } satisfies AppleCell;
+      }),
+    };
+  });
+}
+
 export function ApplesGame({ onBack }: ApplesGameProps) {
-  const { balance, applyBalance, refresh } = useWallet();
+  const { balance, applyServerBalance, refresh } = useWallet();
   const { showToast } = useToast();
   const [phase, setPhase] = useState<ApplePhase>('betting');
   const [betInput, setBetInput] = useState(DEFAULT_BET);
   const [stake, setStake] = useState(0);
-  const [rows, setRows] = useState<AppleRow[]>(() => buildBoard());
+  const [roundId, setRoundId] = useState<string | null>(null);
+  const [rows, setRows] = useState<AppleRow[]>(() => hiddenRows());
   const [activeLevel, setActiveLevel] = useState(1);
   const [lastWonLevel, setLastWonLevel] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [cashoutValue, setCashoutValue] = useState(0);
   const balanceRef = useRef(balance);
   balanceRef.current = balance;
 
-  const cashoutValue = lastWonLevel > 0
-    ? Number((stake * (APPLE_LEVELS[lastWonLevel - 1]?.multiplier ?? 1)).toFixed(2))
-    : 0;
-
-  const setBalance = useCallback(
-    async (next: number) => {
-      const safe = Number(Math.max(0, next).toFixed(2));
-      const previous = balanceRef.current;
-      balanceRef.current = safe;
-      applyBalance(safe);
-      const saved = await persistWalletBalance(safe);
-      if (!saved.ok) {
-        balanceRef.current = previous;
-        applyBalance(previous);
-        await refresh();
-        return false;
-      }
-      balanceRef.current = saved.balance;
-      applyBalance(saved.balance);
-      return true;
-    },
-    [applyBalance, refresh],
-  );
+  const applyRound = (round: { roundId: string; publicResult: Record<string, unknown>; balanceAfter: number }) => {
+    setRoundId(round.roundId);
+    applyServerBalance(round.balanceAfter);
+    const result = round.publicResult;
+    setRows(rowsFromPublic(result));
+    setActiveLevel(Number(result.activeLevel ?? 1));
+    setLastWonLevel(Number(result.lastWonLevel ?? 0));
+    setCashoutValue(Number(result.cashoutValue ?? 0));
+    const nextPhase = String(result.phase ?? 'playing');
+    if (nextPhase === 'lost') setPhase('lost');
+    else if (nextPhase === 'cleared' || nextPhase === 'cashed') setPhase(nextPhase === 'cashed' ? 'betting' : 'cleared');
+    else if (nextPhase === 'playing') setPhase('playing');
+  };
 
   const startRound = async () => {
     if (phase === 'playing' || busy) return;
@@ -76,80 +104,59 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
       return;
     }
     setBusy(true);
-    const ok = await setBalance(balanceRef.current - amount);
-    setBusy(false);
-    if (!ok) {
-      showToast('Не удалось списать ставку');
-      return;
+    try {
+      const round = await startGame({ gameCode: 'apples', stake: amount });
+      setStake(amount);
+      applyRound(round);
+      setPhase(String(round.publicResult.phase ?? 'playing') === 'playing' ? 'playing' : 'playing');
+    } catch (error) {
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
+      await refresh();
+    } finally {
+      setBusy(false);
     }
-    setStake(amount);
-    setRows(buildBoard());
-    setActiveLevel(1);
-    setLastWonLevel(0);
-    setPhase('playing');
   };
 
-  const handleSelectCell = (colIndex: number) => {
-    const rowIndex = activeLevel - 1;
-    const level = activeLevel;
-    if (phase !== 'playing' || busy) return;
-    const cell = rows[rowIndex]?.cells[colIndex];
+  const handleSelectCell = async (colIndex: number) => {
+    if (phase !== 'playing' || busy || !roundId) return;
+    const cell = rows[activeLevel - 1]?.cells[colIndex];
     if (!cell || cell.revealed) return;
-
-    if (cell.kind === 'bad') {
-      setRows((prev) =>
-        revealBoard(prev).map((item, index) =>
-          index !== rowIndex
-            ? item
-            : {
-                ...item,
-                cells: item.cells.map((entry, col) =>
-                  col === colIndex ? { ...entry, revealed: true, picked: true } : { ...entry, revealed: true },
-                ),
-              },
-        ),
-      );
-      setPhase('lost');
-      setLastWonLevel(0);
-      return;
+    setBusy(true);
+    try {
+      const round = await gameAction({ roundId, action: 'pick', options: { col: colIndex } });
+      applyRound(round);
+    } catch (error) {
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code || 'Действие недоступно');
+      await refresh();
+    } finally {
+      setBusy(false);
     }
-
-    setRows((prev) =>
-      prev.map((item, index) =>
-        index !== rowIndex
-          ? item
-          : {
-              ...item,
-              cells: item.cells.map((entry, col) =>
-                col === colIndex ? { ...entry, revealed: true, picked: true } : entry,
-              ),
-            },
-      ),
-    );
-    setLastWonLevel(level);
-    if (level >= APPLE_LEVELS.length) {
-      setPhase('cleared');
-      return;
-    }
-    setActiveLevel(level + 1);
   };
 
   const cashOut = async () => {
-    if (busy || cashoutValue <= 0) return;
+    if (busy || cashoutValue <= 0 || !roundId) return;
     if (phase !== 'playing' && phase !== 'cleared') return;
     setBusy(true);
-    const ok = await setBalance(balanceRef.current + cashoutValue);
-    setBusy(false);
-    if (!ok) {
-      showToast('Не удалось зачислить выигрыш');
-      return;
+    try {
+      const round = await gameAction({ roundId, action: 'cashout' });
+      applyRound(round);
+      showToast(`Забрано ${Number(round.payout).toFixed(2)} TMTM`);
+      setPhase('betting');
+      setStake(0);
+      setLastWonLevel(0);
+      setActiveLevel(1);
+      setCashoutValue(0);
+      setRows(hiddenRows());
+      setRoundId(null);
+    } catch (error) {
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code || 'Не удалось зачислить выигрыш');
+      await refresh();
+    } finally {
+      setBusy(false);
     }
-    showToast(`Забрано ${cashoutValue.toFixed(2)} TMTM`);
-    setPhase('betting');
-    setStake(0);
-    setLastWonLevel(0);
-    setActiveLevel(1);
-    setRows(buildBoard());
   };
 
   const resetAfterLoss = () => {
@@ -157,7 +164,9 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
     setStake(0);
     setLastWonLevel(0);
     setActiveLevel(1);
-    setRows(buildBoard());
+    setCashoutValue(0);
+    setRows(hiddenRows());
+    setRoundId(null);
   };
 
   const setBet = (value: number) => {

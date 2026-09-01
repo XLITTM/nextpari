@@ -13,23 +13,17 @@ import {
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
+import { gameAction, PlayerGameError, startGame } from '@/lib/playerGames';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { Card, type CardScale } from './Card';
-import { calculateHandScore, freshShuffledDeck, isBust, isGoldenOchko } from './deck';
+import { calculateHandScore, isBust, isGoldenOchko } from './deck';
 import {
   CHIP_VALUES,
-  DEALER_DRAW_DELAY_MS,
   MIN_STAKE,
-  dealInitialHands,
-  dealerShouldHit,
-  hitHand,
   payoutAmount,
-  resolveResult,
   resultCopy,
-  revealDealer,
 } from './engine';
 import type { CardType, GameResult, GameStage } from './types';
-import { persistWalletBalance } from './wallet';
 
 interface BlackjackGameProps {
   onBack: () => void;
@@ -58,10 +52,32 @@ function formatStake(value: number): string {
   return `${shown} TMTM`;
 }
 
+function parseCards(value: unknown): CardType[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((raw) => {
+    const card = raw as { suit?: string; rank?: string; value?: number; isHidden?: boolean };
+    return {
+      suit: (card.suit ?? '♠') as CardType['suit'],
+      rank: (card.rank ?? 'A') as CardType['rank'],
+      value: Number(card.value ?? 11),
+      isHidden: card.isHidden === true,
+    };
+  });
+}
+
+function stageFromRound(state: string, publicResult: Record<string, unknown>): GameStage {
+  if (state === 'settled' || state === 'cancelled') return 'gameOver';
+  const stage = String(publicResult.stage ?? '');
+  if (stage === 'playerTurn' || stage === 'dealerTurn' || stage === 'gameOver' || stage === 'betting') {
+    return stage;
+  }
+  return 'playerTurn';
+}
+
 export function BlackjackGame({ onBack }: BlackjackGameProps) {
-  const { balance, applyBalance, refresh } = useWallet();
+  const { balance, applyServerBalance, refresh } = useWallet();
   const { showToast } = useToast();
-  const [deck, setDeck] = useState<CardType[]>(() => freshShuffledDeck());
+  const [roundId, setRoundId] = useState<string | null>(null);
   const [playerHand, setPlayerHand] = useState<CardType[]>([]);
   const [dealerHand, setDealerHand] = useState<CardType[]>([]);
   const [stage, setStage] = useState<GameStage>('betting');
@@ -74,12 +90,8 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
   const [chipsOpen, setChipsOpen] = useState(false);
   const [isCustomBetModalOpen, setIsCustomBetModalOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
-  const paidRef = useRef(false);
+  const busyRef = useRef(false);
   const balanceRef = useRef(balance);
-  const deckRef = useRef(deck);
-  const playerRef = useRef(playerHand);
-  const dealerRef = useRef(dealerHand);
-  const stakeRef = useRef(lockedStake);
   const stageRef = useRef(stage);
   const lastStakeRef = useRef(0);
   const audioRef = useRef<AudioContext | null>(null);
@@ -87,18 +99,6 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
   useEffect(() => {
     balanceRef.current = balance;
   }, [balance]);
-  useEffect(() => {
-    deckRef.current = deck;
-  }, [deck]);
-  useEffect(() => {
-    playerRef.current = playerHand;
-  }, [playerHand]);
-  useEffect(() => {
-    dealerRef.current = dealerHand;
-  }, [dealerHand]);
-  useEffect(() => {
-    stakeRef.current = lockedStake;
-  }, [lockedStake]);
   useEffect(() => {
     stageRef.current = stage;
   }, [stage]);
@@ -132,70 +132,34 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
     }
   }, [soundOn]);
 
-  const setBalance = useCallback(
-    async (next: number) => {
-      const safe = Number(Math.max(0, next).toFixed(2));
-      const previous = balanceRef.current;
-      balanceRef.current = safe;
-      applyBalance(safe);
-      const saved = await persistWalletBalance(safe);
-      if (!saved.ok) {
-        balanceRef.current = previous;
-        applyBalance(previous);
-        await refresh();
-        return false;
-      }
-      balanceRef.current = saved.balance;
-      applyBalance(saved.balance);
-      return true;
-    },
-    [applyBalance, refresh],
-  );
-
-  const settle = useCallback(
-    async (player: CardType[], dealer: CardType[], stakeValue: number) => {
-      if (paidRef.current) return;
-      paidRef.current = true;
-      const outcome = resolveResult(player, dealer);
-      if (!outcome) return;
-      const payout = payoutAmount(stakeValue, outcome);
-      setResult(outcome);
-      setStage('gameOver');
+  const applyRound = useCallback((
+    round: { roundId: string; state: string; payout: number; balanceAfter: number; publicResult: Record<string, unknown> },
+    stakeValue: number,
+  ) => {
+    setRoundId(round.roundId);
+    applyServerBalance(round.balanceAfter);
+    const player = parseCards(round.publicResult.playerHand);
+    const dealer = parseCards(round.publicResult.dealerHand);
+    setPlayerHand(player);
+    setDealerHand(dealer);
+    const nextStage = stageFromRound(round.state, round.publicResult);
+    setStage(nextStage);
+    const outcome = (round.publicResult.result as GameResult) ?? (nextStage === 'gameOver' ? 'lose' : null);
+    setResult(outcome);
+    if (nextStage === 'gameOver' && outcome) {
       setHistory((prev) => [
         {
           id: Date.now(),
-          result: outcome,
+          result: outcome === 'blackjack' ? 'win' : outcome,
           stake: stakeValue,
-          payout,
+          payout: round.payout,
           playerScore: calculateHandScore(player),
-          dealerScore: calculateHandScore(dealer),
+          dealerScore: calculateHandScore(dealer.map((card) => ({ ...card, isHidden: false }))),
         },
         ...prev,
       ].slice(0, 20));
-      if (payout > 0) await setBalance(balanceRef.current + payout);
-    },
-    [setBalance],
-  );
-
-  useEffect(() => {
-    if (stage !== 'dealerTurn') return;
-
-    const playerNatural = isGoldenOchko(playerHand);
-    if (playerNatural || !dealerShouldHit(dealerHand)) {
-      const id = window.setTimeout(() => {
-        void settle(playerRef.current, dealerRef.current, stakeRef.current);
-      }, DEALER_DRAW_DELAY_MS);
-      return () => window.clearTimeout(id);
     }
-
-    const id = window.setTimeout(() => {
-      const next = hitHand(deckRef.current, dealerRef.current);
-      deckRef.current = next.deck;
-      setDeck(next.deck);
-      setDealerHand(next.hand);
-    }, DEALER_DRAW_DELAY_MS);
-    return () => window.clearTimeout(id);
-  }, [dealerHand, playerHand, settle, stage]);
+  }, [applyServerBalance]);
 
   const setStakeSafe = (next: number) => {
     if (!canBet) return;
@@ -261,7 +225,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
 
   const beginRound = async (amount: number) => {
     const now = stageRef.current;
-    if (now === 'playerTurn' || now === 'dealerTurn') return;
+    if (now === 'playerTurn' || now === 'dealerTurn' || busyRef.current) return;
     if (amount < MIN_STAKE) {
       showToast(`Минимальная ставка — ${MIN_STAKE} TMTM`);
       return;
@@ -277,39 +241,26 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
     }
 
     beep(420, 0.12);
-    paidRef.current = false;
     setResult(null);
     setChipsOpen(false);
     setIsCustomBetModalOpen(false);
     setPlayerHand([]);
     setDealerHand([]);
-
-    const debited = await setBalance(balanceRef.current - amount);
-    if (!debited) {
-      showToast('Не удалось списать ставку');
+    busyRef.current = true;
+    try {
+      const round = await startGame({ gameCode: 'blackjack', stake: amount });
+      setLockedStake(amount);
+      setStake(amount);
+      lastStakeRef.current = amount;
+      applyRound(round, amount);
+    } catch (error) {
       setStage('betting');
-      return;
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
+      await refresh();
+    } finally {
+      busyRef.current = false;
     }
-
-    setLockedStake(amount);
-    setStake(amount);
-    stakeRef.current = amount;
-    lastStakeRef.current = amount;
-
-    const dealt = dealInitialHands(deckRef.current);
-    deckRef.current = dealt.deck;
-    setDeck(dealt.deck);
-    setPlayerHand(dealt.playerHand);
-    setDealerHand(dealt.dealerHand);
-
-    const playerGolden = isGoldenOchko(dealt.playerHand);
-    if (playerGolden) {
-      const revealed = revealDealer(dealt.dealerHand);
-      setDealerHand(revealed);
-      void settle(dealt.playerHand, revealed, amount);
-      return;
-    }
-    setStage(calculateHandScore(dealt.playerHand) >= 21 ? 'dealerTurn' : 'playerTurn');
   };
 
   const play = () => {
@@ -317,23 +268,36 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
     void beginRound(stake);
   };
 
-  const hit = () => {
-    if (stage !== 'playerTurn') return;
+  const hit = async () => {
+    if (stage !== 'playerTurn' || !roundId || busyRef.current) return;
     beep(500);
-    const next = hitHand(deckRef.current, playerHand);
-    deckRef.current = next.deck;
-    setDeck(next.deck);
-    setPlayerHand(next.hand);
-    if (isBust(next.hand)) {
-      setDealerHand((prev) => revealDealer(prev));
-      void settle(next.hand, revealDealer(dealerHand), lockedStake);
+    busyRef.current = true;
+    try {
+      const round = await gameAction({ roundId, action: 'hit' });
+      applyRound(round, lockedStake);
+    } catch (error) {
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code || 'Действие недоступно');
+      await refresh();
+    } finally {
+      busyRef.current = false;
     }
   };
 
-  const stand = () => {
-    if (stage !== 'playerTurn') return;
+  const stand = async () => {
+    if (stage !== 'playerTurn' || !roundId || busyRef.current) return;
     beep(360);
-    setStage('dealerTurn');
+    busyRef.current = true;
+    try {
+      const round = await gameAction({ roundId, action: 'stand' });
+      applyRound(round, lockedStake);
+    } catch (error) {
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code || 'Действие недоступно');
+      await refresh();
+    } finally {
+      busyRef.current = false;
+    }
   };
 
   const repeatBet = () => {
@@ -501,7 +465,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
                     key={btn.id}
                     type="button"
                     onClick={btn.onClick}
-                    disabled={btn.disabled || stage === 'dealerTurn'}
+                    disabled={btn.disabled || inHand}
                     className="bj-ctrl h-9 rounded-xl text-[10px] font-black tracking-wide active:translate-y-[1px] disabled:opacity-40 sm:h-10 sm:text-[11px]"
                   >
                     {btn.label}
@@ -522,7 +486,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
                 <button
                   type="button"
                   onClick={play}
-                  disabled={stage === 'dealerTurn'}
+                  disabled={inHand}
                   className="bj-play flex h-14 w-14 items-center justify-center rounded-full text-base font-black tracking-[0.14em] active:scale-95 disabled:opacity-50 sm:h-[4.6rem] sm:w-[4.6rem] sm:text-lg"
                   aria-label="PLAY"
                 >

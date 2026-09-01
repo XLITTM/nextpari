@@ -2,19 +2,17 @@ import { useCallback, useRef, useState } from 'react';
 import { ChevronLeft, Settings, Zap, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
-import { persistWalletBalance } from '@/games/blackjack/wallet';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
+import { PlayerGameError, startGame } from '@/lib/playerGames';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { CrystalBoard } from './CrystalBoard';
 import { CRYSTAL_BG, GEM_SRC } from './crystalAssets';
 import {
-  createBoard,
+  idleBoard,
   PAYTABLE,
-  resolveSpin,
   CELL_COUNT,
   type CrystalCell,
   type GemKind,
-  type SpinResult,
 } from './crystalMath';
 
 interface CrystalGameProps {
@@ -50,9 +48,45 @@ function wait(ms: number) {
   });
 }
 
-function winLinesFromResult(stake: number, result: SpinResult): WinLine[] {
+interface ServerStep {
+  board: CrystalCell[];
+  clusters: { kind: GemKind; multiplier: number }[];
+  exploding: boolean[];
+  combo: number;
+  stepWin: number;
+  nextBoard: CrystalCell[];
+}
+
+function parseBoard(value: unknown): CrystalCell[] {
+  if (!Array.isArray(value)) return idleBoard();
+  return value.map((raw, index) => {
+    const cell = raw as { id?: string; kind?: GemKind };
+    return { id: String(cell.id ?? `c${index}`), kind: (cell.kind ?? 'green') as GemKind };
+  });
+}
+
+function parseSteps(value: unknown): ServerStep[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((raw) => {
+    const step = raw as Record<string, unknown>;
+    const clusters = Array.isArray(step.clusters) ? step.clusters as { kind: GemKind; multiplier: number }[] : [];
+    const exploding = Array.isArray(step.exploding)
+      ? step.exploding.map((flag) => flag === true)
+      : EMPTY_BOOM;
+    return {
+      board: parseBoard(step.board),
+      clusters,
+      exploding: exploding.length === CELL_COUNT ? exploding : EMPTY_BOOM,
+      combo: Number(step.combo ?? 1),
+      stepWin: Number(step.stepWin ?? 0),
+      nextBoard: parseBoard(step.nextBoard),
+    };
+  });
+}
+
+function winLinesFromSteps(stake: number, steps: ServerStep[]): WinLine[] {
   const lines: WinLine[] = [];
-  result.steps.forEach((step, stepIndex) => {
+  steps.forEach((step, stepIndex) => {
     step.clusters.forEach((cluster, clusterIndex) => {
       lines.push({
         id: `${stepIndex}-${clusterIndex}-${cluster.kind}`,
@@ -67,10 +101,10 @@ function winLinesFromResult(stake: number, result: SpinResult): WinLine[] {
 }
 
 export function CrystalGame({ onBack }: CrystalGameProps) {
-  const { balance, applyBalance, refresh } = useWallet();
+  const { balance, applyServerBalance, refresh } = useWallet();
   const { showToast } = useToast();
   const [betInput, setBetInput] = useState(DEFAULT_BET);
-  const [board, setBoard] = useState<CrystalCell[]>(() => createBoard());
+  const [board, setBoard] = useState<CrystalCell[]>(() => idleBoard());
   const [exploding, setExploding] = useState<boolean[]>(EMPTY_BOOM);
   const [roundAccum, setRoundAccum] = useState(0);
   const [winLines, setWinLines] = useState<WinLine[]>([]);
@@ -87,26 +121,6 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
   const autoLeftRef = useRef(0);
   balanceRef.current = balance;
   instantRef.current = instant;
-
-  const setBalance = useCallback(
-    async (next: number) => {
-      const safe = Number(Math.max(0, next).toFixed(2));
-      const previous = balanceRef.current;
-      balanceRef.current = safe;
-      applyBalance(safe);
-      const saved = await persistWalletBalance(safe);
-      if (!saved.ok) {
-        balanceRef.current = previous;
-        applyBalance(previous);
-        await refresh();
-        return false;
-      }
-      balanceRef.current = saved.balance;
-      applyBalance(saved.balance);
-      return true;
-    },
-    [applyBalance, refresh],
-  );
 
   const setBet = (value: number) => {
     if (busyRef.current) return;
@@ -159,56 +173,54 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
     setRoundAccum(0);
     setLastStake(amount);
 
-    const ok = await setBalance(balanceRef.current - amount);
-    if (!ok) {
-      showToast('Не удалось списать ставку');
-      busyRef.current = false;
-      setBusy(false);
-      stopAuto();
-      return;
-    }
+    try {
+      const round = await startGame({ gameCode: 'crystal', stake: amount });
+      applyServerBalance(round.balanceAfter);
+      const steps = parseSteps(round.publicResult.steps);
+      const startBoard = parseBoard(round.publicResult.startBoard);
+      const allLines = winLinesFromSteps(amount, steps);
+      setBoard(startBoard);
+      setExploding(EMPTY_BOOM);
 
-    const result = resolveSpin(amount);
-    const allLines = winLinesFromResult(amount, result);
-    setBoard(result.startBoard);
-    setExploding(EMPTY_BOOM);
-
-    let accum = 0;
-    let revealed = 0;
-    if (!instantRef.current && result.steps.length > 0) {
-      for (const step of result.steps) {
-        accum = Number((accum + step.stepWin).toFixed(2));
-        revealed += step.clusters.length;
-        setBoard(step.board);
-        setExploding(step.exploding);
-        setRoundAccum(accum);
-        setWinLines(allLines.slice(0, revealed));
-        if (accum > 0) setWonRound(true);
-        await wait(460);
-        setExploding(EMPTY_BOOM);
-        setBoard(step.nextBoard);
-        await wait(300);
+      let accum = 0;
+      let revealed = 0;
+      if (!instantRef.current && steps.length > 0) {
+        for (const step of steps) {
+          accum = Number((accum + step.stepWin).toFixed(2));
+          revealed += step.clusters.length;
+          setBoard(step.board);
+          setExploding(step.exploding);
+          setRoundAccum(accum);
+          setWinLines(allLines.slice(0, revealed));
+          if (accum > 0) setWonRound(true);
+          await wait(460);
+          setExploding(EMPTY_BOOM);
+          setBoard(step.nextBoard);
+          await wait(300);
+        }
+      } else if (steps.length > 0) {
+        const last = steps[steps.length - 1];
+        setBoard(last.nextBoard);
+        setRoundAccum(round.payout);
+        setWinLines(allLines);
+        if (round.payout > 0) setWonRound(true);
       }
-    } else if (result.steps.length > 0) {
-      const last = result.steps[result.steps.length - 1];
-      setBoard(last.nextBoard);
-      setRoundAccum(result.totalWin);
-      setWinLines(allLines);
-      if (result.totalWin > 0) setWonRound(true);
-    }
 
-    setExploding(EMPTY_BOOM);
-
-    if (result.totalWin > 0) {
-      const credited = await setBalance(balanceRef.current + result.totalWin);
-      if (!credited) showToast('Не удалось зачислить выигрыш');
-      setWonRound(true);
-      setRoundAccum(result.totalWin);
-      setWinLines(allLines);
-    } else {
-      setRoundAccum(0);
-      setWinLines([]);
-      setWonRound(false);
+      setExploding(EMPTY_BOOM);
+      if (round.payout > 0) {
+        setWonRound(true);
+        setRoundAccum(round.payout);
+        setWinLines(allLines);
+      } else {
+        setRoundAccum(0);
+        setWinLines([]);
+        setWonRound(false);
+      }
+    } catch (error) {
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
+      stopAuto();
+      await refresh();
     }
 
     busyRef.current = false;
@@ -219,7 +231,7 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
       await wait(instantRef.current ? 700 : 1100);
       void runSpin();
     }
-  }, [betInput, setBalance, showToast]);
+  }, [applyServerBalance, betInput, refresh, showToast]);
 
   const startAuto5 = () => {
     if (autoLeftRef.current > 0) {

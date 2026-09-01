@@ -4,8 +4,8 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
-import { persistWalletBalance } from '@/games/blackjack/wallet';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
+import { PlayerGameError, startGame } from '@/lib/playerGames';
 import { DepositModal } from '@/components/games/DepositModal';
 import './pharaoh.css';
 
@@ -61,14 +61,8 @@ function clampBet(value: number): number {
   return roundMoney(Math.min(MAX_BET, Math.max(MIN_BET, value)));
 }
 
-function pickWeighted(): SymbolDef {
-  const total = PHARAOH_SYMBOLS.reduce((sum, s) => sum + WEIGHTS[s.id], 0);
-  let roll = Math.random() * total;
-  for (const symbol of PHARAOH_SYMBOLS) {
-    roll -= WEIGHTS[symbol.id];
-    if (roll <= 0) return symbol;
-  }
-  return PHARAOH_SYMBOLS[PHARAOH_SYMBOLS.length - 1];
+function symbolById(id: string): SymbolDef {
+  return PHARAOH_SYMBOLS.find((item) => item.id === id) ?? PHARAOH_SYMBOLS[PHARAOH_SYMBOLS.length - 1];
 }
 
 function formatTmtm(value: number): string {
@@ -131,7 +125,7 @@ function FlipTile({
 }
 
 export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
-  const { balance, applyBalance, refresh, publicId } = useWallet();
+  const { balance, applyServerBalance, refresh, publicId } = useWallet();
   const { showToast } = useToast();
   const [bet, setBet] = useState(DEFAULT_BET);
   const [phase, setPhase] = useState<Phase>('idle');
@@ -160,47 +154,16 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
 
   useEffect(() => () => clearTimers(), []);
 
-  const setBalance = useCallback(
-    async (next: number) => {
-      const safe = roundMoney(next);
-      const previous = balanceRef.current;
-      balanceRef.current = safe;
-      applyBalance(safe);
-      const saved = await persistWalletBalance(safe);
-      if (!saved.ok) {
-        balanceRef.current = previous;
-        applyBalance(previous);
-        await refresh();
-        return false;
-      }
-      balanceRef.current = saved.balance;
-      applyBalance(saved.balance);
-      return true;
-    },
-    [applyBalance, refresh],
-  );
-
-  const resetBoardVisual = () => {
-    setPrize(null);
-    setBoard(Array(6).fill(null));
-    setPrizeFlipped(false);
-    setBoardFlipped(Array(6).fill(false));
-    setMatched(Array(6).fill(false));
-    setWinAmount(0);
-  };
-
   const finishRound = useCallback(
-    async (prizeSymbol: SymbolDef, tiles: SymbolDef[], stake: number) => {
+    (prizeSymbol: SymbolDef, tiles: SymbolDef[], payout: number) => {
       const hits = tiles.map((tile) => tile.id === prizeSymbol.id);
       const anyHit = hits.some(Boolean);
       setMatched(hits);
 
-      if (anyHit) {
-        const payout = roundMoney(stake * prizeSymbol.mult);
+      if (anyHit && payout > 0) {
         setWinAmount(payout);
         setPhase('won');
         setStatus(`ВЫИГРЫШ: ${formatTmtm(payout)} TMTM!`);
-        await setBalance(balanceRef.current + payout);
         if (!muted) showToast(`Выигрыш ${formatTmtm(payout)} TMTM`);
       } else {
         setPhase('lost');
@@ -209,7 +172,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
 
       busyRef.current = false;
     },
-    [muted, setBalance, showToast],
+    [muted, showToast],
   );
 
   const startRound = useCallback(async () => {
@@ -237,41 +200,57 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
     setPhase('opening');
     setStatus('ОТКРЫВАЕМ...');
 
-    const ok = await setBalance(balanceRef.current - stake);
-    if (!ok) {
+    try {
+      const round = await startGame({ gameCode: 'pharaoh', stake });
+      applyServerBalance(round.balanceAfter);
+      const prizeId = String((round.publicResult.prize as { id?: string } | undefined)?.id ?? '');
+      const prizeSymbol = symbolById(prizeId);
+      const tiles = (Array.isArray(round.publicResult.tiles) ? round.publicResult.tiles : []).map((tile) => {
+        const id = String((tile as { id?: string }).id ?? '');
+        return symbolById(id);
+      });
+      while (tiles.length < 6) tiles.push(PHARAOH_SYMBOLS[PHARAOH_SYMBOLS.length - 1]);
+      setPrize(prizeSymbol);
+      setBoard(tiles.slice(0, 6));
+
+      const prizeTimer = window.setTimeout(() => setPrizeFlipped(true), 280);
+      timersRef.current.push(prizeTimer);
+
+      tiles.slice(0, 6).forEach((_, index) => {
+        const t = window.setTimeout(() => {
+          setBoardFlipped((prev) => {
+            const next = [...prev];
+            next[index] = true;
+            return next;
+          });
+          if (index === 5) {
+            const done = window.setTimeout(() => {
+              finishRound(prizeSymbol, tiles.slice(0, 6), round.payout);
+            }, 450);
+            timersRef.current.push(done);
+          }
+        }, 700 + index * 420);
+        timersRef.current.push(t);
+      });
+    } catch (error) {
       busyRef.current = false;
       setPhase('idle');
       setStatus('СДЕЛАЙТЕ СТАВКУ');
-      showToast('Не удалось списать ставку');
       setAutoSpinsLeft(0);
-      return;
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
+      await refresh();
     }
+  }, [applyServerBalance, bet, finishRound, refresh, showToast]);
 
-    const prizeSymbol = pickWeighted();
-    const tiles = Array.from({ length: 6 }, () => pickWeighted());
-    setPrize(prizeSymbol);
-    setBoard(tiles);
-
-    const prizeTimer = window.setTimeout(() => setPrizeFlipped(true), 280);
-    timersRef.current.push(prizeTimer);
-
-    tiles.forEach((_, index) => {
-      const t = window.setTimeout(() => {
-        setBoardFlipped((prev) => {
-          const next = [...prev];
-          next[index] = true;
-          return next;
-        });
-        if (index === tiles.length - 1) {
-          const done = window.setTimeout(() => {
-            void finishRound(prizeSymbol, tiles, stake);
-          }, 450);
-          timersRef.current.push(done);
-        }
-      }, 700 + index * 420);
-      timersRef.current.push(t);
-    });
-  }, [bet, finishRound, setBalance, showToast]);
+  const resetBoardVisual = () => {
+    setPrize(null);
+    setBoard(Array(6).fill(null));
+    setPrizeFlipped(false);
+    setBoardFlipped(Array(6).fill(false));
+    setMatched(Array(6).fill(false));
+    setWinAmount(0);
+  };
 
   const statusTone = useMemo(() => {
     if (phase === 'won') return 'from-emerald-400 to-lime-500 text-emerald-950';

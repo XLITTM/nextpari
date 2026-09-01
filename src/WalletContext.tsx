@@ -10,6 +10,7 @@ interface WalletContextValue {
   error: string | null;
   refresh: () => Promise<void>;
   applyBalance: (next: number) => void;
+  applyServerBalance: (next: number) => void;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -57,8 +58,19 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     /* Browser cannot mint or change canonical balance. */
   }, []);
 
+  const applyServerBalance = useCallback((next: number) => {
+    if (!Number.isFinite(next) || next < 0) return;
+    const safe = Number(next.toFixed(2));
+    setBalance(safe);
+    hydrate({
+      publicId: publicId ?? '',
+      balance: safe,
+      walletId: null,
+    });
+  }, [hydrate, publicId]);
+
   return (
-    <WalletContext.Provider value={{ balance, publicId, loading, available, error, refresh, applyBalance }}>
+    <WalletContext.Provider value={{ balance, publicId, loading, available, error, refresh, applyBalance, applyServerBalance }}>
       {children}
     </WalletContext.Provider>
   );

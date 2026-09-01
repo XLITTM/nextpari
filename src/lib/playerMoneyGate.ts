@@ -1,5 +1,5 @@
 export const CANONICAL_SPORTS_BET_ENABLED = false;
-export const CANONICAL_GAMES_WAGER_ENABLED = false;
+export const CANONICAL_GAMES_WAGER_ENABLED = true;
 
 export const SPORTS_BET_GATE_MESSAGE =
   'Приём ставок на реальные деньги временно недоступен. Канонический betting engine ещё не подключён.';

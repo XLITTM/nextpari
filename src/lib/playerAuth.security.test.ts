@@ -54,6 +54,7 @@ const playerMoneyFiles = [
   'lib/playerWallet.ts',
   'lib/playerProfile.ts',
   'lib/playerMoneyGate.ts',
+  'lib/playerGames.ts',
   'WalletContext.tsx',
   'stores/userStore.ts',
   'hooks/useAuth.ts',
@@ -73,6 +74,7 @@ const sameOriginPlayerFiles = [
   'lib/playerAuth.ts',
   'lib/playerWallet.ts',
   'hooks/useAuth.ts',
+  'lib/playerGames.ts',
 ];
 
 const PLAYER_ME = {
@@ -330,11 +332,11 @@ describe('betting and game money gates', () => {
     assert.equal(blockedSportsBet()?.includes('реальные деньги'), true);
   });
 
-  it('blocks real-money game wager writes', async () => {
-    assert.equal(CANONICAL_GAMES_WAGER_ENABLED, false);
+  it('keeps persistWalletBalance non-authoritative after the canonical game engine', async () => {
+    assert.equal(CANONICAL_GAMES_WAGER_ENABLED, true);
     const saved = await persistWalletBalance(50);
     assert.equal(saved.ok, false);
-    assert.equal(blockedGamesWager()?.includes('game engine'), true);
+    assert.equal(blockedGamesWager(), null);
   });
 });
 

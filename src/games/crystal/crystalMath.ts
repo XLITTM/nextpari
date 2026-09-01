@@ -66,7 +66,14 @@ export function createCell(kind: GemKind = randomKind()): CrystalCell {
 }
 
 export function createBoard(): CrystalCell[] {
-  return Array.from({ length: CELL_COUNT }, () => createCell());
+  return idleBoard();
+}
+
+export function idleBoard(): CrystalCell[] {
+  return Array.from({ length: CELL_COUNT }, (_, index) => ({
+    id: `idle-${index}`,
+    kind: GEM_KINDS[index % GEM_KINDS.length],
+  }));
 }
 
 export function comboMultiplier(winIndex: number): number {

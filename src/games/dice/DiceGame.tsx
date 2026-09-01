@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, Info, Play, Volume2, VolumeX, X } from 'lucide-react';
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
-import { persistWalletBalance } from '@/games/blackjack/wallet';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
-import { useUserStore } from '@/stores/userStore';
+import { PlayerGameError, startGame } from '@/lib/playerGames';
 import './dice.css';
 
 export const DICE_BG = '/images/26164.png';
@@ -79,9 +78,7 @@ function DieFace({
 }
 
 export function DiceGame({ onBack }: DiceGameProps) {
-  const { applyBalance, balance } = useWallet();
-  const debit = useUserStore((state) => state.debit);
-  const credit = useUserStore((state) => state.credit);
+  const { applyServerBalance, balance, refresh } = useWallet();
   const { showToast } = useToast();
   const [stakeInput, setStakeInput] = useState(String(DEFAULT_STAKE));
   const [playerDice, setPlayerDice] = useState<[number, number]>([5, 3]);
@@ -105,20 +102,7 @@ export function DiceGame({ onBack }: DiceGameProps) {
     };
   }, []);
 
-  const syncWallet = () => {
-    const next = useUserStore.getState().balance;
-    applyBalance(next);
-    void persistWalletBalance(next);
-  };
-
-  const setStakeValue = (value: number) => {
-    if (locked) return;
-    const ceiling = Math.max(MIN_STAKE, maxStake);
-    const capped = roundMoney(Math.min(Math.max(value, MIN_STAKE), ceiling));
-    setStakeInput(String(capped));
-  };
-
-  const play = () => {
+  const play = async () => {
     if (rollingRef.current) return;
     const stake = parseStake(stakeInput);
     if (stake < MIN_STAKE) {
@@ -130,15 +114,10 @@ export function DiceGame({ onBack }: DiceGameProps) {
       showToast(blocked);
       return;
     }
-    if (stake > useUserStore.getState().balance) {
+    if (stake > balance) {
       showToast('Недостаточно средств');
       return;
     }
-    if (!debit(stake)) {
-      showToast('Недостаточно средств');
-      return;
-    }
-    syncWallet();
 
     rollingRef.current = true;
     setOutcome('rolling');
@@ -150,32 +129,50 @@ export function DiceGame({ onBack }: DiceGameProps) {
     }, 80);
     timers.current.push(tick);
 
-    window.setTimeout(() => {
+    try {
+      const round = await startGame({ gameCode: 'dice', stake });
+      applyServerBalance(round.balanceAfter);
+      const player = Array.isArray(round.publicResult.playerDice)
+        ? round.publicResult.playerDice.map((n) => Number(n))
+        : [1, 1];
+      const rival = Array.isArray(round.publicResult.rivalDice)
+        ? round.publicResult.rivalDice.map((n) => Number(n))
+        : [1, 1];
+      window.setTimeout(() => {
+        window.clearInterval(tick);
+        timers.current = timers.current.filter((id) => id !== tick);
+        setPlayerDice([player[0] ?? 1, player[1] ?? 1]);
+        setRivalDice([rival[0] ?? 1, rival[1] ?? 1]);
+        const nextOutcome = String(round.publicResult.outcome ?? 'lose');
+        if (nextOutcome === 'win') {
+          setOutcome('win');
+          setStatus('Вы победили!');
+        } else if (nextOutcome === 'draw') {
+          setOutcome('draw');
+          setStatus('Ничья');
+        } else {
+          setOutcome('lose');
+          setStatus('Вы проиграли');
+        }
+        rollingRef.current = false;
+      }, ROLL_MS);
+    } catch (error) {
       window.clearInterval(tick);
       timers.current = timers.current.filter((id) => id !== tick);
-      const red: [number, number] = [rollDie(), rollDie()];
-      const black: [number, number] = [rollDie(), rollDie()];
-      setPlayerDice(red);
-      setRivalDice(black);
-      const nextPlayer = red[0] + red[1];
-      const nextRival = black[0] + black[1];
-
-      if (nextPlayer > nextRival) {
-        credit(roundMoney(stake * 2));
-        syncWallet();
-        setOutcome('win');
-        setStatus('Вы победили!');
-      } else if (nextPlayer === nextRival) {
-        credit(roundMoney(stake));
-        syncWallet();
-        setOutcome('draw');
-        setStatus('Ничья');
-      } else {
-        setOutcome('lose');
-        setStatus('Вы проиграли');
-      }
       rollingRef.current = false;
-    }, ROLL_MS);
+      setOutcome('idle');
+      setStatus(IDLE_STATUS);
+      const code = error instanceof PlayerGameError ? error.code : '';
+      showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
+      await refresh();
+    }
+  };
+
+  const setStakeValue = (value: number) => {
+    if (locked) return;
+    const ceiling = Math.max(MIN_STAKE, maxStake);
+    const capped = roundMoney(Math.min(Math.max(value, MIN_STAKE), ceiling));
+    setStakeInput(String(capped));
   };
 
   return (
