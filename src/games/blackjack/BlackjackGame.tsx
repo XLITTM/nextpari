@@ -59,7 +59,8 @@ function parseCards(value: unknown): CardType[] {
       suit: (card.suit ?? '♠') as CardType['suit'],
       rank: (card.rank ?? 'A') as CardType['rank'],
       value: Number(card.value ?? 11),
-      isHidden: card.isHidden === true,
+      // Both initial dealer cards are shown; ignore server hole-card hide flag.
+      isHidden: false,
     };
   });
 }
@@ -373,7 +374,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
   ];
 
   return (
-    <div className="bj-felt relative mx-auto flex h-[100dvh] w-full max-w-md flex-col justify-between overflow-hidden overscroll-none text-white shadow-2xl max-md:max-w-none">
+    <div className="bj-felt relative mx-auto flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col justify-between overflow-hidden overscroll-none text-white shadow-2xl max-md:max-w-none">
       <div className="relative z-20 flex shrink-0 flex-col pt-[env(safe-area-inset-top,16px)]">
         <header className="flex h-11 shrink-0 items-center justify-between px-2 sm:h-12">
           <button
@@ -596,7 +597,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
             <li>Два туза — золотое очко, мгновенная победа.</li>
             <li>Дилер останавливается на 17 и выше.</li>
             <li>Равный счёт с дилером — ничья, ставка возвращается.</li>
-            <li>Выплата при обычной победе — ×1.84 от ставки. Золотое очко — ×2. Ничья возвращает ставку.</li>
+            <li>Выплата при обычной победе — ×1.70 от ставки. Золотое очко — ×2. Ничья возвращает ставку.</li>
           </ul>
         </Drawer>
       )}

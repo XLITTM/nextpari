@@ -15,3 +15,20 @@
 .dice-cube.is-rolling {
   animation: dice-tumble 0.8s cubic-bezier(0.22, 0.7, 0.35, 1) both;
 }
+
+@keyframes dice-result-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.dice-result {
+  animation: dice-result-in 320ms ease-out;
+  background: linear-gradient(180deg, rgba(20, 28, 18, 0.88) 0%, rgba(8, 12, 8, 0.92) 100%);
+  box-shadow: inset 0 0 0 1px rgba(163, 230, 53, 0.28), 0 10px 24px rgba(0, 0, 0, 0.45);
+}

@@ -5,8 +5,15 @@ import {
   BLACKJACK_GOLDEN_PAYOUT,
   BLACKJACK_MATH_VERSION,
   BLACKJACK_METHOD,
+  BLACKJACK_PUSH_PAYOUT,
+  BLACKJACK_V2_EXACT_RTP,
+  BLACKJACK_V2_MATH_VERSION,
+  BLACKJACK_V2_WIN_PAYOUT,
+  BLACKJACK_VISIBLE_EXACT_RTP,
+  BLACKJACK_VISIBLE_THEORETICAL_WIN_PAYOUT,
   BLACKJACK_WIN_PAYOUT,
   evaluateBlackjackExact,
+  evaluateBlackjackExactVisibleDealer,
   simulateBlackjackOptimal,
 } from './rtp/blackjackMath.js';
 import {
@@ -50,12 +57,24 @@ describe('audited RTP harness', () => {
     assertBand(row.rtp, 'dice');
   });
 
-  it('prints BLACKJACK optimal-strategy RTP', () => {
-    const exact = evaluateBlackjackExact();
+  it('documents historical BLACKJACK v2 hidden-hole RTP', () => {
+    const exact = evaluateBlackjackExact(BLACKJACK_V2_WIN_PAYOUT, BLACKJACK_PUSH_PAYOUT);
+    console.log('BLACKJACK_V2_HISTORICAL');
+    console.log('mathVersion:', BLACKJACK_V2_MATH_VERSION);
+    console.log('winPayout:', BLACKJACK_V2_WIN_PAYOUT);
+    console.log('optimalPlayerRtp:', exact.rtp);
+    console.log('houseEdge:', exact.houseEdge);
+    assert.equal(BLACKJACK_V2_WIN_PAYOUT, 1.84);
+    assert.ok(Math.abs(exact.rtp - BLACKJACK_V2_EXACT_RTP) < 1e-12);
+  });
+
+  it('prints BLACKJACK v3 visible-dealer optimal RTP', () => {
+    const exact = evaluateBlackjackExactVisibleDealer();
     const sim = simulateBlackjackOptimal();
     console.log('BLACKJACK');
     console.log('mathVersion:', BLACKJACK_MATH_VERSION);
     console.log('method:', BLACKJACK_METHOD);
+    console.log('theoreticalWinPayout:', BLACKJACK_VISIBLE_THEORETICAL_WIN_PAYOUT);
     console.log('prefixes:', exact.prefixes);
     console.log('valueStates:', exact.valueStates);
     console.log('dealerStates:', exact.dealerStates);
@@ -63,11 +82,19 @@ describe('audited RTP harness', () => {
     console.log('optimalPlayerRtp:', exact.rtp);
     console.log('houseEdge:', exact.houseEdge);
     console.log('simRtp:', sim.rtp);
-    console.log('paytable:', `win=${BLACKJACK_WIN_PAYOUT} golden=${BLACKJACK_GOLDEN_PAYOUT} push=1`);
-    assertBand(exact.rtp, 'blackjack exact');
-    assertBand(sim.rtp, 'blackjack sim');
+    console.log('paytable:', `win=${BLACKJACK_WIN_PAYOUT} golden=${BLACKJACK_GOLDEN_PAYOUT} push=${BLACKJACK_PUSH_PAYOUT}`);
+    assert.equal(BLACKJACK_MATH_VERSION, 'blackjack-v3-visible-dealer-rtp875');
+    assert.equal(BLACKJACK_WIN_PAYOUT, 1.7);
+    assert.equal(BLACKJACK_GOLDEN_PAYOUT, 2);
+    assert.equal(BLACKJACK_PUSH_PAYOUT, 1);
+    assert.equal(exact.winPayout, 1.7);
+    assert.ok(exact.rtp >= 0.87 && exact.rtp <= 0.88, `v3 RTP ${exact.rtp} outside 0.87-0.88`);
+    assert.ok(Math.abs(exact.rtp - BLACKJACK_VISIBLE_EXACT_RTP) < 1e-12, 'v3 exact RTP baked constant');
+    assertBand(exact.rtp, 'blackjack v3 exact');
+    assertBand(sim.rtp, 'blackjack v3 sim');
     assert.ok(Math.abs(exact.rtp - sim.rtp) < 0.02, 'sim should track exact RTP');
-    assert.ok(Math.abs(exact.rtp - 0.875492820201475) < 1e-12, 'blackjack exact RTP unchanged');
+    const nearby = evaluateBlackjackExactVisibleDealer(1.69);
+    assert.ok(Math.abs(exact.rtp - 0.875) < Math.abs(nearby.rtp - 0.875), '1.70 closer to 0.875 than 1.69');
   });
 
   it('prints APPLES unchanged progressive model', () => {

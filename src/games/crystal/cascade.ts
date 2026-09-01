@@ -1,5 +1,11 @@
 import { CELL_COUNT, GRID, type CrystalCell, type GemKind } from './crystalMath';
 
+export const CRYSTAL_HIGHLIGHT_MS = 160;
+export const CRYSTAL_EXPLODE_MS = 220;
+export const CRYSTAL_FALL_MS = 260;
+export const CRYSTAL_LAND_MS = 100;
+export const CRYSTAL_REDUCED_STEP_MS = 80;
+
 export interface CascadeActor {
   id: string;
   kind: GemKind;
@@ -7,6 +13,24 @@ export interface CascadeActor {
   fromRow: number;
   toRow: number;
   isNew: boolean;
+}
+
+export interface RestingSlot {
+  id: string;
+  kind: GemKind;
+  index: number;
+  col: number;
+  row: number;
+  transform: 'none';
+}
+
+export interface GridMetrics {
+  cellW: number;
+  cellH: number;
+  strideX: number;
+  strideY: number;
+  originX: number;
+  originY: number;
 }
 
 /**
@@ -55,9 +79,34 @@ export function deriveCascadeActors(
   return actors;
 }
 
+/** Settled board: one integer (col,row) per cell, no animation offset. */
+export function restingSlots(board: CrystalCell[]): RestingSlot[] {
+  return board.map((cell, index) => ({
+    id: cell.id,
+    kind: cell.kind,
+    index,
+    col: index % GRID,
+    row: Math.floor(index / GRID),
+    transform: 'none' as const,
+  }));
+}
+
+export function overlayPoint(col: number, row: number, metrics: GridMetrics): { x: number; y: number } {
+  return {
+    x: metrics.originX + col * metrics.strideX,
+    y: metrics.originY + row * metrics.strideY,
+  };
+}
+
+export function cascadeFallWaitMs(reducedMotion: boolean): number {
+  if (reducedMotion) return CRYSTAL_REDUCED_STEP_MS;
+  return CRYSTAL_FALL_MS + CRYSTAL_LAND_MS;
+}
+
 export function reducedMotionPreferred(): boolean {
-  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const media = (globalThis as { matchMedia?: (query: string) => { matches: boolean } }).matchMedia;
+  if (typeof media !== 'function') return false;
+  return media('(prefers-reduced-motion: reduce)').matches;
 }
 
 export { CELL_COUNT, GRID };

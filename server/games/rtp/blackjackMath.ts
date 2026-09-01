@@ -1,11 +1,18 @@
-export const BLACKJACK_MATH_VERSION = 'blackjack-v2-rtp875';
-export const BLACKJACK_WIN_PAYOUT = 1.84;
+export const BLACKJACK_V2_MATH_VERSION = 'blackjack-v2-rtp875';
+export const BLACKJACK_V2_WIN_PAYOUT = 1.84;
+export const BLACKJACK_V2_EXACT_RTP = 0.875492820201475;
+export const BLACKJACK_MATH_VERSION = 'blackjack-v3-visible-dealer-rtp875';
+export const BLACKJACK_WIN_PAYOUT = 1.7;
 export const BLACKJACK_GOLDEN_PAYOUT = 2;
 export const BLACKJACK_PUSH_PAYOUT = 1;
+export const BLACKJACK_VISIBLE_THEORETICAL_WIN_PAYOUT = 1.6952395194023846;
+export const BLACKJACK_VISIBLE_EXACT_RTP = 0.8771651467167154;
 export const BLACKJACK_EVAL_ROUNDS = 25_000;
 export const BLACKJACK_EVAL_SEED = 21031;
-export const BLACKJACK_METHOD =
+export const BLACKJACK_V2_METHOD =
   'Exact finite-shoe DP: 36-card shoe (4 of each rank), composition-dependent hit/stand, unknown dealer hole mixed into remaining counts, dealer draws to 17, no soft-Ace, AA golden.';
+export const BLACKJACK_METHOD =
+  'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×1.70 golden×2 push×1.';
 
 const RANKS = 9;
 const VALUES = [6, 7, 8, 9, 10, 2, 3, 4, 11] as const;
@@ -139,7 +146,7 @@ function shouldHit(solver: Solver, player: number, upIdx: number, counts: Uint8A
   return hitEv(solver, player, upIdx, counts) > standEv(solver, player, upIdx, counts) + 1e-15;
 }
 
-export function evaluateBlackjackExact(winPayout = BLACKJACK_WIN_PAYOUT, pushPayout = BLACKJACK_PUSH_PAYOUT) {
+export function evaluateBlackjackExact(winPayout = BLACKJACK_V2_WIN_PAYOUT, pushPayout = BLACKJACK_PUSH_PAYOUT) {
   const solver: Solver = {
     valueMemo: new Map(),
     dealerMemo: new Map(),
@@ -174,8 +181,114 @@ export function evaluateBlackjackExact(winPayout = BLACKJACK_WIN_PAYOUT, pushPay
   }
   const rtp = weighted / PREFIXES;
   return {
-    method: BLACKJACK_METHOD,
+    method: BLACKJACK_V2_METHOD,
     prefixes: PREFIXES,
+    fullShoe: FULL_SHOE,
+    valueStates: solver.valueMemo.size,
+    dealerStates: solver.dealerMemo.size,
+    stateCount: solver.valueMemo.size + solver.dealerMemo.size,
+    winPayout,
+    goldenPayout: BLACKJACK_GOLDEN_PAYOUT,
+    pushPayout,
+    rtp,
+    houseEdge: 1 - rtp,
+  };
+}
+
+const VISIBLE_PREFIXES = 36 * 35 * 34 * 33;
+
+function keyValueKnown(packed: number, player: number, dealerTotal: number): number {
+  return packed + player * 0x8000000 + dealerTotal * 0x200000000;
+}
+
+function hitKnownEv(solver: Solver, player: number, dealerTotal: number, counts: Uint8Array): number {
+  const n = totalCards(counts);
+  if (n <= 0) return dealerPlay(solver, dealerTotal, counts, player);
+  let ev = 0;
+  for (let r = 0; r < RANKS; r += 1) {
+    const c = counts[r];
+    if (!c) continue;
+    counts[r] = c - 1;
+    const next = player + VALUES[r];
+    ev += (c / n) * (next > 21 ? 0 : valueKnownDealer(solver, next, dealerTotal, counts));
+    counts[r] = c;
+  }
+  return ev;
+}
+
+function valueKnownDealer(solver: Solver, player: number, dealerTotal: number, counts: Uint8Array): number {
+  if (player > 21) return 0;
+  const packed = pack(counts);
+  const k = keyValueKnown(packed, player, dealerTotal);
+  const cached = solver.valueMemo.get(k);
+  if (cached !== undefined) return cached;
+  const stand = dealerPlay(solver, dealerTotal, counts, player);
+  let ev = stand;
+  if (player < 21) {
+    const hit = hitKnownEv(solver, player, dealerTotal, counts);
+    if (hit > stand) ev = hit;
+  }
+  solver.valueMemo.set(k, ev);
+  return ev;
+}
+
+/**
+ * Optimal RTP when the player sees both initial dealer cards.
+ * Active v3 model. Normal-win payout is the only calibrated economic parameter.
+ */
+export function evaluateBlackjackExactVisibleDealer(
+  winPayout = BLACKJACK_WIN_PAYOUT,
+  pushPayout = BLACKJACK_PUSH_PAYOUT,
+) {
+  const solver: Solver = {
+    valueMemo: new Map(),
+    dealerMemo: new Map(),
+    winPayout,
+    pushPayout,
+  };
+  const counts = new Uint8Array(RANKS).fill(4);
+  let weighted = 0;
+  for (let p1 = 0; p1 < RANKS; p1 += 1) {
+    const w1 = counts[p1];
+    if (!w1) continue;
+    counts[p1] = w1 - 1;
+    for (let d1 = 0; d1 < RANKS; d1 += 1) {
+      const w2 = counts[d1];
+      if (!w2) continue;
+      counts[d1] = w2 - 1;
+      for (let p2 = 0; p2 < RANKS; p2 += 1) {
+        const w3 = counts[p2];
+        if (!w3) continue;
+        counts[p2] = w3 - 1;
+        for (let d2 = 0; d2 < RANKS; d2 += 1) {
+          const w4 = counts[d2];
+          if (!w4) continue;
+          const w = w1 * w2 * w3 * w4;
+          counts[d2] = w4 - 1;
+          if (p1 === ACE && p2 === ACE) {
+            weighted += w * BLACKJACK_GOLDEN_PAYOUT;
+          } else if (d1 === ACE && d2 === ACE) {
+            weighted += w * 0;
+          } else {
+            weighted += w * valueKnownDealer(
+              solver,
+              VALUES[p1] + VALUES[p2],
+              VALUES[d1] + VALUES[d2],
+              counts,
+            );
+          }
+          counts[d2] = w4;
+        }
+        counts[p2] = w3;
+      }
+      counts[d1] = w2;
+    }
+    counts[p1] = w1;
+  }
+  const rtp = weighted / VISIBLE_PREFIXES;
+  return {
+    method: BLACKJACK_METHOD,
+    prefixes: VISIBLE_PREFIXES,
     fullShoe: FULL_SHOE,
     valueStates: solver.valueMemo.size,
     dealerStates: solver.dealerMemo.size,
@@ -200,6 +313,11 @@ function countsFromShoe(shoe: number[], extra: number[] = []): Uint8Array {
   for (const v of shoe) c[VALUES.indexOf(v as (typeof VALUES)[number])] += 1;
   for (const v of extra) c[VALUES.indexOf(v as (typeof VALUES)[number])] += 1;
   return c;
+}
+
+function shouldHitKnown(solver: Solver, player: number, dealerTotal: number, counts: Uint8Array): boolean {
+  if (player >= 21) return false;
+  return hitKnownEv(solver, player, dealerTotal, counts) > dealerPlay(solver, dealerTotal, counts, player) + 1e-15;
 }
 
 export function simulateBlackjackOptimal(rounds = BLACKJACK_EVAL_ROUNDS, seed = BLACKJACK_EVAL_SEED) {
@@ -230,20 +348,20 @@ export function simulateBlackjackOptimal(rounds = BLACKJACK_EVAL_ROUNDS, seed = 
       counts.golden += 1;
       continue;
     }
+    if (dealerGolden) {
+      counts.lose += 1;
+      continue;
+    }
     let player = p1 + p2;
-    const upIdx = VALUES.indexOf(d1 as (typeof VALUES)[number]);
-    while (player <= 21 && shouldHit(solver, player, upIdx, countsFromShoe(shoe, [d2]))) {
+    const dealerTotal = d1 + d2;
+    while (player <= 21 && shouldHitKnown(solver, player, dealerTotal, countsFromShoe(shoe))) {
       player += drawFromShoe(shoe, rand);
     }
     if (player > 21) {
       counts.lose += 1;
       continue;
     }
-    if (dealerGolden) {
-      counts.lose += 1;
-      continue;
-    }
-    let dealer = d1 + d2;
+    let dealer = dealerTotal;
     while (dealer < 17) dealer += drawFromShoe(shoe, rand);
     if (dealer > 21 || player > dealer) {
       counts.win += 1;

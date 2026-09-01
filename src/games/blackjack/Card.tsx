@@ -55,7 +55,7 @@ export function Card({ card, delay = 0, scale = 'lg' }: CardProps) {
         className={`bj-card h-full w-full ${entered ? 'bj-card-in' : 'bj-card-pre'}`}
         style={{ transitionDelay: `${delay}ms` }}
       >
-        <div className={`bj-card-inner ${faceDown ? 'bj-is-back' : 'bj-is-face'}`}>
+        <div className={`bj-card-inner ${faceDown ? 'bj-is-back' : 'bj-is-face'}`} data-face={faceDown ? 'down' : 'up'}>
           <div className="bj-face bj-front rounded-xl border border-[#d4af37]/45 bg-white shadow-[0_8px_18px_rgba(0,0,0,0.35)]">
             <span
               className={`absolute ${type.inset} ${type.rank} font-black leading-none ${ink}`}

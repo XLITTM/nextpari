@@ -439,12 +439,26 @@ body {
   100% { transform: translate(var(--sx), var(--sy)) scale(0.2); opacity: 0; }
 }
 
+@keyframes crystal-highlight {
+  0% { transform: scale(1); }
+  55% { transform: scale(1.08); }
+  100% { transform: scale(1.04); }
+}
+
 .crystal-pop {
-  animation: crystal-pop 0.3s ease-in forwards;
+  animation: crystal-pop 0.22s ease-in forwards;
 }
 
 .crystal-pop-reduced {
   animation: crystal-pop 0.08s linear forwards;
+}
+
+.crystal-highlight {
+  animation: crystal-highlight 0.16s ease-out forwards;
+}
+
+.crystal-highlight-reduced {
+  animation: crystal-highlight 0.08s linear forwards;
 }
 
 .crystal-drop {
@@ -452,7 +466,7 @@ body {
 }
 
 .crystal-land {
-  animation: crystal-land 0.14s ease-out;
+  animation: crystal-land 0.1s ease-out;
 }
 
 .crystal-board[data-cascade='fall'] img {

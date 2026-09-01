@@ -110,3 +110,71 @@ describe('phase 031 frontend regressions', () => {
     assert.match(ui, /1100/);
   });
 });
+
+describe('phase 032 visual restore', () => {
+  it('Pharaoh keeps one themed result banner and no win toast', () => {
+    const ui = read('src/games/pharaoh/PharaohTreasure.tsx');
+    assert.match(ui, /data-pharaoh-result/);
+    assert.match(ui, /pharaoh-banner/);
+    assert.match(ui, /ВЫИГРЫШ: \$\{formatTmtm\(payout\)\} TMTM!/);
+    assert.match(ui, /ВЫ ПРОИГРАЛИ/);
+    assert.equal(ui.includes('showToast(`Выигрыш'), false);
+    assert.equal(ui.includes('×{prize?.mult}'), false);
+  });
+
+  it('Dice shows one result panel from server payout and totals', () => {
+    const ui = read('src/games/dice/DiceGame.tsx');
+    assert.match(ui, /function DiceResultPanel/);
+    assert.match(ui, /data-dice-result/);
+    assert.match(ui, /ПОБЕДА/);
+    assert.match(ui, /НИЧЬЯ/);
+    assert.match(ui, /ПОРАЖЕНИЕ/);
+    assert.match(ui, /Выигрыш/);
+    assert.match(ui, /Возврат/);
+    assert.match(ui, /Проигрыш/);
+    assert.match(ui, /Number\(round\.payout\)/);
+    assert.equal(ui.includes('stake * DICE_WIN_MULTIPLIER'), false);
+    assert.equal(ui.includes('Math.random'), false);
+    assert.match(ui, /DICE_WIN_MULTIPLIER = 1.72/);
+  });
+
+  it('Blackjack presents both initial dealer cards face-up', () => {
+    const ui = read('src/games/blackjack/BlackjackGame.tsx');
+    const card = read('src/games/blackjack/Card.tsx');
+    assert.match(ui, /isHidden: false/);
+    assert.match(ui, /Both initial dealer cards are shown/);
+    assert.match(ui, /×1.70 от ставки/);
+    assert.match(card, /data-face=\{faceDown \? 'down' : 'up'\}/);
+    assert.match(ui, /dealerDraws/);
+    assert.match(ui, /payout=\{serverPayout\}/);
+  });
+
+  it('Apples pre-round CTA is ИГРАТЬ inside the mobile viewport shell', () => {
+    const ui = read('src/games/apples/ApplesGame.tsx');
+    assert.match(ui, /data-apples-play="1"/);
+    assert.match(ui, /\{busy \? 'ЗАПУСК\.\.\.' : 'ИГРАТЬ'\}/);
+    assert.match(ui, /max-h-\[100dvh\]/);
+    assert.match(ui, /min-h-0/);
+    assert.equal(ui.includes('min-h-screen'), false);
+    assert.match(ui, /startGame\(\{ gameCode: 'apples'/);
+    assert.equal(ui.includes("=== 'playing' ? 'playing' : 'playing'"), false);
+    assert.equal(APPLES_MATH_UNCHANGED, true);
+  });
+
+  it('Crystal uses a settled CSS grid and a temporary fall overlay', () => {
+    const board = read('src/games/crystal/CrystalBoard.tsx');
+    const game = read('src/games/crystal/CrystalGame.tsx');
+    assert.match(board, /data-base-grid="7x7"/);
+    assert.match(board, /grid-cols-7 gap-1.5 p-2/);
+    assert.match(board, /data-resting-transform="none"/);
+    assert.match(board, /data-cascade-overlay="1"/);
+    assert.match(board, /overlayActive/);
+    assert.match(board, /translate3d/);
+    assert.match(game, /setMotion\('highlight'\)/);
+    assert.match(game, /setMotion\('fall'\)/);
+    assert.match(game, /setMotion\('idle'\)/);
+    assert.match(game, /setNextBoard\(undefined\)/);
+    assert.equal(game.includes('resolveSpin'), false);
+    assert.equal(game.includes('Math.random'), false);
+  });
+});

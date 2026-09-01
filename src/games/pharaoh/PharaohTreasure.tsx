@@ -165,7 +165,6 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
         setWinAmount(payout);
         setPhase('won');
         setStatus(`ВЫИГРЫШ: ${formatTmtm(payout)} TMTM!`);
-        if (!muted) showToast(`Выигрыш ${formatTmtm(payout)} TMTM`);
       } else {
         setPhase('lost');
         setStatus('ВЫ ПРОИГРАЛИ');
@@ -173,7 +172,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
 
       busyRef.current = false;
     },
-    [muted, showToast],
+    [],
   );
 
   const startRound = useCallback(async () => {
@@ -297,7 +296,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
 
   return (
     <div
-      className="pharaoh-root relative flex min-h-screen h-[100dvh] max-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-cover bg-center bg-no-repeat text-white"
+      className="pharaoh-root relative flex h-[100dvh] max-h-[100dvh] w-full flex-col justify-between overflow-hidden bg-cover bg-center bg-no-repeat text-white"
       style={{ backgroundImage: "url('/assets/games/pharaoh/bg.png')" }}
     >
       <div className="pointer-events-none absolute inset-0 z-0 bg-black/30 backdrop-blur-[1px]" />
@@ -340,6 +339,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
           </button>
 
           <div
+            data-pharaoh-result={phase === 'won' || phase === 'lost' ? phase : 'idle'}
             className={`pharaoh-banner flex min-h-[40px] flex-1 items-center justify-center rounded-xl px-3 py-2 text-center text-[13px] font-black uppercase tracking-wide bg-gradient-to-b ${statusTone}`}
           >
             {status}
@@ -382,15 +382,10 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
             </div>
           </div>
 
-          {phase === 'won' && winAmount > 0 && (
-            <p className="text-center text-sm font-bold text-amber-200 drop-shadow">
-              ×{prize?.mult} · +{formatTmtm(winAmount)} TMTM
-            </p>
-          )}
         </div>
 
         {/* Controls */}
-        <div className="relative z-10 flex shrink-0 flex-col items-center gap-2 px-4 pb-6">
+        <div className="relative z-10 flex shrink-0 flex-col items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             disabled={isPlaying}

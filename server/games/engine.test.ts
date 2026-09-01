@@ -510,3 +510,25 @@ describe('phase 031 stability and shared Aviator', () => {
     assert.equal(rollback.includes('COMMIT;'), false);
   });
 });
+
+describe('phase 032 blackjack visible-dealer calibration', () => {
+  const sql032 = read('supabase/migrations/20260901_032_blackjack_visible_dealer_rtp.sql');
+
+  it('updates only blackjack catalog payout and mathVersion', () => {
+    assert.match(sql032, /^BEGIN;/m);
+    assert.match(sql032, /^COMMIT;/m);
+    assert.match(sql032, /blackjack-v3-visible-dealer-rtp875/);
+    assert.match(sql032, /winPayout', 1.70/);
+    assert.match(sql032, /goldenPayout', 2.00/);
+    assert.match(sql032, /pushPayout', 1.00/);
+    assert.match(sql032, /v_win NUMERIC := 1.70/);
+    assert.match(sql032, /private\.game_math_version\('blackjack'\)/);
+    assert.equal(sql032.includes('UPDATE private.game_rounds'), false);
+    assert.equal(sql032.includes('game_adapter_apples'), false);
+    assert.equal(sql032.includes('game_adapter_dice'), false);
+    assert.equal(sql032.includes('game_adapter_pharaoh'), false);
+    assert.equal(sql032.includes('game_adapter_crystal'), false);
+    assert.equal(sql032.includes('game_adapter_aviator'), false);
+    assert.equal(sql032.includes('apply_wallet_entry'), false);
+  });
+});

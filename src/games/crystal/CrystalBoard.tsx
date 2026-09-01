@@ -1,10 +1,16 @@
 import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { GEM_SRC } from './crystalAssets';
-import { deriveCascadeActors, GRID, type CascadeActor } from './cascade';
+import {
+  deriveCascadeActors,
+  overlayPoint,
+  type CascadeActor,
+  type GridMetrics,
+  GRID,
+} from './cascade';
 import type { CrystalCell, GemKind } from './crystalMath';
 
-export type CrystalMotion = 'idle' | 'explode' | 'fall';
+export type CrystalMotion = 'idle' | 'highlight' | 'explode' | 'fall';
 
 interface CrystalBoardProps {
   board: CrystalCell[];
@@ -24,7 +30,27 @@ const GEM_GLOW: Record<GemKind, string> = {
   coin: '#fde68a',
 };
 
-const CELL_PCT = 100 / GRID;
+function readGridMetrics(boardEl: HTMLElement | null): GridMetrics | null {
+  if (!boardEl) return null;
+  const slots = boardEl.querySelectorAll<HTMLElement>('[data-slot]');
+  if (slots.length < GRID + 1) return null;
+  const first = slots[0];
+  const right = slots[1];
+  const down = slots[GRID];
+  if (!first || !right || !down) return null;
+  const boardBox = boardEl.getBoundingClientRect();
+  const a = first.getBoundingClientRect();
+  const b = right.getBoundingClientRect();
+  const c = down.getBoundingClientRect();
+  return {
+    cellW: a.width,
+    cellH: a.height,
+    strideX: b.left - a.left,
+    strideY: c.top - a.top,
+    originX: a.left - boardBox.left,
+    originY: a.top - boardBox.top,
+  };
+}
 
 export const CrystalBoard = memo(function CrystalBoard({
   board,
@@ -33,128 +59,175 @@ export const CrystalBoard = memo(function CrystalBoard({
   motion,
   reducedMotion = false,
 }: CrystalBoardProps) {
+  const boardRef = useRef<HTMLDivElement>(null);
+  const [metrics, setMetrics] = useState<GridMetrics | null>(null);
+  const overlayActive = motion === 'fall' && Boolean(nextBoard);
   const actors = useMemo(() => {
-    if (motion !== 'fall' || !nextBoard || nextBoard.length !== board.length) return [];
+    if (!overlayActive || !nextBoard) return [];
     return deriveCascadeActors(board, exploding, nextBoard);
-  }, [board, exploding, motion, nextBoard]);
+  }, [board, exploding, nextBoard, overlayActive]);
+
+  useLayoutEffect(() => {
+    setMetrics(readGridMetrics(boardRef.current));
+  }, [board, motion, overlayActive]);
 
   return (
     <div
-      className="crystal-board mx-auto aspect-square w-full max-w-[360px]"
+      ref={boardRef}
+      className="crystal-board relative mx-auto aspect-square w-full max-w-[360px] overflow-visible"
       data-cascade={motion}
+      data-base-grid="7x7"
       style={{ maxWidth: 'min(360px, calc(100dvh - 26rem))' }}
     >
-      <div className="relative h-full w-full p-2">
-        <div className="grid h-full w-full grid-cols-7 gap-1.5">
-          {board.map((cell, index) => (
+      <div className="grid h-full w-full grid-cols-7 gap-1.5 p-2">
+        {board.map((cell, index) => {
+          const col = index % GRID;
+          const row = Math.floor(index / GRID);
+          const boom = exploding[index] === true;
+          const hideGem = overlayActive;
+          return (
             <div
               key={`slot-${index}`}
-              className="relative flex aspect-square items-center justify-center rounded-lg border border-white/15 bg-black/35"
+              data-slot={index}
+              data-slot-col={col}
+              data-slot-row={row}
+              className="relative flex aspect-square items-center justify-center rounded-lg border border-white/15 bg-black/35 shadow-inner"
+            >
+              {hideGem ? null : (
+                <GemCell
+                  cell={cell}
+                  col={col}
+                  row={row}
+                  boom={boom}
+                  motion={motion}
+                  reducedMotion={reducedMotion}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {overlayActive && metrics && actors.length > 0 ? (
+        <div className="pointer-events-none absolute inset-0 overflow-visible" data-cascade-overlay="1">
+          {actors.map((actor) => (
+            <FallingGem
+              key={actor.id}
+              actor={actor}
+              metrics={metrics}
+              reducedMotion={reducedMotion}
             />
           ))}
         </div>
-        {motion === 'fall' && actors.length > 0 ? (
-          <div className="pointer-events-none absolute inset-2">
-            {actors.map((actor) => (
-              <FallingGem
-                key={actor.id}
-                actor={actor}
-                reducedMotion={reducedMotion}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="pointer-events-none absolute inset-2 grid h-[calc(100%-0px)] w-full grid-cols-7 gap-1.5">
-            {board.map((cell, index) => (
-              <GemCell
-                key={cell.id}
-                cell={cell}
-                boom={exploding[index] === true}
-                reducedMotion={reducedMotion}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      ) : null}
     </div>
   );
 });
 
 const GemCell = memo(function GemCell({
   cell,
+  col,
+  row,
   boom,
+  motion,
   reducedMotion,
 }: {
   cell: CrystalCell;
+  col: number;
+  row: number;
   boom: boolean;
+  motion: CrystalMotion;
   reducedMotion: boolean;
 }) {
+  const highlight = boom && motion === 'highlight';
+  const explode = boom && motion === 'explode';
   return (
-    <div className="relative flex aspect-square items-center justify-center">
+    <div
+      data-gem-id={cell.id}
+      data-col={col}
+      data-row={row}
+      data-resting-transform="none"
+      className="relative flex h-full w-full items-center justify-center"
+      style={{ transform: 'none' }}
+    >
       <div
         className={`flex h-[82%] w-[82%] items-center justify-center ${
-          boom ? (reducedMotion ? 'crystal-pop-reduced' : 'crystal-pop') : ''
-        }`}
+          explode ? (reducedMotion ? 'crystal-pop-reduced' : 'crystal-pop') : ''
+        } ${highlight ? (reducedMotion ? 'crystal-highlight-reduced' : 'crystal-highlight') : ''}`}
       >
         <img
           src={GEM_SRC[cell.kind]}
           alt=""
           draggable={false}
-          className="h-full w-full object-contain"
+          className="h-full w-full object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]"
         />
       </div>
-      {boom && !reducedMotion ? <Sparks color={GEM_GLOW[cell.kind]} /> : null}
+      {explode && !reducedMotion ? <Sparks color={GEM_GLOW[cell.kind]} /> : null}
     </div>
   );
 });
 
-function FallingGem({ actor, reducedMotion }: { actor: CascadeActor; reducedMotion: boolean }) {
-  const [landed, setLanded] = useState(reducedMotion);
+function FallingGem({
+  actor,
+  metrics,
+  reducedMotion,
+}: {
+  actor: CascadeActor;
+  metrics: GridMetrics;
+  reducedMotion: boolean;
+}) {
   const nodeRef = useRef<HTMLDivElement>(null);
-  const distance = Math.max(0, actor.toRow - actor.fromRow);
-  const duration = reducedMotion ? 80 : Math.min(300, 150 + distance * 28);
-  const delay = actor.isNew && !reducedMotion ? actor.col * 18 : 0;
+  const [landed, setLanded] = useState(reducedMotion);
+  const dest = overlayPoint(actor.col, actor.toRow, metrics);
+  const from = overlayPoint(actor.col, actor.fromRow, metrics);
+  const dy = from.y - dest.y;
+  const duration = reducedMotion ? 80 : 260;
 
   useLayoutEffect(() => {
     const node = nodeRef.current;
     if (!node) return;
-    const fromY = actor.fromRow * CELL_PCT;
-    const toY = actor.toRow * CELL_PCT;
-    const x = actor.col * CELL_PCT;
-    node.style.transform = `translate3d(${x}%, ${fromY}%, 0)`;
+    node.style.transition = 'none';
+    node.style.transform = `translate3d(0, ${dy}px, 0)`;
     if (reducedMotion) {
-      node.style.transform = `translate3d(${x}%, ${toY}%, 0)`;
+      node.style.transform = 'translate3d(0, 0, 0)';
+      setLanded(true);
       return;
     }
     const frame = window.requestAnimationFrame(() => {
-      node.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0.85, 0.2, 1) ${delay}ms`;
-      node.style.transform = `translate3d(${x}%, ${toY}%, 0)`;
+      node.style.transition = `transform ${duration}ms cubic-bezier(0.2, 0.85, 0.2, 1)`;
+      node.style.transform = 'translate3d(0, 0, 0)';
     });
-    const done = window.setTimeout(() => setLanded(true), duration + delay + 20);
+    const done = window.setTimeout(() => setLanded(true), duration);
     return () => {
       window.cancelAnimationFrame(frame);
       window.clearTimeout(done);
     };
-  }, [actor.col, actor.fromRow, actor.toRow, delay, duration, reducedMotion]);
+  }, [dy, duration, reducedMotion]);
 
   return (
     <div
       ref={nodeRef}
       data-cascade-id={actor.id}
+      data-col={actor.col}
       data-from-row={actor.fromRow}
       data-to-row={actor.toRow}
       data-new={actor.isNew ? '1' : '0'}
-      className="absolute left-0 top-0 h-[calc(100%/7)] w-[calc(100%/7)] will-change-transform"
+      className="absolute will-change-transform"
       style={{
-        transform: `translate3d(${actor.col * CELL_PCT}%, ${actor.fromRow * CELL_PCT}%, 0)`,
+        left: dest.x,
+        top: dest.y,
+        width: metrics.cellW,
+        height: metrics.cellH,
+        transform: `translate3d(0, ${dy}px, 0)`,
       }}
     >
-      <div className="flex h-full w-full items-center justify-center p-[8%]">
+      <div className="flex h-full w-full items-center justify-center">
         <img
           src={GEM_SRC[actor.kind]}
           alt=""
           draggable={false}
-          className={`h-[82%] w-[82%] object-contain ${landed && !reducedMotion ? 'crystal-land' : ''}`}
+          className={`h-[82%] w-[82%] object-contain drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${
+            landed && !reducedMotion ? 'crystal-land' : ''
+          }`}
         />
       </div>
     </div>

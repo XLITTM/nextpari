@@ -6,7 +6,13 @@ import { blockedGamesWager } from '@/lib/playerMoneyGate';
 import { PlayerGameError, startGame } from '@/lib/playerGames';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { CrystalBoard, type CrystalMotion } from './CrystalBoard';
-import { reducedMotionPreferred } from './cascade';
+import {
+  CRYSTAL_EXPLODE_MS,
+  CRYSTAL_HIGHLIGHT_MS,
+  CRYSTAL_REDUCED_STEP_MS,
+  cascadeFallWaitMs,
+  reducedMotionPreferred,
+} from './cascade';
 import { CRYSTAL_BG, GEM_SRC } from './crystalAssets';
 import {
   idleBoard,
@@ -205,13 +211,15 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
           setBoard(step.board);
           setExploding(step.exploding);
           setNextBoard(step.nextBoard);
-          setMotion('explode');
           setRoundAccum(accum);
           setWinLines(allLines.slice(0, revealed));
           if (accum > 0) setWonRound(true);
-          await waitTracked(reduced ? 90 : 300);
+          setMotion('highlight');
+          await waitTracked(reduced ? CRYSTAL_REDUCED_STEP_MS : CRYSTAL_HIGHLIGHT_MS);
+          setMotion('explode');
+          await waitTracked(reduced ? CRYSTAL_REDUCED_STEP_MS : CRYSTAL_EXPLODE_MS);
           setMotion('fall');
-          await waitTracked(reduced ? 90 : 260);
+          await waitTracked(cascadeFallWaitMs(reduced));
           setExploding(EMPTY_BOOM);
           setBoard(step.nextBoard);
           setNextBoard(undefined);
@@ -280,7 +288,7 @@ export function CrystalGame({ onBack }: CrystalGameProps) {
 
   return (
     <div
-      className="relative mx-auto flex h-[100dvh] min-h-screen w-full max-w-md flex-col overflow-hidden bg-cover bg-center bg-no-repeat text-white max-md:max-w-none"
+      className="relative mx-auto flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-cover bg-center bg-no-repeat text-white max-md:max-w-none"
       style={{ backgroundImage: `url('${CRYSTAL_BG}')` }}
     >
       <header className="relative z-20 flex h-12 shrink-0 items-center gap-1 px-2 pt-[env(safe-area-inset-top,8px)]">

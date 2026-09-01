@@ -184,7 +184,7 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
 
   return (
     <div
-      className="aof-screen relative mx-auto flex h-[100dvh] min-h-screen w-full max-w-md flex-col overflow-hidden bg-cover bg-center bg-no-repeat text-white max-md:max-w-none"
+      className="aof-screen relative mx-auto flex h-[100dvh] max-h-[100dvh] w-full max-w-md flex-col overflow-hidden bg-cover bg-center bg-no-repeat text-white max-md:max-w-none"
       style={{ backgroundImage: "url('/images/games/apple_forest_bg.png')" }}
     >
       <header className="relative z-20 flex h-12 shrink-0 items-center gap-1 px-2 pt-[env(safe-area-inset-top,8px)]">
@@ -205,7 +205,7 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
         </div>
       </header>
 
-      <div className={`relative z-10 mx-auto flex w-full max-w-[380px] flex-1 flex-col justify-end overflow-y-auto px-2 pb-3 ${phase === 'lost' ? 'aof-shake' : ''}`}>
+      <div className={`relative z-10 mx-auto flex min-h-0 w-full max-w-[380px] flex-1 flex-col justify-end overflow-y-auto px-2 pb-3 ${phase === 'lost' ? 'aof-shake' : ''}`}>
         <div className="flex flex-col-reverse">
           {rows.map((row) => {
             const isActiveRow = row.level === activeLevel;
@@ -292,10 +292,12 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
           <button
             type="button"
             onClick={() => void startRound()}
-            disabled={busy}
-            className="w-full rounded-2xl bg-gradient-to-b from-lime-400 to-emerald-600 py-3 text-sm font-black uppercase tracking-wide text-emerald-950 shadow-lg shadow-emerald-900/30 active:scale-[0.98]"
+            disabled={busy || balance < MIN_BET}
+            data-apples-play="1"
+            aria-label="ИГРАТЬ"
+            className="w-full rounded-2xl bg-gradient-to-b from-lime-400 to-emerald-600 py-3 text-sm font-black uppercase tracking-wide text-emerald-950 shadow-lg shadow-emerald-900/30 active:scale-[0.98] disabled:opacity-50"
           >
-            СТАВКА
+            {busy ? 'ЗАПУСК...' : 'ИГРАТЬ'}
           </button>
         )}
       </div>

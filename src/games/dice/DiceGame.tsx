@@ -83,6 +83,13 @@ export function DiceGame({ onBack }: DiceGameProps) {
   const [rivalDice, setRivalDice] = useState<[number, number]>([4, 2]);
   const [outcome, setOutcome] = useState<Outcome>('idle');
   const [status, setStatus] = useState(IDLE_STATUS);
+  const [resultView, setResultView] = useState<{
+    outcome: 'win' | 'draw' | 'lose';
+    playerTotal: number;
+    rivalTotal: number;
+    payout: number;
+    stake: number;
+  } | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [muted, setMuted] = useState(false);
   const rollingRef = useRef(false);
@@ -123,6 +130,7 @@ export function DiceGame({ onBack }: DiceGameProps) {
     rollingRef.current = true;
     setOutcome('rolling');
     setStatus('Идёт бросок...');
+    setResultView(null);
 
     const startedAt = performance.now();
     try {
@@ -142,21 +150,26 @@ export function DiceGame({ onBack }: DiceGameProps) {
       setPlayerDice([player[0] ?? 1, player[1] ?? 1]);
       setRivalDice([rival[0] ?? 1, rival[1] ?? 1]);
       const nextOutcome = String(round.publicResult.outcome ?? 'lose');
+      const playerTotal = Number(player[0] ?? 1) + Number(player[1] ?? 1);
+      const rivalTotal = Number(rival[0] ?? 1) + Number(rival[1] ?? 1);
+      const payout = Number(round.payout) || 0;
       if (nextOutcome === 'win') {
         setOutcome('win');
-        setStatus('Вы победили!');
+        setResultView({ outcome: 'win', playerTotal, rivalTotal, payout, stake });
       } else if (nextOutcome === 'draw') {
         setOutcome('draw');
-        setStatus('Ничья');
+        setResultView({ outcome: 'draw', playerTotal, rivalTotal, payout, stake });
       } else {
         setOutcome('lose');
-        setStatus('Вы проиграли');
+        setResultView({ outcome: 'lose', playerTotal, rivalTotal, payout, stake });
       }
+      setStatus(IDLE_STATUS);
       rollingRef.current = false;
     } catch (error) {
       rollingRef.current = false;
       setOutcome('idle');
       setStatus(IDLE_STATUS);
+      setResultView(null);
       const code = error instanceof PlayerGameError ? error.code : '';
       showToast(code === 'INSUFFICIENT_AVAILABLE_BALANCE' ? 'Недостаточно средств' : 'Не удалось списать ставку');
       await refresh();
@@ -212,26 +225,33 @@ export function DiceGame({ onBack }: DiceGameProps) {
           </button>
         </header>
 
-        <div className="flex min-h-0 flex-1 items-center justify-between gap-3 px-1">
-          <div className="flex gap-2">
-            <DieFace value={playerDice[0]} tone="red" rolling={locked} />
-            <DieFace value={playerDice[1]} tone="red" rolling={locked} />
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-3">
+          <div className="flex w-full items-center justify-between gap-3">
+            <div className="flex gap-2">
+              <DieFace value={playerDice[0]} tone="red" rolling={locked} />
+              <DieFace value={playerDice[1]} tone="red" rolling={locked} />
+            </div>
+            <div className="flex gap-2">
+              <DieFace value={rivalDice[0]} tone="black" rolling={locked} />
+              <DieFace value={rivalDice[1]} tone="black" rolling={locked} />
+            </div>
           </div>
-          <div className="flex gap-2">
-            <DieFace value={rivalDice[0]} tone="black" rolling={locked} />
-            <DieFace value={rivalDice[1]} tone="black" rolling={locked} />
-          </div>
+          {resultView ? (
+            <DiceResultPanel result={resultView} />
+          ) : null}
         </div>
 
-        <div className="z-20 flex w-full flex-col gap-2 bg-transparent p-3">
-          <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-wide">
-            <p className="text-rose-100 drop-shadow-md">
-              Вы <span className="tabular-nums text-white">{playerSum}</span>
-            </p>
-            <p className="text-lime-100 drop-shadow-md">
-              Соперник <span className="tabular-nums text-white">{rivalSum}</span>
-            </p>
-          </div>
+        <div className="z-20 flex w-full flex-col gap-2 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+          {resultView ? null : (
+            <div className="flex items-center justify-between text-[12px] font-bold uppercase tracking-wide">
+              <p className="text-rose-100 drop-shadow-md">
+                Вы <span className="tabular-nums text-white">{playerSum}</span>
+              </p>
+              <p className="text-lime-100 drop-shadow-md">
+                Соперник <span className="tabular-nums text-white">{rivalSum}</span>
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-4 gap-1.5">
             <button
@@ -328,6 +348,41 @@ export function DiceGame({ onBack }: DiceGameProps) {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function DiceResultPanel({
+  result,
+}: {
+  result: {
+    outcome: 'win' | 'draw' | 'lose';
+    playerTotal: number;
+    rivalTotal: number;
+    payout: number;
+    stake: number;
+  };
+}) {
+  const title = result.outcome === 'win' ? 'ПОБЕДА' : result.outcome === 'draw' ? 'НИЧЬЯ' : 'ПОРАЖЕНИЕ';
+  const moneyLabel = result.outcome === 'win' ? 'Выигрыш' : result.outcome === 'draw' ? 'Возврат' : 'Проигрыш';
+  const moneyValue = result.outcome === 'lose' ? result.stake : result.payout;
+  return (
+    <div
+      data-dice-result={result.outcome}
+      className="dice-result w-full max-w-sm rounded-2xl px-4 py-3 text-center"
+    >
+      <p data-dice-outcome={result.outcome} className="text-lg font-black tracking-[0.14em] text-[#f5e6a8]">
+        {title}
+      </p>
+      <p className="mt-1 text-sm font-bold text-white/90">
+        Вы: <span className="tabular-nums">{result.playerTotal}</span>
+      </p>
+      <p className="text-sm font-bold text-white/90">
+        Соперник: <span className="tabular-nums">{result.rivalTotal}</span>
+      </p>
+      <p data-dice-money={moneyValue.toFixed(2)} className="mt-1 text-base font-black tabular-nums text-lime-300">
+        {moneyLabel}: {moneyValue.toFixed(2)} TMTM
+      </p>
     </div>
   );
 }
