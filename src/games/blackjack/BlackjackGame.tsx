@@ -13,7 +13,7 @@ import {
 import { useToast } from '@/ToastContext';
 import { useWallet } from '@/WalletContext';
 import { blockedGamesWager } from '@/lib/playerMoneyGate';
-import { gameAction, PlayerGameError, startGame } from '@/lib/playerGames';
+import { gameAction, PlayerGameError, startGame, type PlayerGameRound } from '@/lib/playerGames';
 import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { Card, type CardScale } from './Card';
 import { calculateHandScore, isBust, isGoldenOchko } from './deck';
@@ -22,6 +22,7 @@ import {
   MIN_STAKE,
   resultCopy,
 } from './engine';
+import { parseDealerCards, parsePlayerCards } from './parseHands';
 import type { CardType, GameResult, GameStage } from './types';
 
 interface BlackjackGameProps {
@@ -49,20 +50,6 @@ const CHIP_STYLES: Record<number, string> = {
 function formatStake(value: number): string {
   const shown = Number.isInteger(value) ? String(value) : value.toFixed(2);
   return `${shown} TMTM`;
-}
-
-function parseCards(value: unknown): CardType[] {
-  if (!Array.isArray(value)) return [];
-  return value.map((raw) => {
-    const card = raw as { suit?: string; rank?: string; value?: number; isHidden?: boolean };
-    return {
-      suit: (card.suit ?? '♠') as CardType['suit'],
-      rank: (card.rank ?? 'A') as CardType['rank'],
-      value: Number(card.value ?? 11),
-      // Both initial dealer cards are shown; ignore server hole-card hide flag.
-      isHidden: false,
-    };
-  });
 }
 
 function stageFromRound(state: string, publicResult: Record<string, unknown>): GameStage {
@@ -143,15 +130,15 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
   }, [soundOn]);
 
   const applyRound = useCallback((
-    round: { roundId: string; state: string; payout: number; balanceAfter: number; publicResult: Record<string, unknown> },
+    round: PlayerGameRound,
     stakeValue: number,
     animateDealer = false,
   ) => {
     setRoundId(round.roundId);
     applyServerBalance(round.balanceAfter);
-    const player = parseCards(round.publicResult.playerHand);
-    const dealer = parseCards(round.publicResult.dealerHand);
-    const draws = parseCards(round.publicResult.dealerDraws);
+    const player = parsePlayerCards(round.publicResult.playerHand);
+    const dealer = parseDealerCards(round.publicResult.dealerHand, round.mathVersion);
+    const draws = parseDealerCards(round.publicResult.dealerDraws, round.mathVersion);
     setPlayerHand(player);
     const nextStage = stageFromRound(round.state, round.publicResult);
     const outcome = (round.publicResult.result as GameResult) ?? (nextStage === 'gameOver' ? 'lose' : null);

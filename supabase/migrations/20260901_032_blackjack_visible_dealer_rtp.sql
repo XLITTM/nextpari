@@ -1,11 +1,13 @@
 BEGIN;
 
 -- NEXTPARI PHASE 032
--- Blackjack visible-dealer RTP calibration.
+-- Blackjack visible-dealer RTP calibration + version-safe cutover.
 -- WRITE ONLY. Do not execute against production in this task.
 -- Does not UPDATE historical settled rounds.
 -- Does not change Pharaoh, Dice, Apples, Crystal, or Aviator math.
 -- Does not change Wallet Core or ledger.
+-- New rounds take v3 from game_catalog.mathVersion at START.
+-- Settlement ALWAYS uses private.game_rounds.math_version, never live catalog payout.
 
 UPDATE private.game_catalog
 SET
@@ -19,28 +21,48 @@ SET
     updated_at = pg_catalog.now()
 WHERE game_code = 'blackjack';
 
-CREATE OR REPLACE FUNCTION private.game_bj_payout(p_stake NUMERIC, p_result TEXT)
+CREATE OR REPLACE FUNCTION private.game_bj_payout_for_version(
+    p_stake NUMERIC,
+    p_result TEXT,
+    p_math_version TEXT
+)
 RETURNS NUMERIC
 LANGUAGE plpgsql
 STABLE
 SET search_path = ''
 AS $fn$
 DECLARE
-    v_win NUMERIC := 1.70;
+    v_win NUMERIC;
     v_golden NUMERIC := 2.00;
 BEGIN
-    SELECT
-        COALESCE((c.config->>'winPayout')::NUMERIC, 1.70),
-        COALESCE((c.config->>'goldenPayout')::NUMERIC, 2.00)
-    INTO v_win, v_golden
-    FROM private.game_catalog AS c
-    WHERE c.game_code = 'blackjack';
+    IF p_math_version IS NULL OR btrim(p_math_version) = '' THEN
+        RAISE EXCEPTION 'BLACKJACK_MATH_VERSION_MISSING';
+    END IF;
+    IF p_math_version = 'blackjack-v2-rtp875' THEN
+        v_win := 1.84;
+    ELSIF p_math_version = 'blackjack-v3-visible-dealer-rtp875' THEN
+        v_win := 1.70;
+    ELSE
+        RAISE EXCEPTION 'BLACKJACK_MATH_VERSION_UNSUPPORTED';
+    END IF;
     RETURN CASE
         WHEN p_result = 'golden' THEN private.game_money(p_stake * v_golden)
         WHEN p_result IN ('blackjack', 'win') THEN private.game_money(p_stake * v_win)
         WHEN p_result = 'push' THEN private.game_money(p_stake)
         ELSE 0
     END;
+END;
+$fn$;
+
+-- Two-arg helper must not silently follow live catalog after cutover.
+CREATE OR REPLACE FUNCTION private.game_bj_payout(p_stake NUMERIC, p_result TEXT)
+RETURNS NUMERIC
+LANGUAGE plpgsql
+STABLE
+SET search_path = ''
+AS $fn$
+BEGIN
+    RAISE EXCEPTION 'BLACKJACK_PAYOUT_REQUIRES_VERSION';
 END;
 $fn$;
 
@@ -75,16 +97,19 @@ BEGIN
     v_pub := private.game_bj_public(p_player, v_dealer, 'gameOver', v_result)
         || jsonb_build_object(
             'dealerDraws', v_draws,
-            'mathVersion', COALESCE(private.game_math_version('blackjack'), 'blackjack-v3-visible-dealer-rtp875')
+            'mathVersion', v_round.math_version
         );
     RETURN private.game_settle_win(
         p_round_id,
-        private.game_bj_payout(v_round.stake, v_result),
+        private.game_bj_payout_for_version(v_round.stake, v_result, v_round.math_version),
         v_pub,
         jsonb_build_object('deck', p_deck, 'playerHand', p_player, 'dealerHand', v_dealer, 'result', v_result, 'dealerDraws', v_draws),
         p_actor
     );
 END;
 $fn$;
+
+REVOKE ALL ON FUNCTION private.game_bj_payout_for_version(NUMERIC, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.game_bj_payout(NUMERIC, TEXT) FROM PUBLIC, anon, authenticated;
 
 COMMIT;

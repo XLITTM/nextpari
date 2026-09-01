@@ -140,9 +140,13 @@ describe('phase 032 visual restore', () => {
 
   it('Blackjack presents both initial dealer cards face-up', () => {
     const ui = read('src/games/blackjack/BlackjackGame.tsx');
+    const parse = read('src/games/blackjack/parseHands.ts');
     const card = read('src/games/blackjack/Card.tsx');
-    assert.match(ui, /isHidden: false/);
-    assert.match(ui, /Both initial dealer cards are shown/);
+    assert.match(ui, /parseDealerCards\(round\.publicResult\.dealerHand, round\.mathVersion\)/);
+    assert.match(ui, /round\.mathVersion/);
+    assert.match(parse, /BLACKJACK_V3_MATH_VERSION/);
+    assert.match(parse, /forceFaceUp \? false : card\.isHidden === true/);
+    assert.equal(parse.includes('isHidden: false,'), false);
     assert.match(ui, /×1.70 от ставки/);
     assert.match(card, /data-face=\{faceDown \? 'down' : 'up'\}/);
     assert.match(ui, /dealerDraws/);

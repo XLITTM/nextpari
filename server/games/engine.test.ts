@@ -521,8 +521,6 @@ describe('phase 032 blackjack visible-dealer calibration', () => {
     assert.match(sql032, /winPayout', 1.70/);
     assert.match(sql032, /goldenPayout', 2.00/);
     assert.match(sql032, /pushPayout', 1.00/);
-    assert.match(sql032, /v_win NUMERIC := 1.70/);
-    assert.match(sql032, /private\.game_math_version\('blackjack'\)/);
     assert.equal(sql032.includes('UPDATE private.game_rounds'), false);
     assert.equal(sql032.includes('game_adapter_apples'), false);
     assert.equal(sql032.includes('game_adapter_dice'), false);
@@ -530,5 +528,25 @@ describe('phase 032 blackjack visible-dealer calibration', () => {
     assert.equal(sql032.includes('game_adapter_crystal'), false);
     assert.equal(sql032.includes('game_adapter_aviator'), false);
     assert.equal(sql032.includes('apply_wallet_entry'), false);
+  });
+
+  it('settles from the round math_version, not live catalog payout', () => {
+    const helper = extractFn(sql032, 'private.game_bj_payout_for_version');
+    const finish = extractFn(sql032, 'private.game_adapter_blackjack_finish');
+    assert.match(helper, /blackjack-v2-rtp875/);
+    assert.match(helper, /v_win := 1\.84/);
+    assert.match(helper, /blackjack-v3-visible-dealer-rtp875/);
+    assert.match(helper, /v_win := 1\.70/);
+    assert.match(helper, /v_golden NUMERIC := 2\.00/);
+    assert.match(helper, /BLACKJACK_MATH_VERSION_UNSUPPORTED/);
+    assert.match(helper, /BLACKJACK_MATH_VERSION_MISSING/);
+    assert.equal(helper.includes("c.config->>'winPayout'"), false);
+    assert.match(finish, /private\.game_bj_payout_for_version\(v_round\.stake, v_result, v_round\.math_version\)/);
+    assert.match(finish, /'mathVersion', v_round\.math_version/);
+    assert.equal(finish.includes("private.game_bj_payout(v_round.stake, v_result)"), false);
+    assert.equal(finish.includes("private.game_math_version('blackjack')"), false);
+    assert.match(sql032, /BLACKJACK_PAYOUT_REQUIRES_VERSION/);
+    assert.match(sql032, /REVOKE ALL ON FUNCTION private\.game_bj_payout_for_version/);
+    assert.match(sql032, /FROM PUBLIC, anon, authenticated/);
   });
 });
