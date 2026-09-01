@@ -213,10 +213,14 @@ export interface GameRtpMetrics {
   realizedHold: number | null;
 }
 
+export type GameRtpModel = 'fixed-target' | 'progressive';
+
 export interface GameRtpGameRow extends GameRtpMetrics {
   gameCode: string;
   displayName: string;
   status?: string;
+  theoreticalRtpTarget: number | null;
+  rtpModel: GameRtpModel;
 }
 
 export interface GameRtpDayRow {
@@ -227,7 +231,7 @@ export interface GameRtpDayRow {
 
 export interface GameRtpReport {
   timezone: string;
-  theoreticalRtp: number;
+  controlledGameTargetRtp: number;
   primaryWindow: string;
   period: {
     kind: GameRtpPeriodKind;
@@ -256,11 +260,25 @@ function parseMetrics(raw: Record<string, unknown>): GameRtpMetrics {
   };
 }
 
+function parseRtpModel(raw: Record<string, unknown>): GameRtpModel {
+  const model = str(raw.rtpModel ?? raw.rtp_model);
+  if (model === 'progressive' || str(raw.gameCode ?? raw.game_code) === 'apples') {
+    return 'progressive';
+  }
+  return 'fixed-target';
+}
+
 function parseGameRow(raw: Record<string, unknown>): GameRtpGameRow {
+  const rtpModel = parseRtpModel(raw);
+  const targetRaw = raw.theoreticalRtpTarget ?? raw.theoretical_rtp_target;
   return {
     gameCode: str(raw.gameCode ?? raw.game_code),
     displayName: str(raw.displayName ?? raw.display_name),
     status: raw.status == null ? undefined : str(raw.status),
+    theoreticalRtpTarget: rtpModel === 'progressive'
+      ? null
+      : (targetRaw == null ? 0.875 : num(targetRaw)),
+    rtpModel,
     ...parseMetrics(raw),
   };
 }
@@ -285,7 +303,9 @@ export async function fetchOwnerGameRtpReport(params: {
     : 'today';
   return {
     timezone: str(raw.timezone, 'Asia/Ashgabat'),
-    theoreticalRtp: num(raw.theoreticalRtp ?? raw.theoretical_rtp) || 0.875,
+    controlledGameTargetRtp: num(
+      raw.controlledGameTargetRtp ?? raw.controlled_game_target_rtp,
+    ) || 0.875,
     primaryWindow: str(raw.primaryWindow ?? raw.primary_window, 'today'),
     period: {
       kind,

@@ -143,9 +143,11 @@ export function GameRtpReportPanel() {
       {report && (
         <>
           <p className="text-[11px] text-gray-500 mb-3 leading-relaxed">
-            Теоретический RTP контролируемых игр ≈ {(report.theoreticalRtp * 100).toFixed(1)}%.
+            Целевой RTP контролируемых игр: {(report.controlledGameTargetRtp * 100).toFixed(1)}%.
+            Apple of Fortune использует отдельную прогрессивную модель.
             Календарный день — окно отчёта, а не повод менять исходы.
             Дневной hold колеблется из‑за дисперсии.
+            Смешанный теоретический RTP каталога не равен 87.5%.
           </p>
           <MetricsGrid metrics={report.totals} />
           <p className="mt-2 text-[11px] text-gray-500">
@@ -158,6 +160,7 @@ export function GameRtpReportPanel() {
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide text-gray-400">
                   <th className="py-2 pr-3 font-semibold">Игра</th>
+                  <th className="py-2 pr-3 font-semibold">Цель RTP</th>
                   <th className="py-2 pr-3 font-semibold">Ставки</th>
                   <th className="py-2 pr-3 font-semibold">Выплаты</th>
                   <th className="py-2 pr-3 font-semibold">Раунды</th>
@@ -171,6 +174,11 @@ export function GameRtpReportPanel() {
                 {report.games.map((game) => (
                   <tr key={game.gameCode} className="border-t border-slate-100">
                     <td className="py-2 pr-3 font-bold text-ink-900">{game.displayName}</td>
+                    <td className="py-2 pr-3 text-xs font-semibold text-ink-700">
+                      {game.rtpModel === 'progressive' || game.theoreticalRtpTarget == null
+                        ? 'Прогрессивный'
+                        : pct(game.theoreticalRtpTarget)}
+                    </td>
                     <td className="py-2 pr-3 tabular-nums">{money(game.totalWagered)}</td>
                     <td className="py-2 pr-3 tabular-nums">{money(game.totalPayouts)}</td>
                     <td className="py-2 pr-3 tabular-nums">{game.rounds}</td>

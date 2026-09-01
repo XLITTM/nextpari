@@ -1,8 +1,12 @@
--- NEXTPARI PHASE 030
+-- NEXTPARI PHASE 030 / 030B
 -- Behavioral BEGIN/ROLLBACK probe for timezone-aware daily RTP reporting.
 --
--- NOT a migration. Do NOT COMMIT. Do NOT run against production.
+-- NOT a migration. Do not commit this transaction. Do NOT run against production.
 -- Requires 029 + 030 already applied on the database you test.
+--
+-- 030B: winningRounds uses public_result outcome/result, not payout > 0.
+-- Dice draw and blackjack push return stake but are not wins.
+-- Apples theoretical target is null / progressive.
 --
 -- Live IDs (test file only — never in production functions):
 --   player auth/profile       bc5d66cd-5e18-4352-b7f8-ea99029758e0
@@ -176,7 +180,7 @@ SELECT
     COALESCE(SUM(r.total_stake), 0) AS wagered,
     COALESCE(SUM(r.payout), 0) AS payouts,
     COUNT(*)::BIGINT AS rounds,
-    COUNT(*) FILTER (WHERE r.payout > 0)::BIGINT AS wins
+    COUNT(*) FILTER (WHERE private.game_report_is_win(r.public_result))::BIGINT AS wins
 FROM private.game_rounds AS r
 WHERE r.state = 'settled'
   AND r.id IN (
@@ -200,7 +204,7 @@ SELECT
     COALESCE(SUM(r.total_stake), 0) AS wagered,
     COALESCE(SUM(r.payout), 0) AS payouts,
     COUNT(*)::BIGINT AS rounds,
-    COUNT(*) FILTER (WHERE r.payout > 0)::BIGINT AS wins
+    COUNT(*) FILTER (WHERE private.game_report_is_win(r.public_result))::BIGINT AS wins
 FROM private.game_rounds AS r
 WHERE r.state = 'settled'
   AND r.id IN (
@@ -271,7 +275,157 @@ SELECT pg_temp.np_expect_error(
 
 SELECT pg_temp.np_assert(
     (SELECT theoretical_rtp FROM private.game_report_settings WHERE id = 1) = 0.875000,
-    'theoretical RTP remains 87.5% metadata'
+    'controlled-game target RTP remains 87.5% metadata'
+);
+
+SELECT pg_temp.np_assert(
+    private.game_report_is_win('{"outcome":"draw"}'::jsonb) IS FALSE
+    AND private.game_report_is_win('{"result":"push"}'::jsonb) IS FALSE
+    AND private.game_report_is_win('{"outcome":"lose"}'::jsonb) IS FALSE
+    AND private.game_report_is_win('{"outcome":"cancelled"}'::jsonb) IS FALSE
+    AND private.game_report_is_win('{"outcome":"refund"}'::jsonb) IS FALSE
+    AND private.game_report_is_win('{"outcome":"win"}'::jsonb) IS TRUE
+    AND private.game_report_is_win('{"result":"blackjack"}'::jsonb) IS TRUE
+    AND private.game_report_is_win('{"result":"golden"}'::jsonb) IS TRUE,
+    'draw/push/lose/cancelled/refund are not wins; win/golden/blackjack are'
+);
+
+SELECT pg_temp.np_assert(
+    (private.game_report_rtp_meta('apples')->>'rtpModel') = 'progressive'
+    AND (private.game_report_rtp_meta('apples')->>'theoreticalRtpTarget') IS NULL
+    AND (private.game_report_rtp_meta('pharaoh')->>'rtpModel') = 'fixed-target'
+    AND (private.game_report_rtp_meta('dice')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
+    AND (private.game_report_rtp_meta('blackjack')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
+    AND (private.game_report_rtp_meta('crystal')->>'theoreticalRtpTarget')::NUMERIC = 0.875000
+    AND (private.game_report_rtp_meta('aviator')->>'theoreticalRtpTarget')::NUMERIC = 0.875000,
+    'Apples is progressive with null target; five controlled games target 0.875'
+);
+
+INSERT INTO private.game_rounds (
+    id,
+    player_user_id,
+    wallet_id,
+    game_code,
+    state,
+    stake,
+    total_stake,
+    payout,
+    public_result,
+    private_state,
+    server_seed,
+    server_seed_hash,
+    nonce,
+    start_idempotency_key,
+    start_fingerprint,
+    settled_at,
+    cancelled_at,
+    created_at,
+    updated_at
+) VALUES
+(
+    'aaaaaaaa-0000-4000-8000-000000000010',
+    'bc5d66cd-5e18-4352-b7f8-ea99029758e0',
+    '3ea1677a-d664-47c3-b019-0635b643d6e5',
+    'dice',
+    'settled',
+    100, 100, 100,
+    '{"outcome":"draw","playerSum":7,"rivalSum":7}'::jsonb,
+    '{}'::jsonb,
+    'seed-draw',
+    'hash-draw',
+    1,
+    '030:semantics-draw',
+    'fp-draw',
+    '2026-09-03 12:00:00+00'::TIMESTAMPTZ,
+    NULL,
+    '2026-09-03 12:00:00+00'::TIMESTAMPTZ,
+    '2026-09-03 12:00:00+00'::TIMESTAMPTZ
+),
+(
+    'aaaaaaaa-0000-4000-8000-000000000011',
+    'bc5d66cd-5e18-4352-b7f8-ea99029758e0',
+    '3ea1677a-d664-47c3-b019-0635b643d6e5',
+    'blackjack',
+    'settled',
+    50, 50, 50,
+    '{"result":"push","stage":"gameOver"}'::jsonb,
+    '{}'::jsonb,
+    'seed-push',
+    'hash-push',
+    1,
+    '030:semantics-push',
+    'fp-push',
+    '2026-09-03 12:00:01+00'::TIMESTAMPTZ,
+    NULL,
+    '2026-09-03 12:00:01+00'::TIMESTAMPTZ,
+    '2026-09-03 12:00:01+00'::TIMESTAMPTZ
+),
+(
+    'aaaaaaaa-0000-4000-8000-000000000012',
+    'bc5d66cd-5e18-4352-b7f8-ea99029758e0',
+    '3ea1677a-d664-47c3-b019-0635b643d6e5',
+    'dice',
+    'settled',
+    80, 80, 160,
+    '{"outcome":"win"}'::jsonb,
+    '{}'::jsonb,
+    'seed-win',
+    'hash-win',
+    1,
+    '030:semantics-win',
+    'fp-win',
+    '2026-09-03 12:00:02+00'::TIMESTAMPTZ,
+    NULL,
+    '2026-09-03 12:00:02+00'::TIMESTAMPTZ,
+    '2026-09-03 12:00:02+00'::TIMESTAMPTZ
+);
+
+CREATE TEMP TABLE np_semantics ON COMMIT DROP AS
+SELECT
+    COALESCE(SUM(r.total_stake), 0) AS wagered,
+    COALESCE(SUM(r.payout), 0) AS payouts,
+    COUNT(*)::BIGINT AS rounds,
+    COUNT(*) FILTER (WHERE r.payout > 0)::BIGINT AS payout_positive,
+    COUNT(*) FILTER (WHERE private.game_report_is_win(r.public_result))::BIGINT AS wins
+FROM private.game_rounds AS r
+WHERE r.state = 'settled'
+  AND r.id IN (
+      'aaaaaaaa-0000-4000-8000-000000000010',
+      'aaaaaaaa-0000-4000-8000-000000000011',
+      'aaaaaaaa-0000-4000-8000-000000000012'
+  );
+
+SELECT pg_temp.np_assert(
+    (SELECT payout FROM private.game_rounds WHERE id = 'aaaaaaaa-0000-4000-8000-000000000010') > 0
+    AND private.game_report_is_win((
+        SELECT public_result FROM private.game_rounds WHERE id = 'aaaaaaaa-0000-4000-8000-000000000010'
+    )) IS FALSE,
+    'Dice draw: payout > 0 and winningRounds does not increase'
+);
+
+SELECT pg_temp.np_assert(
+    (SELECT payout FROM private.game_rounds WHERE id = 'aaaaaaaa-0000-4000-8000-000000000011') > 0
+    AND private.game_report_is_win((
+        SELECT public_result FROM private.game_rounds WHERE id = 'aaaaaaaa-0000-4000-8000-000000000011'
+    )) IS FALSE,
+    'Blackjack push: payout > 0 and winningRounds does not increase'
+);
+
+SELECT pg_temp.np_assert(
+    private.game_report_is_win((
+        SELECT public_result FROM private.game_rounds WHERE id = 'aaaaaaaa-0000-4000-8000-000000000012'
+    )) IS TRUE,
+    'real win: winningRounds increases by 1'
+);
+
+SELECT pg_temp.np_assert(
+    (SELECT rounds FROM np_semantics) = 3
+    AND (SELECT payout_positive FROM np_semantics) = 3
+    AND (SELECT wins FROM np_semantics) = 1
+    AND (SELECT wagered FROM np_semantics) = 230
+    AND (SELECT payouts FROM np_semantics) = 310
+    AND (SELECT (private.game_rtp_metrics_json(230, 310, 3, 1)->>'ggr')::NUMERIC) = -80,
+    'payout-based RTP/GGR still include draw/push returned stake; winningRounds counts only the real win'
 );
 
 ROLLBACK;

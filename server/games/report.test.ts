@@ -3,8 +3,18 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { DEFAULT_REPORT_TIMEZONE, THEORETICAL_CONTROLLED_GAME_RTP } from './registry.js';
-import { calendarDateInZone, rtpMetrics, zonedDayUtcRange } from './reportWindow.js';
+import {
+  CONTROLLED_GAME_CODES,
+  DEFAULT_REPORT_TIMEZONE,
+  THEORETICAL_CONTROLLED_GAME_RTP,
+} from './registry.js';
+import {
+  calendarDateInZone,
+  gameRtpReportingMeta,
+  isWinningRound,
+  rtpMetrics,
+  zonedDayUtcRange,
+} from './reportWindow.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../..');
@@ -16,6 +26,11 @@ function read(rel: string) {
 const migration = read('supabase/migrations/20260901_030_game_rtp_daily_report.sql');
 const rollback = read('supabase/tests/20260901_030_game_rtp_daily_report.rollback.sql');
 const adapters = read('supabase/migrations/20260901_029_canonical_games_engine.sql');
+const ui = read('src/owner/GameRtpReport.tsx');
+const services = read('src/owner/services.ts');
+
+const APPLES_LEVELS_JSON =
+  '{"levels":[{"level":1,"multiplier":1.23,"good":4,"bad":1},{"level":2,"multiplier":1.54,"good":4,"bad":1},{"level":3,"multiplier":1.93,"good":4,"bad":1},{"level":4,"multiplier":2.41,"good":3,"bad":2},{"level":5,"multiplier":4.02,"good":3,"bad":2},{"level":6,"multiplier":6.71,"good":3,"bad":2},{"level":7,"multiplier":11.18,"good":2,"bad":3},{"level":8,"multiplier":27.92,"good":2,"bad":3},{"level":9,"multiplier":69.80,"good":1,"bad":4},{"level":10,"multiplier":349.00,"good":1,"bad":4}]}';
 
 describe('timezone-aware daily RTP window', () => {
   it('splits the same UTC instant across Ashgabat midnight', () => {
@@ -48,6 +63,68 @@ describe('timezone-aware daily RTP window', () => {
   });
 });
 
+describe('winningRounds semantics', () => {
+  it('does not treat a dice draw as a win even when payout returns the stake', () => {
+    assert.equal(isWinningRound({ outcome: 'draw' }), false);
+    assert.match(rollback, /Dice draw: payout > 0 and winningRounds does not increase/);
+    assert.match(migration, /private\.game_report_is_win/);
+    assert.match(migration, /public_result->>'outcome'/);
+    assert.match(migration, /public_result->>'result'/);
+    assert.equal(migration.includes('COUNT(*) FILTER (WHERE r.payout > 0)'), false);
+  });
+
+  it('does not treat a blackjack push as a win even when payout returns the stake', () => {
+    assert.equal(isWinningRound({ result: 'push' }), false);
+    assert.match(rollback, /Blackjack push: payout > 0 and winningRounds does not increase/);
+  });
+
+  it('counts actual winning outcomes including golden and blackjack', () => {
+    assert.equal(isWinningRound({ outcome: 'win' }), true);
+    assert.equal(isWinningRound({ result: 'golden' }), true);
+    assert.equal(isWinningRound({ result: 'blackjack' }), true);
+    assert.equal(isWinningRound({ outcome: 'lose' }), false);
+    assert.equal(isWinningRound({ outcome: 'cancelled' }), false);
+    assert.equal(isWinningRound({ outcome: 'refund' }), false);
+    assert.match(rollback, /real win: winningRounds increases by 1/);
+    assert.match(migration, /IN \('win', 'golden', 'blackjack'\)/);
+  });
+});
+
+describe('Apples theoretical RTP reporting exception', () => {
+  it('marks Apples as progressive with a null theoretical target', () => {
+    assert.deepEqual(gameRtpReportingMeta('apples'), {
+      theoreticalRtpTarget: null,
+      rtpModel: 'progressive',
+    });
+    assert.match(migration, /rtpModel', 'progressive'/);
+    assert.match(migration, /theoreticalRtpTarget', NULL/);
+    assert.match(migration, /controlledGameTargetRtp/);
+    assert.equal(migration.includes("'theoreticalRtp'"), false);
+    assert.match(rollback, /Apples is progressive with null target/);
+    assert.match(services, /rtpModel: GameRtpModel/);
+    assert.match(ui, /Прогрессивный/);
+    assert.match(ui, /Целевой RTP контролируемых игр/);
+    assert.match(ui, /Apple of Fortune использует отдельную прогрессивную модель/);
+  });
+
+  it('keeps the five controlled games on a 0.875 fixed target', () => {
+    assert.deepEqual([...CONTROLLED_GAME_CODES], [
+      'pharaoh',
+      'dice',
+      'blackjack',
+      'crystal',
+      'aviator',
+    ]);
+    for (const code of CONTROLLED_GAME_CODES) {
+      assert.deepEqual(gameRtpReportingMeta(code), {
+        theoreticalRtpTarget: 0.875,
+        rtpModel: 'fixed-target',
+      });
+    }
+    assert.match(rollback, /five controlled games target 0\.875/);
+  });
+});
+
 describe('030 daily RTP reporting SQL contract', () => {
   it('stores UTC timestamps and reports in a configurable timezone', () => {
     assert.match(migration, /private\.game_report_settings/);
@@ -74,10 +151,11 @@ describe('030 daily RTP reporting SQL contract', () => {
     assert.match(migration, /realizedHold/);
     assert.match(rollback, /GGR \/ realized RTP \/ hold formulas/);
     assert.match(rollback, /primary business window is one calendar day/);
+    assert.match(rollback, /payout-based RTP\/GGR still include draw\/push returned stake/);
   });
 
   it('does not change game odds, RNG, or payouts to hit a daily profit', () => {
-    assert.match(migration, /DO NOT use it to change odds/);
+    assert.match(migration, /DO NOT use reporting metadata to change odds/);
     assert.match(migration, /Outcomes are not adjusted/);
     assert.equal(migration.includes('CREATE OR REPLACE FUNCTION private.game_adapter_'), false);
     assert.equal(migration.includes('private.apply_wallet_entry'), false);
@@ -85,6 +163,16 @@ describe('030 daily RTP reporting SQL contract', () => {
     assert.equal(/UPDATE private\.game_rounds/.test(migration), false);
     assert.match(adapters, /private\.game_adapter_pharaoh_start/);
     assert.equal(rollback.includes('COMMIT;'), false);
+    assert.equal(/\bCOMMIT\s*;/i.test(rollback), false);
     assert.match(rollback, /^ROLLBACK;/m);
+  });
+
+  it('leaves Apples game math in migration 029 untouched', () => {
+    assert.match(adapters, /CREATE OR REPLACE FUNCTION private\.game_adapter_apples_start/);
+    assert.match(adapters, /CREATE OR REPLACE FUNCTION private\.game_adapter_apples_action/);
+    assert.equal(adapters.includes(APPLES_LEVELS_JSON), true);
+    assert.equal(migration.includes('game_adapter_apples'), false);
+    assert.equal(migration.includes('"good":4,"bad":1'), false);
+    assert.equal(migration.includes('multiplier":1.23'), false);
   });
 });

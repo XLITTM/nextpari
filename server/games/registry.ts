@@ -2,6 +2,14 @@ export const THEORETICAL_CONTROLLED_GAME_RTP = 0.875;
 
 export const DEFAULT_REPORT_TIMEZONE = 'Asia/Ashgabat';
 
+export const CONTROLLED_GAME_CODES = [
+  'pharaoh',
+  'dice',
+  'blackjack',
+  'crystal',
+  'aviator',
+] as const;
+
 export const CANONICAL_GAME_CODES = [
   'pharaoh',
   'dice',

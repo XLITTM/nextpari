@@ -11,10 +11,17 @@ BEGIN;
 -- Default business window: ONE calendar day (today).
 -- Also: 7d, 30d, custom inclusive date range.
 --
--- Theoretical controlled-game RTP is approximately 87.5%.
--- This value is metadata for operators.
--- DO NOT use it to change odds, RNG, payouts, crash points,
--- boards, cards, or results.
+-- Theoretical RTP for CONTROLLED games (pharaoh, dice, blackjack,
+-- crystal, aviator) is approximately 87.5%. Metadata only.
+-- APPLES uses a separate progressive model and has NO 87.5% target.
+-- Mixed-catalog theoretical RTP is not 87.5%; it depends on game mix.
+--
+-- winningRounds counts actual wins (outcome/result in win, golden,
+-- blackjack). Dice draw and blackjack push return stake (payout > 0)
+-- but are NOT wins.
+--
+-- DO NOT use reporting metadata to change odds, RNG, payouts, crash
+-- points, boards, cards, or results.
 -- Daily realized hold may fluctuate because of variance.
 -- ============================================================
 
@@ -36,7 +43,7 @@ VALUES (1, 'Asia/Ashgabat', 0.875000)
 ON CONFLICT (id) DO NOTHING;
 
 COMMENT ON TABLE private.game_report_settings IS
-'Reporting defaults only. Theoretical RTP is not an outcome-control lever.';
+'Reporting defaults only. theoretical_rtp is the controlled-game target (not Apples, not mixed-catalog). Not an outcome-control lever.';
 
 CREATE INDEX IF NOT EXISTS game_rounds_settled_at_idx
 ON private.game_rounds (settled_at)
@@ -160,6 +167,49 @@ BEGIN
 END;
 $fn$;
 
+-- Canonical win label from public_result.outcome, else public_result.result.
+-- Draws, pushes, losses, cancels, and refunds are not wins even if payout > 0.
+CREATE OR REPLACE FUNCTION private.game_report_is_win(p_public_result jsonb)
+RETURNS BOOLEAN
+LANGUAGE sql
+IMMUTABLE
+SET search_path = ''
+AS $fn$
+    SELECT LOWER(BTRIM(COALESCE(
+        NULLIF(p_public_result->>'outcome', ''),
+        NULLIF(p_public_result->>'result', ''),
+        ''
+    ))) IN ('win', 'golden', 'blackjack');
+$fn$;
+
+CREATE OR REPLACE FUNCTION private.game_report_rtp_meta(p_game_code TEXT)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_theo NUMERIC(8,6);
+BEGIN
+    IF p_game_code = 'apples' THEN
+        RETURN jsonb_build_object(
+            'theoreticalRtpTarget', NULL,
+            'rtpModel', 'progressive'
+        );
+    END IF;
+
+    SELECT s.theoretical_rtp
+    INTO v_theo
+    FROM private.game_report_settings AS s
+    WHERE s.id = 1;
+
+    RETURN jsonb_build_object(
+        'theoreticalRtpTarget', COALESCE(v_theo, 0.875000),
+        'rtpModel', 'fixed-target'
+    );
+END;
+$fn$;
+
 CREATE OR REPLACE FUNCTION private.game_rtp_resolve_period(
     p_period TEXT,
     p_from DATE,
@@ -265,7 +315,7 @@ BEGIN
         COALESCE(SUM(r.total_stake), 0),
         COALESCE(SUM(r.payout), 0),
         COUNT(*)::BIGINT,
-        COUNT(*) FILTER (WHERE r.payout > 0)::BIGINT
+        COUNT(*) FILTER (WHERE private.game_report_is_win(r.public_result))::BIGINT
     )
     INTO v_totals
     FROM private.game_rounds AS r
@@ -285,7 +335,7 @@ BEGIN
             COALESCE(agg.payouts, 0),
             COALESCE(agg.rounds, 0),
             COALESCE(agg.wins, 0)
-        ) AS item
+        ) || private.game_report_rtp_meta(c.game_code) AS item
         FROM private.game_catalog AS c
         LEFT JOIN (
             SELECT
@@ -293,7 +343,7 @@ BEGIN
                 SUM(r.total_stake) AS wagered,
                 SUM(r.payout) AS payouts,
                 COUNT(*)::BIGINT AS rounds,
-                COUNT(*) FILTER (WHERE r.payout > 0)::BIGINT AS wins
+                COUNT(*) FILTER (WHERE private.game_report_is_win(r.public_result))::BIGINT AS wins
             FROM private.game_rounds AS r
             WHERE r.state = 'settled'
               AND r.settled_at >= v_start
@@ -324,7 +374,7 @@ BEGIN
                         COALESCE(g.payouts, 0),
                         COALESCE(g.rounds, 0),
                         COALESCE(g.wins, 0)
-                    ) AS gitem
+                    ) || private.game_report_rtp_meta(c.game_code) AS gitem
                     FROM private.game_catalog AS c
                     LEFT JOIN (
                         SELECT
@@ -332,7 +382,7 @@ BEGIN
                             SUM(r.total_stake) AS wagered,
                             SUM(r.payout) AS payouts,
                             COUNT(*)::BIGINT AS rounds,
-                            COUNT(*) FILTER (WHERE r.payout > 0)::BIGINT AS wins
+                            COUNT(*) FILTER (WHERE private.game_report_is_win(r.public_result))::BIGINT AS wins
                         FROM private.game_rounds AS r
                         WHERE r.state = 'settled'
                           AND r.settled_at >= v_start
@@ -357,7 +407,7 @@ BEGIN
                 SUM(r.total_stake) AS wagered,
                 SUM(r.payout) AS payouts,
                 COUNT(*)::BIGINT AS rounds,
-                COUNT(*) FILTER (WHERE r.payout > 0)::BIGINT AS wins
+                COUNT(*) FILTER (WHERE private.game_report_is_win(r.public_result))::BIGINT AS wins
             FROM private.game_rounds AS r
             WHERE r.state = 'settled'
               AND r.settled_at >= v_start
@@ -369,7 +419,7 @@ BEGIN
     RETURN jsonb_build_object(
         'ok', true,
         'timezone', v_tz,
-        'theoreticalRtp', v_theo,
+        'controlledGameTargetRtp', v_theo,
         'primaryWindow', 'today',
         'period', jsonb_build_object(
             'kind', v_window->>'kind',
@@ -381,7 +431,7 @@ BEGIN
         'totals', v_totals,
         'games', v_games,
         'days', v_days,
-        'note', 'Calendar day is a reporting window. Outcomes are not adjusted to hit a daily profit target.'
+        'note', 'Calendar day is a reporting window. Outcomes are not adjusted to hit a daily profit target. Controlled games target 87.5% RTP. Apple of Fortune uses a separate progressive model. Mixed-catalog theoretical RTP is not 87.5%.'
     );
 END;
 $fn$;
@@ -391,6 +441,8 @@ REVOKE ALL ON FUNCTION private.game_report_day(TIMESTAMPTZ, TEXT) FROM PUBLIC, a
 REVOKE ALL ON FUNCTION private.game_report_range_start(DATE, TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.game_report_range_end(DATE, TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.game_rtp_metrics_json(NUMERIC, NUMERIC, BIGINT, BIGINT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.game_report_is_win(jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.game_report_rtp_meta(TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.game_rtp_resolve_period(TEXT, DATE, DATE, TEXT) FROM PUBLIC, anon, authenticated;
 
 REVOKE ALL ON FUNCTION public.owner_game_rtp_report(TEXT, DATE, DATE, TEXT) FROM PUBLIC;
@@ -398,6 +450,6 @@ REVOKE ALL ON FUNCTION public.owner_game_rtp_report(TEXT, DATE, DATE, TEXT) FROM
 GRANT EXECUTE ON FUNCTION public.owner_game_rtp_report(TEXT, DATE, DATE, TEXT) TO authenticated;
 
 COMMENT ON FUNCTION public.owner_game_rtp_report(TEXT, DATE, DATE, TEXT) IS
-'Owner JWT daily RTP/GGR report. Timezone-aware calendar days. Read-only. Does not change game outcomes.';
+'Owner JWT daily RTP/GGR report. Timezone-aware calendar days. Read-only. winningRounds uses outcome/result wins, not payout>0. Does not change game outcomes.';
 
 COMMIT;
