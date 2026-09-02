@@ -272,6 +272,20 @@ describe('lsports shadow bridge', () => {
     assert.equal(remote.host, '0.0.0.0');
     assert.equal(remote.port, 8080);
     assert.equal(remote.enableStream, false);
+    assert.equal(remote.allowVercelPreviews, true);
+    assert.equal(
+      corsOriginForRequest(
+        'https://nextpari-fhalnknm4-xlit.vercel.app',
+        remote.allowedOrigins,
+        remote.allowVercelPreviews,
+      ),
+      'https://nextpari-fhalnknm4-xlit.vercel.app',
+    );
+    const locked = resolveLsportsHttpOptions({
+      LSPORTS_WORKER_MODE: 'remote',
+      LSPORTS_ALLOW_VERCEL_PREVIEWS: '0',
+    });
+    assert.equal(locked.allowVercelPreviews, false);
   });
 
   it('rate-limits inplay and hides stack traces', () => {

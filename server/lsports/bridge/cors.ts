@@ -25,7 +25,9 @@ export function resolveAllowedOrigins(
 }
 
 export function allowVercelPreviewOrigins(env: NodeJS.ProcessEnv = process.env): boolean {
-  return String(env.LSPORTS_ALLOW_VERCEL_PREVIEWS ?? '') === '1';
+  const raw = env.LSPORTS_ALLOW_VERCEL_PREVIEWS;
+  if (raw == null || String(raw).trim() === '') return true;
+  return String(raw).trim() === '1';
 }
 
 export function corsOriginForRequest(
