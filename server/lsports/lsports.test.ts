@@ -179,13 +179,30 @@ describe('lsports diagnostics stay secret-free', () => {
     const bridgeRate = read('server/lsports/bridge/rateLimitHttp.ts');
     const shadowScript = read('scripts/run-lsports-shadow.ts');
     const workerScript = read('scripts/run-lsports-worker.ts');
-    for (const src of [config, probe, rmq, script, observe, typeCapture, distribution, snapshot, snapshotScript, scoresMarketsScript, stateStore, stateRecovery, stateCoordinator, stateSettlement, statePlan, stateRateLimit, adapterAdapt, adapterConfig, adapterPublish, adapterMarkets, adapterEvent, adapterPrematch, adapterPrematchMarkets, prematchRuntime, prematchPayload, bridgePayload, bridgePublisher, bridgeHttp, bridgeRuntime, bridgeIo, bridgeStatus, bridgeCors, bridgeRate, shadowScript, workerScript]) {
+    const sdkMode = read('server/lsports/sdk/mode.ts');
+    const sdkWriter = read('server/lsports/sdk/writer.ts');
+    const sdkShadow = read('server/lsports/sdk/shadow.ts');
+    const sdkKeepAlive = read('server/lsports/sdk/keepalive.ts');
+    const sdkFeed = read('server/lsports/sdk/feed.ts');
+    const sdkOrder = read('server/lsports/sdk/order.ts');
+    const sdkHealth = read('server/lsports/sdk/health.ts');
+    const sdkClassify = read('server/lsports/sdk/classify.ts');
+    const sdkCustomers = read('server/lsports/sdk/customers.ts');
+    const sdkSnapshotIo = read('server/lsports/sdk/snapshotIo.ts');
+    const sdkLogger = read('server/lsports/sdk/logger.ts');
+    const sdkPayload = read('server/lsports/sdk/payload.ts');
+    const sdkMq = read('server/lsports/sdk/mqSettings.ts');
+    const sdkConstants = read('server/lsports/sdk/constants.ts');
+    const sdkEntityKeys = read('server/lsports/sdk/entityKeys.ts');
+    const sdkOrderScript = read('scripts/run-lsports-sdk-order.ts');
+    for (const src of [config, probe, rmq, script, observe, typeCapture, distribution, snapshot, snapshotScript, scoresMarketsScript, stateStore, stateRecovery, stateCoordinator, stateSettlement, statePlan, stateRateLimit, adapterAdapt, adapterConfig, adapterPublish, adapterMarkets, adapterEvent, adapterPrematch, adapterPrematchMarkets, prematchRuntime, prematchPayload, bridgePayload, bridgePublisher, bridgeHttp, bridgeRuntime, bridgeIo, bridgeStatus, bridgeCors, bridgeRate, shadowScript, workerScript, sdkMode, sdkWriter, sdkShadow, sdkKeepAlive, sdkFeed, sdkOrder, sdkHealth, sdkClassify, sdkCustomers, sdkSnapshotIo, sdkLogger, sdkPayload, sdkMq, sdkConstants, sdkEntityKeys, sdkOrderScript]) {
       assert.equal(src.includes('VITE_'), false);
       assert.equal(src.includes(['264', '390-'].join('')), false);
     }
     const workerEnv = read('deploy/lsports-worker.env.example');
     const vercelEnv = read('deploy/vercel.lsports.env.example');
     assert.match(workerEnv, /LSPORTS_RMQ_USERNAME=/);
+    assert.match(workerEnv, /LSPORTS_TRANSPORT=direct/);
     assert.equal(workerEnv.includes('VITE_'), false);
     assert.match(vercelEnv, /VITE_LSPORTS_DISPLAY_FEED=1/);
     assert.match(vercelEnv, /VITE_LSPORTS_FEED_BASE_URL=/);

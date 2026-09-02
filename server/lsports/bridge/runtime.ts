@@ -18,6 +18,14 @@ import {
 } from './http.js';
 import { createLsportsRecoveryIo } from './io.js';
 import type { LsportsBrowserFeed } from './payload.js';
+import { startLsportsSdkFeed } from '../sdk/feed.js';
+import { resolveLsportsTransport } from '../sdk/mode.js';
+import { resetSdkShadowsForTests, sdkShadowFor } from '../sdk/shadow.js';
+import {
+  claimCanonicalWriter,
+  releaseCanonicalWriter,
+  resetCanonicalWritersForTests,
+} from '../sdk/writer.js';
 import { LsportsDisplayBridge, LSPORTS_SHADOW_HEALTH_POLL_MS } from './publisher.js';
 import {
   LSPORTS_DISTRIBUTION_STATUS_POLL_MS,
@@ -56,6 +64,10 @@ export interface LsportsShadowBridgeDeps {
   onFatal?: (error: unknown) => void;
   log?: (parts: Record<string, string | number | boolean | null | undefined>) => void;
   warn?: (parts: Record<string, string | number | boolean | null | undefined>) => void;
+  startSdkFeed?: (input: {
+    onMessage: (payload: unknown) => void;
+    onParseFailure: () => void;
+  }) => Promise<{ stop: () => Promise<void> }>;
 }
 
 export interface LsportsShadowRuntime {
@@ -75,6 +87,8 @@ export function isLsportsShadowRunning(): boolean {
 
 export function resetLsportsShadowRuntimeForTests(): void {
   activeRuntime = null;
+  resetCanonicalWritersForTests();
+  resetSdkShadowsForTests();
 }
 
 function logShadow(parts: Record<string, string | number | boolean | null | undefined>): void {
@@ -101,6 +115,7 @@ export async function runLsportsShadowBridge(
 
   const config = resolveLsportsRmqConfig('inplay', env);
   const published = publicLsportsConfig(config);
+  const mode = resolveLsportsTransport(env);
   const store = new LsportsInPlayStore();
   const buffer = new LsportsRecoveryBuffer(store);
   const limiter = deps.limiter ?? new LsportsSnapshotRateLimiter();
@@ -123,6 +138,7 @@ export async function runLsportsShadowBridge(
   let server: ReturnType<typeof createLsportsShadowHttpServer> | null = null;
   let started = false;
   let stopping = false;
+  let sdkFeed: { stop: () => Promise<void> } | null = null;
 
   const applyStatus = (snapshot: LsportsDistributionSnapshot) => {
     const payload = bridge.noteDistributionStatus(snapshot);
@@ -192,6 +208,15 @@ export async function runLsportsShadowBridge(
     consumerTag = null;
     consumers = 0;
     started = false;
+    if (sdkFeed) {
+      try {
+        await sdkFeed.stop();
+      } catch {
+        // already closed
+      }
+      sdkFeed = null;
+    }
+    releaseCanonicalWriter('inplay', mode.transport);
     if (activeRuntime?.stop === stop) activeRuntime = null;
   };
 
@@ -206,9 +231,24 @@ export async function runLsportsShadowBridge(
   activeRuntime = runtime;
 
   try {
+    claimCanonicalWriter('inplay', mode.transport);
     await (deps.startDistribution ?? (() => startDistributionAcceptingActive('inplay', env)))();
 
     buffer.beginBuffering();
+
+    const ingestJson = (json: unknown, parsed: boolean) => {
+      if (mode.shadow) {
+        if (parsed && json && typeof json === 'object') sdkShadowFor('inplay').observe(json);
+        else sdkShadowFor('inplay').noteParseFailure();
+      }
+      if (!parsed || !json || typeof json !== 'object') {
+        store.noteRmqTransport('parse-failed');
+        return;
+      }
+      store.noteRmqTransport('parsed');
+      bridge.handleRmq(json);
+    };
+
     const connect = deps.connect
       ?? ((cfg: LsportsRmqConfig) => connectLsportsRmqWithRetry(cfg, { sleep: deps.sleep }));
     const openChannel = deps.openChannel ?? openLsportsChannel;
@@ -217,15 +257,10 @@ export async function runLsportsShadowBridge(
       if (!message || !channel) return;
       try {
         const { json } = summarizeLsportsMessage('inplay', message);
-        if (json && typeof json === 'object') {
-          store.noteRmqTransport('parsed');
-          bridge.handleRmq(json);
-        } else {
-          store.noteRmqTransport('parse-failed');
-        }
+        ingestJson(json, Boolean(json && typeof json === 'object'));
         channel.ack(message);
       } catch {
-        store.noteRmqTransport('parse-failed');
+        ingestJson(null, false);
         channel.ack(message);
       }
     };
@@ -249,9 +284,10 @@ export async function runLsportsShadowBridge(
 
     let reconnecting = false;
     const reconnectRmq = async () => {
-      if (stopping || reconnecting) return;
+      if (stopping || reconnecting || mode.transport === 'sdk') return;
       reconnecting = true;
       log({ action: 'rmq-reconnect' });
+      sdkShadowFor('inplay').noteReconnect();
       try {
         if (channel && consumerTag) {
           try {
@@ -276,16 +312,38 @@ export async function runLsportsShadowBridge(
       }
     };
 
-    await beginConsume(await connect(config));
-
-    log({
-      action: 'shadow-rmq',
-      host: published.host,
-      vhost: published.vhost,
-      package: published.packageId,
-      queue: published.queue,
-      buffering: buffer.isBuffering(),
-    });
+    if (mode.transport === 'sdk') {
+      sdkShadowFor('inplay').markConnection('sdk-feed');
+      const startFeed = deps.startSdkFeed ?? ((input) => startLsportsSdkFeed({
+        flow: 'inplay',
+        env,
+        prefetch: PREFETCH,
+        onMessage: input.onMessage,
+        onParseFailure: input.onParseFailure,
+      }));
+      sdkFeed = await startFeed({
+        onMessage: (payload) => ingestJson(payload, true),
+        onParseFailure: () => ingestJson(null, false),
+      });
+      consumers = 1;
+      log({
+        action: 'sdk-feed',
+        flow: 'inplay',
+        package: published.packageId,
+        buffering: buffer.isBuffering(),
+      });
+    } else {
+      if (mode.shadow) sdkShadowFor('inplay').markConnection('in-process-shadow');
+      await beginConsume(await connect(config));
+      log({
+        action: 'shadow-rmq',
+        host: published.host,
+        vhost: published.vhost,
+        package: published.packageId,
+        queue: published.queue,
+        buffering: buffer.isBuffering(),
+      });
+    }
     await coordinator.runColdStart();
     bridge.markRecoveryComplete();
     log({
@@ -296,12 +354,14 @@ export async function runLsportsShadowBridge(
     });
 
     healthTimer = setInterval(() => bridge.refreshHealth(), LSPORTS_SHADOW_HEALTH_POLL_MS);
+    healthTimer.unref();
     const pollMs = deps.distributionPollMs ?? LSPORTS_DISTRIBUTION_STATUS_POLL_MS;
     if (pollMs > 0) {
       void pollStatus();
       statusTimer = setInterval(() => {
         void pollStatus();
       }, pollMs);
+      statusTimer.unref();
     }
     if (deps.listenHttp !== false) {
       const httpOptions = deps.httpOptions ?? resolveLsportsHttpOptions(env);

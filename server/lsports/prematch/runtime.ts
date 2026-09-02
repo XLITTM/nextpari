@@ -22,6 +22,10 @@ import { planPrematchSnapshotRequests } from '../state/plan.js';
 import { LsportsSnapshotRateLimiter } from '../state/rateLimit.js';
 import { LsportsRecoveryBuffer } from '../state/recovery.js';
 import { LsportsInPlayStore } from '../state/store.js';
+import { startLsportsSdkFeed } from '../sdk/feed.js';
+import { resolveLsportsTransport } from '../sdk/mode.js';
+import { sdkShadowFor } from '../sdk/shadow.js';
+import { claimCanonicalWriter, releaseCanonicalWriter } from '../sdk/writer.js';
 import type { LsportsPrematchFeed, LsportsPrematchSnapshotDiag } from './payload.js';
 import { LsportsPrematchDisplayBridge, LSPORTS_PREMATCH_HEALTH_POLL_MS } from './publisher.js';
 
@@ -53,6 +57,10 @@ export interface LsportsPrematchBridgeDeps {
   onFatal?: (error: unknown) => void;
   log?: (parts: Record<string, string | number | boolean | null | undefined>) => void;
   warn?: (parts: Record<string, string | number | boolean | null | undefined>) => void;
+  startSdkFeed?: (input: {
+    onMessage: (payload: unknown) => void;
+    onParseFailure: () => void;
+  }) => Promise<{ stop: () => Promise<void> }>;
 }
 
 export interface LsportsPrematchRuntime {
@@ -72,6 +80,8 @@ export function isLsportsPrematchRunning(): boolean {
 
 export function resetLsportsPrematchRuntimeForTests(): void {
   activePrematchRuntime = null;
+  releaseCanonicalWriter('prematch', 'direct');
+  releaseCanonicalWriter('prematch', 'sdk');
 }
 
 function logPrematch(parts: Record<string, string | number | boolean | null | undefined>): void {
@@ -98,6 +108,7 @@ export async function runLsportsPrematchBridge(
 
   const config = resolveLsportsRmqConfig('prematch', env);
   const published = publicLsportsConfig(config);
+  const mode = resolveLsportsTransport(env);
   const store = new LsportsInPlayStore();
   const buffer = new LsportsRecoveryBuffer(store);
   const limiter = deps.limiter ?? new LsportsSnapshotRateLimiter();
@@ -149,6 +160,7 @@ export async function runLsportsPrematchBridge(
   let statusTimer: ReturnType<typeof setInterval> | null = null;
   let started = false;
   let stopping = false;
+  let sdkFeed: { stop: () => Promise<void> } | null = null;
 
   const applyStatus = (snapshot: LsportsDistributionSnapshot) => {
     const payload = bridge.noteDistributionStatus(snapshot);
@@ -211,6 +223,15 @@ export async function runLsportsPrematchBridge(
     consumerTag = null;
     consumers = 0;
     started = false;
+    if (sdkFeed) {
+      try {
+        await sdkFeed.stop();
+      } catch {
+        // already closed
+      }
+      sdkFeed = null;
+    }
+    releaseCanonicalWriter('prematch', mode.transport);
     if (activePrematchRuntime?.stop === stop) activePrematchRuntime = null;
   };
 
@@ -225,27 +246,35 @@ export async function runLsportsPrematchBridge(
   activePrematchRuntime = runtime;
 
   try {
+    claimCanonicalWriter('prematch', mode.transport);
     await (deps.startDistribution ?? (() => startDistributionAcceptingActive('prematch', env)))();
 
     buffer.beginBuffering();
+    const ingestJson = (json: unknown, parsed: boolean) => {
+      lastMessageAt = Date.now();
+      if (mode.shadow) {
+        if (parsed && json && typeof json === 'object') sdkShadowFor('prematch').observe(json);
+        else sdkShadowFor('prematch').noteParseFailure();
+      }
+      if (!parsed || !json || typeof json !== 'object') {
+        store.noteRmqTransport('parse-failed');
+        return;
+      }
+      store.noteRmqTransport('parsed');
+      bridge.handleRmq(json);
+    };
     const connect = deps.connect
       ?? ((cfg: LsportsRmqConfig) => connectLsportsRmqWithRetry(cfg, { sleep: deps.sleep }));
     const openChannel = deps.openChannel ?? openLsportsChannel;
 
     const onMessage = (message: ConsumeMessage | null) => {
       if (!message || !channel) return;
-      lastMessageAt = Date.now();
       try {
         const { json } = summarizeLsportsMessage('prematch', message);
-        if (json && typeof json === 'object') {
-          store.noteRmqTransport('parsed');
-          bridge.handleRmq(json);
-        } else {
-          store.noteRmqTransport('parse-failed');
-        }
+        ingestJson(json, Boolean(json && typeof json === 'object'));
         channel.ack(message);
       } catch {
-        store.noteRmqTransport('parse-failed');
+        ingestJson(null, false);
         channel.ack(message);
       }
     };
@@ -269,9 +298,10 @@ export async function runLsportsPrematchBridge(
 
     let reconnecting = false;
     const reconnectRmq = async () => {
-      if (stopping || reconnecting) return;
+      if (stopping || reconnecting || mode.transport === 'sdk') return;
       reconnecting = true;
       log({ action: 'rmq-reconnect' });
+      sdkShadowFor('prematch').noteReconnect();
       try {
         if (channel && consumerTag) {
           try {
@@ -296,16 +326,38 @@ export async function runLsportsPrematchBridge(
       }
     };
 
-    await beginConsume(await connect(config));
-
-    log({
-      action: 'prematch-rmq',
-      host: published.host,
-      vhost: published.vhost,
-      package: published.packageId,
-      queue: published.queue,
-      buffering: buffer.isBuffering(),
-    });
+    if (mode.transport === 'sdk') {
+      sdkShadowFor('prematch').markConnection('sdk-feed');
+      const startFeed = deps.startSdkFeed ?? ((input) => startLsportsSdkFeed({
+        flow: 'prematch',
+        env,
+        prefetch: PREMATCH_PREFETCH,
+        onMessage: input.onMessage,
+        onParseFailure: input.onParseFailure,
+      }));
+      sdkFeed = await startFeed({
+        onMessage: (payload) => ingestJson(payload, true),
+        onParseFailure: () => ingestJson(null, false),
+      });
+      consumers = 1;
+      log({
+        action: 'sdk-feed',
+        flow: 'prematch',
+        package: published.packageId,
+        buffering: buffer.isBuffering(),
+      });
+    } else {
+      if (mode.shadow) sdkShadowFor('prematch').markConnection('in-process-shadow');
+      await beginConsume(await connect(config));
+      log({
+        action: 'prematch-rmq',
+        host: published.host,
+        vhost: published.vhost,
+        package: published.packageId,
+        queue: published.queue,
+        buffering: buffer.isBuffering(),
+      });
+    }
     await coordinator.runColdStart();
     bridge.markRecoveryComplete();
     log({
@@ -316,12 +368,14 @@ export async function runLsportsPrematchBridge(
     });
 
     healthTimer = setInterval(() => bridge.refreshHealth(), LSPORTS_PREMATCH_HEALTH_POLL_MS);
+    healthTimer.unref();
     const pollMs = deps.distributionPollMs ?? LSPORTS_DISTRIBUTION_STATUS_POLL_MS;
     if (pollMs > 0) {
       void pollStatus();
       statusTimer = setInterval(() => {
         void pollStatus();
       }, pollMs);
+      statusTimer.unref();
     }
     started = true;
     return runtime;

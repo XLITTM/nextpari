@@ -1,7 +1,8 @@
 import type { Server } from 'node:http';
 import { createLsportsDualHttpServer, resolveLsportsHttpOptions } from '../server/lsports/bridge/http.js';
-import { runLsportsShadowBridge } from '../server/lsports/bridge/runtime.js';
-import { runLsportsPrematchBridge } from '../server/lsports/prematch/runtime.js';
+import { resetLsportsShadowRuntimeForTests, runLsportsShadowBridge } from '../server/lsports/bridge/runtime.js';
+import { resetLsportsPrematchRuntimeForTests, runLsportsPrematchBridge } from '../server/lsports/prematch/runtime.js';
+import { resolveLsportsTransport } from '../server/lsports/sdk/mode.js';
 import { LsportsSnapshotRateLimiter } from '../server/lsports/state/rateLimit.js';
 
 process.env.LSPORTS_WORKER_MODE ??= 'remote';
@@ -41,11 +42,29 @@ process.on('SIGTERM', () => shutdown(0));
 
 try {
   const limiter = new LsportsSnapshotRateLimiter();
-  inplay = await runLsportsShadowBridge(process.env, {
-    listenHttp: false,
-    limiter,
-    onFatal: () => shutdown(1),
+  const transport = resolveLsportsTransport(process.env);
+  logWorker({
+    action: 'worker-transport',
+    transport: transport.transport,
+    shadow: transport.shadow,
   });
+  const inplayEnv: NodeJS.ProcessEnv = { ...process.env };
+  try {
+    inplay = await runLsportsShadowBridge(inplayEnv, {
+      listenHttp: false,
+      limiter,
+      onFatal: () => shutdown(1),
+    });
+  } catch (error) {
+    if (transport.transport !== 'sdk') throw error;
+    logWorker({ action: 'sdk-inplay-fallback-direct' });
+    resetLsportsShadowRuntimeForTests();
+    inplay = await runLsportsShadowBridge({ ...inplayEnv, LSPORTS_TRANSPORT: 'direct' }, {
+      listenHttp: false,
+      limiter,
+      onFatal: () => shutdown(1),
+    });
+  }
   logWorker({ action: 'worker-inplay-ready', consumers: inplay.consumerCount() });
 
   const liveInplay = inplay;
@@ -80,11 +99,35 @@ try {
     });
     logWorker({ action: 'worker-prematch-ready', consumers: prematch.consumerCount() });
   } catch (error) {
-    const code = error && typeof error === 'object' && 'code' in error
-      ? String((error as { code: unknown }).code)
-      : error instanceof Error ? error.message : 'UNKNOWN';
-    logWorker({ action: 'worker-prematch-failed', code });
-    prematch = null;
+    const mode = resolveLsportsTransport(process.env);
+    if (mode.transport === 'sdk') {
+      logWorker({ action: 'sdk-prematch-fallback-direct' });
+      resetLsportsPrematchRuntimeForTests();
+      try {
+        prematch = await runLsportsPrematchBridge({ ...process.env, LSPORTS_TRANSPORT: 'direct' }, {
+          limiter,
+          onFatal: (fatal) => {
+            const code = fatal instanceof Error ? fatal.message : 'UNKNOWN';
+            logWorker({ action: 'prematch-fatal-isolated', code });
+            void prematch?.stop();
+            prematch = null;
+          },
+        });
+        logWorker({ action: 'worker-prematch-ready', consumers: prematch.consumerCount() });
+      } catch (fallbackError) {
+        const code = fallbackError && typeof fallbackError === 'object' && 'code' in fallbackError
+          ? String((fallbackError as { code: unknown }).code)
+          : fallbackError instanceof Error ? fallbackError.message : 'UNKNOWN';
+        logWorker({ action: 'worker-prematch-failed', code });
+        prematch = null;
+      }
+    } else {
+      const code = error && typeof error === 'object' && 'code' in error
+        ? String((error as { code: unknown }).code)
+        : error instanceof Error ? error.message : 'UNKNOWN';
+      logWorker({ action: 'worker-prematch-failed', code });
+      prematch = null;
+    }
   }
 } catch (error) {
   const code = error && typeof error === 'object' && 'code' in error

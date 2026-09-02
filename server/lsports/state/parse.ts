@@ -1,3 +1,4 @@
+import { extractKeepAliveActiveEvents } from '../sdk/keepalive.js';
 import { normalizeFixtureId } from './keys.js';
 import type { LsportsHeaderMeta } from './types.js';
 
@@ -87,14 +88,7 @@ export function readBetId(bet: Record<string, unknown>): string | number | null 
 }
 
 export function readActiveEvents(payload: unknown): number[] {
-  const root = asRecord(payload);
-  const body = asRecord(root?.Body) ?? asRecord(root?.body);
-  const keepAlive = asRecord(body?.KeepAlive) ?? asRecord(body?.keepAlive);
-  const raw = keepAlive?.ActiveEvents ?? keepAlive?.activeEvents;
-  if (!Array.isArray(raw)) return [];
-  return raw
-    .map((value) => normalizeFixtureId(value))
-    .filter((id): id is number => id != null);
+  return extractKeepAliveActiveEvents(payload).fixtureIds;
 }
 
 export function mergeFixtureMetadata(

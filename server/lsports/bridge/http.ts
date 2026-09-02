@@ -13,6 +13,7 @@ import {
   sanitizePrematchHealth,
   type LsportsPrematchFeed,
 } from '../prematch/payload.js';
+import { buildSdkHealthDiagnostics } from '../sdk/health.js';
 
 export const LSPORTS_SHADOW_HOST = '127.0.0.1';
 export const LSPORTS_SHADOW_PORT = 8787;
@@ -137,6 +138,7 @@ export function handleLsportsShadowRequest(
         ...payload.diagnostics,
         health: payload.health,
         prematch: sanitizePrematchHealth(prematchPayload),
+        sdk: buildSdkHealthDiagnostics(),
       });
       return true;
     }
