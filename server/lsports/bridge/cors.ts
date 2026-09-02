@@ -1,6 +1,8 @@
 export const LSPORTS_DEFAULT_REMOTE_ORIGINS = [
   'https://nextpari.net',
   'https://www.nextpari.net',
+  'http://127.0.0.1:5173',
+  'http://localhost:5173',
 ] as const;
 
 const VERCEL_PREVIEW = /^https:\/\/[a-z0-9-]+\.vercel\.app$/i;

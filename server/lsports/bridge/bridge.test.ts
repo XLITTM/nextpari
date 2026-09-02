@@ -199,6 +199,22 @@ describe('lsports shadow bridge', () => {
     assert.equal(JSON.stringify(locked).includes('2.8'), false);
   });
 
+  it('exposes store vs adapted market inventory on the browser payload', () => {
+    const store = new LsportsInPlayStore();
+    seedTwo(store);
+    store.ingestHeartbeat({ Header: { Type: 32, ServerTimestamp: 111 } }, 1_000);
+    const payload = buildLsportsBrowserPayload(store, 1_000);
+    assert.ok(payload.diagnostics.storeMarketCount >= 2);
+    assert.equal(payload.diagnostics.adaptedMarketCount, 2);
+    assert.equal(payload.diagnostics.marketCount, 2);
+    assert.equal(payload.diagnostics.marketInventory.market1.count, 2);
+    assert.equal(payload.diagnostics.marketInventory.market1.openMarketCount, 2);
+    assert.ok(payload.diagnostics.marketInventory.ingest.market1AppliedFromType3 >= 2);
+    assert.equal(payload.diagnostics.market1Adapter.adapted, 2);
+    assert.equal(JSON.stringify(payload).includes('ProviderMarkets'), false);
+    assert.equal(JSON.stringify(payload).includes('2.1'), false);
+  });
+
   it('never includes fake 2.10/3.25/2.80 in LSports mode', () => {
     const store = new LsportsInPlayStore();
     store.ingestFixturesSnapshot(snapshotFixtures());
@@ -237,11 +253,11 @@ describe('lsports shadow bridge', () => {
     assert.deepEqual(parseAllowedOrigins('*,https://nextpari.net'), ['https://nextpari.net']);
     assert.deepEqual(
       resolveAllowedOrigins({ LSPORTS_ALLOWED_ORIGINS: '' }, 'remote'),
-      ['https://nextpari.net', 'https://www.nextpari.net'],
+      ['https://nextpari.net', 'https://www.nextpari.net', 'http://127.0.0.1:5173', 'http://localhost:5173'],
     );
     assert.equal(
-      corsOriginForRequest('https://nextpari.net', ['https://nextpari.net'], false),
-      'https://nextpari.net',
+      corsOriginForRequest('http://127.0.0.1:5173', resolveAllowedOrigins({}, 'remote'), false),
+      'http://127.0.0.1:5173',
     );
     assert.equal(corsOriginForRequest('https://evil.example', ['https://nextpari.net'], false), null);
     assert.equal(

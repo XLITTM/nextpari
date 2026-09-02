@@ -5,6 +5,7 @@ import {
   marketLineKey,
   parseTimestamp,
 } from './keys.js';
+import { buildMarketInventory, emptyIngestCounters } from './marketInventory.js';
 import {
   mergeFixtureMetadata,
   readActiveEvents,
@@ -19,6 +20,7 @@ import {
 } from './parse.js';
 import {
   applySettlementCode,
+  LSPORTS_SETTLEMENT,
   readSettlementCode,
   settlementFingerprint,
   type LsportsOutcomeSettlement,
@@ -28,11 +30,38 @@ import {
   type LsportsApplyOptions,
   type LsportsFeedHealth,
   type LsportsFixtureState,
+  type LsportsIngestCounters,
   type LsportsIngestSource,
   type LsportsKeepAliveDiscrepancy,
+  type LsportsMarketInventory,
   type LsportsMarketRecord,
   type LsportsStateMetrics,
 } from './types.js';
+
+function isOpenBetStatus(value: unknown): boolean {
+  return value === 1 || value === '1';
+}
+
+/**
+ * Type 3 / snapshot market replace is authoritative for open bets.
+ * Clear sticky Type 35 result overlays when the incoming bet is open and
+ * unsettled so later prices can be displayed again.
+ */
+export function clearStickySettlementsForOpenBets(
+  settlements: Map<string, LsportsOutcomeSettlement>,
+  market: Record<string, unknown>,
+): void {
+  for (const bet of readBets(market)) {
+    const id = readBetId(bet);
+    if (id == null) continue;
+    const code = readSettlementCode(bet.Settlement);
+    const open = isOpenBetStatus(bet.Status) || isOpenBetStatus(bet.BetStatusId);
+    const unsettled = code == null
+      || code === LSPORTS_SETTLEMENT.NotSettled
+      || code === LSPORTS_SETTLEMENT.Cancelled;
+    if (open && unsettled) settlements.delete(String(id));
+  }
+}
 
 function emptyFixture(fixtureId: number): LsportsFixtureState {
   return {
@@ -95,6 +124,7 @@ export class LsportsInPlayStore {
   private lastHeartbeatServerTimestamp: number | null = null;
   private lastHeartbeatReceivedAt: number | null = null;
   private bufferDepth = 0;
+  private readonly ingestCounters: LsportsIngestCounters = emptyIngestCounters();
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -143,6 +173,7 @@ export class LsportsInPlayStore {
 
   ingestMarketsSnapshot(payload: unknown, options: LsportsApplyOptions = {}): void {
     for (const event of readEvents(payload)) {
+      this.ingestCounters.snapshotMarketEvents += 1;
       this.applyMarkets(event, 'snapshot-markets', options);
     }
   }
@@ -194,12 +225,14 @@ export class LsportsInPlayStore {
   }
 
   ingestMarketDelta(payload: unknown, options: LsportsApplyOptions = {}): void {
+    this.ingestCounters.type3Messages += 1;
     for (const event of readEvents(payload)) {
       this.applyMarkets(event, 'rmq-3', options);
     }
   }
 
   ingestSettlement(payload: unknown, options: LsportsApplyOptions = {}): void {
+    this.ingestCounters.type35Messages += 1;
     const header = readHeader(payload);
     for (const event of readEvents(payload)) {
       this.patchSettlementEvent(event, header.msgGuid, options);
@@ -271,15 +304,24 @@ export class LsportsInPlayStore {
         continue;
       }
       const settlements = existing?.settlements ?? new Map();
+      clearStickySettlementsForOpenBets(settlements, market);
+      const marketId = marketIdOf(market);
       state.markets.set(key, {
         key,
-        marketId: marketIdOf(market),
+        marketId,
         line: marketLineKey(market),
         payload: overlaySettlements(market, settlements),
         lastUpdate: incomingLastUpdate,
         settlements,
       });
       replaced = true;
+      if (source === 'rmq-3') {
+        this.ingestCounters.marketsAppliedFromType3 += 1;
+        if (String(marketId) === '1') this.ingestCounters.market1AppliedFromType3 += 1;
+      } else {
+        this.ingestCounters.marketsAppliedFromSnapshot += 1;
+        if (String(marketId) === '1') this.ingestCounters.market1AppliedFromSnapshot += 1;
+      }
     }
     if (replaced) this.markLive(state, source);
   }
@@ -394,6 +436,14 @@ export class LsportsInPlayStore {
         discrepancies.activeInLsportsAbsentLocal.length
         + discrepancies.localActiveAbsentFromKeepAlive.length,
     };
+  }
+
+  getIngestCounters(): LsportsIngestCounters {
+    return { ...this.ingestCounters };
+  }
+
+  marketInventory(): LsportsMarketInventory {
+    return buildMarketInventory(this, this.ingestCounters);
   }
 
   getMarket(fixtureId: number, market: unknown): LsportsMarketRecord | undefined {

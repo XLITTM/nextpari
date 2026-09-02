@@ -1,7 +1,7 @@
 import type { LsportsInPlayStore } from '../state/store.js';
 import type { LsportsFixtureState } from '../state/types.js';
 import { adaptLsportsEvent, isLsportsFootball, readSportId } from './event.js';
-import { adaptFootballMarkets } from './markets.js';
+import { adaptFootballMarkets, emptyMarket1AdapterDiagnostics } from './markets.js';
 import type {
   LsportsAdaptResult,
   LsportsAdapterDiagnostics,
@@ -20,6 +20,7 @@ function emptyDiagnostics(fixtureCount: number): LsportsAdapterDiagnostics {
     suspendedMarketCount: 0,
     suspendedOutcomeCount: 0,
     fixturesMissing1x2: [],
+    market1Adapter: emptyMarket1AdapterDiagnostics(),
   };
 }
 
@@ -82,7 +83,11 @@ export function adaptLsportsStore(store: LsportsInPlayStore): LsportsAdaptResult
       continue;
     }
 
-    const mapped = adaptFootballMarkets(state.fixtureId, state.markets.values());
+    const mapped = adaptFootballMarkets(
+      state.fixtureId,
+      state.markets.values(),
+      diagnostics.market1Adapter,
+    );
     diagnostics.adaptedMarketCount += mapped.markets.length;
     diagnostics.suspendedMarketCount += mapped.suspendedMarkets;
     diagnostics.suspendedOutcomeCount += mapped.suspendedOutcomes;

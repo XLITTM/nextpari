@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
       react(),
       sportsCatalogPlugin(),
       sportsInplayPlugin(),
-      lsportsShadowPlugin(),
+      lsportsShadowPlugin(env.VITE_LSPORTS_FEED_BASE_URL),
       betsapiGatewayPlugin(),
       betsapiLiveWsPlugin(token),
       ownerStaffOnboardingPlugin(),

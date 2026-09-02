@@ -397,6 +397,27 @@ describe('lsports type 35 settlement patches', () => {
     assert.equal(second?.received, 2);
     assert.equal(betById(store.getMarket(FIXTURE_ID, { Id: 1 }), DRAW_BET)?.Price, '1.02');
   });
+
+  it('lets a later open Type 3 clear sticky Type 35 settlements on 1X2 bets', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestRmq(type3Market({ priceHome: '20', lastUpdate: '2026-09-01T22:51:11Z' }));
+    store.ingestRmq(type35Settlement());
+    assert.equal(betById(store.getMarket(FIXTURE_ID, { Id: 1 }), HOME_BET)?.Settlement, 1);
+    store.ingestRmq(type3Market({ priceHome: '1.91', lastUpdate: '2026-09-01T22:56:00Z' }));
+    const market = store.getMarket(FIXTURE_ID, { Id: 1 });
+    assert.equal(market?.payload.Status, 1);
+    assert.equal(betById(market, HOME_BET)?.Price, '1.91');
+    assert.equal(betById(market, HOME_BET)?.Status, 1);
+    assert.equal(betById(market, HOME_BET)?.Settlement, undefined);
+    assert.equal(market?.settlements.has(String(HOME_BET)), false);
+    assert.equal(store.getIngestCounters().type3Messages, 2);
+    assert.equal(store.getIngestCounters().type35Messages, 1);
+    assert.equal(store.getIngestCounters().market1AppliedFromType3, 2);
+    const inventory = store.marketInventory();
+    assert.equal(inventory.market1.count, 1);
+    assert.equal(inventory.market1.openMarketCount, 1);
+    assert.ok(inventory.market1.validPriceCount >= 3);
+  });
 });
 
 describe('lsports recovery coordinator', () => {

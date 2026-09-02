@@ -3,10 +3,11 @@ import {
   NEXTPARI_1X2_MARKET_KEY,
   type AdaptedMarket,
   type LsportsAdaptedMatch,
+  type LsportsMarket1AdapterDiagnostics,
 } from '../adapter/types.js';
 import { containsSecret } from '../redact.js';
 import type { LsportsInPlayStore } from '../state/store.js';
-import type { LsportsFeedHealth } from '../state/types.js';
+import type { LsportsFeedHealth, LsportsMarketInventory } from '../state/types.js';
 import {
   sanitizeDistributionDiagnostics,
   type LsportsDistributionSnapshot,
@@ -21,18 +22,26 @@ export const LSPORTS_LOCKED_1X2: AdaptedMarket = {
   entries: [],
 };
 
+const MISSING_1X2_SAMPLE = 8;
+
 export interface LsportsBrowserDiagnostics {
   health: LsportsFeedHealth;
   fixtureCount: number;
   activeFixtureCount: number;
   adaptedFixtureCount: number;
+  /** Adapted (display) 1X2 markets. Prefer adaptedMarketCount. */
   marketCount: number;
+  adaptedMarketCount: number;
+  storeMarketCount: number;
   lastUpdateAt: number;
   lastHeartbeatAt: number | null;
   unsupportedMarkets: Array<{ marketId: string; name: string; count: number }>;
   suspendedMarketCount: number;
   suspendedOutcomeCount: number;
+  fixturesMissing1x2Count: number;
   fixturesMissing1x2: string[];
+  marketInventory: LsportsMarketInventory;
+  market1Adapter: LsportsMarket1AdapterDiagnostics;
   distributionActive: boolean | null;
   consumerCount: number | null;
   numberMessagesInQueue: number | null;
@@ -75,12 +84,15 @@ export function buildLsportsBrowserPayload(
     ? adapted.matches
     : lockLsportsDisplayMatches(adapted.matches);
   const metrics = store.metrics();
+  const inventory = store.marketInventory();
   const lastHeartbeatAt = store.getLastHeartbeatServerTimestamp();
   const distributionDiagnostics = sanitizeDistributionDiagnostics(
     distribution,
     heartbeatHealth,
     lastHeartbeatAt,
   );
+  const missing = adapted.diagnostics.fixturesMissing1x2;
+  const adaptedMarketCount = health === 'HEALTHY' ? adapted.diagnostics.adaptedMarketCount : 0;
   return {
     source: 'lsports',
     health,
@@ -91,13 +103,18 @@ export function buildLsportsBrowserPayload(
       fixtureCount: metrics.fixtureCount,
       activeFixtureCount: metrics.activeFixtureCount,
       adaptedFixtureCount: adapted.diagnostics.adaptedLiveFootballCount,
-      marketCount: health === 'HEALTHY' ? adapted.diagnostics.adaptedMarketCount : 0,
+      marketCount: adaptedMarketCount,
+      adaptedMarketCount,
+      storeMarketCount: inventory.storeMarketCount,
       lastUpdateAt: now,
       lastHeartbeatAt,
-      unsupportedMarkets: adapted.diagnostics.unsupportedMarkets,
-      fixturesMissing1x2: adapted.diagnostics.fixturesMissing1x2,
+      unsupportedMarkets: adapted.diagnostics.unsupportedMarkets.slice(0, 40),
+      fixturesMissing1x2Count: missing.length,
+      fixturesMissing1x2: missing.slice(0, MISSING_1X2_SAMPLE),
       suspendedMarketCount: adapted.diagnostics.suspendedMarketCount,
       suspendedOutcomeCount: adapted.diagnostics.suspendedOutcomeCount,
+      marketInventory: inventory,
+      market1Adapter: adapted.diagnostics.market1Adapter,
       distributionActive: distributionDiagnostics.distributionActive,
       consumerCount: distributionDiagnostics.consumerCount,
       numberMessagesInQueue: distributionDiagnostics.numberMessagesInQueue,

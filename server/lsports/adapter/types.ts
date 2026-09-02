@@ -63,6 +63,18 @@ export interface LsportsSkipRecord {
   reason: LsportsSkipReason;
 }
 
+export interface LsportsMarket1AdapterDiagnostics {
+  seen: number;
+  adapted: number;
+  rejectedSettledMarket: number;
+  rejectedSuspendedMarket: number;
+  rejectedNoOutcomes: number;
+  settlementBlockedBets: number;
+  badPriceBets: number;
+  badNameBets: number;
+  openSelectableOutcomes: number;
+}
+
 export interface LsportsAdapterDiagnostics {
   fixtureCount: number;
   adaptedLiveFootballCount: number;
@@ -74,6 +86,7 @@ export interface LsportsAdapterDiagnostics {
   suspendedMarketCount: number;
   suspendedOutcomeCount: number;
   fixturesMissing1x2: string[];
+  market1Adapter: LsportsMarket1AdapterDiagnostics;
 }
 
 export interface LsportsAdaptResult {

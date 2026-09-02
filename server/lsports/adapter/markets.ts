@@ -6,6 +6,7 @@ import {
   type AdaptedMarket,
   type AdaptedMarketEntry,
   type AdaptedOutcome,
+  type LsportsMarket1AdapterDiagnostics,
 } from './types.js';
 
 export const LSPORTS_1X2_BET_NAME: Record<string, 'home' | 'draw' | 'away'> = {
@@ -28,6 +29,20 @@ export function isLsportsSettledStatus(value: unknown): boolean {
   return value === 3 || value === '3';
 }
 
+export function emptyMarket1AdapterDiagnostics(): LsportsMarket1AdapterDiagnostics {
+  return {
+    seen: 0,
+    adapted: 0,
+    rejectedSettledMarket: 0,
+    rejectedSuspendedMarket: 0,
+    rejectedNoOutcomes: 0,
+    settlementBlockedBets: 0,
+    badPriceBets: 0,
+    badNameBets: 0,
+    openSelectableOutcomes: 0,
+  };
+}
+
 export function isSupportedFootballMarket(market: LsportsMarketRecord): boolean {
   const payload = market.payload;
   const id = String(market.marketId ?? readId(payload.Id ?? payload.id) ?? '');
@@ -43,26 +58,42 @@ export function unsupportedMarketKey(market: LsportsMarketRecord): { marketId: s
   };
 }
 
+function settlementBlocksBet(bet: Record<string, unknown>): boolean {
+  const settlement = bet.Settlement;
+  return settlement === 1 || settlement === 2 || settlement === 3 || settlement === 4 || settlement === 5;
+}
+
 function outcomeSelectable(bet: Record<string, unknown>): boolean {
   if (isLsportsSuspendedStatus(bet.Status) || isLsportsSuspendedStatus(bet.BetStatusId)) return false;
   if (isLsportsSettledStatus(bet.Status) || isLsportsSettledStatus(bet.BetStatusId)) return false;
-  const settlement = bet.Settlement;
-  if (settlement === 1 || settlement === 2 || settlement === 3 || settlement === 4 || settlement === 5) {
-    return false;
-  }
+  if (settlementBlocksBet(bet)) return false;
   if (!isLsportsOpenStatus(bet.Status ?? 1) && bet.Status != null) return false;
   return true;
 }
 
-function map1x2Outcome(bet: Record<string, unknown>): AdaptedOutcome | null {
+function map1x2Outcome(
+  bet: Record<string, unknown>,
+  diag: LsportsMarket1AdapterDiagnostics,
+): AdaptedOutcome | null {
   const name = String(bet.Name ?? bet.name ?? '').trim();
   const key = LSPORTS_1X2_BET_NAME[name];
-  if (!key) return null;
+  if (!key) {
+    diag.badNameBets += 1;
+    return null;
+  }
   const betId = readBetId(bet);
   if (betId == null) return null;
+  if (settlementBlocksBet(bet)) {
+    diag.settlementBlockedBets += 1;
+    return null;
+  }
   if (!outcomeSelectable(bet)) return null;
   const odds = toDecimalPrice(bet.Price ?? bet.price);
-  if (odds == null) return null;
+  if (odds == null) {
+    diag.badPriceBets += 1;
+    return null;
+  }
+  diag.openSelectableOutcomes += 1;
   return {
     key,
     odds,
@@ -74,6 +105,7 @@ function map1x2Outcome(bet: Record<string, unknown>): AdaptedOutcome | null {
 export function adaptFootballMarkets(
   fixtureId: number,
   markets: Iterable<LsportsMarketRecord>,
+  market1Diag: LsportsMarket1AdapterDiagnostics = emptyMarket1AdapterDiagnostics(),
 ): {
   markets: AdaptedMarket[];
   unsupported: Array<{ marketId: string; name: string }>;
@@ -93,10 +125,13 @@ export function adaptFootballMarkets(
       continue;
     }
     saw1x2 = true;
+    market1Diag.seen += 1;
     const payload = market.payload;
     const marketSuspended = isLsportsSuspendedStatus(payload.Status);
     if (marketSuspended || isLsportsSettledStatus(payload.Status)) {
       suspendedMarkets += 1;
+      if (marketSuspended) market1Diag.rejectedSuspendedMarket += 1;
+      else market1Diag.rejectedSettledMarket += 1;
       for (const bet of readBets(payload)) {
         if (!outcomeSelectable(bet) || marketSuspended) suspendedOutcomes += 1;
       }
@@ -107,10 +142,13 @@ export function adaptFootballMarkets(
       if (isLsportsSuspendedStatus(bet.Status) || isLsportsSuspendedStatus(bet.BetStatusId)) {
         suspendedOutcomes += 1;
       }
-      const mapped = map1x2Outcome(bet);
+      const mapped = map1x2Outcome(bet, market1Diag);
       if (mapped) outcomes.push(mapped);
     }
-    if (!outcomes.length) continue;
+    if (!outcomes.length) {
+      market1Diag.rejectedNoOutcomes += 1;
+      continue;
+    }
     const entry: AdaptedMarketEntry = {
       id: `lsports-${fixtureId}-1-main`,
       outcomes,
@@ -125,6 +163,7 @@ export function adaptFootballMarkets(
       category: 'main',
       entries: [entry],
     });
+    market1Diag.adapted += 1;
   }
 
   return {

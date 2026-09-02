@@ -8,6 +8,7 @@ import {
   displayMatchesFromFeed,
   lsportsHealthUrl,
   lsportsInplayUrl,
+  parseLsportsBrowserFeed,
   type LsportsBrowserFeed,
 } from './lsportsShadowFeed';
 
@@ -72,10 +73,27 @@ describe('lsports shadow client guards', () => {
     assert.equal(json.includes('2.8'), false);
     const healthy = displayMatchesFromFeed({ ...staleFeed, health: 'HEALTHY' });
     assert.equal(healthy[0]?.markets[0]?.entries[0]?.outcomes[0]?.odds, 1.85);
+    const mixed = displayMatchesFromFeed({
+      ...staleFeed,
+      health: 'HEALTHY',
+      matches: [
+        staleFeed.matches[0]!,
+        {
+          event: { ...staleFeed.matches[0]!.event, id: 'betsapi-1', our_events: undefined },
+          markets: staleFeed.matches[0]!.markets,
+        },
+      ],
+    });
+    assert.equal(mixed.length, 1);
+    assert.equal(mixed[0]?.event.id, '19981248');
   });
 
   it('uses the remote worker HTTPS feed when a base URL is set', () => {
     const env = { VITE_LSPORTS_FEED_BASE_URL: 'https://lsports-inplay.example.test/' };
+    assert.equal(
+      lsportsInplayUrl({ VITE_LSPORTS_FEED_BASE_URL: 'https://nextpari-production.up.railway.app' }),
+      'https://nextpari-production.up.railway.app/inplay',
+    );
     assert.equal(lsportsInplayUrl(env), 'https://lsports-inplay.example.test/inplay');
     assert.equal(lsportsHealthUrl(env), 'https://lsports-inplay.example.test/health');
     assert.equal(lsportsInplayUrl(env).includes('localhost'), false);
@@ -87,5 +105,15 @@ describe('lsports shadow client guards', () => {
     const hook = readFileSync(join(root, 'src/hooks/useLsportsShadowFeed.ts'), 'utf8');
     assert.match(hook, /fetchLsportsShadowHealth/);
     assert.match(hook, /fetchLsportsShadowInplay/);
+    const hydrate = readFileSync(join(root, 'src/lib/hydrateCatalogOdds.ts'), 'utf8');
+    assert.match(hydrate, /isLsportsDisplayEvent/);
+    const parsed = parseLsportsBrowserFeed({
+      source: 'lsports',
+      health: 'HEALTHY',
+      generatedAt: 1,
+      matches: staleFeed.matches,
+    });
+    assert.equal(parsed.matches.length, 1);
+    assert.throws(() => parseLsportsBrowserFeed({ source: 'betsapi', matches: [] }));
   });
 });

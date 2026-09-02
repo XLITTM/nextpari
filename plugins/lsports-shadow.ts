@@ -1,9 +1,15 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { Plugin, ViteDevServer } from 'vite';
 
-const SHADOW_ORIGIN = 'http://127.0.0.1:8787';
+const LOCAL_SHADOW_ORIGIN = 'http://127.0.0.1:8787';
 
-function attachShadowProxy(server: ViteDevServer) {
+function railwayOrigin(feedBaseUrl?: string): string {
+  const trimmed = String(feedBaseUrl ?? '').trim().replace(/\/$/, '');
+  return trimmed || LOCAL_SHADOW_ORIGIN;
+}
+
+function attachShadowProxy(server: ViteDevServer, feedBaseUrl?: string) {
+  const origin = railwayOrigin(feedBaseUrl);
   server.middlewares.use((req: IncomingMessage, res: ServerResponse, next: () => void) => {
     const path = (req.url ?? '').split('?')[0] ?? '';
     if (!path.startsWith('/api/lsports')) {
@@ -11,9 +17,9 @@ function attachShadowProxy(server: ViteDevServer) {
       return;
     }
 
-    void fetch(`${SHADOW_ORIGIN}${path}`, {
+    void fetch(`${origin}${path}`, {
       headers: { Accept: req.headers.accept ?? 'application/json' },
-      signal: AbortSignal.timeout(8_000),
+      signal: AbortSignal.timeout(12_000),
     }).then(async (upstream) => {
       if (res.writableEnded) return;
       const contentType = upstream.headers.get('content-type') ?? 'application/json';
@@ -56,10 +62,14 @@ function attachShadowProxy(server: ViteDevServer) {
   });
 }
 
-export function lsportsShadowPlugin(): Plugin {
+export function lsportsShadowPlugin(feedBaseUrl?: string): Plugin {
   return {
     name: 'lsports-shadow',
-    configureServer: attachShadowProxy,
-    configurePreviewServer: attachShadowProxy,
+    configureServer(server) {
+      attachShadowProxy(server, feedBaseUrl);
+    },
+    configurePreviewServer(server) {
+      attachShadowProxy(server, feedBaseUrl);
+    },
   };
 }

@@ -207,6 +207,7 @@ describe('lsports display adapter', () => {
     const { matches, diagnostics } = adaptLsportsStore(store);
     assert.equal(matches[0]?.markets.length, 0);
     assert.deepEqual(diagnostics.fixturesMissing1x2, ['19981248']);
+    assert.equal(diagnostics.market1Adapter.seen, 0);
     const card = projectLsportsCard(matches[0]!);
     assert.equal(isFakeDefault(card.markets), false);
     assert.deepEqual(card.markets, { '1': 0, x: 0, '2': 0 });
@@ -215,6 +216,39 @@ describe('lsports display adapter', () => {
     assert.equal(JSON.stringify(matches).includes('2.1'), false);
     assert.equal(JSON.stringify(matches).includes('3.25'), false);
     assert.equal(JSON.stringify(matches).includes('2.8'), false);
+  });
+
+  it('re-adapts open 1X2 after Type 35 settlement is cleared by a later Type 3', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(type3(FIXTURE_A, '1.85'));
+    store.ingestRmq({
+      Header: { Type: 35, ServerTimestamp: 4000, MsgGuid: 'settle' },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE_A,
+          Markets: [{
+            Id: 1,
+            Name: '1X2',
+            Status: 3,
+            Bets: [
+              { Id: HOME_BET, Name: '1', Status: 3, BetStatusId: 3, Settlement: 1, LastUpdate: '2026-09-01T22:53:45Z' },
+              { Id: DRAW_BET, Name: 'X', Status: 3, BetStatusId: 3, Settlement: 2, LastUpdate: '2026-09-01T22:53:45Z' },
+              { Id: AWAY_BET, Name: '2', Status: 3, BetStatusId: 3, Settlement: 3, LastUpdate: '2026-09-01T22:53:45Z' },
+            ],
+          }],
+        }],
+      },
+    });
+    assert.equal(adaptLsportsStore(store).diagnostics.adaptedMarketCount, 0);
+    store.ingestRmq(type3(FIXTURE_A, '1.91', false, '2026-09-01T22:56:00Z'));
+    const { matches, diagnostics } = adaptLsportsStore(store);
+    assert.equal(diagnostics.adaptedMarketCount, 1);
+    assert.equal(diagnostics.market1Adapter.adapted, 1);
+    assert.equal(diagnostics.market1Adapter.openSelectableOutcomes, 3);
+    assert.equal(mainOdds(matches[0]?.markets ?? [])['1'], 1.91);
+    assert.equal(isFakeDefault(mainOdds(matches[0]?.markets ?? [])), false);
   });
 
   it('skips unsupported markets and non-football fixtures', () => {

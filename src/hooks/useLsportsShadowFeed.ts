@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { isLsportsDisplayFeedEnabled } from '@/lib/lsportsFeed';
 import { applyLsportsBrowserFeed, fetchLsportsShadowHealth, fetchLsportsShadowInplay } from '@/lib/lsportsShadowPublish';
 
-const POLL_MS = 1_000;
+const POLL_MS = 2_000;
 
 export function useLsportsShadowFeed() {
   const enabled = isLsportsDisplayFeedEnabled();

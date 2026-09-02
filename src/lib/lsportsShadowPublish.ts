@@ -7,6 +7,7 @@ import {
   displayMatchesFromFeed,
   lsportsHealthUrl,
   lsportsInplayUrl,
+  parseLsportsBrowserFeed,
   type LsportsBrowserFeed,
 } from './lsportsShadowFeed';
 
@@ -34,17 +35,29 @@ export function applyLsportsBrowserFeed(feed: LsportsBrowserFeed): void {
 }
 
 export async function fetchLsportsShadowInplay(signal?: AbortSignal): Promise<LsportsBrowserFeed> {
-  const response = await fetch(lsportsInplayUrl(), { signal, cache: 'no-store' });
+  const response = await fetch(lsportsInplayUrl(), {
+    signal,
+    cache: 'no-store',
+    credentials: 'omit',
+  });
   if (!response.ok) {
     throw new Error(`lsports-feed-http-${response.status}`);
   }
-  return await response.json() as LsportsBrowserFeed;
+  return parseLsportsBrowserFeed(await response.json());
 }
 
 export async function fetchLsportsShadowHealth(signal?: AbortSignal): Promise<{ health?: string }> {
-  const response = await fetch(lsportsHealthUrl(), { signal, cache: 'no-store' });
+  const response = await fetch(lsportsHealthUrl(), {
+    signal,
+    cache: 'no-store',
+    credentials: 'omit',
+  });
   if (!response.ok) {
     throw new Error(`lsports-health-http-${response.status}`);
   }
-  return await response.json() as { health?: string };
+  const json = await response.json() as { source?: string; health?: string };
+  if (json.source != null && json.source !== 'lsports') {
+    throw new Error('lsports-health-invalid');
+  }
+  return json;
 }

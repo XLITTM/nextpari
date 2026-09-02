@@ -16,12 +16,20 @@ export {
   type LsportsSettlementCode,
   type LsportsSettlementPhase,
 } from './settlement.js';
-export { LsportsInPlayStore, betById, shouldReplaceMarket } from './store.js';
+export { buildMarketInventory, emptyIngestCounters } from './marketInventory.js';
+export {
+  LsportsInPlayStore,
+  betById,
+  clearStickySettlementsForOpenBets,
+  shouldReplaceMarket,
+} from './store.js';
 export type { LsportsFixtureState, LsportsMarketRecord } from './types.js';
 export {
   LSPORTS_HEARTBEAT_STALE_MS,
   type LsportsFeedHealth,
+  type LsportsIngestCounters,
   type LsportsKeepAliveDiscrepancy,
+  type LsportsMarketInventory,
   type LsportsRecoveryMode,
   type LsportsStateMetrics,
 } from './types.js';

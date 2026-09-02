@@ -61,6 +61,35 @@ export interface LsportsStateMetrics {
   discrepanciesCount: number;
 }
 
+export interface LsportsIngestCounters {
+  type3Messages: number;
+  type35Messages: number;
+  snapshotMarketEvents: number;
+  marketsAppliedFromType3: number;
+  marketsAppliedFromSnapshot: number;
+  market1AppliedFromType3: number;
+  market1AppliedFromSnapshot: number;
+}
+
+export interface LsportsMarket1Inventory {
+  count: number;
+  openMarketCount: number;
+  marketStatus: Record<string, number>;
+  betStatus: Record<string, number>;
+  betStatusId: Record<string, number>;
+  betNames: Record<string, number>;
+  validPriceCount: number;
+  sampleFixtureIds: number[];
+}
+
+export interface LsportsMarketInventory {
+  fixturesWithMarkets: number;
+  storeMarketCount: number;
+  byMarketId: Array<{ marketId: string; count: number }>;
+  market1: LsportsMarket1Inventory;
+  ingest: LsportsIngestCounters;
+}
+
 export interface LsportsBufferedMessage {
   receivedAt: number;
   payload: unknown;
