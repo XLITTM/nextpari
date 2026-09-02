@@ -5,6 +5,11 @@ import { LsportsRecoveryBuffer } from './recovery.js';
 import { LsportsInPlayStore } from './store.js';
 import type { LsportsRecoveryMode } from './types.js';
 
+export type LsportsSnapshotPlanner = (input: {
+  mode: LsportsRecoveryMode;
+  lastHealthyHeartbeatServerTimestamp?: number | null;
+}) => LsportsSnapshotPlanItem[];
+
 /**
  * Injected I/O for the recovery coordinator. Tests supply fakes; this
  * module does not open RMQ, call Distribution/Start, or hit snapshot HTTP.
@@ -21,6 +26,8 @@ export interface LsportsRecoveryCoordinatorOptions {
   io: LsportsRecoveryIo;
   now?: () => number;
   lastHealthyHeartbeatServerTimestamp?: number | null;
+  /** Defaults to InPlay GetFixtures/GetScores/GetFixtureMarkets. PreMatch injects its own plan. */
+  planSnapshots?: LsportsSnapshotPlanner;
 }
 
 /**
@@ -38,6 +45,7 @@ export class LsportsRecoveryCoordinator {
   private readonly limiter: LsportsSnapshotRateLimiter;
   private readonly io: LsportsRecoveryIo;
   private readonly now: () => number;
+  private readonly planSnapshots: LsportsSnapshotPlanner;
 
   constructor(options: LsportsRecoveryCoordinatorOptions) {
     this.store = options.store;
@@ -45,6 +53,7 @@ export class LsportsRecoveryCoordinator {
     this.limiter = options.limiter;
     this.io = options.io;
     this.now = options.now ?? Date.now;
+    this.planSnapshots = options.planSnapshots ?? planSnapshotRequests;
     this.lastHealthyHeartbeatServerTimestamp = options.lastHealthyHeartbeatServerTimestamp
       ?? options.store.getLastHeartbeatServerTimestamp();
     this.mode = this.lastHealthyHeartbeatServerTimestamp == null
@@ -66,7 +75,7 @@ export class LsportsRecoveryCoordinator {
 
   planCurrentSnapshots(): LsportsSnapshotPlanItem[] {
     if (this.mode === 'LIVE') return [];
-    return planSnapshotRequests({
+    return this.planSnapshots({
       mode: this.mode,
       lastHealthyHeartbeatServerTimestamp: this.lastHealthyHeartbeatServerTimestamp,
     });
@@ -109,7 +118,7 @@ export class LsportsRecoveryCoordinator {
 
   private async runRecoveryCycle(): Promise<void> {
     this.buffer.beginBuffering();
-    const plan = planSnapshotRequests({
+    const plan = this.planSnapshots({
       mode: this.mode === 'LIVE' ? 'COLD_START' : this.mode,
       lastHealthyHeartbeatServerTimestamp: this.lastHealthyHeartbeatServerTimestamp,
     });

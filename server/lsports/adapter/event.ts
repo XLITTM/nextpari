@@ -2,6 +2,7 @@ import type { LsportsFixtureState } from '../state/types.js';
 import {
   LSPORTS_DISPLAY_TAG,
   LSPORTS_FOOTBALL_SPORT_ID,
+  LSPORTS_PREMATCH_DISPLAY_TAG,
   NEXTPARI_FOOTBALL_SPORT_ID,
   type AdaptedBetsEvent,
 } from './types.js';
@@ -107,6 +108,18 @@ export function adaptLsportsEvent(state: LsportsFixtureState): AdaptedBetsEvent 
     event.time = timeStr;
   }
   if (period) event.period = period;
+  return event;
+}
+
+export function adaptLsportsPrematchEvent(state: LsportsFixtureState): AdaptedBetsEvent | null {
+  const event = adaptLsportsEvent(state);
+  if (!event) return null;
+  event.time_status = '0';
+  event.our_events = LSPORTS_PREMATCH_DISPLAY_TAG;
+  delete event.ss;
+  delete event.time_str;
+  delete event.time;
+  delete event.period;
   return event;
 }
 

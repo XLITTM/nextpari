@@ -1,0 +1,308 @@
+import type { Channel, ChannelModel, ConsumeMessage } from 'amqplib';
+import { publicLsportsConfig, resolveLsportsRmqConfig, type LsportsRmqConfig } from '../config.js';
+import { startDistributionAcceptingActive } from '../distribution.js';
+import { summarizeLsportsMessage } from '../probe.js';
+import {
+  closeLsportsRmq,
+  connectLsportsRmqWithRetry,
+  openLsportsChannel,
+} from '../rmq.js';
+import { createLsportsPrematchRecoveryIo } from '../bridge/io.js';
+import {
+  LSPORTS_DISTRIBUTION_STATUS_POLL_MS,
+  LSPORTS_QUEUE_DEPTH_WARNING,
+  pollPrematchDistributionStatus,
+  shouldWarnQueueDepth,
+  type LsportsDistributionSnapshot,
+} from '../bridge/status.js';
+import { LsportsRecoveryCoordinator } from '../state/coordinator.js';
+import { planPrematchSnapshotRequests } from '../state/plan.js';
+import { LsportsSnapshotRateLimiter } from '../state/rateLimit.js';
+import { LsportsRecoveryBuffer } from '../state/recovery.js';
+import { LsportsInPlayStore } from '../state/store.js';
+import type { LsportsPrematchFeed } from './payload.js';
+import { LsportsPrematchDisplayBridge, LSPORTS_PREMATCH_HEALTH_POLL_MS } from './publisher.js';
+
+/** Higher than InPlay (5) so Package 4352 can drain an accumulated queue without sharing that channel. */
+const PREMATCH_PREFETCH = 50;
+
+export class LsportsPrematchAlreadyRunningError extends Error {
+  constructor() {
+    super('LSPORTS_PREMATCH_ALREADY_RUNNING');
+    this.name = 'LsportsPrematchAlreadyRunningError';
+  }
+}
+
+export interface LsportsPrematchBridgeDeps {
+  connect?: (config: LsportsRmqConfig) => Promise<ChannelModel>;
+  openChannel?: (connection: ChannelModel, prefetch: number) => Promise<Channel>;
+  checkQueue?: (channel: Channel, queue: string) => Promise<void>;
+  consume?: (
+    channel: Channel,
+    queue: string,
+    onMessage: (message: ConsumeMessage | null) => void,
+  ) => Promise<{ consumerTag: string }>;
+  createIo?: typeof createLsportsPrematchRecoveryIo;
+  startDistribution?: () => Promise<void>;
+  pollDistributionStatus?: () => Promise<LsportsDistributionSnapshot>;
+  sleep?: (ms: number) => Promise<void>;
+  limiter?: LsportsSnapshotRateLimiter;
+  distributionPollMs?: number;
+  onFatal?: (error: unknown) => void;
+  log?: (parts: Record<string, string | number | boolean | null | undefined>) => void;
+  warn?: (parts: Record<string, string | number | boolean | null | undefined>) => void;
+}
+
+export interface LsportsPrematchRuntime {
+  stop: () => Promise<void>;
+  consumerCount: () => number;
+  started: () => boolean;
+  isBuffering: () => boolean;
+  getPayload: () => LsportsPrematchFeed;
+  noteDistributionStatus: (snapshot: LsportsDistributionSnapshot) => LsportsPrematchFeed;
+}
+
+let activePrematchRuntime: LsportsPrematchRuntime | null = null;
+
+export function isLsportsPrematchRunning(): boolean {
+  return activePrematchRuntime != null;
+}
+
+export function resetLsportsPrematchRuntimeForTests(): void {
+  activePrematchRuntime = null;
+}
+
+function logPrematch(parts: Record<string, string | number | boolean | null | undefined>): void {
+  const body = Object.entries(parts)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ');
+  console.log(`[lsports-prematch] ${body}`);
+}
+
+function warnPrematch(parts: Record<string, string | number | boolean | null | undefined>): void {
+  const body = Object.entries(parts)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ');
+  console.warn(`[lsports-prematch] WARNING ${body}`);
+}
+
+export async function runLsportsPrematchBridge(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LsportsPrematchBridgeDeps = {},
+): Promise<LsportsPrematchRuntime> {
+  if (activePrematchRuntime) throw new LsportsPrematchAlreadyRunningError();
+
+  const config = resolveLsportsRmqConfig('prematch', env);
+  const published = publicLsportsConfig(config);
+  const store = new LsportsInPlayStore();
+  const buffer = new LsportsRecoveryBuffer(store);
+  const limiter = deps.limiter ?? new LsportsSnapshotRateLimiter();
+  const coordinator = new LsportsRecoveryCoordinator({
+    store,
+    buffer,
+    limiter,
+    io: (deps.createIo ?? createLsportsPrematchRecoveryIo)(env),
+    planSnapshots: planPrematchSnapshotRequests,
+  });
+  let lastMessageAt: number | null = null;
+  let consumers = 0;
+  const bridge = new LsportsPrematchDisplayBridge({
+    store,
+    coordinator,
+    packageId: published.packageId,
+    consumerConnected: () => consumers > 0,
+    lastMessageAt: () => lastMessageAt,
+  });
+  const log = deps.log ?? logPrematch;
+  const warn = deps.warn ?? warnPrematch;
+
+  let connection: ChannelModel | null = null;
+  let channel: Channel | null = null;
+  let consumerTag: string | null = null;
+  let healthTimer: ReturnType<typeof setInterval> | null = null;
+  let statusTimer: ReturnType<typeof setInterval> | null = null;
+  let started = false;
+  let stopping = false;
+
+  const applyStatus = (snapshot: LsportsDistributionSnapshot) => {
+    const payload = bridge.noteDistributionStatus(snapshot);
+    log({
+      action: 'distribution-status',
+      active: snapshot.distributionActive,
+      consumers: snapshot.consumerCount,
+      queue: snapshot.numberMessagesInQueue,
+      mps: snapshot.messagesPerSecond,
+      health: payload.health,
+      heartbeat: payload.diagnostics.lastHeartbeatAt,
+    });
+    if (shouldWarnQueueDepth(snapshot.numberMessagesInQueue)) {
+      warn({
+        queue: snapshot.numberMessagesInQueue,
+        threshold: LSPORTS_QUEUE_DEPTH_WARNING,
+      });
+    }
+    if (snapshot.distributionActive === false) {
+      warn({
+        action: 'distribution-disabled',
+        package: published.packageId,
+        health: payload.health,
+      });
+    }
+    return payload;
+  };
+
+  const pollStatus = async () => {
+    const poll = deps.pollDistributionStatus
+      ?? (() => pollPrematchDistributionStatus(env, { log, verbose: false }));
+    try {
+      applyStatus(await poll());
+    } catch {
+      log({ action: 'distribution-status-error' });
+    }
+  };
+
+  const stop = async () => {
+    if (stopping) return;
+    stopping = true;
+    if (healthTimer) {
+      clearInterval(healthTimer);
+      healthTimer = null;
+    }
+    if (statusTimer) {
+      clearInterval(statusTimer);
+      statusTimer = null;
+    }
+    if (channel && consumerTag) {
+      try {
+        await channel.cancel(consumerTag);
+      } catch {
+        // already closed
+      }
+    }
+    await closeLsportsRmq(channel, connection);
+    channel = null;
+    connection = null;
+    consumerTag = null;
+    consumers = 0;
+    started = false;
+    if (activePrematchRuntime?.stop === stop) activePrematchRuntime = null;
+  };
+
+  const runtime: LsportsPrematchRuntime = {
+    stop,
+    consumerCount: () => consumers,
+    started: () => started,
+    isBuffering: () => buffer.isBuffering(),
+    getPayload: () => bridge.getPayload(),
+    noteDistributionStatus: applyStatus,
+  };
+  activePrematchRuntime = runtime;
+
+  try {
+    await (deps.startDistribution ?? (() => startDistributionAcceptingActive('prematch', env)))();
+
+    buffer.beginBuffering();
+    const connect = deps.connect
+      ?? ((cfg: LsportsRmqConfig) => connectLsportsRmqWithRetry(cfg, { sleep: deps.sleep }));
+    const openChannel = deps.openChannel ?? openLsportsChannel;
+
+    const onMessage = (message: ConsumeMessage | null) => {
+      if (!message || !channel) return;
+      lastMessageAt = Date.now();
+      try {
+        const { json } = summarizeLsportsMessage('prematch', message);
+        if (json && typeof json === 'object') {
+          store.noteRmqTransport('parsed');
+          bridge.handleRmq(json);
+        } else {
+          store.noteRmqTransport('parse-failed');
+        }
+        channel.ack(message);
+      } catch {
+        store.noteRmqTransport('parse-failed');
+        channel.ack(message);
+      }
+    };
+
+    const beginConsume = async (nextConnection: ChannelModel) => {
+      connection = nextConnection;
+      channel = await openChannel(connection, PREMATCH_PREFETCH);
+      if (deps.checkQueue) await deps.checkQueue(channel, config.queue);
+      else await channel.checkQueue(config.queue);
+      const consumed = deps.consume
+        ? await deps.consume(channel, config.queue, onMessage)
+        : await channel.consume(config.queue, onMessage);
+      consumerTag = consumed.consumerTag;
+      consumers = 1;
+      const emitter = connection as unknown as { on?: (event: string, handler: () => void) => void };
+      emitter.on?.('close', () => {
+        if (stopping) return;
+        void reconnectRmq();
+      });
+    };
+
+    let reconnecting = false;
+    const reconnectRmq = async () => {
+      if (stopping || reconnecting) return;
+      reconnecting = true;
+      log({ action: 'rmq-reconnect' });
+      try {
+        if (channel && consumerTag) {
+          try {
+            await channel.cancel(consumerTag);
+          } catch {
+            // already closed
+          }
+        }
+        await closeLsportsRmq(channel, connection);
+        channel = null;
+        connection = null;
+        consumerTag = null;
+        consumers = 0;
+        await beginConsume(await connect(config));
+        log({ action: 'rmq-reconnect-ok', consumers });
+      } catch (error) {
+        log({ action: 'rmq-reconnect-failed' });
+        await stop();
+        deps.onFatal?.(error);
+      } finally {
+        reconnecting = false;
+      }
+    };
+
+    await beginConsume(await connect(config));
+
+    log({
+      action: 'prematch-rmq',
+      host: published.host,
+      vhost: published.vhost,
+      package: published.packageId,
+      queue: published.queue,
+      buffering: buffer.isBuffering(),
+    });
+    await coordinator.runColdStart();
+    bridge.markRecoveryComplete();
+    log({
+      action: 'prematch-live',
+      mode: coordinator.getMode(),
+      health: store.feedHealth(),
+      fixtures: store.metrics().fixtureCount,
+    });
+
+    healthTimer = setInterval(() => bridge.refreshHealth(), LSPORTS_PREMATCH_HEALTH_POLL_MS);
+    const pollMs = deps.distributionPollMs ?? LSPORTS_DISTRIBUTION_STATUS_POLL_MS;
+    if (pollMs > 0) {
+      void pollStatus();
+      statusTimer = setInterval(() => {
+        void pollStatus();
+      }, pollMs);
+    }
+    started = true;
+    return runtime;
+  } catch (error) {
+    await stop();
+    throw error;
+  }
+}

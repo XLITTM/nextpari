@@ -165,6 +165,10 @@ describe('lsports diagnostics stay secret-free', () => {
     const adapterPublish = read('server/lsports/adapter/publish.ts');
     const adapterMarkets = read('server/lsports/adapter/markets.ts');
     const adapterEvent = read('server/lsports/adapter/event.ts');
+    const adapterPrematch = read('server/lsports/adapter/prematchAdapt.ts');
+    const adapterPrematchMarkets = read('server/lsports/adapter/prematchMarkets.ts');
+    const prematchRuntime = read('server/lsports/prematch/runtime.ts');
+    const prematchPayload = read('server/lsports/prematch/payload.ts');
     const bridgePayload = read('server/lsports/bridge/payload.ts');
     const bridgePublisher = read('server/lsports/bridge/publisher.ts');
     const bridgeHttp = read('server/lsports/bridge/http.ts');
@@ -175,7 +179,7 @@ describe('lsports diagnostics stay secret-free', () => {
     const bridgeRate = read('server/lsports/bridge/rateLimitHttp.ts');
     const shadowScript = read('scripts/run-lsports-shadow.ts');
     const workerScript = read('scripts/run-lsports-worker.ts');
-    for (const src of [config, probe, rmq, script, observe, typeCapture, distribution, snapshot, snapshotScript, scoresMarketsScript, stateStore, stateRecovery, stateCoordinator, stateSettlement, statePlan, stateRateLimit, adapterAdapt, adapterConfig, adapterPublish, adapterMarkets, adapterEvent, bridgePayload, bridgePublisher, bridgeHttp, bridgeRuntime, bridgeIo, bridgeStatus, bridgeCors, bridgeRate, shadowScript, workerScript]) {
+    for (const src of [config, probe, rmq, script, observe, typeCapture, distribution, snapshot, snapshotScript, scoresMarketsScript, stateStore, stateRecovery, stateCoordinator, stateSettlement, statePlan, stateRateLimit, adapterAdapt, adapterConfig, adapterPublish, adapterMarkets, adapterEvent, adapterPrematch, adapterPrematchMarkets, prematchRuntime, prematchPayload, bridgePayload, bridgePublisher, bridgeHttp, bridgeRuntime, bridgeIo, bridgeStatus, bridgeCors, bridgeRate, shadowScript, workerScript]) {
       assert.equal(src.includes('VITE_'), false);
       assert.equal(src.includes(['264', '390-'].join('')), false);
     }
@@ -429,6 +433,8 @@ describe('lsports inplay snapshot', () => {
     assert.equal(snapshotScript.includes('runLsportsProbe'), false);
     assert.equal(snapshotScript.includes('PreMatch'), false);
     assert.equal(read('server/lsports/snapshot.ts').includes('GetEvents'), false);
+    assert.match(read('server/lsports/snapshot.ts'), /\/PreMatch\/GetFixtures/);
+    assert.match(read('server/lsports/snapshot.ts'), /\/PreMatch\/GetFixtureMarkets/);
   });
 
   it('builds timestamp-filtered scores and markets requests', () => {

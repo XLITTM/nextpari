@@ -1,5 +1,6 @@
 export const LSPORTS_HTTP_INPLAY_RATE_MAX = 60;
 export const LSPORTS_HTTP_HEALTH_RATE_MAX = 120;
+export const LSPORTS_HTTP_PREMATCH_RATE_MAX = 60;
 export const LSPORTS_HTTP_RATE_WINDOW_MS = 60_000;
 
 export class LsportsHttpRateLimiter {

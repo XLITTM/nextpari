@@ -13,6 +13,17 @@ export const LSPORTS_INPLAY_GET_SCORES_URL =
   `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_INPLAY_GET_SCORES_PATH}`;
 export const LSPORTS_INPLAY_GET_FIXTURE_MARKETS_URL =
   `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_INPLAY_GET_FIXTURE_MARKETS_PATH}`;
+
+/** Official PreMatch snapshot actions (docs.lsports.eu PreMatch Snapshot). */
+export const LSPORTS_PREMATCH_GET_FIXTURES_PATH = '/PreMatch/GetFixtures';
+export const LSPORTS_PREMATCH_GET_SCORES_PATH = '/PreMatch/GetScores';
+export const LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_PATH = '/PreMatch/GetFixtureMarkets';
+export const LSPORTS_PREMATCH_GET_FIXTURES_URL =
+  `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_PREMATCH_GET_FIXTURES_PATH}`;
+export const LSPORTS_PREMATCH_GET_SCORES_URL =
+  `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_PREMATCH_GET_SCORES_PATH}`;
+export const LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_URL =
+  `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_PATH}`;
 export const LSPORTS_FOOTBALL_SPORT_ID = 6046;
 export const LSPORTS_SNAPSHOT_TIMEOUT_MS = 60_000;
 export const LSPORTS_SNAPSHOT_MIN_INTERVAL_MS = 1_100;
@@ -242,6 +253,12 @@ const SNAPSHOT_URLS = {
   GetFixtureMarkets: LSPORTS_INPLAY_GET_FIXTURE_MARKETS_URL,
 } as const;
 
+const PREMATCH_SNAPSHOT_URLS = {
+  GetFixtures: LSPORTS_PREMATCH_GET_FIXTURES_URL,
+  GetScores: LSPORTS_PREMATCH_GET_SCORES_URL,
+  GetFixtureMarkets: LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_URL,
+} as const;
+
 export const LSPORTS_SNAPSHOT_MAX_ATTEMPTS = 4;
 export const LSPORTS_SNAPSHOT_RETRY_DELAYS_MS = [2_000, 4_000, 8_000] as const;
 export const LSPORTS_SNAPSHOT_RETRY_AFTER_MAX_MS = 30_000;
@@ -353,6 +370,78 @@ export async function fetchInPlaySnapshotBody(
     }
     if (attempt > 1) {
       log({ action: 'snapshot-ok', endpoint: item.endpoint, attempt, http: response.status });
+    }
+    return parsed;
+  }
+  throw new LsportsSnapshotHttpError(lastStatus || 429);
+}
+
+/**
+ * PreMatch coordinator snapshot POST (package 4352).
+ * Same retry/rate-limit semantics as InPlay; separate store/consumer.
+ */
+export async function fetchPreMatchSnapshotBody(
+  item: { endpoint: keyof typeof PREMATCH_SNAPSHOT_URLS; timestamp?: number; unfiltered: boolean },
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LsportsSnapshotFetchDeps = {},
+): Promise<unknown> {
+  const config = resolveLsportsRmqConfig('prematch', env);
+  const secrets = [config.password, config.username];
+  const request: {
+    packageId: number;
+    userName: string;
+    password: string;
+    timestamp?: number;
+  } = {
+    packageId: config.packageId,
+    userName: config.username,
+    password: config.password,
+  };
+  if (!item.unfiltered && item.timestamp != null) {
+    request.timestamp = item.timestamp;
+  }
+  const url = PREMATCH_SNAPSHOT_URLS[item.endpoint];
+  const fetchImpl = deps.fetchImpl ?? fetch;
+  const sleep = deps.sleep ?? snapshotWait;
+  const log = deps.log ?? logLine;
+
+  let lastStatus = 0;
+  for (let attempt = 1; attempt <= LSPORTS_SNAPSHOT_MAX_ATTEMPTS; attempt += 1) {
+    const response = await fetchImpl(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+      signal: AbortSignal.timeout(LSPORTS_SNAPSHOT_TIMEOUT_MS),
+    });
+    lastStatus = response.status;
+    const rawText = await response.text();
+    if (containsSecret(rawText, secrets)) {
+      throw new Error('LSPORTS_SAMPLE_LEAK');
+    }
+    if (response.status === 429 && attempt < LSPORTS_SNAPSHOT_MAX_ATTEMPTS) {
+      const waitMs = snapshot429WaitMs(attempt - 1, response.headers.get('retry-after'));
+      log({
+        action: 'prematch-snapshot-retry',
+        endpoint: item.endpoint,
+        attempt,
+        waitMs,
+        http: 429,
+      });
+      await sleep(waitMs);
+      continue;
+    }
+    if (!response.ok) {
+      throw new LsportsSnapshotHttpError(response.status);
+    }
+    const parsed: unknown = rawText ? JSON.parse(rawText) : null;
+    if (containsSecret(serializeDiagnostic(parsed), secrets)) {
+      throw new Error('LSPORTS_SAMPLE_LEAK');
+    }
+    if (attempt > 1) {
+      log({ action: 'prematch-snapshot-ok', endpoint: item.endpoint, attempt, http: response.status });
     }
     return parsed;
   }

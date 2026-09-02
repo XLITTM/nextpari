@@ -1,7 +1,11 @@
 export { LsportsRecoveryCoordinator, type LsportsRecoveryIo } from './coordinator.js';
 export { canonicalMarketKey, marketLineKey, marketLastUpdate } from './keys.js';
 export { mergeFixtureMetadata, readEvents, readHeader } from './parse.js';
-export { buildPlannedSnapshotBody, planSnapshotRequests } from './plan.js';
+export {
+  buildPlannedSnapshotBody,
+  planPrematchSnapshotRequests,
+  planSnapshotRequests,
+} from './plan.js';
 export {
   LSPORTS_SNAPSHOT_GLOBAL_MIN_INTERVAL_MS,
   LSPORTS_SNAPSHOT_UNFILTERED_MIN_INTERVAL_MS,

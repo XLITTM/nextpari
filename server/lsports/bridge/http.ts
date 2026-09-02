@@ -4,9 +4,15 @@ import { allowVercelPreviewOrigins, corsOriginForRequest, resolveAllowedOrigins 
 import {
   LSPORTS_HTTP_HEALTH_RATE_MAX,
   LSPORTS_HTTP_INPLAY_RATE_MAX,
+  LSPORTS_HTTP_PREMATCH_RATE_MAX,
   LsportsHttpRateLimiter,
   clientKey,
 } from './rateLimitHttp.js';
+import {
+  emptyPrematchFeed,
+  sanitizePrematchHealth,
+  type LsportsPrematchFeed,
+} from '../prematch/payload.js';
 
 export const LSPORTS_SHADOW_HOST = '127.0.0.1';
 export const LSPORTS_SHADOW_PORT = 8787;
@@ -87,13 +93,15 @@ export function handleLsportsShadowRequest(
   subscribe?: (listener: (payload: LsportsBrowserFeed) => void) => () => void,
   options: LsportsHttpOptions = resolveLsportsHttpOptions(),
   limiter: LsportsHttpRateLimiter = new LsportsHttpRateLimiter(),
+  getPrematchPayload?: () => LsportsPrematchFeed | null,
 ): boolean {
   const path = pathOf(req);
   const inplay = path === '/inplay' || path === '/api/lsports/inplay';
   const health = path === '/health' || path === '/api/lsports/health';
   const stream = path === '/stream' || path === '/api/lsports/stream';
+  const prematch = path === '/prematch' || path === '/api/lsports/prematch';
   if (stream && !options.enableStream) return false;
-  if (!inplay && !health && !stream) return false;
+  if (!inplay && !health && !stream && !prematch) return false;
 
   try {
     applyCors(req, res, options);
@@ -107,8 +115,13 @@ export function handleLsportsShadowRequest(
       return true;
     }
 
-    const key = `${clientKey(req)}:${inplay ? 'inplay' : health ? 'health' : 'stream'}`;
-    const max = health ? LSPORTS_HTTP_HEALTH_RATE_MAX : LSPORTS_HTTP_INPLAY_RATE_MAX;
+    const bucket = inplay ? 'inplay' : health ? 'health' : prematch ? 'prematch' : 'stream';
+    const key = `${clientKey(req)}:${bucket}`;
+    const max = health
+      ? LSPORTS_HTTP_HEALTH_RATE_MAX
+      : prematch
+        ? LSPORTS_HTTP_PREMATCH_RATE_MAX
+        : LSPORTS_HTTP_INPLAY_RATE_MAX;
     if (!limiter.allow(key, max)) {
       res.setHeader('Retry-After', '60');
       writeJson(req, res, options, 429, { error: 'rate-limited' });
@@ -116,17 +129,23 @@ export function handleLsportsShadowRequest(
     }
 
     const payload = getPayload();
+    const prematchPayload = getPrematchPayload?.() ?? null;
     if (health) {
       writeJson(req, res, options, 200, {
         source: payload.source,
         generatedAt: payload.generatedAt,
         ...payload.diagnostics,
         health: payload.health,
+        prematch: sanitizePrematchHealth(prematchPayload),
       });
       return true;
     }
     if (inplay) {
       writeJson(req, res, options, 200, payload);
+      return true;
+    }
+    if (prematch) {
+      writeJson(req, res, options, 200, prematchPayload ?? emptyPrematchFeed());
       return true;
     }
 
@@ -151,15 +170,29 @@ export function createLsportsShadowHttpServer(
   getPayload: () => LsportsBrowserFeed,
   subscribe: (listener: (payload: LsportsBrowserFeed) => void) => () => void,
   options: LsportsHttpOptions = resolveLsportsHttpOptions(),
+  getPrematchPayload?: () => LsportsPrematchFeed | null,
 ): Server {
   const limiter = new LsportsHttpRateLimiter();
   return createServer((req, res) => {
     try {
-      if (!handleLsportsShadowRequest(req, res, getPayload, subscribe, options, limiter)) {
+      if (!handleLsportsShadowRequest(req, res, getPayload, subscribe, options, limiter, getPrematchPayload)) {
         writeJson(req, res, options, 404, { error: 'not-found' });
       }
     } catch {
       writeJson(req, res, options, 500, { error: 'unavailable' });
     }
   });
+}
+
+export function createLsportsDualHttpServer(
+  getInplayPayload: () => LsportsBrowserFeed,
+  getPrematchPayload: () => LsportsPrematchFeed | null,
+  options: LsportsHttpOptions = resolveLsportsHttpOptions(),
+): Server {
+  return createLsportsShadowHttpServer(
+    getInplayPayload,
+    () => () => {},
+    options,
+    getPrematchPayload,
+  );
 }

@@ -1,7 +1,10 @@
 export const LSPORTS_FOOTBALL_SPORT_ID = 6046;
 export const NEXTPARI_FOOTBALL_SPORT_ID = '1';
 export const LSPORTS_DISPLAY_TAG = 'lsports';
+export const LSPORTS_PREMATCH_DISPLAY_TAG = 'lsports-prematch';
 export const NEXTPARI_1X2_MARKET_KEY = '1_1';
+export const NEXTPARI_HANDICAP_MARKET_KEY = '1_2';
+export const NEXTPARI_TOTALS_MARKET_KEY = '1_3';
 
 /** Structurally compatible with src/lib/betsapi BetsEvent. */
 export interface AdaptedBetsEvent {

@@ -7,6 +7,12 @@ export const LSPORTS_SNAPSHOT_ENDPOINTS = [
   'GetFixtureMarkets',
 ] as const;
 
+/** PreMatch cold-start/recovery: fixtures + markets (scores optional for line). */
+export const LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS = [
+  'GetFixtures',
+  'GetFixtureMarkets',
+] as const;
+
 export function planSnapshotRequests(input: {
   mode: LsportsRecoveryMode;
   lastHealthyHeartbeatServerTimestamp?: number | null;
@@ -24,6 +30,25 @@ export function planSnapshotRequests(input: {
     }));
   }
   return LSPORTS_SNAPSHOT_ENDPOINTS.map((endpoint) => ({ endpoint, unfiltered: true }));
+}
+
+export function planPrematchSnapshotRequests(input: {
+  mode: LsportsRecoveryMode;
+  lastHealthyHeartbeatServerTimestamp?: number | null;
+}): LsportsSnapshotPlanItem[] {
+  if (input.mode === 'LIVE') return [];
+  if (input.mode === 'RECOVERY_WITH_HEARTBEAT') {
+    const timestamp = input.lastHealthyHeartbeatServerTimestamp;
+    if (timestamp == null) {
+      return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({ endpoint, unfiltered: true }));
+    }
+    return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({
+      endpoint,
+      timestamp,
+      unfiltered: false,
+    }));
+  }
+  return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({ endpoint, unfiltered: true }));
 }
 
 export function buildPlannedSnapshotBody(

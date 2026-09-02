@@ -73,3 +73,10 @@ export async function pollInPlayDistributionStatus(
   const result = await getDistributionStatus(flow, env, { ...deps, verbose: false });
   return snapshotFromDistributionStatus(result);
 }
+
+export async function pollPrematchDistributionStatus(
+  env: NodeJS.ProcessEnv = process.env,
+  deps: LsportsDistributionCallDeps = {},
+): Promise<LsportsDistributionSnapshot> {
+  return pollInPlayDistributionStatus(env, deps, 'prematch');
+}

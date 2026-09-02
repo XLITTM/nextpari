@@ -1,12 +1,13 @@
 export { corsOriginForRequest, resolveAllowedOrigins } from './cors.js';
 export {
   createLsportsShadowHttpServer,
+  createLsportsDualHttpServer,
   handleLsportsShadowRequest,
   resolveLsportsHttpOptions,
   LSPORTS_SHADOW_HOST,
   LSPORTS_SHADOW_PORT,
 } from './http.js';
-export { createLsportsRecoveryIo } from './io.js';
+export { createLsportsPrematchRecoveryIo, createLsportsRecoveryIo } from './io.js';
 export {
   browserPayloadHasSecrets,
   buildLsportsBrowserPayload,
