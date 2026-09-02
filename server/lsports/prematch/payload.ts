@@ -33,6 +33,13 @@ export interface LsportsPrematchSample {
   status: string | number | null;
 }
 
+export interface LsportsPrematchSnapshotDiag {
+  endpoint: string;
+  headerType: number | null;
+  fixtureCount: number;
+  topLevelKeys: string[];
+}
+
 export interface LsportsPrematchDiagnostics extends LsportsBrowserDiagnostics {
   packageId: number;
   consumerConnected: boolean;
@@ -50,6 +57,7 @@ export interface LsportsPrematchDiagnostics extends LsportsBrowserDiagnostics {
   };
   open1x2WithPricesCount: number;
   sample: LsportsPrematchSample | null;
+  snapshot: LsportsPrematchSnapshotDiag | null;
 }
 
 export interface LsportsPrematchFeed {
@@ -137,6 +145,7 @@ export function emptyPrematchFeed(
       messageTypeCounters: ingest,
       open1x2WithPricesCount: 0,
       sample: null,
+      snapshot: extras.snapshot ?? null,
     },
   };
 }
@@ -237,6 +246,7 @@ export function buildLsportsPrematchPayload(
     consumerConnected?: boolean;
     lastMessageAt?: number | null;
     packageId?: number;
+    snapshot?: LsportsPrematchSnapshotDiag | null;
   } = {},
 ): LsportsPrematchFeed {
   const heartbeatHealth = store.feedHealth(now);
@@ -314,6 +324,7 @@ export function buildLsportsPrematchPayload(
       },
       open1x2WithPricesCount: adapted.open1x2WithPricesCount,
       sample: pickOpen1x2Sample(store),
+      snapshot: extras.snapshot ?? null,
     },
   };
 }
@@ -359,5 +370,6 @@ export function sanitizePrematchHealth(payload: LsportsPrematchFeed | null): Rec
     queueWarning: payload.diagnostics.queueWarning,
     byMarketId: payload.diagnostics.marketInventory.byMarketId.slice(0, 20),
     sample: payload.diagnostics.sample,
+    snapshot: payload.diagnostics.snapshot,
   };
 }

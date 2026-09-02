@@ -3,7 +3,7 @@ import type { LsportsRecoveryCoordinator } from '../state/coordinator.js';
 import type { LsportsInPlayStore } from '../state/store.js';
 import type { LsportsFeedHealth, LsportsRecoveryMode } from '../state/types.js';
 import type { LsportsDistributionSnapshot } from '../bridge/status.js';
-import { buildLsportsPrematchPayload, type LsportsPrematchFeed } from './payload.js';
+import { buildLsportsPrematchPayload, type LsportsPrematchFeed, type LsportsPrematchSnapshotDiag } from './payload.js';
 
 const MEANINGFUL_TYPES = new Set([1, 2, 3, 31, 35]);
 
@@ -18,6 +18,7 @@ export interface LsportsPrematchBridgeOptions {
   coalesceMs?: number;
   consumerConnected?: () => boolean;
   lastMessageAt?: () => number | null;
+  lastSnapshot?: () => LsportsPrematchSnapshotDiag | null;
 }
 
 export class LsportsPrematchDisplayBridge {
@@ -28,6 +29,7 @@ export class LsportsPrematchDisplayBridge {
   private readonly packageId: number;
   private readonly consumerConnected: () => boolean;
   private readonly lastMessageAt: () => number | null;
+  private readonly lastSnapshot: () => LsportsPrematchSnapshotDiag | null;
   private payload: LsportsPrematchFeed;
   private publishTimer: ReturnType<typeof setTimeout> | null = null;
   private lastHealth: LsportsFeedHealth;
@@ -41,6 +43,7 @@ export class LsportsPrematchDisplayBridge {
     this.packageId = options.packageId ?? 4352;
     this.consumerConnected = options.consumerConnected ?? (() => false);
     this.lastMessageAt = options.lastMessageAt ?? (() => null);
+    this.lastSnapshot = options.lastSnapshot ?? (() => null);
     this.payload = this.buildPayload();
     this.lastHealth = this.payload.health;
   }
@@ -99,6 +102,7 @@ export class LsportsPrematchDisplayBridge {
       consumerConnected: this.consumerConnected(),
       lastMessageAt: this.lastMessageAt(),
       packageId: this.packageId,
+      snapshot: this.lastSnapshot(),
     });
   }
 

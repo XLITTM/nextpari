@@ -8,6 +8,8 @@ import {
   openLsportsChannel,
 } from '../rmq.js';
 import { createLsportsPrematchRecoveryIo } from '../bridge/io.js';
+import { readHeader } from '../state/parse.js';
+import { readSnapshotFixtures } from '../snapshot.js';
 import {
   LSPORTS_DISTRIBUTION_STATUS_POLL_MS,
   LSPORTS_QUEUE_DEPTH_WARNING,
@@ -20,7 +22,7 @@ import { planPrematchSnapshotRequests } from '../state/plan.js';
 import { LsportsSnapshotRateLimiter } from '../state/rateLimit.js';
 import { LsportsRecoveryBuffer } from '../state/recovery.js';
 import { LsportsInPlayStore } from '../state/store.js';
-import type { LsportsPrematchFeed } from './payload.js';
+import type { LsportsPrematchFeed, LsportsPrematchSnapshotDiag } from './payload.js';
 import { LsportsPrematchDisplayBridge, LSPORTS_PREMATCH_HEALTH_POLL_MS } from './publisher.js';
 
 /** Higher than InPlay (5) so Package 4352 can drain an accumulated queue without sharing that channel. */
@@ -99,11 +101,32 @@ export async function runLsportsPrematchBridge(
   const store = new LsportsInPlayStore();
   const buffer = new LsportsRecoveryBuffer(store);
   const limiter = deps.limiter ?? new LsportsSnapshotRateLimiter();
+  let lastSnapshot: LsportsPrematchSnapshotDiag | null = null;
+  const innerIo = (deps.createIo ?? createLsportsPrematchRecoveryIo)(env);
   const coordinator = new LsportsRecoveryCoordinator({
     store,
     buffer,
     limiter,
-    io: (deps.createIo ?? createLsportsPrematchRecoveryIo)(env),
+    io: {
+      sleep: innerIo.sleep,
+      fetchSnapshot: async (item) => {
+        const payload = await innerIo.fetchSnapshot(item);
+        const root = payload && typeof payload === 'object' ? payload as Record<string, unknown> : null;
+        lastSnapshot = {
+          endpoint: item.endpoint,
+          headerType: readHeader(payload).type,
+          fixtureCount: readSnapshotFixtures(payload).length,
+          topLevelKeys: root ? Object.keys(root).slice(0, 8) : [],
+        };
+        logPrematch({
+          action: 'prematch-snapshot-applied',
+          endpoint: item.endpoint,
+          fixtures: lastSnapshot.fixtureCount,
+          headerType: lastSnapshot.headerType,
+        });
+        return payload;
+      },
+    },
     planSnapshots: planPrematchSnapshotRequests,
   });
   let lastMessageAt: number | null = null;
@@ -114,6 +137,7 @@ export async function runLsportsPrematchBridge(
     packageId: published.packageId,
     consumerConnected: () => consumers > 0,
     lastMessageAt: () => lastMessageAt,
+    lastSnapshot: () => lastSnapshot,
   });
   const log = deps.log ?? logPrematch;
   const warn = deps.warn ?? warnPrematch;
