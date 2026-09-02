@@ -133,9 +133,13 @@ export class LsportsRecoveryCoordinator {
       if (snapshotRequestedAt == null) snapshotRequestedAt = this.now();
       const payload = await this.io.fetchSnapshot(item);
       this.limiter.recordDispatch(item);
-      if (item.endpoint === 'GetFixtures') snapshots.fixtures = payload;
-      else if (item.endpoint === 'GetScores') snapshots.scores = payload;
-      else snapshots.markets = payload;
+      if (item.endpoint === 'GetFixtures' || item.endpoint === 'GetEvents') {
+        snapshots.fixtures = payload;
+      }
+      if (item.endpoint === 'GetScores') snapshots.scores = payload;
+      if (item.endpoint === 'GetFixtureMarkets' || item.endpoint === 'GetEvents') {
+        snapshots.markets = payload;
+      }
     }
     this.buffer.applySnapshot({
       ...snapshots,

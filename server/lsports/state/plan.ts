@@ -7,10 +7,9 @@ export const LSPORTS_SNAPSHOT_ENDPOINTS = [
   'GetFixtureMarkets',
 ] as const;
 
-/** PreMatch cold-start/recovery: fixtures + markets (scores optional for line). */
+/** Official PreMatch Snapshot: GetEvents includes fixtures, markets, and scores. */
 export const LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS = [
-  'GetFixtures',
-  'GetFixtureMarkets',
+  'GetEvents',
 ] as const;
 
 export function planSnapshotRequests(input: {

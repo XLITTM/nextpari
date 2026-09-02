@@ -432,7 +432,8 @@ describe('lsports inplay snapshot', () => {
     assert.match(snapshotScript, /fetchInPlayFootballFixtures/);
     assert.equal(snapshotScript.includes('runLsportsProbe'), false);
     assert.equal(snapshotScript.includes('PreMatch'), false);
-    assert.equal(read('server/lsports/snapshot.ts').includes('GetEvents'), false);
+    assert.equal(read('server/lsports/snapshot.ts').includes('/InPlay/GetEvents'), false);
+    assert.match(read('server/lsports/snapshot.ts'), /\/PreMatch\/GetEvents/);
     assert.match(read('server/lsports/snapshot.ts'), /\/PreMatch\/GetFixtures/);
     assert.match(read('server/lsports/snapshot.ts'), /\/PreMatch\/GetFixtureMarkets/);
   });

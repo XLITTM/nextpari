@@ -1,7 +1,7 @@
 export const LSPORTS_SNAPSHOT_GLOBAL_MIN_INTERVAL_MS = 1_100;
 export const LSPORTS_SNAPSHOT_UNFILTERED_MIN_INTERVAL_MS = 15_000;
 
-export type LsportsSnapshotEndpoint = 'GetFixtures' | 'GetScores' | 'GetFixtureMarkets';
+export type LsportsSnapshotEndpoint = 'GetFixtures' | 'GetScores' | 'GetFixtureMarkets' | 'GetEvents';
 
 export interface LsportsSnapshotPlanItem {
   endpoint: LsportsSnapshotEndpoint;

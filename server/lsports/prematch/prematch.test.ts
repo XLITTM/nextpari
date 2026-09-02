@@ -22,6 +22,7 @@ import { LsportsRecoveryBuffer } from '../state/recovery.js';
 import { LsportsInPlayStore } from '../state/store.js';
 import {
   fetchPreMatchSnapshotBody,
+  LSPORTS_PREMATCH_GET_EVENTS_URL,
   LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_URL,
   LSPORTS_PREMATCH_GET_FIXTURES_URL,
   LSPORTS_PREMATCH_GET_SCORES_URL,
@@ -140,23 +141,24 @@ function type3Markets(fixtureId: number, extras: {
 }
 
 describe('lsports prematch snapshot plan', () => {
-  it('uses official PreMatch snapshot URLs and omits GetEvents', () => {
+  it('uses official PreMatch snapshot URLs and omits invented endpoints', () => {
+    assert.equal(LSPORTS_PREMATCH_GET_EVENTS_URL, 'https://stm-snapshot.lsports.eu/PreMatch/GetEvents');
     assert.equal(LSPORTS_PREMATCH_GET_FIXTURES_URL, 'https://stm-snapshot.lsports.eu/PreMatch/GetFixtures');
     assert.equal(LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_URL, 'https://stm-snapshot.lsports.eu/PreMatch/GetFixtureMarkets');
     assert.equal(LSPORTS_PREMATCH_GET_SCORES_URL, 'https://stm-snapshot.lsports.eu/PreMatch/GetScores');
     const plan = planPrematchSnapshotRequests({ mode: 'COLD_START' });
-    assert.deepEqual(plan.map((item) => item.endpoint), ['GetFixtures', 'GetFixtureMarkets']);
+    assert.deepEqual(plan.map((item) => item.endpoint), ['GetEvents']);
     for (const item of plan) {
       assert.equal(item.unfiltered, false);
       assert.equal(item.timestamp, undefined);
     }
   });
 
-  it('POSTs PreMatch GetFixtures with package 4352 and retries 429', async () => {
+  it('POSTs PreMatch GetEvents with package 4352 and retries 429', async () => {
     const urls: string[] = [];
     let calls = 0;
     const result = await fetchPreMatchSnapshotBody(
-      { endpoint: 'GetFixtures', unfiltered: true },
+      { endpoint: 'GetEvents', unfiltered: false },
       ENV,
       {
         fetchImpl: async (url) => {
@@ -181,7 +183,7 @@ describe('lsports prematch snapshot plan', () => {
         log: () => {},
       },
     );
-    assert.equal(urls[0], LSPORTS_PREMATCH_GET_FIXTURES_URL);
+    assert.equal(urls[0], LSPORTS_PREMATCH_GET_EVENTS_URL);
     assert.equal(calls, 2);
     assert.equal((result as { Header?: { Type?: number } }).Header?.Type, 36);
   });
@@ -272,14 +274,22 @@ describe('lsports prematch state and adapter', () => {
         },
         fetchSnapshot: async (item) => {
           requested.push(item.endpoint);
-          if (item.endpoint === 'GetFixtures') return fixturesSnapshot([FIXTURE_B]);
-          return type3Markets(FIXTURE_B, { home: '2.05', draw: '3.10', away: '3.80' });
+          const fixtures = fixturesSnapshot([FIXTURE_B]);
+          const markets = type3Markets(FIXTURE_B, { home: '2.05', draw: '3.10', away: '3.80' });
+          return {
+            Header: { Type: 36, ServerTimestamp: 1000 },
+            Body: [{
+              FixtureId: FIXTURE_B,
+              Fixture: (fixtures.Body[0] as { Fixture: unknown }).Fixture,
+              Markets: (markets.Body as { Events: Array<{ Markets: unknown }> }).Events[0].Markets,
+            }],
+          };
         },
       },
     });
     prematch.ingestRmq(type1Delta(FIXTURE_B));
     await coordinator.runColdStart();
-    assert.deepEqual(requested, ['GetFixtures', 'GetFixtureMarkets']);
+    assert.deepEqual(requested, ['GetEvents']);
     assert.equal(coordinator.getMode(), 'LIVE');
     assert.ok((prematch.getFixture(FIXTURE_B)?.markets.size ?? 0) > 0);
     assert.equal(inplay.getFixture(FIXTURE_B), undefined);

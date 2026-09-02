@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { publicLsportsConfig, resolveLsportsRmqConfig, type LsportsFlow } from './config.js';
 import { containsSecret, serializeDiagnostic } from './redact.js';
+import type { LsportsSnapshotPlanItem } from './state/rateLimit.js';
 
 export const LSPORTS_SNAPSHOT_BASE = 'https://stm-snapshot.lsports.eu';
 export const LSPORTS_INPLAY_GET_FIXTURES_PATH = '/InPlay/GetFixtures';
@@ -15,15 +16,19 @@ export const LSPORTS_INPLAY_GET_FIXTURE_MARKETS_URL =
   `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_INPLAY_GET_FIXTURE_MARKETS_PATH}`;
 
 /** Official PreMatch snapshot actions (docs.lsports.eu PreMatch Snapshot). */
+export const LSPORTS_PREMATCH_GET_EVENTS_PATH = '/PreMatch/GetEvents';
 export const LSPORTS_PREMATCH_GET_FIXTURES_PATH = '/PreMatch/GetFixtures';
 export const LSPORTS_PREMATCH_GET_SCORES_PATH = '/PreMatch/GetScores';
 export const LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_PATH = '/PreMatch/GetFixtureMarkets';
+export const LSPORTS_PREMATCH_GET_EVENTS_URL =
+  `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_PREMATCH_GET_EVENTS_PATH}`;
 export const LSPORTS_PREMATCH_GET_FIXTURES_URL =
   `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_PREMATCH_GET_FIXTURES_PATH}`;
 export const LSPORTS_PREMATCH_GET_SCORES_URL =
   `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_PREMATCH_GET_SCORES_PATH}`;
 export const LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_URL =
   `${LSPORTS_SNAPSHOT_BASE}${LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_PATH}`;
+export const LSPORTS_PREMATCH_SNAPSHOT_WINDOW_MS = 48 * 60 * 60 * 1000;
 export const LSPORTS_FOOTBALL_SPORT_ID = 6046;
 export const LSPORTS_SNAPSHOT_TIMEOUT_MS = 60_000;
 export const LSPORTS_SNAPSHOT_MIN_INTERVAL_MS = 1_100;
@@ -254,6 +259,7 @@ const SNAPSHOT_URLS = {
 } as const;
 
 const PREMATCH_SNAPSHOT_URLS = {
+  GetEvents: LSPORTS_PREMATCH_GET_EVENTS_URL,
   GetFixtures: LSPORTS_PREMATCH_GET_FIXTURES_URL,
   GetScores: LSPORTS_PREMATCH_GET_SCORES_URL,
   GetFixtureMarkets: LSPORTS_PREMATCH_GET_FIXTURE_MARKETS_URL,
@@ -309,10 +315,13 @@ export interface LsportsSnapshotFetchDeps {
  * HTTP 429 retries with Retry-After or 2s/4s/8s, bounded attempts.
  */
 export async function fetchInPlaySnapshotBody(
-  item: { endpoint: keyof typeof SNAPSHOT_URLS; timestamp?: number; unfiltered: boolean },
+  item: LsportsSnapshotPlanItem,
   env: NodeJS.ProcessEnv = process.env,
   deps: LsportsSnapshotFetchDeps = {},
 ): Promise<unknown> {
+  if (item.endpoint === 'GetEvents' || !(item.endpoint in SNAPSHOT_URLS)) {
+    throw new LsportsSnapshotHttpError(404);
+  }
   const config = resolveLsportsRmqConfig('inplay', env);
   const secrets = [config.password, config.username];
   const request: {
@@ -328,7 +337,7 @@ export async function fetchInPlaySnapshotBody(
   if (!item.unfiltered && item.timestamp != null) {
     request.timestamp = item.timestamp;
   }
-  const url = SNAPSHOT_URLS[item.endpoint];
+  const url = SNAPSHOT_URLS[item.endpoint as keyof typeof SNAPSHOT_URLS];
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sleep = deps.sleep ?? snapshotWait;
   const log = deps.log ?? logLine;
@@ -392,16 +401,22 @@ export async function fetchPreMatchSnapshotBody(
     userName: string;
     password: string;
     sports: number[];
+    fromDate?: number;
+    toDate?: number;
     timestamp?: number;
   } = {
     packageId: config.packageId,
     userName: config.username,
     password: config.password,
-    // Official SnapshotFilteredRequestDto. Unfiltered PreMatch dumps can be empty/too large.
+    // Official SnapshotFilteredRequestDto. Unfiltered PreMatch dumps can return nothing.
     sports: [LSPORTS_FOOTBALL_SPORT_ID],
   };
   if (!item.unfiltered && item.timestamp != null) {
     request.timestamp = item.timestamp;
+  } else {
+    const fromDate = Date.now() - 60 * 60 * 1000;
+    request.fromDate = fromDate;
+    request.toDate = fromDate + LSPORTS_PREMATCH_SNAPSHOT_WINDOW_MS;
   }
   const url = PREMATCH_SNAPSHOT_URLS[item.endpoint];
   const fetchImpl = deps.fetchImpl ?? fetch;
