@@ -22,6 +22,8 @@ import { planPrematchSnapshotRequests } from '../state/plan.js';
 import { LsportsSnapshotRateLimiter } from '../state/rateLimit.js';
 import { LsportsRecoveryBuffer } from '../state/recovery.js';
 import { LsportsInPlayStore } from '../state/store.js';
+import { lookupCanonicalQuoteRecord } from '../../sports/lsportsQuote.js';
+import { dispatchSettlementNotices } from '../../sports/settlementDispatch.js';
 import { startLsportsSdkFeed } from '../sdk/feed.js';
 import { resolveLsportsTransport } from '../sdk/mode.js';
 import { sdkShadowFor } from '../sdk/shadow.js';
@@ -69,6 +71,7 @@ export interface LsportsPrematchRuntime {
   started: () => boolean;
   isBuffering: () => boolean;
   getPayload: () => LsportsPrematchFeed;
+  lookupQuote: (query: Record<string, string>) => unknown;
   noteDistributionStatus: (snapshot: LsportsDistributionSnapshot) => LsportsPrematchFeed;
 }
 
@@ -241,6 +244,10 @@ export async function runLsportsPrematchBridge(
     started: () => started,
     isBuffering: () => buffer.isBuffering(),
     getPayload: () => bridge.getPayload(),
+    lookupQuote: (query: Record<string, string>) => lookupCanonicalQuoteRecord(store, {
+      ...query,
+      feedType: query.feedType || 'prematch',
+    }),
     noteDistributionStatus: applyStatus,
   };
   activePrematchRuntime = runtime;
@@ -262,6 +269,10 @@ export async function runLsportsPrematchBridge(
       }
       store.noteRmqTransport('parsed');
       bridge.handleRmq(json);
+      const notices = store.takeSettlementNotices();
+      if (notices.length) {
+        void dispatchSettlementNotices(notices, env, { log });
+      }
     };
     const connect = deps.connect
       ?? ((cfg: LsportsRmqConfig) => connectLsportsRmqWithRetry(cfg, { sleep: deps.sleep }));

@@ -212,7 +212,9 @@ describe('same-origin BFF and frontend client', () => {
     assert.equal(read('src/games/crystal/CrystalGame.tsx').includes('resolveSpin'), false);
     assert.equal(read('src/games/aviator/AviatorGame.tsx').includes('resolveCrashRound'), false);
     assert.match(read('src/games/dice/DiceGame.tsx'), /startGame/);
-    assert.match(gate, /CANONICAL_SPORTS_BET_ENABLED = false/);
+    assert.match(gate, /isCanonicalSportsBetEnabled/);
+    assert.match(gate, /CANONICAL_SPORTS_BET_ENABLED/);
+    assert.equal(gate.includes('VITE_CANONICAL_SPORTS_BET_ENABLED'), false);
     assert.match(gate, /CANONICAL_GAMES_WAGER_ENABLED = true/);
   });
 
@@ -266,7 +268,9 @@ describe('029A pre-production hardening', () => {
   });
 
   it('keeps sports gated off and games enabled on this branch', () => {
-    assert.match(gate, /CANONICAL_SPORTS_BET_ENABLED = false/);
+    assert.match(gate, /isCanonicalSportsBetEnabled/);
+    assert.match(gate, /CANONICAL_SPORTS_BET_ENABLED/);
+    assert.equal(gate.includes('VITE_CANONICAL_SPORTS_BET_ENABLED'), false);
     assert.match(gate, /CANONICAL_GAMES_WAGER_ENABLED = true/);
   });
 

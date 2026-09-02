@@ -38,6 +38,16 @@ import {
   type LsportsStateMetrics,
 } from './types.js';
 
+export interface LsportsSettlementNotice {
+  fixtureId: number;
+  marketId: string;
+  marketKey: string;
+  betId: string;
+  settlement: number;
+  fingerprint: string;
+  lastUpdate: string | null;
+}
+
 function isOpenBetStatus(value: unknown): boolean {
   return value === 1 || value === '1';
 }
@@ -125,6 +135,7 @@ export class LsportsInPlayStore {
   private lastHeartbeatReceivedAt: number | null = null;
   private bufferDepth = 0;
   private readonly ingestCounters: LsportsIngestCounters = emptyIngestCounters();
+  private settlementNotices: LsportsSettlementNotice[] = [];
 
   constructor(private readonly now: () => number = Date.now) {}
 
@@ -389,6 +400,17 @@ export class LsportsInPlayStore {
           });
           const applied = applySettlementCode(settlements.get(sid), code, fingerprint);
           settlements.set(sid, applied.next);
+          if (applied.changed) {
+            this.settlementNotices.push({
+              fixtureId,
+              marketId: String(marketIdOf(existing?.payload ?? incoming) ?? ''),
+              marketKey: key,
+              betId: sid,
+              settlement: code,
+              fingerprint,
+              lastUpdate: incomingLastUpdate,
+            });
+          }
         }
         if (!previousBet) {
           byId.set(sid, { ...bet });
@@ -473,6 +495,17 @@ export class LsportsInPlayStore {
 
   getKeepAliveActiveEvents(): readonly number[] {
     return this.activeEvents;
+  }
+
+  heartbeatAgeMs(at = this.now()): number | null {
+    if (this.lastHeartbeatReceivedAt == null) return null;
+    return at - this.lastHeartbeatReceivedAt;
+  }
+
+  takeSettlementNotices(): LsportsSettlementNotice[] {
+    const next = this.settlementNotices;
+    this.settlementNotices = [];
+    return next;
   }
 }
 

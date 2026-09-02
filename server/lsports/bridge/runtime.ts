@@ -18,6 +18,8 @@ import {
 } from './http.js';
 import { createLsportsRecoveryIo } from './io.js';
 import type { LsportsBrowserFeed } from './payload.js';
+import { lookupCanonicalQuoteRecord } from '../../sports/lsportsQuote.js';
+import { dispatchSettlementNotices } from '../../sports/settlementDispatch.js';
 import { startLsportsSdkFeed } from '../sdk/feed.js';
 import { resolveLsportsTransport } from '../sdk/mode.js';
 import { resetSdkShadowsForTests, sdkShadowFor } from '../sdk/shadow.js';
@@ -76,6 +78,7 @@ export interface LsportsShadowRuntime {
   started: () => boolean;
   isBuffering: () => boolean;
   getPayload: () => LsportsBrowserFeed;
+  lookupQuote: (query: Record<string, string>) => unknown;
   noteDistributionStatus: (snapshot: LsportsDistributionSnapshot) => LsportsBrowserFeed;
 }
 
@@ -226,6 +229,7 @@ export async function runLsportsShadowBridge(
     started: () => started,
     isBuffering: () => buffer.isBuffering(),
     getPayload: () => bridge.getPayload(),
+    lookupQuote: (query: Record<string, string>) => lookupCanonicalQuoteRecord(store, query),
     noteDistributionStatus: applyStatus,
   };
   activeRuntime = runtime;
@@ -247,6 +251,10 @@ export async function runLsportsShadowBridge(
       }
       store.noteRmqTransport('parsed');
       bridge.handleRmq(json);
+      const notices = store.takeSettlementNotices();
+      if (notices.length) {
+        void dispatchSettlementNotices(notices, env, { log });
+      }
     };
 
     const connect = deps.connect
@@ -369,6 +377,8 @@ export async function runLsportsShadowBridge(
         () => bridge.getPayload(),
         (listener) => bridge.subscribe(listener),
         httpOptions,
+        undefined,
+        (query) => lookupCanonicalQuoteRecord(store, query),
       );
       await new Promise<void>((resolve, reject) => {
         server?.once('error', reject);

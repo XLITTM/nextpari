@@ -74,6 +74,12 @@ try {
     () => liveInplay.getPayload(),
     () => prematch?.getPayload() ?? null,
     httpOptions,
+    (query) => {
+      if ((query.feedType === 'prematch' || query.feed_type === 'prematch') && prematch?.lookupQuote) {
+        return prematch.lookupQuote(query);
+      }
+      return liveInplay.lookupQuote(query);
+    },
   );
   await new Promise<void>((resolve, reject) => {
     httpServer?.once('error', reject);

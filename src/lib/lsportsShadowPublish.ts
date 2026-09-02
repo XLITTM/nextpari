@@ -8,6 +8,7 @@ import {
   lsportsHealthUrl,
   lsportsInplayUrl,
   parseLsportsBrowserFeed,
+  shouldApplyLsportsGeneratedAt,
   type LsportsBrowserFeed,
 } from './lsportsShadowFeed';
 
@@ -20,6 +21,21 @@ export {
   type LsportsBrowserFeed,
 };
 
+let lastAppliedGeneratedAt = 0;
+let inFlight: AbortController | null = null;
+let fetchGeneration = 0;
+
+export function resetLsportsFeedApplyForTests(): void {
+  lastAppliedGeneratedAt = 0;
+  fetchGeneration = 0;
+  inFlight?.abort();
+  inFlight = null;
+}
+
+export function lastAppliedLsportsGeneratedAt(): number {
+  return lastAppliedGeneratedAt;
+}
+
 /** Writes a full LSports-adapted live set into the existing sportsStore. */
 export function applyLsportsShadowInplay(matches: InplayMatch[]): void {
   const events = matches.map((row) => row.event);
@@ -30,8 +46,13 @@ export function applyLsportsShadowInplay(matches: InplayMatch[]): void {
   useSportsStore.getState().applyInplay(events, marketsById);
 }
 
-export function applyLsportsBrowserFeed(feed: LsportsBrowserFeed): void {
+export function applyLsportsBrowserFeed(feed: LsportsBrowserFeed): boolean {
+  if (!shouldApplyLsportsGeneratedAt(feed.generatedAt, lastAppliedGeneratedAt)) {
+    return false;
+  }
   applyLsportsShadowInplay(displayMatchesFromFeed(feed));
+  if (feed.generatedAt) lastAppliedGeneratedAt = feed.generatedAt;
+  return true;
 }
 
 export async function fetchLsportsShadowInplay(signal?: AbortSignal): Promise<LsportsBrowserFeed> {
@@ -43,7 +64,13 @@ export async function fetchLsportsShadowInplay(signal?: AbortSignal): Promise<Ls
   if (!response.ok) {
     throw new Error(`lsports-feed-http-${response.status}`);
   }
-  return parseLsportsBrowserFeed(await response.json());
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    throw new Error('lsports-feed-invalid');
+  }
+  return parseLsportsBrowserFeed(json);
 }
 
 export async function fetchLsportsShadowHealth(signal?: AbortSignal): Promise<{ health?: string }> {
@@ -60,4 +87,20 @@ export async function fetchLsportsShadowHealth(signal?: AbortSignal): Promise<{ 
     throw new Error('lsports-health-invalid');
   }
   return json;
+}
+
+export async function pollLsportsBrowserFeed(): Promise<LsportsBrowserFeed> {
+  inFlight?.abort();
+  const generation = ++fetchGeneration;
+  const controller = new AbortController();
+  inFlight = controller;
+  try {
+    const feed = await fetchLsportsShadowInplay(controller.signal);
+    if (generation !== fetchGeneration) {
+      throw new DOMException('stale-generation', 'AbortError');
+    }
+    return feed;
+  } finally {
+    if (inFlight === controller) inFlight = null;
+  }
 }

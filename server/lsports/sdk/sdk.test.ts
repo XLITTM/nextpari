@@ -263,7 +263,9 @@ describe('lsports SDK runtime fallback and health', () => {
     assert.equal(body.includes('shared-secret'), false);
     assert.equal(body.includes('password'), false);
     const gate = readFileSync(join(root, 'src/lib/playerMoneyGate.ts'), 'utf8');
-    assert.match(gate, /CANONICAL_SPORTS_BET_ENABLED = false/);
+    assert.match(gate, /isCanonicalSportsBetEnabled/);
+    assert.match(gate, /CANONICAL_SPORTS_BET_ENABLED/);
+    assert.equal(gate.includes('VITE_CANONICAL_SPORTS_BET_ENABLED'), false);
     const diag = buildSdkHealthDiagnostics();
     assert.equal(diag.rmqConsumeInShadow, false);
     assert.equal(diag.fixtureOrdering.autoOnStartup, false);

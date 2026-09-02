@@ -87,6 +87,21 @@ function safeHttpError(error: unknown): { error: string } {
   return { error: 'unavailable' };
 }
 
+export type LsportsQuoteLookup = (query: Record<string, string>) => unknown;
+
+function queryRecord(req: IncomingMessage): Record<string, string> {
+  try {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    const out: Record<string, string> = {};
+    url.searchParams.forEach((value, key) => {
+      out[key] = value;
+    });
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export function handleLsportsShadowRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -95,14 +110,16 @@ export function handleLsportsShadowRequest(
   options: LsportsHttpOptions = resolveLsportsHttpOptions(),
   limiter: LsportsHttpRateLimiter = new LsportsHttpRateLimiter(),
   getPrematchPayload?: () => LsportsPrematchFeed | null,
+  lookupQuote?: LsportsQuoteLookup,
 ): boolean {
   const path = pathOf(req);
   const inplay = path === '/inplay' || path === '/api/lsports/inplay';
   const health = path === '/health' || path === '/api/lsports/health';
   const stream = path === '/stream' || path === '/api/lsports/stream';
   const prematch = path === '/prematch' || path === '/api/lsports/prematch';
+  const quote = path === '/quote' || path === '/api/lsports/quote';
   if (stream && !options.enableStream) return false;
-  if (!inplay && !health && !stream && !prematch) return false;
+  if (!inplay && !health && !stream && !prematch && !quote) return false;
 
   try {
     applyCors(req, res, options);
@@ -116,11 +133,11 @@ export function handleLsportsShadowRequest(
       return true;
     }
 
-    const bucket = inplay ? 'inplay' : health ? 'health' : prematch ? 'prematch' : 'stream';
+    const bucket = inplay ? 'inplay' : health ? 'health' : prematch ? 'prematch' : quote ? 'quote' : 'stream';
     const key = `${clientKey(req)}:${bucket}`;
     const max = health
       ? LSPORTS_HTTP_HEALTH_RATE_MAX
-      : prematch
+      : prematch || quote
         ? LSPORTS_HTTP_PREMATCH_RATE_MAX
         : LSPORTS_HTTP_INPLAY_RATE_MAX;
     if (!limiter.allow(key, max)) {
@@ -131,6 +148,14 @@ export function handleLsportsShadowRequest(
 
     const payload = getPayload();
     const prematchPayload = getPrematchPayload?.() ?? null;
+    if (quote) {
+      if (!lookupQuote) {
+        writeJson(req, res, options, 503, { error: 'quote-unavailable' });
+        return true;
+      }
+      writeJson(req, res, options, 200, lookupQuote(queryRecord(req)));
+      return true;
+    }
     if (health) {
       writeJson(req, res, options, 200, {
         source: payload.source,
@@ -173,11 +198,12 @@ export function createLsportsShadowHttpServer(
   subscribe: (listener: (payload: LsportsBrowserFeed) => void) => () => void,
   options: LsportsHttpOptions = resolveLsportsHttpOptions(),
   getPrematchPayload?: () => LsportsPrematchFeed | null,
+  lookupQuote?: LsportsQuoteLookup,
 ): Server {
   const limiter = new LsportsHttpRateLimiter();
   return createServer((req, res) => {
     try {
-      if (!handleLsportsShadowRequest(req, res, getPayload, subscribe, options, limiter, getPrematchPayload)) {
+      if (!handleLsportsShadowRequest(req, res, getPayload, subscribe, options, limiter, getPrematchPayload, lookupQuote)) {
         writeJson(req, res, options, 404, { error: 'not-found' });
       }
     } catch {
@@ -190,11 +216,13 @@ export function createLsportsDualHttpServer(
   getInplayPayload: () => LsportsBrowserFeed,
   getPrematchPayload: () => LsportsPrematchFeed | null,
   options: LsportsHttpOptions = resolveLsportsHttpOptions(),
+  lookupQuote?: LsportsQuoteLookup,
 ): Server {
   return createLsportsShadowHttpServer(
     getInplayPayload,
     () => () => {},
     options,
     getPrematchPayload,
+    lookupQuote,
   );
 }

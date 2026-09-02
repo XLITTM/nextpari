@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { ChevronDown, ChevronRight, Pin } from 'lucide-react';
 import { useBetSlip } from '@/BetSlipContext';
 import { useOddInteraction } from '@/hooks/useOddInteraction';
 import { useOddsFlash } from '@/hooks/useOddsFlash';
 import { formatOdds } from '@/lib/matchOdds';
 import { outcomeLabel, type ParsedMarket, type ParsedMarketEntry } from '@/lib/odds-parser';
+import { isLsportsDisplayEvent } from '@/lib/lsportsFeed';
 import { useSportsStore } from '@/stores/sportsStore';
 import type { BetSelection, MatchEvent, SportId } from '@/types';
 
@@ -73,6 +74,10 @@ interface DisplayOutcome {
   key: string;
   label: string;
   odds: number;
+  providerBetId?: string;
+  marketId?: string;
+  marketKey?: string;
+  line?: string;
 }
 
 interface DisplayMarket {
@@ -170,6 +175,10 @@ function toDisplayMarket(market: ParsedMarket): DisplayMarket | null {
       key: `${entry.id}-${row.key}`,
       label: outcomeLabel(row.key, entry.line),
       odds: row.odds,
+      providerBetId: row.providerBetId,
+      marketId: market.marketId,
+      marketKey: market.key,
+      line: entry.line,
     }));
     return isMoneyline ? sortDisplayOutcomes(rows) : rows;
   });
@@ -392,8 +401,8 @@ function MarketAccordion({
               eventId={eventId}
               match={match}
               marketName={market.name}
-              label={outcome.label}
-              odds={outcome.odds}
+              market={market}
+              outcome={outcome}
             />
           ))}
         </div>
@@ -406,19 +415,26 @@ function OutcomeButton({
   eventId,
   match,
   marketName,
-  label,
-  odds,
+  market,
+  outcome,
 }: {
   eventId: string;
   match: MatchEvent;
   marketName: string;
-  label: string;
-  odds: number;
+  market: DisplayMarket;
+  outcome: DisplayOutcome;
 }) {
+  const odds = outcome.odds;
+  const label = outcome.label;
   const flash = useOddsFlash(odds);
   const { isSelectionActive } = useBetSlip();
+  const state = useSportsStore.getState().getEvent(eventId);
+  const lsports = isLsportsDisplayEvent(state?.event);
+  const locked = odds <= 1 || (lsports && !outcome.providerBetId);
   const selection: BetSelection = {
-    id: `${eventId}-${marketName}-${label}`,
+    id: outcome.providerBetId
+      ? `lsports:${eventId}:${market.key}:${outcome.providerBetId}`
+      : `${eventId}-${marketName}-${label}`,
     matchId: eventId,
     matchLabel: `${match.team1} — ${match.team2}`,
     market: marketName,
@@ -432,6 +448,13 @@ function OutcomeButton({
     isLive: match.isLive,
     startTime: match.startTime,
     liveStatus: match.liveStatus,
+    provider: lsports ? 'lsports' : undefined,
+    feedType: lsports ? 'inplay' : undefined,
+    fixtureId: lsports ? eventId : undefined,
+    marketId: outcome.marketId ?? market.marketId,
+    marketKey: outcome.marketKey ?? market.key,
+    line: outcome.line,
+    outcomeId: outcome.providerBetId,
   };
   const handlers = useOddInteraction(selection);
   const active = isSelectionActive(eventId, label, marketName);
@@ -446,11 +469,14 @@ function OutcomeButton({
   return (
     <button
       type="button"
-      {...handlers}
+      {...(locked ? { onClick: (event: MouseEvent) => event.preventDefault() } : handlers)}
+      disabled={locked}
       className={`flex min-h-[44px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left shadow-sm transition-[transform,background-color,border-color,box-shadow] duration-150 active:scale-[0.97] ${
-        active
-          ? 'border-[#16A34A] bg-[#22C55E] shadow-[0_4px_10px_rgba(34,197,94,0.28)]'
-          : 'border-[#E5E7EB] bg-[#F3F4F6] hover:border-[#D1D5DB] hover:bg-white hover:shadow-md'
+        locked
+          ? 'border-[#E5E7EB] bg-[#F3F4F6] opacity-70'
+          : active
+            ? 'border-[#16A34A] bg-[#22C55E] shadow-[0_4px_10px_rgba(34,197,94,0.28)]'
+            : 'border-[#E5E7EB] bg-[#F3F4F6] hover:border-[#D1D5DB] hover:bg-white hover:shadow-md'
       }`}
     >
       <span

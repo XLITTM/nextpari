@@ -9,6 +9,7 @@ import {
   lsportsHealthUrl,
   lsportsInplayUrl,
   parseLsportsBrowserFeed,
+  shouldApplyLsportsGeneratedAt,
   type LsportsBrowserFeed,
 } from './lsportsShadowFeed';
 
@@ -101,10 +102,11 @@ describe('lsports shadow client guards', () => {
     assert.equal(lsportsInplayUrl({}), '/api/lsports/inplay');
     const publish = readFileSync(join(root, 'src/lib/lsportsShadowPublish.ts'), 'utf8');
     assert.match(publish, /lsportsInplayUrl\(\)/);
-    assert.match(publish, /lsportsHealthUrl\(\)/);
+    assert.match(publish, /shouldApplyLsportsGeneratedAt/);
     const hook = readFileSync(join(root, 'src/hooks/useLsportsShadowFeed.ts'), 'utf8');
-    assert.match(hook, /fetchLsportsShadowHealth/);
-    assert.match(hook, /fetchLsportsShadowInplay/);
+    assert.match(hook, /pollLsportsBrowserFeed/);
+    assert.match(hook, /inTick/);
+    assert.equal(hook.includes('fetchLsportsShadowHealth'), false);
     const hydrate = readFileSync(join(root, 'src/lib/hydrateCatalogOdds.ts'), 'utf8');
     assert.match(hydrate, /isLsportsDisplayEvent/);
     const parsed = parseLsportsBrowserFeed({
@@ -115,5 +117,13 @@ describe('lsports shadow client guards', () => {
     });
     assert.equal(parsed.matches.length, 1);
     assert.throws(() => parseLsportsBrowserFeed({ source: 'betsapi', matches: [] }));
+    assert.throws(() => parseLsportsBrowserFeed(null));
+    assert.throws(() => parseLsportsBrowserFeed('not-json'));
+  });
+
+  it('does not let an older generatedAt overwrite a newer applied feed', () => {
+    assert.equal(shouldApplyLsportsGeneratedAt(20, 0), true);
+    assert.equal(shouldApplyLsportsGeneratedAt(20, 10), true);
+    assert.equal(shouldApplyLsportsGeneratedAt(10, 20), false);
   });
 });

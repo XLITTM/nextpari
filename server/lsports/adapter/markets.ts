@@ -63,7 +63,7 @@ function settlementBlocksBet(bet: Record<string, unknown>): boolean {
   return settlement === 1 || settlement === 2 || settlement === 3 || settlement === 4 || settlement === 5;
 }
 
-function outcomeSelectable(bet: Record<string, unknown>): boolean {
+export function outcomeSelectable(bet: Record<string, unknown>): boolean {
   if (isLsportsSuspendedStatus(bet.Status) || isLsportsSuspendedStatus(bet.BetStatusId)) return false;
   if (isLsportsSettledStatus(bet.Status) || isLsportsSettledStatus(bet.BetStatusId)) return false;
   if (settlementBlocksBet(bet)) return false;

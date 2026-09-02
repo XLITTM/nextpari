@@ -26,6 +26,7 @@ export {
   betById,
   clearStickySettlementsForOpenBets,
   shouldReplaceMarket,
+  type LsportsSettlementNotice,
 } from './store.js';
 export type { LsportsFixtureState, LsportsMarketRecord } from './types.js';
 export {

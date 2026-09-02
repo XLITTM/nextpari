@@ -80,7 +80,7 @@ function SelectionMeta({ s }: { s: BetSelection }) {
 export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: BetSlipScreenProps) {
   const { selections, removeSelection, clearAll, addSelection, applyOddsUpdates } = useBetSlip();
   const { addBet, refresh: refreshHistory } = useBetHistory();
-  const { applyBalance } = useWallet();
+  const { applyServerBalance, refresh } = useWallet();
   const { toast } = useToast();
   const [mode, setMode] = useState<'express' | 'single'>('express');
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -176,7 +176,8 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
         return;
       }
 
-      applyBalance(result.newBalance);
+      applyServerBalance(result.newBalance);
+      void refresh();
       void refreshHistory();
       const entry = buildPlacedBet({
         type: mode,

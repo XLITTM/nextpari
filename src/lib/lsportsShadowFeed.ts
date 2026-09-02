@@ -124,6 +124,14 @@ export function parseLsportsBrowserFeed(value: unknown): LsportsBrowserFeed {
   };
 }
 
+export function shouldApplyLsportsGeneratedAt(
+  incomingGeneratedAt: number,
+  lastAppliedGeneratedAt: number,
+): boolean {
+  if (!incomingGeneratedAt || !lastAppliedGeneratedAt) return true;
+  return incomingGeneratedAt >= lastAppliedGeneratedAt;
+}
+
 export function displayMatchesFromFeed(feed: LsportsBrowserFeed): InplayMatch[] {
   const matches = feed.matches.filter((row) => isLsportsDisplayEvent(row.event));
   if (feed.health === 'HEALTHY') return matches;

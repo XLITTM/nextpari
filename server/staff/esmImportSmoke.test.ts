@@ -30,6 +30,9 @@ const RUNTIME_GRAPH = [
   'api/player/games/session/aviator.ts',
   'api/player/games/[roundId].ts',
   'api/player/games/[roundId]/action.ts',
+  'api/player/sports/place.ts',
+  'api/player/sports/bets.ts',
+  'api/internal/sports/settle.ts',
   'api/owner/dashboard.ts',
   'api/owner/me.ts',
   'api/owner/cashiers.ts',
@@ -179,6 +182,8 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/player/games/session/aviator.js',
         'api/player/games/[roundId].js',
         'api/player/games/[roundId]/action.js',
+        'api/player/sports/place.js',
+        'api/player/sports/bets.js',
       ];
       const controlEntries = [
         'api/owner/dashboard.js',
@@ -236,10 +241,12 @@ describe('staff onboarding Node ESM import graph', () => {
 
       for (const rel of playerGameEntries) {
         const compiled = readFileSync(join(outDir, rel), 'utf8');
-        assert.match(compiled, /from ['"].*server\/player\/(?:playerGamesHttp|vercelGamesHandler)\.js['"]/);
+        assert.match(compiled, /from ['"].*server\/player\/(?:playerGamesHttp|vercelGamesHandler|sportsPlaceHttp)\.js['"]/);
       }
+      const settleCompiled = readFileSync(join(outDir, 'api/internal/sports/settle.js'), 'utf8');
+      assert.match(settleCompiled, /from ['"].*server\/sports\/settleHttp\.js['"]/);
 
-      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries]) {
+      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries, 'api/internal/sports/settle.js']) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,

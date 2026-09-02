@@ -36,8 +36,13 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'PLAYER_WALLET_NOT_ACTIVE'
     || code === 'BETTING_WINDOW_CLOSED'
     || code === 'AVIATOR_SESSION_CLOSED'
+    || code === 'ODDS_CHANGED'
+    || code === 'MARKET_SUSPENDED'
+    || code === 'EVENT_UNAVAILABLE'
+    || code === 'FEED_STALE'
+    || code === 'SPORTS_BET_DISABLED'
   ) {
-    return staffError(code, 409);
+    return staffError(code, code === 'SPORTS_BET_DISABLED' ? 403 : 409);
   }
   if (code === 'GAME_NOT_FOUND' || code === 'GAME_ROUND_NOT_FOUND' || code === 'WALLET_ACCOUNT_NOT_FOUND' || code === 'PLAYER_WALLET_MISSING') {
     return staffError(code, 404);
@@ -52,6 +57,13 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'STAKE_SCALE_INVALID'
     || code === 'ACTION_NOT_ALLOWED'
     || code === 'GAME_ADAPTER_NOT_IMPLEMENTED'
+    || code === 'INVALID_PRICE'
+    || code === 'MISSING_BET_ID'
+    || code === 'MISSING_FIXTURE'
+    || code === 'SPORTS_LEGS_REQUIRED'
+    || code === 'SPORTS_MODE_INVALID'
+    || code === 'SPORTS_SINGLE_REQUIRES_ONE_LEG'
+    || code === 'SPORTS_EXPRESS_REQUIRES_LEGS'
   ) {
     return staffError(code, 400);
   }
