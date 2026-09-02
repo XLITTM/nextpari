@@ -1,4 +1,4 @@
-const SECRET_KEY = /pass(word)?|secret|token|credential|authorization/i;
+const SECRET_KEY = /pass(word)?|user(name)?|secret|token|credential|authorization/i;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);

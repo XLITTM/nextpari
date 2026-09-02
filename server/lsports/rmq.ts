@@ -70,6 +70,58 @@ export function wrapRmqError(error: unknown, fallback = 'RMQ connection failed')
   return new LsportsRmqError(code, safe);
 }
 
+export const LSPORTS_RMQ_STARTUP_RETRY_DELAYS_MS = [2_000, 5_000, 10_000] as const;
+
+export interface LsportsRmqConnectDeps {
+  connect?: (config: LsportsRmqConfig) => Promise<ChannelModel>;
+  sleep?: (ms: number) => Promise<void>;
+  log?: (parts: Record<string, string | number | boolean | null | undefined>) => void;
+}
+
+function logRmq(parts: Record<string, string | number | boolean | null | undefined>): void {
+  const body = Object.entries(parts)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => `${key}=${value}`)
+    .join(' ');
+  console.log(`[lsports] ${body}`);
+}
+
+/**
+ * Bounded startup connect. ACCESS_REFUSED stays classified as AUTH_REFUSED,
+ * but the first refusal is not treated as permanently bad credentials.
+ */
+export async function connectLsportsRmqWithRetry(
+  config: LsportsRmqConfig,
+  deps: LsportsRmqConnectDeps = {},
+): Promise<ChannelModel> {
+  const connect = deps.connect ?? connectLsportsRmq;
+  const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  }));
+  const log = deps.log ?? logRmq;
+  const maxAttempts = LSPORTS_RMQ_STARTUP_RETRY_DELAYS_MS.length + 1;
+  let lastError: LsportsRmqError | null = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const connection = await connect(config);
+      if (attempt > 1) log({ action: 'rmq-connect-ok', attempt });
+      return connection;
+    } catch (error) {
+      lastError = wrapRmqError(error);
+      const waitMs = LSPORTS_RMQ_STARTUP_RETRY_DELAYS_MS[attempt - 1];
+      log({
+        action: 'rmq-connect-retry',
+        attempt,
+        code: lastError.code,
+        waitMs: waitMs ?? 0,
+      });
+      if (waitMs == null) break;
+      await sleep(waitMs);
+    }
+  }
+  throw lastError ?? new LsportsRmqError('UNKNOWN', 'RMQ startup retries exhausted');
+}
+
 export async function connectLsportsRmq(config: LsportsRmqConfig): Promise<ChannelModel> {
   try {
     return await amqplib.connect(

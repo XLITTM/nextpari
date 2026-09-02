@@ -1,7 +1,9 @@
 import { createContext, useContext, useMemo, useCallback, type ReactNode } from 'react';
-import { isLineEvent, isLive } from './lib/betsapi';
-import { matchEventFromStore } from './lib/liveMatches';
 import { useEventsList } from './hooks/useEventsList';
+import { useLsportsShadowFeed } from './hooks/useLsportsShadowFeed';
+import { isLineEvent, isLive } from './lib/betsapi';
+import { isLsportsDisplayFeedEnabled } from './lib/lsportsFeed';
+import { matchEventFromStore } from './lib/liveMatches';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
@@ -16,7 +18,10 @@ interface LiveMatchesContextValue {
 const LiveMatchesContext = createContext<LiveMatchesContextValue | null>(null);
 
 export function LiveMatchesProvider({ children }: { children: ReactNode }) {
-  const { loading, refresh } = useEventsList('live', 'all');
+  const list = useEventsList('live', 'all');
+  const shadow = useLsportsShadowFeed();
+  const loading = isLsportsDisplayFeedEnabled() ? shadow.loading : list.loading;
+  const refresh = isLsportsDisplayFeedEnabled() ? shadow.refresh : list.refresh;
   const eventsMap = useSportsStore((s) => s.events);
 
   const liveMatches = useMemo(() => {

@@ -3,6 +3,7 @@ import { isUnixClock, liveMinuteLabel, mapBetsApiEvent, parseSsScore, tournament
 import { groupsFromLiveOdds, orderPriorityMarkets } from './marketOrder';
 import { groupsFromParsedMarkets, type ParsedMarket } from './odds-parser';
 import { isFullTime1x2 } from './matchOdds';
+import { isLsportsDisplayEvent, lsportsCardMarkets } from './lsportsFeed';
 import type { EventState } from '../stores/sportsStore';
 import type { MarketCategory, MarketGroup, MatchEvent, SportId } from '../types';
 
@@ -265,11 +266,17 @@ export function matchEventFromStore(state: EventState): MatchEvent {
       ? base.liveStatus
       : undefined;
   const rawMarkets = latestOdds ?? base.markets;
-  const markets = {
-    '1': rawMarkets['1'] > 1 ? rawMarkets['1'] : 2.1,
-    x: rawMarkets.x > 1 ? rawMarkets.x : 3.25,
-    '2': rawMarkets['2'] > 1 ? rawMarkets['2'] : 2.8,
-  };
+  const lsports = isLsportsDisplayEvent(ev);
+  const projected = lsports
+    ? lsportsCardMarkets(rawMarkets)
+    : {
+      markets: {
+        '1': rawMarkets['1'] > 1 ? rawMarkets['1'] : 2.1,
+        x: rawMarkets.x > 1 ? rawMarkets.x : 3.25,
+        '2': rawMarkets['2'] > 1 ? rawMarkets['2'] : 2.8,
+      },
+      marketsLocked: false,
+    };
   return {
     ...base,
     sport: sportFromBetsId(ev.sport_id) ?? base.sport,
@@ -277,11 +284,11 @@ export function matchEventFromStore(state: EventState): MatchEvent {
     isLive: ev.time_status === '1',
     liveStatus: status,
     liveScore: score ? { team1: score.home, team2: score.away } : base.liveScore,
-    markets,
+    markets: projected.markets,
     extraMarkets: Math.max(marketCount, parsedGroups.length),
     marketGroups: parsedGroups.length ? parsedGroups : base.marketGroups,
     marketsEstimated: false,
-    marketsLocked: false,
+    marketsLocked: projected.marketsLocked,
   };
 }
 

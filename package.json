@@ -21,10 +21,22 @@
     "player:auth:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test src/lib/playerAuth.security.test.ts server/player/playerAuth.test.ts",
     "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts server/games/dice.cutover.test.ts",
     "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts",
-    "lsports:test": "tsx --tsconfig tsconfig.server.json --test server/lsports/lsports.test.ts",
+    "start": "tsx --tsconfig tsconfig.server.json scripts/run-lsports-worker.ts",
+    "lsports:test": "tsx --tsconfig tsconfig.server.json --test server/lsports/lsports.test.ts server/lsports/state/state.test.ts server/lsports/adapter/adapter.test.ts server/lsports/bridge/bridge.test.ts server/lsports/bridge/startup.test.ts src/lib/lsportsFeed.test.ts src/lib/lsportsShadow.test.ts",
+    "lsports:worker": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-worker.ts",
+    "lsports:shadow:inplay": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-shadow.ts",
     "lsports:probe:inplay": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-probe.ts inplay",
+    "lsports:observe:inplay": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-observe.ts inplay",
+    "lsports:capture:types:inplay": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-type-capture.ts inplay",
     "lsports:probe:prematch": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-probe.ts prematch",
-    "lsports:probe:both": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-probe.ts both"
+    "lsports:probe:both": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-probe.ts both",
+    "lsports:distribution:status:inplay": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-distribution-status.ts inplay",
+    "lsports:distribution:start:inplay": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-distribution-start.ts inplay",
+    "lsports:snapshot:inplay:football": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-snapshot.ts inplay",
+    "lsports:snapshot:inplay:scores-markets": "tsx --tsconfig tsconfig.server.json --env-file=.env.lsports.local scripts/run-lsports-snapshot-scores-markets.ts inplay"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.3",
@@ -33,6 +45,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "ws": "^8.21.3",
+    "tsx": "^4.23.12",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
@@ -48,7 +61,6 @@
     "globals": "^15.9.0",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
-    "tsx": "^4.23.12",
     "typescript": "^5.5.3",
     "typescript-eslint": "^8.3.0",
     "vite": "^5.4.2"
