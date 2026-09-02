@@ -391,11 +391,14 @@ export async function fetchPreMatchSnapshotBody(
     packageId: number;
     userName: string;
     password: string;
+    sports: number[];
     timestamp?: number;
   } = {
     packageId: config.packageId,
     userName: config.username,
     password: config.password,
+    // Official SnapshotFilteredRequestDto. Unfiltered PreMatch dumps can be empty/too large.
+    sports: [LSPORTS_FOOTBALL_SPORT_ID],
   };
   if (!item.unfiltered && item.timestamp != null) {
     request.timestamp = item.timestamp;
@@ -440,9 +443,13 @@ export async function fetchPreMatchSnapshotBody(
     if (containsSecret(serializeDiagnostic(parsed), secrets)) {
       throw new Error('LSPORTS_SAMPLE_LEAK');
     }
-    if (attempt > 1) {
-      log({ action: 'prematch-snapshot-ok', endpoint: item.endpoint, attempt, http: response.status });
-    }
+    log({
+      action: 'prematch-snapshot-ok',
+      endpoint: item.endpoint,
+      attempt,
+      http: response.status,
+      fixtures: readSnapshotFixtures(parsed).length,
+    });
     return parsed;
   }
   throw new LsportsSnapshotHttpError(lastStatus || 429);

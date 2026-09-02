@@ -40,7 +40,7 @@ export function planPrematchSnapshotRequests(input: {
   if (input.mode === 'RECOVERY_WITH_HEARTBEAT') {
     const timestamp = input.lastHealthyHeartbeatServerTimestamp;
     if (timestamp == null) {
-      return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({ endpoint, unfiltered: true }));
+      return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({ endpoint, unfiltered: false }));
     }
     return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({
       endpoint,
@@ -48,7 +48,7 @@ export function planPrematchSnapshotRequests(input: {
       unfiltered: false,
     }));
   }
-  return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({ endpoint, unfiltered: true }));
+  return LSPORTS_PREMATCH_SNAPSHOT_ENDPOINTS.map((endpoint) => ({ endpoint, unfiltered: false }));
 }
 
 export function buildPlannedSnapshotBody(

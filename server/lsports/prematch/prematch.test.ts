@@ -147,7 +147,7 @@ describe('lsports prematch snapshot plan', () => {
     const plan = planPrematchSnapshotRequests({ mode: 'COLD_START' });
     assert.deepEqual(plan.map((item) => item.endpoint), ['GetFixtures', 'GetFixtureMarkets']);
     for (const item of plan) {
-      assert.equal(item.unfiltered, true);
+      assert.equal(item.unfiltered, false);
       assert.equal(item.timestamp, undefined);
     }
   });
