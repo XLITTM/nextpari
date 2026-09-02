@@ -56,6 +56,10 @@ export class LsportsRecoveryCoordinator {
     return this.mode;
   }
 
+  isBuffering(): boolean {
+    return this.buffer.isBuffering();
+  }
+
   getLastHealthyHeartbeatServerTimestamp(): number | null {
     return this.lastHealthyHeartbeatServerTimestamp;
   }

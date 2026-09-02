@@ -12,6 +12,10 @@ function pickNumber(record: Record<string, unknown> | null, keys: readonly strin
   for (const key of keys) {
     const value = record[key];
     if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() !== '') {
+      const numeric = Number(value.trim());
+      if (Number.isFinite(numeric)) return numeric;
+    }
   }
   return null;
 }

@@ -62,8 +62,17 @@ export interface LsportsStateMetrics {
 }
 
 export interface LsportsIngestCounters {
+  rmqReceived: number;
+  rmqParsed: number;
+  rmqParseFailed: number;
+  type1Messages: number;
+  type2Messages: number;
   type3Messages: number;
+  type31Messages: number;
+  type32Messages: number;
   type35Messages: number;
+  typeUnknownMessages: number;
+  typeNullMessages: number;
   snapshotMarketEvents: number;
   marketsAppliedFromType3: number;
   marketsAppliedFromSnapshot: number;

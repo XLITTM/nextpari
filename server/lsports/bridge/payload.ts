@@ -7,7 +7,11 @@ import {
 } from '../adapter/types.js';
 import { containsSecret } from '../redact.js';
 import type { LsportsInPlayStore } from '../state/store.js';
-import type { LsportsFeedHealth, LsportsMarketInventory } from '../state/types.js';
+import type {
+  LsportsFeedHealth,
+  LsportsMarketInventory,
+  LsportsRecoveryMode,
+} from '../state/types.js';
 import {
   sanitizeDistributionDiagnostics,
   type LsportsDistributionSnapshot,
@@ -42,6 +46,8 @@ export interface LsportsBrowserDiagnostics {
   fixturesMissing1x2: string[];
   marketInventory: LsportsMarketInventory;
   market1Adapter: LsportsMarket1AdapterDiagnostics;
+  recoveryMode: LsportsRecoveryMode | null;
+  buffering: boolean;
   distributionActive: boolean | null;
   consumerCount: number | null;
   numberMessagesInQueue: number | null;
@@ -76,6 +82,7 @@ export function buildLsportsBrowserPayload(
   store: LsportsInPlayStore,
   now = Date.now(),
   distribution: LsportsDistributionSnapshot | null = null,
+  recovery: { mode?: LsportsRecoveryMode | null; buffering?: boolean } | null = null,
 ): LsportsBrowserFeed {
   const heartbeatHealth = store.feedHealth(now);
   const health = displayHealthFromSources(heartbeatHealth, distribution);
@@ -115,6 +122,8 @@ export function buildLsportsBrowserPayload(
       suspendedOutcomeCount: adapted.diagnostics.suspendedOutcomeCount,
       marketInventory: inventory,
       market1Adapter: adapted.diagnostics.market1Adapter,
+      recoveryMode: recovery?.mode ?? null,
+      buffering: Boolean(recovery?.buffering),
       distributionActive: distributionDiagnostics.distributionActive,
       consumerCount: distributionDiagnostics.consumerCount,
       numberMessagesInQueue: distributionDiagnostics.numberMessagesInQueue,

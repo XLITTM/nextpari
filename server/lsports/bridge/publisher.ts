@@ -1,7 +1,7 @@
 import { readHeader } from '../state/parse.js';
 import type { LsportsRecoveryCoordinator } from '../state/coordinator.js';
 import type { LsportsInPlayStore } from '../state/store.js';
-import type { LsportsFeedHealth } from '../state/types.js';
+import type { LsportsFeedHealth, LsportsRecoveryMode } from '../state/types.js';
 import { buildLsportsBrowserPayload, type LsportsBrowserFeed } from './payload.js';
 import type { LsportsDistributionSnapshot } from './status.js';
 
@@ -40,12 +40,20 @@ export class LsportsDisplayBridge {
     this.now = options.now ?? Date.now;
     this.coalesceMs = options.coalesceMs ?? LSPORTS_SHADOW_COALESCE_MS;
     this.onPublish = options.onPublish;
-    this.payload = buildLsportsBrowserPayload(this.store, this.now(), this.distribution);
+    this.payload = this.buildPayload();
     this.lastHealth = this.payload.health;
   }
 
   getPayload(): LsportsBrowserFeed {
     return this.payload;
+  }
+
+  getRecoveryMode(): LsportsRecoveryMode | null {
+    return this.coordinator?.getMode() ?? null;
+  }
+
+  isBuffering(): boolean {
+    return this.coordinator?.isBuffering() ?? false;
   }
 
   subscribe(listener: (payload: LsportsBrowserFeed) => void): () => void {
@@ -73,7 +81,7 @@ export class LsportsDisplayBridge {
   }
 
   refreshHealth(): void {
-    const health = buildLsportsBrowserPayload(this.store, this.now(), this.distribution).health;
+    const health = this.buildPayload().health;
     if (health !== this.lastHealth) this.publishNow();
   }
 
@@ -82,11 +90,18 @@ export class LsportsDisplayBridge {
       clearTimeout(this.publishTimer);
       this.publishTimer = null;
     }
-    this.payload = buildLsportsBrowserPayload(this.store, this.now(), this.distribution);
+    this.payload = this.buildPayload();
     this.lastHealth = this.payload.health;
     for (const listener of this.listeners) listener(this.payload);
     this.onPublish?.(this.payload);
     return this.payload;
+  }
+
+  private buildPayload(): LsportsBrowserFeed {
+    return buildLsportsBrowserPayload(this.store, this.now(), this.distribution, {
+      mode: this.getRecoveryMode(),
+      buffering: this.isBuffering(),
+    });
   }
 
   private schedulePublish(): void {

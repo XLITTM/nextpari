@@ -5,6 +5,7 @@ import { canonicalMarketKey } from './keys.js';
 import { buildPlannedSnapshotBody, planSnapshotRequests } from './plan.js';
 import { LsportsSnapshotRateLimiter, type LsportsSnapshotPlanItem } from './rateLimit.js';
 import { LsportsRecoveryBuffer } from './recovery.js';
+import { readHeader } from './parse.js';
 import { LsportsInPlayStore, betById } from './store.js';
 import { LSPORTS_HEARTBEAT_STALE_MS } from './types.js';
 
@@ -123,6 +124,32 @@ function type35Settlement() {
 }
 
 describe('lsports inplay state engine', () => {
+  it('parses numeric string Header.Type values for Type 3 markets', () => {
+    const store = new LsportsInPlayStore();
+    assert.equal(readHeader({ Header: { Type: '3', ServerTimestamp: '3000' } }).type, 3);
+    store.ingestRmq({
+      Header: { Type: '3', ServerTimestamp: '3000' },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE_ID,
+          Markets: [{
+            Id: 1,
+            Name: '1X2',
+            Status: 1,
+            Bets: [
+              { Id: 117469638719981250, Name: '1', Price: '1.85', Status: 1, BetStatusId: 1, LastUpdate: '2026-09-01T22:51:11Z' },
+              { Id: 212242794219981250, Name: 'X', Price: '3.40', Status: 1, BetStatusId: 1, LastUpdate: '2026-09-01T22:51:11Z' },
+              { Id: 155418696819981250, Name: '2', Price: '4.20', Status: 1, BetStatusId: 1, LastUpdate: '2026-09-01T22:51:11Z' },
+            ],
+          }],
+        }],
+      },
+    });
+    assert.equal(store.getIngestCounters().type3Messages, 1);
+    assert.equal(store.getIngestCounters().market1AppliedFromType3, 1);
+    assert.equal(store.getMarket(FIXTURE_ID, { Id: 1 })?.payload.Status, 1);
+  });
+
   it('does not erase snapshot fixture metadata when Type 2 sends null Location/League/Subscription', () => {
     const store = new LsportsInPlayStore();
     store.ingestFixturesSnapshot(snapshotFixtures());
@@ -412,6 +439,7 @@ describe('lsports type 35 settlement patches', () => {
     assert.equal(market?.settlements.has(String(HOME_BET)), false);
     assert.equal(store.getIngestCounters().type3Messages, 2);
     assert.equal(store.getIngestCounters().type35Messages, 1);
+    assert.equal(store.getIngestCounters().type32Messages, 0);
     assert.equal(store.getIngestCounters().market1AppliedFromType3, 2);
     const inventory = store.marketInventory();
     assert.equal(inventory.market1.count, 1);

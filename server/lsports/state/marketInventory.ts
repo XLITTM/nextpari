@@ -24,8 +24,17 @@ function toPrice(value: unknown): number | null {
 
 export function emptyIngestCounters(): LsportsIngestCounters {
   return {
+    rmqReceived: 0,
+    rmqParsed: 0,
+    rmqParseFailed: 0,
+    type1Messages: 0,
+    type2Messages: 0,
     type3Messages: 0,
+    type31Messages: 0,
+    type32Messages: 0,
     type35Messages: 0,
+    typeUnknownMessages: 0,
+    typeNullMessages: 0,
     snapshotMarketEvents: 0,
     marketsAppliedFromType3: 0,
     marketsAppliedFromSnapshot: 0,

@@ -178,8 +178,23 @@ export class LsportsInPlayStore {
     }
   }
 
+  noteRmqTransport(result: 'parsed' | 'parse-failed'): void {
+    this.ingestCounters.rmqReceived += 1;
+    if (result === 'parsed') this.ingestCounters.rmqParsed += 1;
+    else this.ingestCounters.rmqParseFailed += 1;
+  }
+
   ingestRmq(payload: unknown, options: LsportsApplyOptions = {}): void {
     const header = readHeader(payload);
+    if (header.type == null) this.ingestCounters.typeNullMessages += 1;
+    else if (header.type === 1) this.ingestCounters.type1Messages += 1;
+    else if (header.type === 2) this.ingestCounters.type2Messages += 1;
+    else if (header.type === 3) this.ingestCounters.type3Messages += 1;
+    else if (header.type === 31) this.ingestCounters.type31Messages += 1;
+    else if (header.type === 32) this.ingestCounters.type32Messages += 1;
+    else if (header.type === 35) this.ingestCounters.type35Messages += 1;
+    else this.ingestCounters.typeUnknownMessages += 1;
+
     switch (header.type) {
       case 1:
         this.ingestFixtureDelta(payload, header.serverTimestamp);
@@ -188,7 +203,7 @@ export class LsportsInPlayStore {
         this.ingestLivescoreDelta(payload, header.serverTimestamp, options);
         break;
       case 3:
-        this.ingestMarketDelta(payload, options);
+        this.applyMarketDeltaEvents(payload, options);
         break;
       case 31:
         this.ingestKeepAlive(payload);
@@ -197,7 +212,7 @@ export class LsportsInPlayStore {
         this.ingestHeartbeat(payload, options.receivedAt);
         break;
       case 35:
-        this.ingestSettlement(payload, options);
+        this.applySettlementEvents(payload, options);
         break;
       default:
         break;
@@ -225,14 +240,20 @@ export class LsportsInPlayStore {
   }
 
   ingestMarketDelta(payload: unknown, options: LsportsApplyOptions = {}): void {
-    this.ingestCounters.type3Messages += 1;
+    this.applyMarketDeltaEvents(payload, options);
+  }
+
+  private applyMarketDeltaEvents(payload: unknown, options: LsportsApplyOptions = {}): void {
     for (const event of readEvents(payload)) {
       this.applyMarkets(event, 'rmq-3', options);
     }
   }
 
   ingestSettlement(payload: unknown, options: LsportsApplyOptions = {}): void {
-    this.ingestCounters.type35Messages += 1;
+    this.applySettlementEvents(payload, options);
+  }
+
+  private applySettlementEvents(payload: unknown, options: LsportsApplyOptions = {}): void {
     const header = readHeader(payload);
     for (const event of readEvents(payload)) {
       this.patchSettlementEvent(event, header.msgGuid, options);

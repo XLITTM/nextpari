@@ -217,9 +217,15 @@ export async function runLsportsShadowBridge(
       if (!message || !channel) return;
       try {
         const { json } = summarizeLsportsMessage('inplay', message);
-        if (json && typeof json === 'object') bridge.handleRmq(json);
+        if (json && typeof json === 'object') {
+          store.noteRmqTransport('parsed');
+          bridge.handleRmq(json);
+        } else {
+          store.noteRmqTransport('parse-failed');
+        }
         channel.ack(message);
       } catch {
+        store.noteRmqTransport('parse-failed');
         channel.ack(message);
       }
     };
