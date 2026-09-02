@@ -48,6 +48,26 @@ try {
   });
   logWorker({ action: 'worker-inplay-ready', consumers: inplay.consumerCount() });
 
+  const liveInplay = inplay;
+  if (!liveInplay) throw new Error('inplay-missing');
+  const httpOptions = resolveLsportsHttpOptions(process.env);
+  httpServer = createLsportsDualHttpServer(
+    () => liveInplay.getPayload(),
+    () => prematch?.getPayload() ?? null,
+    httpOptions,
+  );
+  await new Promise<void>((resolve, reject) => {
+    httpServer?.once('error', reject);
+    httpServer?.listen(httpOptions.port, httpOptions.host, resolve);
+  });
+  logWorker({
+    action: 'worker-http',
+    http: `${httpOptions.host}:${httpOptions.port}`,
+    mode: httpOptions.mode,
+    inplay: Boolean(inplay.started()),
+    prematch: false,
+  });
+
   try {
     prematch = await runLsportsPrematchBridge(process.env, {
       limiter,
@@ -66,26 +86,6 @@ try {
     logWorker({ action: 'worker-prematch-failed', code });
     prematch = null;
   }
-
-  const liveInplay = inplay;
-  if (!liveInplay) throw new Error('inplay-missing');
-  const httpOptions = resolveLsportsHttpOptions(process.env);
-  httpServer = createLsportsDualHttpServer(
-    () => liveInplay.getPayload(),
-    () => prematch?.getPayload() ?? null,
-    httpOptions,
-  );
-  await new Promise<void>((resolve, reject) => {
-    httpServer?.once('error', reject);
-    httpServer?.listen(httpOptions.port, httpOptions.host, resolve);
-  });
-  logWorker({
-    action: 'worker-http',
-    http: `${httpOptions.host}:${httpOptions.port}`,
-    mode: httpOptions.mode,
-    inplay: Boolean(inplay.started()),
-    prematch: Boolean(prematch?.started()),
-  });
 } catch (error) {
   const code = error && typeof error === 'object' && 'code' in error
     ? String((error as { code: unknown }).code)
