@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { addSlipSelection, removeSlipSelection } from './lib/sportsPlaceSlip';
 import type { BetSelection } from './types';
 
 interface BetSlipContextValue {
@@ -17,18 +18,11 @@ export function BetSlipProvider({ children }: { children: ReactNode }) {
   const [selections, setSelections] = useState<BetSelection[]>([]);
 
   const addSelection = useCallback((selection: BetSelection) => {
-    setSelections((prev) => {
-      if (prev.some((row) => row.id === selection.id)) {
-        return prev.filter((row) => row.id !== selection.id);
-      }
-      return [...prev.filter((row) => row.matchId !== selection.matchId), selection];
-    });
+    setSelections((prev) => addSlipSelection(prev, selection));
   }, []);
 
   const removeSelection = useCallback((matchId: string, outcome: string) => {
-    setSelections((prev) =>
-      prev.filter((s) => !(s.matchId === matchId && s.outcome === outcome))
-    );
+    setSelections((prev) => removeSlipSelection(prev, matchId, outcome));
   }, []);
 
   const clearAll = useCallback(() => setSelections([]), []);

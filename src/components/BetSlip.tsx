@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Trash2, Plus, Minus, TrendingUp } from 'lucide-react';
 import type { BetSelection } from '../types';
 import { formatOdds } from '../lib/matchOdds';
+import { placeModeFromCount, placeModeLabel } from '../lib/sportsPlaceMode';
 
 interface BetSlipProps {
   selections: BetSelection[];
@@ -11,8 +12,8 @@ interface BetSlipProps {
 }
 
 export function BetSlip({ selections, onRemove, onClear, onClose }: BetSlipProps) {
-  const [mode, setMode] = useState<'express' | 'single'>('express');
   const [stake, setStake] = useState<number>(500);
+  const mode = placeModeFromCount(selections.length);
 
   const totalOdds = selections.reduce((acc, s) => acc * s.odds, 1);
   const expressWin = stake * totalOdds;
@@ -54,23 +55,14 @@ export function BetSlip({ selections, onRemove, onClear, onClose }: BetSlipProps
         <>
           {/* Mode toggle */}
           <div className="flex bg-gray-100 dark:bg-[#1e293b] p-1 mx-3 mt-3 rounded-xl shrink-0 transition-colors">
-            <button
-              onClick={() => setMode('express')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold transition-all ${
+            <div
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-semibold ${
                 mode === 'express' ? 'bg-brand-600 text-white' : 'text-gray-700 dark:text-gray-200'
               }`}
             >
-              <TrendingUp className="w-3.5 h-3.5" />
-              Экспресс
-            </button>
-            <button
-              onClick={() => setMode('single')}
-              className={`flex-1 py-2 rounded-lg text-xs font-semibold transition-all ${
-                mode === 'single' ? 'bg-brand-600 text-white' : 'text-gray-700 dark:text-gray-200'
-              }`}
-            >
-              Ординар
-            </button>
+              {mode === 'express' ? <TrendingUp className="w-3.5 h-3.5" /> : null}
+              {placeModeLabel(mode)}
+            </div>
           </div>
 
           {/* Selections */}

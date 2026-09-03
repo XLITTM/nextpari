@@ -8,7 +8,7 @@ import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
 import { extraMarketRows, buildCardSelection, mainOutcomeButtons } from '../lib/cardOdds';
-import { isSelectableLsportsOutcome, withLsportsIdentity } from '../lib/sportsSelection';
+import { extraLsportsMarketRows, isSelectableLsportsOutcome, withLsportsIdentity } from '../lib/sportsSelection';
 
 interface MatchCardProps {
   match: MatchEvent;
@@ -67,7 +67,8 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
   const outcomeButtons = mainOutcomeButtons(match);
   const liveMinute = formatCardMinute(match.liveStatus);
-  const extraRows = extraMarketRows(match);
+  const lsportsExtras = extraLsportsMarketRows(match);
+  const extraRows = lsportsExtras.length ? lsportsExtras : extraMarketRows(match);
   const extraCount = match.feedTag === 'lsports'
     ? Math.max(Number(match.extraMarkets) || 0, extraRows.length)
     : Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
@@ -183,7 +184,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
               {row.outcomes.map((item) => (
                 <MatchOddButton
                   key={`${row.name}-${item.label}`}
-                  selection={withLsportsIdentity(
+                  selection={item.selection ?? withLsportsIdentity(
                     buildCardSelection(match, item.label, item.odds, row.name),
                     match,
                     item.label,
@@ -191,7 +192,8 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
                   )}
                   label={item.label}
                   odds={item.odds}
-                  isActive={isSelectionActive(match.id, item.label, row.name)}
+                  locked={!item.selection?.outcomeId}
+                  isActive={isSelectionActive(match.id, item.label, item.selection?.market ?? row.name)}
                 />
               ))}
             </div>

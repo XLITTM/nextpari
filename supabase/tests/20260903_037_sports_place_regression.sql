@@ -1,0 +1,15 @@
+-- Safe SQL regression notes for 20260903_037_fix_sports_leg_alias.sql
+-- Not applied by this task. Do not run against production player balances.
+-- Local integration requires a disposable Supabase clone with Wallet Core + 036 already applied.
+--
+-- Required assertions when a disposable DB is available:
+-- 1. A valid single LSports leg through public.sports_place_for_player creates exactly one sports_bet.
+-- 2. It creates exactly one sports_bet_leg with fixtureId, marketId, marketKey, line, outcomeId, acceptedOdds.
+-- 3. Wallet Core apply_wallet_entry CASINO_BET debit occurs exactly once.
+-- 4. The same idempotency key retry returns the existing bet and does not debit twice.
+-- 5. A failed transaction (invalid price / missing outcome) leaves no partial bet/leg/ledger rows.
+-- 6. ACL is unchanged: sports_place_for_player is service_role-only.
+-- 7. public.player_sports_place remains unavailable to authenticated players.
+--
+-- This file is documentation plus static guards. Node tests scan 037 SQL for the alias fix
+-- and unchanged money/ACL semantics because a live DB is not available in this workspace.

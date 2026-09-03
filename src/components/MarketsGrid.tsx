@@ -188,7 +188,7 @@ function toDisplayMarket(market: ParsedMarket): DisplayMarket | null {
       odds: row.odds,
       providerBetId: row.providerBetId,
       marketId: market.marketId,
-      marketKey: entry.canonicalKey ?? market.canonicalKey ?? market.key,
+      marketKey: entry.canonicalKey ?? market.canonicalKey,
       line: entry.line,
     }));
     return isMoneyline ? sortDisplayOutcomes(rows) : rows;
@@ -453,10 +453,13 @@ function OutcomeButton({
   const { isSelectionActive } = useBetSlip();
   const state = useSportsStore.getState().getEvent(eventId);
   const lsports = isLsportsDisplayEvent(state?.event);
-  const locked = odds <= 1 || (lsports && !outcome.providerBetId);
+  const marketKey = String(outcome.marketKey ?? '').trim();
+  const marketId = String(outcome.marketId ?? market.marketId ?? '').trim();
+  const providerBetId = String(outcome.providerBetId ?? '').trim();
+  const locked = odds <= 1 || (lsports && (!providerBetId || !marketKey.includes(':')));
   const selection: BetSelection = {
-    id: outcome.providerBetId
-      ? `lsports:${eventId}:${outcome.marketKey ?? market.key}:${outcome.providerBetId}`
+    id: providerBetId && marketKey
+      ? `lsports:${eventId}:${marketKey}:${providerBetId}`
       : `${eventId}-${marketName}-${label}`,
     matchId: eventId,
     matchLabel: `${match.team1} — ${match.team2}`,
@@ -474,10 +477,10 @@ function OutcomeButton({
     provider: lsports ? 'lsports' : undefined,
     feedType: lsports ? 'inplay' : undefined,
     fixtureId: lsports ? eventId : undefined,
-    marketId: outcome.marketId ?? market.marketId,
-    marketKey: outcome.marketKey ?? market.key,
-    line: outcome.line,
-    outcomeId: outcome.providerBetId,
+    marketId: lsports ? marketId : outcome.marketId ?? market.marketId,
+    marketKey: lsports ? marketKey : outcome.marketKey ?? market.key,
+    line: outcome.line ?? '',
+    outcomeId: providerBetId || undefined,
   };
   const handlers = useOddInteraction(selection);
   const active = isSelectionActive(eventId, label, marketName);
