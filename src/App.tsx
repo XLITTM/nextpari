@@ -250,6 +250,7 @@ function AppContent() {
           <BetDetailsScreen
             betId={screen.betId}
             onBack={() => setScreen({ name: 'history' })}
+            onNavigate={setScreen}
           />
         );
       case 'menu':

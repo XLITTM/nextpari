@@ -1,22 +1,20 @@
 import { useState } from 'react';
 import {
   ChevronDown, ChevronRight, Filter, Calendar, Tag, Plus,
-  Bell, MoreHorizontal, Layers, Ticket, TrendingUp,
+  Bell, MoreHorizontal, Ticket, TrendingUp,
 } from 'lucide-react';
 import type { BetHistoryEntry, Screen } from '../types';
 import { useBetHistory } from '../BetHistoryContext';
-import { SportIcon } from '../components/SportIcon';
-import { betStatusLabel, couponNumber } from '../lib/betTicket';
+import {
+  formatStakeMoney,
+  historyCardView,
+  historyPeriodStats,
+  playerStatusClass,
+} from '../lib/betHistoryView';
 
 interface HistoryScreenProps {
   onNavigate: (screen: Screen) => void;
   balance: number;
-}
-
-function statusClass(status: BetHistoryEntry['status']) {
-  if (status === 'lost') return 'text-red-500';
-  if (status === 'won') return 'text-green-500';
-  return 'text-gray-500';
 }
 
 export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
@@ -25,14 +23,14 @@ export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
   const [saleOnly, setSaleOnly] = useState(false);
 
   const visible = saleOnly
-    ? entries.filter((b) => (b.status === 'in_progress' || b.status === 'pending') && b.cashout)
+    ? entries.filter((b) => (b.status === 'in_progress' || b.status === 'pending' || b.status === 'accepted') && b.cashout)
     : entries;
 
-  const periodSum = visible.reduce((sum, b) => sum + b.amount, 0);
+  const stats = historyPeriodStats(visible);
 
   return (
     <div className="min-h-full bg-gray-100 dark:bg-gray-900 pb-28">
-      <header className="bg-white dark:bg-[#1e293b] px-4 h-14 flex items-center justify-between">
+      <header className="bg-white dark:bg-[#1e293b] px-4 h-12 flex items-center justify-between">
         <button type="button" className="flex items-center gap-1 min-w-0">
           <h1 className="text-base font-bold text-gray-900 dark:text-white truncate">История ставок</h1>
           <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" strokeWidth={2} />
@@ -42,12 +40,12 @@ export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
         </button>
       </header>
 
-      <div className="bg-white dark:bg-[#1e293b] px-4 pb-4">
+      <div className="bg-white dark:bg-[#1e293b] px-4 pb-3">
         <div className="flex items-end justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[11px] text-gray-500 font-medium">Основной</p>
             <button type="button" className="flex items-center gap-1 mt-0.5">
-              <span className="text-2xl font-extrabold text-gray-900 dark:text-white tabular-nums leading-none">
+              <span className="text-xl font-extrabold text-gray-900 dark:text-white tabular-nums leading-none">
                 {balance.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TMTM
               </span>
               <ChevronDown className="w-4 h-4 text-gray-500 shrink-0" strokeWidth={2} />
@@ -56,14 +54,14 @@ export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
           <button
             type="button"
             onClick={() => onNavigate({ name: 'wallet' })}
-            className="shrink-0 bg-gray-800 text-white rounded-xl px-4 py-2 text-sm font-medium flex items-center gap-1 active:scale-95 transition-transform"
+            className="shrink-0 bg-gray-800 text-white rounded-xl px-3 py-1.5 text-sm font-medium flex items-center gap-1 active:scale-95 transition-transform"
           >
             <Plus className="w-4 h-4" strokeWidth={2.4} />
             Пополнить
           </button>
         </div>
 
-        <div className="flex gap-2 mt-4">
+        <div className="flex gap-2 mt-3">
           <button
             type="button"
             onClick={() => setMonthOpen(!monthOpen)}
@@ -87,14 +85,11 @@ export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
         </div>
       </div>
 
-      <button
-        type="button"
-        className="w-full flex items-center justify-between px-4 py-3"
-      >
+      <button type="button" className="w-full flex items-center justify-between px-4 py-2.5">
         <div className="text-left">
           <p className="text-sm font-semibold text-gray-900 dark:text-white">Статистика за период</p>
           <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
-            Сумма ставок: {periodSum.toLocaleString('ru-RU')} TMTM
+            Ставок: {stats.count} · {formatStakeMoney(stats.stakeTotal)}
           </p>
         </div>
         <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
@@ -103,7 +98,7 @@ export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
       {loading && visible.length === 0 ? (
         <div className="text-center py-16 text-sm font-bold text-gray-500">Загрузка...</div>
       ) : visible.length > 0 ? (
-        <div className="px-4">
+        <div className="px-3 space-y-2">
           {visible.map((bet) => (
             <HistoryItem
               key={bet.id}
@@ -119,73 +114,55 @@ export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
   );
 }
 
-function HistoryItem({ bet, onOpen }: { bet: BetHistoryEntry; onOpen: () => void }) {
-  const eventCount = bet.events.length;
-  const isExpress = eventCount > 1 || bet.type === 'express';
-  const typeLabel = isExpress ? `Экспресс (${eventCount} событий)` : 'Одинар';
-  const receipt = couponNumber(bet.id, bet.ticketCode);
-  const possibleWin = bet.payout || bet.amount * bet.totalOdds;
-  const isLive = (bet.status === 'in_progress' || bet.status === 'pending') && bet.events.some((event) => event.isLive);
+function HistoryItem({
+  bet,
+  onOpen,
+}: {
+  bet: BetHistoryEntry;
+  onOpen: () => void;
+}) {
+  const view = historyCardView(bet);
 
   return (
     <article
-      className="bg-white dark:bg-[#1e293b] rounded-3xl p-4 shadow-sm mb-3 flex flex-col gap-2 cursor-pointer active:scale-[0.99] transition-transform"
+      className="bg-white dark:bg-[#1e293b] rounded-2xl px-3 py-2.5 shadow-sm cursor-pointer active:scale-[0.99] transition-transform"
       onClick={onOpen}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 min-w-0">
-          {isExpress ? (
-            <Layers className="w-6 h-6 text-[#4ade80] shrink-0 mt-0.5" strokeWidth={1.5} />
-          ) : (
-            <SportIcon sport="football" className="w-6 h-6 text-[#4ade80] shrink-0 mt-0.5" />
-          )}
-          <div className="min-w-0">
-            <p className="text-[10px] text-gray-400 leading-tight">
-              {bet.date} · № {receipt}
-            </p>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <p className="text-sm font-bold text-gray-900 dark:text-white">{typeLabel}</p>
-              {isLive && (
-                <span className="text-[9px] font-bold text-white bg-red-500 px-1.5 py-0.5 rounded leading-none">
-                  LIVE
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <ChevronRight className="w-5 h-5 text-gray-400" strokeWidth={1.8} />
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] text-gray-500 leading-none tabular-nums truncate">
+          {view.dateTime} · №{view.couponNo}
+        </p>
+        <div className="flex items-center shrink-0">
           <span
             role="button"
             tabIndex={0}
-            className="w-8 h-8 flex items-center justify-center text-gray-400"
+            className="w-7 h-7 flex items-center justify-center text-gray-400"
             aria-label="Уведомления"
             onClick={(e) => e.stopPropagation()}
           >
-            <Bell className="w-4 h-4" strokeWidth={1.8} />
+            <Bell className="w-3.5 h-3.5" strokeWidth={1.8} />
           </span>
           <span
             role="button"
             tabIndex={0}
-            className="w-8 h-8 flex items-center justify-center text-gray-400"
+            className="w-7 h-7 flex items-center justify-center text-gray-400"
             aria-label="Ещё"
             onClick={(e) => e.stopPropagation()}
           >
-            <MoreHorizontal className="w-4 h-4" strokeWidth={1.8} />
+            <MoreHorizontal className="w-3.5 h-3.5" strokeWidth={1.8} />
           </span>
         </div>
       </div>
 
-      <dl className="flex flex-col gap-1.5 mt-1">
-        <Row label="Коэффициент:" value={bet.totalOdds.toFixed(2)} />
-        <Row label="Ставка:" value={`${bet.amount.toLocaleString('ru-RU')} TMTM`} />
-        <Row
-          label="Возможный выигрыш:"
-          value={bet.status === 'lost' ? '0 TMTM' : `${Number(possibleWin.toFixed(2)).toLocaleString('ru-RU')} TMTM`}
-        />
+      <p className="text-sm font-bold text-gray-900 dark:text-white mt-1">{view.typeLabel}</p>
+
+      <dl className="mt-1.5 flex flex-col gap-0.5">
+        <Row label="Коэффициент:" value={view.odds} />
+        <Row label="Ставка:" value={view.stake} />
+        <Row label="Возможный выигрыш:" value={view.potential} />
         <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-xs text-gray-400">Статус:</dt>
-          <dd className={`text-sm font-semibold ${statusClass(bet.status)}`}>{betStatusLabel(bet.status)}</dd>
+          <dt className="text-[11px] text-gray-400">Статус:</dt>
+          <dd className={`text-sm font-semibold ${playerStatusClass(view.status)}`}>{view.statusLabel}</dd>
         </div>
       </dl>
     </article>
@@ -195,7 +172,7 @@ function HistoryItem({ bet, onOpen }: { bet: BetHistoryEntry; onOpen: () => void
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-xs text-gray-400">{label}</dt>
+      <dt className="text-[11px] text-gray-400">{label}</dt>
       <dd className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{value}</dd>
     </div>
   );
