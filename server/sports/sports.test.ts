@@ -298,3 +298,16 @@ describe('035 SQL reuses Wallet Core', () => {
     assert.equal(evaluateSportsRisk({ stake: 1, mode: 'single', quotes: [] }).ok, true);
   });
 });
+
+describe('036 server-only sports place', () => {
+  it('closes the authenticated money RPC and does not reapply 035', () => {
+    const sql = read('supabase/migrations/20260903_036_server_only_sports_place.sql');
+    assert.match(sql, /Do not reapply 035/);
+    assert.match(sql, /RAISE EXCEPTION 'SPORTS_PLACE_SERVER_ONLY'/);
+    assert.match(sql, /public\.sports_place_for_player/);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.sports_place_for_player\(UUID, TEXT, NUMERIC, TEXT, JSONB\) TO service_role/);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_sports_place\(TEXT, NUMERIC, TEXT, JSONB\) FROM anon, authenticated, service_role/);
+    assert.equal(sql.includes('auth.uid()'), false);
+    assert.equal(sql.includes('UPDATE public.wallets'), false);
+  });
+});

@@ -10,9 +10,9 @@ import {
 } from '../staff/httpHandler.js';
 import { GAME_NO_STORE_HEADERS } from '../games/httpCache.js';
 import { requestIsSecure } from './playerCookies.js';
-import { livePlayerGamePorts } from './playerGamesService.js';
 import {
   listSportsBets,
+  liveSportsPlacePorts,
   placeSportsBet,
   type SportsPlacePorts,
 } from './sportsPlaceService.js';
@@ -123,7 +123,7 @@ export async function attachPlayerSportsHttp(
         cookieSecure: requestIsSecure(req.headers),
         body,
       },
-      livePlayerGamePorts(),
+        liveSportsPlacePorts(),
       log,
     );
     writeStaffJson(res, toStaffResult(result));
@@ -158,7 +158,7 @@ export async function handleVercelPlayerSports(
       cookieSecure: requestIsSecure(req.headers),
       body: req.body,
     },
-    ports ?? livePlayerGamePorts(),
+    ports ?? liveSportsPlacePorts(),
     log,
   );
   writeStaffJson(res, toStaffResult(result));

@@ -1,11 +1,21 @@
+import { GAME_NO_STORE_HEADERS, serverTimingHeader } from '../games/httpCache.js';
 import { isCanonicalSportsBetEnabled } from '../sports/enabled.js';
 import { fetchLsportsCanonicalQuote } from '../sports/feedClient.js';
+import { createSportsPlaceAsPlayerRpc, type SportsPlaceAsPlayer } from '../sports/placeRpc.js';
 import { decideSportsQuote } from '../sports/quote.js';
 import { evaluateSportsRisk } from '../sports/risk.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 import { staffError, StaffOnboardingError } from '../staff/errors.js';
-import { runPlayerGameRpc, type PlayerGameGatewayPorts } from './playerGamesService.js';
+import {
+  livePlayerGamePorts,
+  runPlayerGameRpc,
+  type PlayerGameGatewayPorts,
+} from './playerGamesService.js';
 import type { PlayerAuthHttpResult } from './playerAuthService.js';
+import {
+  readPlayerCookies,
+  serializePlayerCookies,
+} from './playerCookies.js';
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -26,6 +36,10 @@ function requireStake(value: unknown): number {
     throw staffError('STAKE_NOT_POSITIVE', 400);
   }
   return Number(n.toFixed(2));
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function parseQuote(value: unknown): SportsQuote {
@@ -67,6 +81,7 @@ function quoteHttpStatus(reason: string): number {
 
 export interface SportsPlacePorts extends PlayerGameGatewayPorts {
   fetchQuote?: (request: SportsQuoteRequest) => Promise<SportsQuote>;
+  placeAsVerifiedPlayer?: SportsPlaceAsPlayer;
 }
 
 async function defaultFetchQuote(request: SportsQuoteRequest): Promise<SportsQuote> {
@@ -94,6 +109,61 @@ function parseLeg(value: unknown): SportsQuoteRequest {
   };
 }
 
+async function resolveVerifiedPlayerUserId(
+  ports: SportsPlacePorts,
+  cookieHeader: string | undefined,
+  secure: boolean,
+): Promise<{ userId: string; cookies?: string[]; authMs: number; refreshed: boolean }> {
+  const started = Date.now();
+  const cookies = readPlayerCookies(cookieHeader);
+  if (!cookies.accessToken && !cookies.refreshToken) {
+    throw staffError('JWT_REQUIRED', 401);
+  }
+
+  let accessToken = cookies.accessToken;
+  let setCookies: string[] | undefined;
+  let refreshed = false;
+
+  if (!accessToken) {
+    if (!cookies.refreshToken) throw staffError('JWT_REQUIRED', 401);
+    try {
+      const tokens = await ports.refreshSession(cookies.refreshToken);
+      accessToken = tokens.accessToken;
+      setCookies = serializePlayerCookies(tokens.accessToken, tokens.refreshToken, secure);
+      refreshed = true;
+    } catch {
+      throw staffError('JWT_INVALID', 401);
+    }
+  }
+
+  try {
+    const user = await ports.getAuthUser(accessToken);
+    const userId = String(user.id ?? '').trim();
+    if (!userId || !isUuid(userId)) throw staffError('AUTH_REQUIRED', 401);
+    return { userId, cookies: setCookies, authMs: Date.now() - started, refreshed };
+  } catch (error) {
+    if (refreshed || !cookies.refreshToken) {
+      if (error instanceof StaffOnboardingError) throw error;
+      throw staffError('JWT_INVALID', 401);
+    }
+    let tokens;
+    try {
+      tokens = await ports.refreshSession(cookies.refreshToken);
+    } catch {
+      throw staffError('JWT_INVALID', 401);
+    }
+    const user = await ports.getAuthUser(tokens.accessToken);
+    const userId = String(user.id ?? '').trim();
+    if (!userId || !isUuid(userId)) throw staffError('AUTH_REQUIRED', 401);
+    return {
+      userId,
+      cookies: serializePlayerCookies(tokens.accessToken, tokens.refreshToken, secure),
+      authMs: Date.now() - started,
+      refreshed: true,
+    };
+  }
+}
+
 export async function placeSportsBet(
   ports: SportsPlacePorts,
   cookieHeader: string | undefined,
@@ -101,9 +171,13 @@ export async function placeSportsBet(
   secure: boolean,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<PlayerAuthHttpResult> {
+  const totalStart = Date.now();
   if (!isCanonicalSportsBetEnabled(env)) {
     throw staffError('SPORTS_BET_DISABLED', 403);
   }
+
+  const session = await resolveVerifiedPlayerUserId(ports, cookieHeader, secure);
+
   const stake = requireStake(body.stake);
   const modeRaw = String(body.mode ?? 'single').trim().toLowerCase();
   const mode = modeRaw === 'express' ? 'express' : 'single';
@@ -134,7 +208,7 @@ export async function placeSportsBet(
       throw staffError('FEED_STALE', 409);
     }
     const decision = decideSportsQuote(request, quote, {
-      bettingEnabled: true,
+      bettingEnabled: isCanonicalSportsBetEnabled(env),
     });
     if (!decision.ok) {
       throw new StaffOnboardingError(decision.reason, quoteHttpStatus(decision.reason), decision.reason, {
@@ -166,12 +240,33 @@ export async function placeSportsBet(
   const risk = evaluateSportsRisk({ stake, mode, quotes });
   if (!risk.ok) throw staffError(risk.code, 409);
 
-  return runPlayerGameRpc(ports, cookieHeader, secure, 'player_sports_place', {
-    p_idempotency_key: idempotencyKey,
-    p_stake: stake,
-    p_mode: mode,
-    p_legs: accepted,
+  if (!isCanonicalSportsBetEnabled(env)) {
+    throw staffError('SPORTS_BET_DISABLED', 403);
+  }
+
+  const place = ports.placeAsVerifiedPlayer ?? createSportsPlaceAsPlayerRpc();
+  const rpcStart = Date.now();
+  const payload = await place({
+    playerUserId: session.userId,
+    idempotencyKey,
+    stake,
+    mode,
+    legs: accepted,
   });
+  return {
+    status: 200,
+    body: payload,
+    cookies: session.cookies,
+    headers: {
+      ...GAME_NO_STORE_HEADERS,
+      'Server-Timing': serverTimingHeader({
+        authMs: session.authMs,
+        rpcMs: Date.now() - rpcStart,
+        totalMs: Date.now() - totalStart,
+        refreshed: session.refreshed,
+      }),
+    },
+  };
 }
 
 export async function listSportsBets(
@@ -180,4 +275,11 @@ export async function listSportsBets(
   secure: boolean,
 ): Promise<PlayerAuthHttpResult> {
   return runPlayerGameRpc(ports, cookieHeader, secure, 'player_sports_list', {});
+}
+
+export function liveSportsPlacePorts(): SportsPlacePorts {
+  return {
+    ...livePlayerGamePorts(),
+    placeAsVerifiedPlayer: createSportsPlaceAsPlayerRpc(),
+  };
 }
