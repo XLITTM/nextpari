@@ -128,6 +128,67 @@ export function shouldReplaceMarket(
   return receivedAt >= snapshotRequestedAt;
 }
 
+function marketIdKey(marketId: string | number | null): string {
+  return String(marketId ?? '');
+}
+
+function newestLastUpdate(values: Array<string | null>): string | null {
+  let newest: { raw: string; ms: number } | null = null;
+  for (const raw of values) {
+    if (!raw) continue;
+    const ms = parseTimestamp(raw);
+    if (ms == null) continue;
+    if (!newest || ms > newest.ms) newest = { raw, ms };
+  }
+  return newest?.raw ?? values.find((value) => value != null) ?? null;
+}
+
+function groupIncomingMarketReplacements(
+  fixtureId: number,
+  markets: Record<string, unknown>[],
+): Map<string, {
+  marketId: string | number | null;
+  keys: Set<string>;
+  groups: Array<{
+    key: string;
+    line: string;
+    payload: Record<string, unknown>;
+    incomingLastUpdate: string | null;
+  }>;
+}> {
+  const byId = new Map<string, {
+    marketId: string | number | null;
+    keys: Set<string>;
+    groups: Array<{
+      key: string;
+      line: string;
+      payload: Record<string, unknown>;
+      incomingLastUpdate: string | null;
+    }>;
+  }>();
+  for (const market of markets) {
+    const marketId = marketIdOf(market);
+    const idKey = marketIdKey(marketId);
+    let bucket = byId.get(idKey);
+    if (!bucket) {
+      bucket = { marketId, keys: new Set(), groups: [] };
+      byId.set(idKey, bucket);
+    }
+    for (const group of expandMarketLineGroups(market)) {
+      const key = canonicalMarketKey(fixtureId, market, group.line);
+      const incomingLastUpdate = marketLastUpdate(group.payload);
+      bucket.keys.add(key);
+      bucket.groups.push({
+        key,
+        line: group.line,
+        payload: group.payload,
+        incomingLastUpdate,
+      });
+    }
+  }
+  return byId;
+}
+
 export class LsportsInPlayStore {
   private readonly fixtures = new Map<number, LsportsFixtureState>();
   private activeEvents: number[] = [];
@@ -328,33 +389,41 @@ export class LsportsInPlayStore {
     const state = this.ensure(fixtureId);
     state.fixture = mergeFixtureMetadata(state.fixture, readFixture(event));
     let replaced = false;
-    for (const market of readMarkets(event)) {
-      const marketId = marketIdOf(market);
-      for (const group of expandMarketLineGroups(market)) {
-        const key = canonicalMarketKey(fixtureId, market, group.line);
-        const incomingLastUpdate = marketLastUpdate(group.payload);
-        const existing = state.markets.get(key);
-        if (existing && !shouldReplaceMarket(incomingLastUpdate, existing.lastUpdate, options)) {
+    const replacements = groupIncomingMarketReplacements(fixtureId, readMarkets(event));
+    for (const [idKey, incoming] of replacements) {
+      for (const group of incoming.groups) {
+        const existing = state.markets.get(group.key);
+        if (existing && !shouldReplaceMarket(group.incomingLastUpdate, existing.lastUpdate, options)) {
           continue;
         }
         const settlements = existing?.settlements ?? new Map();
         clearStickySettlementsForOpenBets(settlements, group.payload);
-        state.markets.set(key, {
-          key,
-          marketId,
+        state.markets.set(group.key, {
+          key: group.key,
+          marketId: incoming.marketId,
           line: group.line,
           payload: overlaySettlements(group.payload, settlements),
-          lastUpdate: incomingLastUpdate,
+          lastUpdate: group.incomingLastUpdate,
           settlements,
         });
         replaced = true;
         if (source === 'rmq-3') {
           this.ingestCounters.marketsAppliedFromType3 += 1;
-          if (String(marketId) === '1') this.ingestCounters.market1AppliedFromType3 += 1;
+          if (idKey === '1') this.ingestCounters.market1AppliedFromType3 += 1;
         } else {
           this.ingestCounters.marketsAppliedFromSnapshot += 1;
-          if (String(marketId) === '1') this.ingestCounters.market1AppliedFromSnapshot += 1;
+          if (idKey === '1') this.ingestCounters.market1AppliedFromSnapshot += 1;
         }
+      }
+      const incomingUpdate = newestLastUpdate(
+        incoming.groups.map((group) => group.incomingLastUpdate),
+      );
+      for (const [key, record] of [...state.markets.entries()]) {
+        if (marketIdKey(record.marketId) !== idKey) continue;
+        if (incoming.keys.has(key)) continue;
+        if (!shouldReplaceMarket(incomingUpdate, record.lastUpdate, options)) continue;
+        state.markets.delete(key);
+        replaced = true;
       }
     }
     if (replaced) this.markLive(state, source);

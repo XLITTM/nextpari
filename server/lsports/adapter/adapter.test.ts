@@ -340,6 +340,8 @@ const OVER_25 = '220000000000000001';
 const UNDER_25 = '220000000000000002';
 const OVER_35 = '220000000000000003';
 const UNDER_35 = '220000000000000004';
+const OVER_45 = '220000000000000005';
+const UNDER_45 = '220000000000000006';
 const AH_HOME_05 = '330000000000000001';
 const AH_AWAY_05 = '330000000000000002';
 const AH_HOME_15 = '330000000000000003';
@@ -478,7 +480,7 @@ describe('lsports multi-market football adapter', () => {
     assert.equal(JSON.stringify(adapted).includes('3.25'), false);
   });
 
-  it('keeps 2.5 and 3.5 isolated when Type 3 replaces only one totals line', () => {
+  it('prunes exploded totals lines omitted from a later Type 3 Market.Id replacement', () => {
     const store = new LsportsInPlayStore();
     store.ingestFixturesSnapshot(snapshotFixtures());
     store.ingestRmq(type2());
@@ -488,10 +490,79 @@ describe('lsports multi-market football adapter', () => {
         Id: 2,
         Name: 'Under/Over',
         Status: 1,
+        MainLine: '2.5',
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.90', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '1.95', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_45, Name: 'Over', Line: '4.5', BaseLine: '4.5', Price: '3.10', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_45, Name: 'Under', Line: '4.5', BaseLine: '4.5', Price: '1.35', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 17,
+        Name: 'Both Teams To Score',
+        Status: 1,
+        Bets: [
+          { Id: BTTS_YES, Name: 'Yes', Price: '1.80', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: BTTS_NO, Name: 'No', Price: '2.05', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+    ]));
+    store.ingestRmq(footballType3([{
+      Id: 2,
+      Name: 'Under/Over',
+      Status: 1,
+      MainLine: '2.5',
+      Bets: [
+        { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.72', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '2.10', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+      ],
+    }]));
+    const { matches } = adaptLsportsStore(store);
+    const totals = matches[0]?.markets.find((market) => market.marketId === '2');
+    assert.deepEqual(totals?.entries.map((entry) => entry.line).sort(), ['2.5', '3.5']);
+    assert.equal(totals?.entries.find((entry) => entry.line === '2.5')?.outcomes.find((row) => row.key === 'over')?.odds, 1.72);
+    assert.equal(totals?.entries.find((entry) => entry.line === '3.5')?.outcomes.find((row) => row.key === 'over')?.odds, 2.2);
+    assert.equal(totals?.entries.some((entry) => entry.line === '4.5'), false);
+    const btts = matches[0]?.markets.find((market) => market.marketId === '17');
+    assert.deepEqual(btts?.entries[0]?.outcomes.map((row) => row.key), ['yes', 'no']);
+    assert.equal(mainOdds(matches[0]?.markets ?? [])['1'], 1.85);
+  });
+
+  it('unions same-Market.Id objects in one Type 3 event before pruning siblings', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets(),
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        MainLine: '2.5',
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.90', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '1.95', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_45, Name: 'Over', Line: '4.5', BaseLine: '4.5', Price: '3.10', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_45, Name: 'Under', Line: '4.5', BaseLine: '4.5', Price: '1.35', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+    ]));
+    store.ingestRmq(footballType3([
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
         BaseLine: '2.5',
         Bets: [
-          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.90', Status: 1 },
-          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '1.95', Status: 1 },
+          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.72', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '2.10', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
         ],
       },
       {
@@ -500,29 +571,16 @@ describe('lsports multi-market football adapter', () => {
         Status: 1,
         BaseLine: '3.5',
         Bets: [
-          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1 },
-          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1 },
+          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.05', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.80', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
         ],
       },
     ]));
-    store.ingestRmq(footballType3([{
-      Id: 2,
-      Name: 'Under/Over',
-      Status: 1,
-      BaseLine: '2.5',
-      Bets: [
-        { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.72', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
-        { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '2.10', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
-      ],
-    }]));
     const { matches } = adaptLsportsStore(store);
     const totals = matches[0]?.markets.find((market) => market.marketId === '2');
-    const line25 = totals?.entries.find((entry) => entry.line === '2.5');
-    const line35 = totals?.entries.find((entry) => entry.line === '3.5');
-    assert.equal(line25?.outcomes.find((row) => row.key === 'over')?.odds, 1.72);
-    assert.equal(line35?.outcomes.find((row) => row.key === 'over')?.odds, 2.2);
-    assert.equal(line25?.outcomes.find((row) => row.key === 'over')?.providerBetId, String(OVER_25));
-    assert.equal(mainOdds(matches[0]?.markets ?? [])['1'], 1.85);
+    assert.deepEqual(totals?.entries.map((entry) => entry.line).sort(), ['2.5', '3.5']);
+    assert.equal(totals?.entries.find((entry) => entry.line === '3.5')?.outcomes.find((row) => row.key === 'over')?.odds, 2.05);
+    assert.equal(totals?.entries.some((entry) => entry.line === '4.5'), false);
   });
 
   it('does not publish suspended or settled extra markets and never uses invalid Price', () => {

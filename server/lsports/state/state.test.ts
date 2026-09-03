@@ -219,6 +219,58 @@ describe('lsports inplay state engine', () => {
     assert.notEqual(canonicalMarketKey(FIXTURE_ID, totals, '2.5'), `${FIXTURE_ID}:2:`);
   });
 
+  it('prunes exploded Market.Id siblings omitted from a later Type 3 replacement', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestRmq({
+      Header: { Type: 3, ServerTimestamp: 3000 },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE_ID,
+          Markets: [{
+            Id: 2,
+            Name: 'Under/Over',
+            Status: 1,
+            MainLine: '2.5',
+            Bets: [
+              { Id: '25', Name: 'Over', Line: '2.5', BaseLine: '2.5', Status: 1, Price: '1.90', LastUpdate: '2026-09-03T12:00:00Z' },
+              { Id: '35', Name: 'Over', Line: '3.5', BaseLine: '3.5', Status: 1, Price: '2.20', LastUpdate: '2026-09-03T12:00:00Z' },
+              { Id: '45', Name: 'Over', Line: '4.5', BaseLine: '4.5', Status: 1, Price: '3.10', LastUpdate: '2026-09-03T12:00:00Z' },
+            ],
+          }, {
+            Id: 17,
+            Name: 'Both Teams To Score',
+            Status: 1,
+            Bets: [{ Id: 'yes', Name: 'Yes', Status: 1, Price: '1.80', LastUpdate: '2026-09-03T12:00:00Z' }],
+          }],
+        }],
+      },
+    });
+    store.ingestRmq({
+      Header: { Type: 3, ServerTimestamp: 3100 },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE_ID,
+          Markets: [{
+            Id: 2,
+            Name: 'Under/Over',
+            Status: 1,
+            MainLine: '2.5',
+            Bets: [
+              { Id: '25', Name: 'Over', Line: '2.5', BaseLine: '2.5', Status: 1, Price: '1.72', LastUpdate: '2026-09-03T12:05:00Z' },
+              { Id: '35', Name: 'Over', Line: '3.5', BaseLine: '3.5', Status: 1, Price: '2.20', LastUpdate: '2026-09-03T12:05:00Z' },
+            ],
+          }],
+        }],
+      },
+    });
+    const fixture = store.getFixture(FIXTURE_ID);
+    assert.equal(fixture?.markets.has('19981248:2:2.5'), true);
+    assert.equal(fixture?.markets.has('19981248:2:3.5'), true);
+    assert.equal(fixture?.markets.has('19981248:2:4.5'), false);
+    assert.equal(fixture?.markets.has('19981248:17:'), true);
+    assert.equal(betById(fixture?.markets.get('19981248:2:2.5'), '25')?.Price, '1.72');
+  });
+
   it('applies Type 35 Settlement codes without payout logic', () => {
     const store = new LsportsInPlayStore();
     store.ingestRmq(type3Market({ priceHome: '20', lastUpdate: '2026-09-01T22:51:11Z' }));
