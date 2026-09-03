@@ -66,16 +66,19 @@ export async function placeBet(params: {
   const blocked = blockedSportsBet();
   if (blocked) return { ok: false, error: blocked };
 
+  const payload = serializeSportsPlaceBody({
+    selections: params.selections,
+    stake: params.stake,
+    idempotencyKey: params.idempotencyKey ?? newIdempotencyKey(),
+  });
+  if (!payload) return { ok: false, error: 'EVENT_UNAVAILABLE' };
+
   const res = await fetch('/api/player/sports/place', {
     method: 'POST',
     credentials: 'same-origin',
     cache: 'no-store',
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    body: JSON.stringify(serializeSportsPlaceBody({
-      selections: params.selections,
-      stake: params.stake,
-      idempotencyKey: params.idempotencyKey ?? newIdempotencyKey(),
-    })),
+    body: JSON.stringify(payload),
   });
   const body = await readJson(res);
   if (!res.ok || body.ok === false) {

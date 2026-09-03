@@ -26,17 +26,18 @@ interface OddButtonProps {
   label: string;
   odds: number;
   selection: BetSelection;
-  onClick?: () => void;
   active?: boolean;
+  locked?: boolean;
   size?: 'sm' | 'md' | 'lg';
   layout?: 'row' | 'column';
 }
 
-export function OddButton({ label, odds, selection, onClick, active, size = 'md', layout = 'row' }: OddButtonProps) {
+export function OddButton({ label, odds, selection, active, locked = false, size = 'md', layout = 'row' }: OddButtonProps) {
   const flash = useOddsFlash(odds);
   const { isSelectionActive } = useBetSlip();
   const handlers = useOddInteraction(selection);
   const isActive = active ?? isSelectionActive(selection.matchId, selection.outcome);
+  const disabled = locked || odds <= 1;
   const flashBtn = oddsFlashButtonClass(flash);
   const flashText = oddsFlashTextClass(flash);
 
@@ -55,11 +56,11 @@ export function OddButton({ label, odds, selection, onClick, active, size = 'md'
         : 'bg-white dark:bg-[#0f172a] border-gray-200 dark:border-gray-600 hover:border-brand-600';
 
   const text = flashText ? flashText : isActive ? 'text-white' : 'text-gray-900 dark:text-white';
-  const eventHandlers = onClick
+  const eventHandlers = disabled
     ? {
         onClick: (e: React.MouseEvent) => {
+          e.preventDefault();
           e.stopPropagation();
-          onClick();
         },
       }
     : handlers;
@@ -68,7 +69,8 @@ export function OddButton({ label, odds, selection, onClick, active, size = 'md'
     return (
       <button
         {...eventHandlers}
-        className={`flex flex-col items-center justify-center gap-0.5 rounded-2xl border active:scale-95 transition-[background-color,border-color,box-shadow,color] duration-500 ${sizeClasses[size]} ${surface}`}
+        disabled={disabled}
+        className={`flex flex-col items-center justify-center gap-0.5 rounded-2xl border active:scale-95 select-none touch-manipulation transition-[background-color,border-color,box-shadow,color] duration-500 ${sizeClasses[size]} ${surface} ${disabled ? 'opacity-70' : ''}`}
       >
         <span className={`text-xs font-bold transition-colors duration-500 ${text}`}>{label}</span>
         <OddsFlashValue odds={odds} flash={flash} className={`font-extrabold transition-colors duration-500 ${text}`} />
@@ -79,7 +81,8 @@ export function OddButton({ label, odds, selection, onClick, active, size = 'md'
   return (
     <button
       {...eventHandlers}
-      className={`flex items-center justify-between rounded-2xl border active:scale-95 select-none transition-[background-color,border-color,box-shadow,color] duration-500 ${sizeClasses[size]} ${surface}`}
+      disabled={disabled}
+      className={`flex items-center justify-between rounded-2xl border active:scale-95 select-none touch-manipulation transition-[background-color,border-color,box-shadow,color] duration-500 ${sizeClasses[size]} ${surface} ${disabled ? 'opacity-70' : ''}`}
     >
       <span className={`text-xs font-bold transition-colors duration-500 ${text}`}>{label}</span>
       <OddsFlashValue odds={odds} flash={flash} className={`font-extrabold transition-colors duration-500 ${text}`} />

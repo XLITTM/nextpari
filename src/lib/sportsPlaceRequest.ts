@@ -41,12 +41,16 @@ export function serializeSportsPlaceBody(params: {
   mode: 'single' | 'express';
   idempotencyKey: string;
   selections: SportsPlaceLegPayload[];
-} {
+} | null {
+  const selections = params.selections.map(serializeSportsPlaceLeg);
+  if (selections.some((leg) => !leg.outcomeId || !assertLsportsPlaceLeg(leg))) {
+    return null;
+  }
   return {
     stake: params.stake,
     mode: slipPlaceMode(params.selections),
     idempotencyKey: params.idempotencyKey,
-    selections: params.selections.map(serializeSportsPlaceLeg),
+    selections,
   };
 }
 

@@ -1,11 +1,14 @@
 import type { BetSelection } from '../types';
+import { acceptLsportsSelection } from './sportsOddGuard';
 import { placeModeFromCount, type SportsPlaceMode } from './sportsPlaceMode';
 
 export function addSlipSelection(prev: BetSelection[], selection: BetSelection): BetSelection[] {
-  if (prev.some((row) => row.id === selection.id)) {
-    return prev.filter((row) => row.id !== selection.id);
+  const accepted = acceptLsportsSelection(selection);
+  if (!accepted) return prev;
+  if (prev.some((row) => row.id === accepted.id)) {
+    return prev.filter((row) => row.id !== accepted.id);
   }
-  return [...prev.filter((row) => row.matchId !== selection.matchId), selection];
+  return [...prev.filter((row) => row.matchId !== accepted.matchId), accepted];
 }
 
 export function removeSlipSelection(

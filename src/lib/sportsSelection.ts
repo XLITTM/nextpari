@@ -1,32 +1,20 @@
 import { isLsportsDisplayEvent } from './lsportsFeed';
-import { outcomeLabel, type ParsedMarket, type ParsedMarketEntry, type ParsedOutcome } from './odds-parser';
+import { outcomeLabel, type ParsedMarket } from './odds-parser';
 import { useSportsStore } from '../stores/sportsStore';
 import type { BetSelection, MatchEvent } from '../types';
-import {
-  hasCompleteLsportsIdentity,
-  selectionFromLsportsOutcome,
-} from './sportsPlaceIdentity';
+import { selectionFromLsportsOutcome } from './sportsPlaceIdentity';
 import type { ExtraCardOutcome } from './cardOdds';
+import {
+  clickableCardSelectionFromMarkets,
+  lsportsCardSelectionFromMarkets,
+  selectionFromProviderBetIdInMarkets,
+} from './sportsCardIdentity';
 
 export { hasCompleteLsportsIdentity, selectionFromLsportsOutcome } from './sportsPlaceIdentity';
-
-const LABEL_TO_KEY: Record<string, string> = {
-  П1: 'home',
-  П2: 'away',
-  X: 'draw',
-  '1': 'home',
-  '2': 'away',
-  ТБ: 'over',
-  ТМ: 'under',
-  Да: 'yes',
-  Нет: 'no',
-  '1X': '1x',
-  '12': '12',
-  X2: 'x2',
-  Нечет: 'odd',
-  Чет: 'even',
-  Ровно: 'exactly',
-};
+export {
+  clickableCardSelectionFromMarkets,
+  lsportsCardSelectionFromMarkets,
+} from './sportsCardIdentity';
 
 export function lsportsStoreMarkets(matchId: string): ParsedMarket[] {
   const state = useSportsStore.getState().getEvent(matchId);
@@ -34,52 +22,12 @@ export function lsportsStoreMarkets(matchId: string): ParsedMarket[] {
   return Object.values(state.markets);
 }
 
-function is1x2Market(market: ParsedMarket): boolean {
-  return market.marketId === '1' || market.key === '1_1' || /^1x2$/i.test(market.name);
-}
-
-function looksLikeBetId(value: string): boolean {
-  return /^\d{6,}$/.test(value.trim());
-}
-
-function outcomeMatchesLabel(
-  entry: ParsedMarketEntry,
-  outcome: ParsedOutcome,
-  label: string,
-): boolean {
-  const wanted = LABEL_TO_KEY[label] ?? label.toLowerCase();
-  const display = outcomeLabel(outcome.key, entry.line);
-  return outcome.key === wanted
-    || display === label
-    || outcome.key === label
-    || (looksLikeBetId(label) && outcome.providerBetId === label);
-}
-
-function findNormalizedOutcome(
-  markets: ParsedMarket[],
-  outcomeLabelText: string,
-  marketName: string,
-): { market: ParsedMarket; entry: ParsedMarketEntry; outcome: ParsedOutcome } | null {
-  const named = markets.filter((row) => row.name === marketName);
-  const search = named.length
-    ? named
-    : /^(1x2)$/i.test(marketName)
-      ? markets.filter(is1x2Market)
-      : markets.filter((row) => {
-        const display = [row.name, ...row.entries.map((entry) => [row.name, entry.line].filter(Boolean).join(' '))];
-        return display.some((name) => name === marketName);
-      });
-  for (const market of search) {
-    for (const entry of market.entries) {
-      for (const outcome of entry.outcomes) {
-        if (!outcome.providerBetId) continue;
-        if (outcomeMatchesLabel(entry, outcome, outcomeLabelText)) {
-          return { market, entry, outcome };
-        }
-      }
-    }
-  }
-  return null;
+export function selectionFromProviderBetId(
+  match: MatchEvent,
+  providerBetId: string,
+  markets = lsportsStoreMarkets(match.id),
+): BetSelection | null {
+  return selectionFromProviderBetIdInMarkets(match, providerBetId, markets);
 }
 
 export function lsportsIdentity(
@@ -87,11 +35,39 @@ export function lsportsIdentity(
   outcomeLabelText: string,
   marketName: string,
 ): Partial<BetSelection> {
-  const markets = lsportsStoreMarkets(match.id);
-  if (!markets.length) return {};
-  const found = findNormalizedOutcome(markets, outcomeLabelText, marketName);
-  if (!found) return {};
-  return selectionFromLsportsOutcome(match, found.market, found.entry, found.outcome) ?? {};
+  return lsportsCardSelectionFromMarkets(match, lsportsStoreMarkets(match.id), outcomeLabelText, marketName) ?? {};
+}
+
+export function isLsportsMatch(match: Pick<MatchEvent, 'id' | 'feedTag'>): boolean {
+  return match.feedTag === 'lsports' || lsportsStoreMarkets(match.id).length > 0;
+}
+
+export function lsportsCardSelection(
+  match: MatchEvent,
+  outcomeLabelText: string,
+  marketName: string,
+): BetSelection | null {
+  return lsportsCardSelectionFromMarkets(
+    match,
+    lsportsStoreMarkets(match.id),
+    outcomeLabelText,
+    marketName,
+  );
+}
+
+export function clickableCardSelection(
+  match: MatchEvent,
+  outcomeLabelText: string,
+  marketName: string,
+  odds: number,
+): { selection: BetSelection; locked: boolean } {
+  return clickableCardSelectionFromMarkets(
+    match,
+    lsportsStoreMarkets(match.id),
+    outcomeLabelText,
+    marketName,
+    odds,
+  );
 }
 
 export function withLsportsIdentity(
@@ -100,17 +76,18 @@ export function withLsportsIdentity(
   outcomeLabelText: string,
   marketName: string,
 ): BetSelection {
-  const identity = lsportsIdentity(match, outcomeLabelText, marketName);
-  if (!identity.outcomeId) return base;
-  return { ...base, ...identity };
+  return lsportsCardSelection(match, outcomeLabelText, marketName) ?? {
+    ...base,
+    provider: isLsportsMatch(match) || match.feedTag === 'lsports' ? 'lsports' : base.provider,
+    fixtureId: match.id,
+  };
 }
 
 export function isSelectableLsportsOutcome(match: MatchEvent, outcomeLabelText: string, marketName: string): boolean {
-  const markets = lsportsStoreMarkets(match.id);
-  if (!markets.length) {
-    return match.feedTag !== 'lsports';
+  if (isLsportsMatch(match)) {
+    return lsportsCardSelection(match, outcomeLabelText, marketName) != null;
   }
-  return hasCompleteLsportsIdentity(lsportsIdentity(match, outcomeLabelText, marketName));
+  return true;
 }
 
 export function extraLsportsMarketRows(
