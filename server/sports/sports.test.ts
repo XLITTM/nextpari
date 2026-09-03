@@ -19,6 +19,18 @@ import type { SportsQuote } from './types.js';
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const FIXTURE = 19981248;
 const HOME_BET = '117469638719981250';
+const ONE_X2_KEY = `${FIXTURE}:1:`;
+
+function oneX2Request(overrides: Record<string, unknown> = {}) {
+  return {
+    fixtureId: String(FIXTURE),
+    outcomeId: HOME_BET,
+    marketId: '1',
+    marketKey: ONE_X2_KEY,
+    price: 1.85,
+    ...overrides,
+  };
+}
 
 function read(rel: string) {
   return readFileSync(join(root, rel), 'utf8');
@@ -97,7 +109,7 @@ describe('canonical sports betting switch', () => {
 describe('quote revalidation', () => {
   it('accepts an unchanged open LSports price when betting is enabled', () => {
     const decision = decideSportsQuote(
-      { fixtureId: String(FIXTURE), outcomeId: HOME_BET, marketId: '1', price: 1.85 },
+      oneX2Request(),
       openQuote(),
       { bettingEnabled: true },
     );
@@ -107,7 +119,7 @@ describe('quote revalidation', () => {
 
   it('rejects when the global switch is off', () => {
     const decision = decideSportsQuote(
-      { fixtureId: String(FIXTURE), outcomeId: HOME_BET, price: 1.85 },
+      oneX2Request(),
       openQuote(),
       { bettingEnabled: false },
     );
@@ -117,7 +129,7 @@ describe('quote revalidation', () => {
 
   it('rejects a browser fake price with ODDS_CHANGED and returns live price', () => {
     const decision = decideSportsQuote(
-      { fixtureId: String(FIXTURE), outcomeId: HOME_BET, price: 9.99 },
+      oneX2Request({ price: 9.99 }),
       openQuote({ price: 1.85 }),
       { bettingEnabled: true },
     );
@@ -131,58 +143,59 @@ describe('quote revalidation', () => {
   it('rejects suspended, missing fixture, missing Bet.Id, stale heartbeat, and invalid price', () => {
     assert.equal(
       decideSportsQuote(
-        { fixtureId: String(FIXTURE), outcomeId: HOME_BET, price: 1.85 },
+        oneX2Request(),
         openQuote({ selectable: false, status: 'suspended' }),
       ).ok === false
         && (decideSportsQuote(
-          { fixtureId: String(FIXTURE), outcomeId: HOME_BET, price: 1.85 },
+          oneX2Request(),
           openQuote({ selectable: false, status: 'suspended' }),
         ) as { reason: string }).reason,
       'MARKET_SUSPENDED',
     );
     assert.equal(
       (decideSportsQuote(
-        { fixtureId: String(FIXTURE), outcomeId: HOME_BET, price: 1.85 },
+        oneX2Request(),
         openQuote({ status: 'missing', outcomeId: HOME_BET }),
       ) as { reason: string }).reason,
       'EVENT_UNAVAILABLE',
     );
     assert.equal(
       (decideSportsQuote(
-        { fixtureId: String(FIXTURE), outcomeId: '', price: 1.85 },
+        oneX2Request({ outcomeId: '' }),
         openQuote(),
       ) as { reason: string }).reason,
       'MISSING_BET_ID',
     );
     assert.equal(
       (decideSportsQuote(
-        { fixtureId: '', outcomeId: HOME_BET, price: 1.85 },
+        oneX2Request({ fixtureId: '' }),
         openQuote(),
       ) as { reason: string }).reason,
       'MISSING_FIXTURE',
     );
     assert.equal(
       (decideSportsQuote(
-        { fixtureId: String(FIXTURE), outcomeId: HOME_BET, price: 1.85 },
+        oneX2Request(),
         openQuote({ health: 'STALE', heartbeatAgeMs: 20_000 }),
       ) as { reason: string }).reason,
       'FEED_STALE',
     );
     assert.equal(
       (decideSportsQuote(
-        { fixtureId: String(FIXTURE), outcomeId: HOME_BET, price: 1.85 },
+        oneX2Request(),
         openQuote({ price: 1 }),
       ) as { reason: string }).reason,
       'INVALID_PRICE',
     );
   });
 
-  it('looks up canonical store by FixtureId + Bet.Id and never uses ProviderMarkets', () => {
+  it('looks up canonical store by exact FixtureId + Market.Id + marketKey + Bet.Id', () => {
     const store = new LsportsInPlayStore();
     seedOpen1x2(store);
     const quote = lookupCanonicalQuote(store, {
       fixtureId: String(FIXTURE),
       marketId: '1',
+      marketKey: ONE_X2_KEY,
       outcomeId: HOME_BET,
       feedType: 'inplay',
     });
@@ -190,6 +203,13 @@ describe('quote revalidation', () => {
     assert.equal(quote.price, 1.85);
     assert.equal(quote.outcomeId, HOME_BET);
     assert.equal(quote.fixtureId, String(FIXTURE));
+    const byBetIdOnly = lookupCanonicalQuote(store, {
+      fixtureId: String(FIXTURE),
+      outcomeId: HOME_BET,
+      feedType: 'inplay',
+    });
+    assert.equal(byBetIdOnly.status, 'missing');
+    assert.equal(byBetIdOnly.selectable, false);
     const adapter = read('server/lsports/adapter/markets.ts');
     assert.match(adapter, /toDecimalPrice\(bet\.Price/);
     assert.equal(adapter.includes('ProviderMarkets'), false);
@@ -262,6 +282,7 @@ describe('quote revalidation', () => {
     const wrongLine = lookupCanonicalQuote(store, {
       fixtureId: String(FIXTURE),
       marketId: '2',
+      marketKey: `${FIXTURE}:2:3.5`,
       line: '3.5',
       outcomeId: '2201',
     });
@@ -287,6 +308,7 @@ describe('quote revalidation', () => {
       {
         fixtureId: String(FIXTURE),
         marketId: '2',
+        marketKey: `${FIXTURE}:2:2.5`,
         line: '3.5',
         outcomeId: '2201',
         price: 1.9,
@@ -316,6 +338,7 @@ describe('quote revalidation', () => {
     const suspended = lookupCanonicalQuote(store, {
       fixtureId: String(FIXTURE),
       marketId: '2',
+      marketKey: `${FIXTURE}:2:2.5`,
       line: '2.5',
       outcomeId: '2201',
     });
@@ -324,6 +347,7 @@ describe('quote revalidation', () => {
       {
         fixtureId: String(FIXTURE),
         marketId: '2',
+        marketKey: `${FIXTURE}:2:2.5`,
         line: '2.5',
         outcomeId: '2201',
         price: 1.9,
@@ -332,6 +356,266 @@ describe('quote revalidation', () => {
     );
     assert.equal(afterSelect.ok, false);
     if (!afterSelect.ok) assert.equal(afterSelect.reason, 'MARKET_SUSPENDED');
+  });
+});
+
+describe('LSports exact canonical identity', () => {
+  const REAL_FIXTURE = 20024076;
+  const OVER_25 = '136472347120024080';
+  const UNDER_25 = '172546680120024060';
+  const OVER_35 = '136472343820024080';
+  const AH_HOME = '67812785420024080';
+  const AH_AWAY = '138540931820024080';
+  const CORNER_UNDER = '183049533419994140';
+  const CORNER_OVER = '183049540019994140';
+
+  function seedRealPackedLines(store: LsportsInPlayStore) {
+    store.ingestHeartbeat({ Header: { Type: 32, ServerTimestamp: 1 } }, Date.now());
+    store.ingestFixturesSnapshot({
+      Header: { Type: 1, ServerTimestamp: 1 },
+      Body: [{
+        FixtureId: REAL_FIXTURE,
+        Fixture: {
+          Sport: { Id: 6046, Name: 'Football' },
+          Participants: [
+            { Name: 'Home FC', Position: '1' },
+            { Name: 'Away FC', Position: '2' },
+          ],
+        },
+      }],
+    });
+    store.ingestMarketDelta({
+      Header: { Type: 3, ServerTimestamp: 2 },
+      Body: {
+        Events: [{
+          FixtureId: REAL_FIXTURE,
+          Markets: [
+            {
+              Id: 1,
+              Name: '1X2',
+              Status: 1,
+              Bets: [{ Id: HOME_BET, Name: '1', Status: 1, Price: 1.85 }],
+            },
+            {
+              Id: 2,
+              Name: 'Under/Over',
+              Status: 1,
+              MainLine: '2.5',
+              BaseLine: null,
+              Line: null,
+              Bets: [
+                {
+                  Id: OVER_25,
+                  Name: 'Over',
+                  Status: 1,
+                  Line: '2.5',
+                  BaseLine: '2.5',
+                  Handicap: null,
+                  Total: null,
+                  Price: '2.14',
+                },
+                {
+                  Id: UNDER_25,
+                  Name: 'Under',
+                  Status: 1,
+                  Line: '2.5',
+                  BaseLine: '2.5',
+                  Handicap: null,
+                  Total: null,
+                  Price: '1.675',
+                },
+                {
+                  Id: OVER_35,
+                  Name: 'Over',
+                  Status: 1,
+                  Line: '3.5',
+                  BaseLine: '3.5',
+                  Handicap: null,
+                  Total: null,
+                  Price: '4.08',
+                },
+              ],
+            },
+            {
+              Id: 1439,
+              Name: 'Asian Handicap - Full Time',
+              Status: 1,
+              MainLine: '-1.0',
+              BaseLine: null,
+              Line: null,
+              Bets: [
+                {
+                  Id: AH_HOME,
+                  Name: '1',
+                  Status: 1,
+                  Line: '-1.0',
+                  BaseLine: '-1.0',
+                  Handicap: null,
+                  Total: null,
+                  Price: '1.97',
+                },
+                {
+                  Id: AH_AWAY,
+                  Name: '2',
+                  Status: 1,
+                  Line: '1.0',
+                  BaseLine: '-1.0',
+                  Handicap: null,
+                  Total: null,
+                  Price: '1.795',
+                },
+              ],
+            },
+            {
+              Id: 11,
+              Name: 'Total Corners',
+              Status: 1,
+              MainLine: '12.0',
+              BaseLine: null,
+              Line: null,
+              Bets: [
+                {
+                  Id: CORNER_UNDER,
+                  Name: 'Under',
+                  Status: 1,
+                  Line: '12.0',
+                  BaseLine: '12.0',
+                  Handicap: null,
+                  Total: null,
+                  Price: '1.85',
+                },
+                {
+                  Id: CORNER_OVER,
+                  Name: 'Over',
+                  Status: 1,
+                  Line: '12.0',
+                  BaseLine: '12.0',
+                  Handicap: null,
+                  Total: null,
+                  Price: '1.95',
+                },
+              ],
+            },
+          ],
+        }],
+      },
+    });
+  }
+
+  it('rejects LSports quotes that omit or mismatch Market.Id / canonical marketKey / line', () => {
+    const store = new LsportsInPlayStore();
+    seedRealPackedLines(store);
+    const exact = {
+      fixtureId: String(REAL_FIXTURE),
+      marketId: '2',
+      marketKey: `${REAL_FIXTURE}:2:2.5`,
+      line: '2.5',
+      outcomeId: OVER_25,
+      price: 2.14,
+    };
+    const accepted = lookupCanonicalQuote(store, exact);
+    assert.equal(accepted.status, 'open');
+    assert.equal(accepted.price, 2.14);
+    assert.equal(accepted.marketKey, `${REAL_FIXTURE}:2:2.5`);
+
+    const missingMarketId = lookupCanonicalQuote(store, { ...exact, marketId: '' });
+    assert.equal(missingMarketId.status, 'missing');
+    assert.equal(
+      (decideSportsQuote({ ...exact, marketId: '' }, accepted) as { reason: string }).reason,
+      'EVENT_UNAVAILABLE',
+    );
+
+    const wrongMarketId = lookupCanonicalQuote(store, { ...exact, marketId: '1439' });
+    assert.equal(wrongMarketId.status, 'missing');
+    assert.equal(
+      (decideSportsQuote({ ...exact, marketId: '1439' }, accepted) as { reason: string }).reason,
+      'EVENT_UNAVAILABLE',
+    );
+
+    const missingKey = lookupCanonicalQuote(store, { ...exact, marketKey: '' });
+    assert.equal(missingKey.status, 'missing');
+    assert.equal(
+      (decideSportsQuote({ ...exact, marketKey: '' }, accepted) as { reason: string }).reason,
+      'EVENT_UNAVAILABLE',
+    );
+
+    const wrongKey = lookupCanonicalQuote(store, { ...exact, marketKey: `${REAL_FIXTURE}:2:3.5` });
+    assert.equal(wrongKey.status, 'missing');
+    assert.equal(
+      (decideSportsQuote({ ...exact, marketKey: `${REAL_FIXTURE}:1:` }, accepted) as { reason: string }).reason,
+      'EVENT_UNAVAILABLE',
+    );
+
+    const totalsWrongLine = lookupCanonicalQuote(store, {
+      ...exact,
+      marketKey: `${REAL_FIXTURE}:2:3.5`,
+      line: '3.5',
+    });
+    assert.equal(totalsWrongLine.status, 'missing');
+    assert.equal(
+      (decideSportsQuote({
+        ...exact,
+        marketKey: `${REAL_FIXTURE}:2:3.5`,
+        line: '3.5',
+      }, accepted) as { reason: string }).reason,
+      'EVENT_UNAVAILABLE',
+    );
+
+    const ahExact = lookupCanonicalQuote(store, {
+      fixtureId: String(REAL_FIXTURE),
+      marketId: '1439',
+      marketKey: `${REAL_FIXTURE}:1439:-1.0`,
+      line: '-1.0',
+      outcomeId: AH_HOME,
+    });
+    assert.equal(ahExact.status, 'open');
+    assert.equal(ahExact.price, 1.97);
+    const ahWrongLine = lookupCanonicalQuote(store, {
+      fixtureId: String(REAL_FIXTURE),
+      marketId: '1439',
+      marketKey: `${REAL_FIXTURE}:1439:-1.0`,
+      line: '1.0',
+      outcomeId: AH_HOME,
+    });
+    assert.equal(ahWrongLine.status, 'missing');
+    assert.equal(
+      (decideSportsQuote({
+        fixtureId: String(REAL_FIXTURE),
+        marketId: '1439',
+        marketKey: `${REAL_FIXTURE}:1439:-1.0`,
+        line: '1.0',
+        outcomeId: AH_HOME,
+        price: 1.97,
+      }, ahExact) as { reason: string }).reason,
+      'EVENT_UNAVAILABLE',
+    );
+
+    const decision = decideSportsQuote(exact, accepted);
+    assert.equal(decision.ok, true);
+    if (decision.ok) assert.equal(decision.quote.outcomeId, OVER_25);
+  });
+
+  it('splits a packed live Type 3 market by Bet.BaseLine so opposite handicap lines stay one selection', () => {
+    const store = new LsportsInPlayStore();
+    seedRealPackedLines(store);
+    const fixture = store.getFixture(REAL_FIXTURE);
+    assert.equal(fixture?.markets.has(`${REAL_FIXTURE}:2:2.5`), true);
+    assert.equal(fixture?.markets.has(`${REAL_FIXTURE}:2:3.5`), true);
+    assert.equal(fixture?.markets.has(`${REAL_FIXTURE}:2:`), false);
+    assert.equal(fixture?.markets.has(`${REAL_FIXTURE}:1439:-1.0`), true);
+    assert.equal(fixture?.markets.get(`${REAL_FIXTURE}:1439:-1.0`)?.line, '-1.0');
+    assert.equal(fixture?.markets.has(`${REAL_FIXTURE}:1439:1.0`), false);
+    assert.equal(fixture?.markets.has(`${REAL_FIXTURE}:11:12.0`), true);
+    const away = lookupCanonicalQuote(store, {
+      fixtureId: String(REAL_FIXTURE),
+      marketId: '1439',
+      marketKey: `${REAL_FIXTURE}:1439:-1.0`,
+      line: '-1.0',
+      outcomeId: AH_AWAY,
+    });
+    assert.equal(away.status, 'open');
+    assert.equal(away.line, '-1.0');
+    assert.equal(away.price, 1.795);
   });
 });
 

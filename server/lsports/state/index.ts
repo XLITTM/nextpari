@@ -1,5 +1,12 @@
 export { LsportsRecoveryCoordinator, type LsportsRecoveryIo } from './coordinator.js';
-export { canonicalMarketKey, marketLineKey, marketLastUpdate } from './keys.js';
+export {
+  canonicalMarketKey,
+  expandMarketLineGroups,
+  marketLastUpdate,
+  marketLineKey,
+  parseCanonicalMarketKey,
+  selectionLineKey,
+} from './keys.js';
 export { mergeFixtureMetadata, readEvents, readHeader } from './parse.js';
 export {
   buildPlannedSnapshotBody,

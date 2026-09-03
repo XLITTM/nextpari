@@ -1,8 +1,8 @@
 import {
   canonicalMarketKey,
+  expandMarketLineGroups,
   marketIdOf,
   marketLastUpdate,
-  marketLineKey,
   parseTimestamp,
 } from './keys.js';
 import { buildMarketInventory, emptyIngestCounters } from './marketInventory.js';
@@ -329,30 +329,32 @@ export class LsportsInPlayStore {
     state.fixture = mergeFixtureMetadata(state.fixture, readFixture(event));
     let replaced = false;
     for (const market of readMarkets(event)) {
-      const key = canonicalMarketKey(fixtureId, market);
-      const incomingLastUpdate = marketLastUpdate(market);
-      const existing = state.markets.get(key);
-      if (existing && !shouldReplaceMarket(incomingLastUpdate, existing.lastUpdate, options)) {
-        continue;
-      }
-      const settlements = existing?.settlements ?? new Map();
-      clearStickySettlementsForOpenBets(settlements, market);
       const marketId = marketIdOf(market);
-      state.markets.set(key, {
-        key,
-        marketId,
-        line: marketLineKey(market),
-        payload: overlaySettlements(market, settlements),
-        lastUpdate: incomingLastUpdate,
-        settlements,
-      });
-      replaced = true;
-      if (source === 'rmq-3') {
-        this.ingestCounters.marketsAppliedFromType3 += 1;
-        if (String(marketId) === '1') this.ingestCounters.market1AppliedFromType3 += 1;
-      } else {
-        this.ingestCounters.marketsAppliedFromSnapshot += 1;
-        if (String(marketId) === '1') this.ingestCounters.market1AppliedFromSnapshot += 1;
+      for (const group of expandMarketLineGroups(market)) {
+        const key = canonicalMarketKey(fixtureId, market, group.line);
+        const incomingLastUpdate = marketLastUpdate(group.payload);
+        const existing = state.markets.get(key);
+        if (existing && !shouldReplaceMarket(incomingLastUpdate, existing.lastUpdate, options)) {
+          continue;
+        }
+        const settlements = existing?.settlements ?? new Map();
+        clearStickySettlementsForOpenBets(settlements, group.payload);
+        state.markets.set(key, {
+          key,
+          marketId,
+          line: group.line,
+          payload: overlaySettlements(group.payload, settlements),
+          lastUpdate: incomingLastUpdate,
+          settlements,
+        });
+        replaced = true;
+        if (source === 'rmq-3') {
+          this.ingestCounters.marketsAppliedFromType3 += 1;
+          if (String(marketId) === '1') this.ingestCounters.market1AppliedFromType3 += 1;
+        } else {
+          this.ingestCounters.marketsAppliedFromSnapshot += 1;
+          if (String(marketId) === '1') this.ingestCounters.market1AppliedFromSnapshot += 1;
+        }
       }
     }
     if (replaced) this.markLive(state, source);
@@ -368,76 +370,78 @@ export class LsportsInPlayStore {
     const state = this.ensure(fixtureId);
     let patched = false;
     for (const incoming of readMarkets(event)) {
-      const key = canonicalMarketKey(fixtureId, incoming);
-      const existing = state.markets.get(key);
-      const settlements = existing?.settlements ?? new Map();
-      const bets = existing ? readBets(existing.payload).map((bet) => ({ ...bet })) : [];
-      const byId = new Map<string, Record<string, unknown>>();
-      const order: string[] = [];
-      for (const bet of bets) {
-        const id = readBetId(bet);
-        if (id == null) continue;
-        const sid = String(id);
-        byId.set(sid, bet);
-        order.push(sid);
-      }
-      for (const bet of readBets(incoming)) {
-        const id = readBetId(bet);
-        if (id == null) continue;
-        const sid = String(id);
-        const incomingLastUpdate = typeof bet.LastUpdate === 'string' ? bet.LastUpdate : null;
-        const previousBet = byId.get(sid);
-        if (previousBet && incomingLastUpdate && typeof previousBet.LastUpdate === 'string') {
-          if (!shouldReplaceMarket(incomingLastUpdate, previousBet.LastUpdate, options)) continue;
+      for (const group of expandMarketLineGroups(incoming)) {
+        const key = canonicalMarketKey(fixtureId, incoming, group.line);
+        const existing = state.markets.get(key);
+        const settlements = existing?.settlements ?? new Map();
+        const bets = existing ? readBets(existing.payload).map((bet) => ({ ...bet })) : [];
+        const byId = new Map<string, Record<string, unknown>>();
+        const order: string[] = [];
+        for (const bet of bets) {
+          const id = readBetId(bet);
+          if (id == null) continue;
+          const sid = String(id);
+          byId.set(sid, bet);
+          order.push(sid);
         }
-        const code = readSettlementCode(bet.Settlement);
-        if (code != null) {
-          const fingerprint = settlementFingerprint({
-            msgGuid,
-            betId: sid,
-            settlement: code,
-            lastUpdate: incomingLastUpdate,
-          });
-          const applied = applySettlementCode(settlements.get(sid), code, fingerprint);
-          settlements.set(sid, applied.next);
-          if (applied.changed) {
-            this.settlementNotices.push({
-              fixtureId,
-              marketId: String(marketIdOf(existing?.payload ?? incoming) ?? ''),
-              marketKey: key,
+        for (const bet of readBets(group.payload)) {
+          const id = readBetId(bet);
+          if (id == null) continue;
+          const sid = String(id);
+          const incomingLastUpdate = typeof bet.LastUpdate === 'string' ? bet.LastUpdate : null;
+          const previousBet = byId.get(sid);
+          if (previousBet && incomingLastUpdate && typeof previousBet.LastUpdate === 'string') {
+            if (!shouldReplaceMarket(incomingLastUpdate, previousBet.LastUpdate, options)) continue;
+          }
+          const code = readSettlementCode(bet.Settlement);
+          if (code != null) {
+            const fingerprint = settlementFingerprint({
+              msgGuid,
               betId: sid,
               settlement: code,
-              fingerprint,
               lastUpdate: incomingLastUpdate,
             });
+            const applied = applySettlementCode(settlements.get(sid), code, fingerprint);
+            settlements.set(sid, applied.next);
+            if (applied.changed) {
+              this.settlementNotices.push({
+                fixtureId,
+                marketId: String(marketIdOf(existing?.payload ?? incoming) ?? ''),
+                marketKey: key,
+                betId: sid,
+                settlement: code,
+                fingerprint,
+                lastUpdate: incomingLastUpdate,
+              });
+            }
           }
-        }
-        if (!previousBet) {
-          byId.set(sid, { ...bet });
-          order.push(sid);
-        } else {
-          const nextBet = { ...previousBet };
-          for (const field of ['Settlement', 'Status', 'BetStatusId', 'LastUpdate', 'Price'] as const) {
-            if (bet[field] !== undefined) nextBet[field] = bet[field];
+          if (!previousBet) {
+            byId.set(sid, { ...bet });
+            order.push(sid);
+          } else {
+            const nextBet = { ...previousBet };
+            for (const field of ['Settlement', 'Status', 'BetStatusId', 'LastUpdate', 'Price'] as const) {
+              if (bet[field] !== undefined) nextBet[field] = bet[field];
+            }
+            byId.set(sid, nextBet);
           }
-          byId.set(sid, nextBet);
+          patched = true;
         }
-        patched = true;
+        const nextBets = order
+          .map((id) => byId.get(id))
+          .filter((bet): bet is Record<string, unknown> => bet != null);
+        const payload = existing
+          ? { ...existing.payload, Bets: nextBets }
+          : { ...group.payload, Bets: nextBets };
+        state.markets.set(key, {
+          key,
+          marketId: marketIdOf(existing?.payload ?? incoming),
+          line: existing?.line ?? group.line,
+          payload: overlaySettlements(payload, settlements),
+          lastUpdate: marketLastUpdate(payload),
+          settlements,
+        });
       }
-      const nextBets = order
-        .map((id) => byId.get(id))
-        .filter((bet): bet is Record<string, unknown> => bet != null);
-      const payload = existing
-        ? { ...existing.payload, Bets: nextBets }
-        : { ...incoming, Bets: nextBets };
-      state.markets.set(key, {
-        key,
-        marketId: marketIdOf(existing?.payload ?? incoming),
-        line: marketLineKey(existing?.payload ?? incoming),
-        payload: overlaySettlements(payload, settlements),
-        lastUpdate: marketLastUpdate(payload),
-        settlements,
-      });
     }
     if (patched) this.markLive(state, 'rmq-35');
   }

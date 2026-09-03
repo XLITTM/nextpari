@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { LsportsRecoveryCoordinator } from './coordinator.js';
-import { canonicalMarketKey } from './keys.js';
+import { canonicalMarketKey, expandMarketLineGroups, marketLineKey } from './keys.js';
 import { buildPlannedSnapshotBody, planSnapshotRequests } from './plan.js';
 import { LsportsSnapshotRateLimiter, type LsportsSnapshotPlanItem } from './rateLimit.js';
 import { LsportsRecoveryBuffer } from './recovery.js';
@@ -177,6 +177,46 @@ describe('lsports inplay state engine', () => {
     assert.equal(betById(oneX2, 117469638719981250)?.Name, '1');
     assert.equal(nextGoal?.payload.Name, 'Next Goal');
     assert.equal(betById(nextGoal, 46928646919981250)?.Price, '18.25');
+  });
+
+  it('expands packed live totals/handicap by Bet.BaseLine and does not collapse to an empty line', () => {
+    const totals = {
+      Id: 2,
+      Name: 'Under/Over',
+      Status: 1,
+      MainLine: '2.5',
+      BaseLine: null,
+      Line: null,
+      Bets: [
+        { Id: 'a', Name: 'Over', Line: '2.5', BaseLine: '2.5' },
+        { Id: 'b', Name: 'Under', Line: '2.5', BaseLine: '2.5' },
+        { Id: 'c', Name: 'Over', Line: '3.5', BaseLine: '3.5' },
+      ],
+    };
+    const handicap = {
+      Id: 1439,
+      Name: 'Asian Handicap - Full Time',
+      Status: 1,
+      MainLine: '-1.0',
+      BaseLine: null,
+      Line: null,
+      Bets: [
+        { Id: 'h', Name: '1', Line: '-1.0', BaseLine: '-1.0' },
+        { Id: 'a', Name: '2', Line: '1.0', BaseLine: '-1.0' },
+      ],
+    };
+    assert.equal(marketLineKey(totals), '2.5');
+    assert.equal(marketLineKey(handicap), '-1.0');
+    assert.deepEqual(
+      expandMarketLineGroups(totals).map((group) => group.line).sort(),
+      ['2.5', '3.5'],
+    );
+    const ahGroups = expandMarketLineGroups(handicap);
+    assert.deepEqual(ahGroups.map((group) => group.line), ['-1.0']);
+    assert.equal(Array.isArray(ahGroups[0]?.payload.Bets) ? ahGroups[0].payload.Bets.length : 0, 2);
+    assert.equal(canonicalMarketKey(FIXTURE_ID, totals, '3.5'), '19981248:2:3.5');
+    assert.equal(canonicalMarketKey(FIXTURE_ID, handicap, '-1.0'), '19981248:1439:-1.0');
+    assert.notEqual(canonicalMarketKey(FIXTURE_ID, totals, '2.5'), `${FIXTURE_ID}:2:`);
   });
 
   it('applies Type 35 Settlement codes without payout logic', () => {

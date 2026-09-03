@@ -603,4 +603,49 @@ describe('lsports multi-market football adapter', () => {
     assert.equal(btts?.entries[0]?.outcomes.find((row) => row.key === 'no')?.odds, 2.05);
     assert.equal(btts?.entries[0]?.outcomes.find((row) => row.key === 'no')?.providerBetId, String(BTTS_NO));
   });
+
+  it('splits a packed live Under/Over + opposite-line handicap object into distinct canonical keys', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets(),
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        MainLine: '2.5',
+        BaseLine: null,
+        Line: null,
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Status: 1, Line: '2.5', BaseLine: '2.5', Price: '2.14' },
+          { Id: UNDER_25, Name: 'Under', Status: 1, Line: '2.5', BaseLine: '2.5', Price: '1.675' },
+          { Id: OVER_35, Name: 'Over', Status: 1, Line: '3.5', BaseLine: '3.5', Price: '4.08' },
+          { Id: UNDER_35, Name: 'Under', Status: 1, Line: '3.5', BaseLine: '3.5', Price: '1.22' },
+        ],
+      },
+      {
+        Id: 1439,
+        Name: 'Asian Handicap - Full Time',
+        Status: 1,
+        MainLine: '-1.0',
+        BaseLine: null,
+        Line: null,
+        Bets: [
+          { Id: AH_HOME_05, Name: '1', Status: 1, Line: '-1.0', BaseLine: '-1.0', Price: '1.97' },
+          { Id: AH_AWAY_05, Name: '2', Status: 1, Line: '1.0', BaseLine: '-1.0', Price: '1.795' },
+        ],
+      },
+    ]));
+    const { matches } = adaptLsportsStore(store);
+    const totals = matches[0]?.markets.find((market) => market.marketId === '2');
+    assert.deepEqual(totals?.entries.map((entry) => entry.line).sort(), ['2.5', '3.5']);
+    assert.equal(totals?.entries.find((entry) => entry.line === '2.5')?.canonicalKey, `${FIXTURE_A}:2:2.5`);
+    assert.equal(totals?.entries.find((entry) => entry.line === '3.5')?.canonicalKey, `${FIXTURE_A}:2:3.5`);
+    const handicap = matches[0]?.markets.find((market) => market.marketId === '1439');
+    assert.equal(handicap?.entries.length, 1);
+    assert.equal(handicap?.entries[0]?.line, '-1.0');
+    assert.equal(handicap?.entries[0]?.canonicalKey, `${FIXTURE_A}:1439:-1.0`);
+    assert.equal(handicap?.entries[0]?.outcomes.length, 2);
+  });
 });

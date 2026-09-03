@@ -53,6 +53,7 @@ const PLACE_BODY = {
   selections: [{
     fixtureId: '19981248',
     marketId: '1',
+    marketKey: '19981248:1:',
     outcomeId: '117469638719981250',
     price: 1.85,
     playerUserId: ATTACKER_ID,
@@ -192,11 +193,29 @@ describe('player sports place HTTP', () => {
     const changed = await place(changedPorts, {
       ...PLACE_BODY,
       idempotencyKey: 'k2',
-      selections: [{ fixtureId: '19981248', outcomeId: '117469638719981250', price: 9.99 }],
+      selections: [{
+        fixtureId: '19981248',
+        marketId: '1',
+        marketKey: '19981248:1:',
+        outcomeId: '117469638719981250',
+        price: 9.99,
+      }],
     });
     assert.equal(changed.body.error, 'ODDS_CHANGED');
     assert.equal(changed.body.currentPrice, 1.85);
     assert.equal(changedPorts.places.length, 0);
+
+    const missingKey = await place(createPorts(), {
+      ...PLACE_BODY,
+      idempotencyKey: 'k-missing-key',
+      selections: [{
+        fixtureId: '19981248',
+        marketId: '1',
+        outcomeId: '117469638719981250',
+        price: 1.85,
+      }],
+    });
+    assert.equal(missingKey.body.error, 'EVENT_UNAVAILABLE');
 
     const suspendedPorts = createPorts({ quote: { ...OPEN, selectable: false, status: 'suspended' } });
     const suspended = await place(suspendedPorts, { ...PLACE_BODY, idempotencyKey: 'k3' });
