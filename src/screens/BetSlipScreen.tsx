@@ -9,6 +9,7 @@ import { useBetHistory } from '../BetHistoryContext';
 import { useWallet } from '../WalletContext';
 import { useToast } from '../ToastContext';
 import { placeBet } from '../lib/bets';
+import { placeModeFromCount, placeModeLabel } from '../lib/sportsPlaceMode';
 import type { OddsUpdate, BetPlacementSnapshot } from '../lib/liveBetGuard';
 import {
   couponHasLive,
@@ -82,7 +83,6 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
   const { addBet, refresh: refreshHistory } = useBetHistory();
   const { applyServerBalance, refresh } = useWallet();
   const { toast } = useToast();
-  const [mode, setMode] = useState<'express' | 'single'>('express');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [placedTicketCode, setPlacedTicketCode] = useState<string | null>(null);
@@ -107,6 +107,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
   const [loadCode, setLoadCode] = useState('');
   const [loadError, setLoadError] = useState('');
 
+  const mode = placeModeFromCount(selections.length);
   const totalOdds = selections.reduce((acc, s) => acc * s.odds, 1);
   const potentialWin = mode === 'express'
     ? stake * totalOdds
@@ -369,37 +370,23 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
             <X className="w-5 h-5" />
           </button>
 
-          {/* Mode dropdown */}
           <div className="relative">
             <button
+              type="button"
               onClick={() => setDropdownOpen(!dropdownOpen)}
               className="flex items-center gap-1.5 font-bold text-gray-900 dark:text-white text-base"
             >
-              {mode === 'express' ? 'Экспресс' : 'Ординар'}
+              {placeModeLabel(mode)}
               <ChevronDown className={`w-4 h-4 text-gray-500 dark:text-gray-200 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             {dropdownOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setDropdownOpen(false)} />
                 <div className="absolute top-9 left-1/2 -translate-x-1/2 z-50 bg-white dark:bg-[#1e293b] rounded-xl border border-gray-200 dark:border-gray-600 shadow-xl py-1 w-40 transition-colors">
-                  <button
-                    onClick={() => { setMode('express'); setDropdownOpen(false); }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors ${
-                      mode === 'express' ? 'text-brand-600 font-bold' : 'text-gray-700 dark:text-gray-200'
-                    }`}
-                  >
-                    Экспресс
-                    {mode === 'express' && <CheckCircle className="w-4 h-4" />}
-                  </button>
-                  <button
-                    onClick={() => { setMode('single'); setDropdownOpen(false); }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 text-sm transition-colors ${
-                      mode === 'single' ? 'text-brand-600 font-bold' : 'text-gray-700 dark:text-gray-200'
-                    }`}
-                  >
-                    Ординар
-                    {mode === 'single' && <CheckCircle className="w-4 h-4" />}
-                  </button>
+                  <div className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-brand-600 font-bold">
+                    {placeModeLabel(mode)}
+                    <CheckCircle className="w-4 h-4" />
+                  </div>
                 </div>
               </>
             )}

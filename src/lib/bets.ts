@@ -1,6 +1,7 @@
 import { tournamentLine } from './betTicket';
 import { blockedSportsBet, SPORTS_BET_GATE_MESSAGE } from './playerMoneyGate';
 import { ensureOwnPlayerWallet } from './playerWallet';
+import { serializeSportsPlaceBody } from './sportsPlaceRequest';
 import type { OddsUpdate } from './liveBetGuard';
 import type { BetEvent, BetHistoryEntry, BetSelection, BetStatus, SportId } from '../types';
 
@@ -70,24 +71,11 @@ export async function placeBet(params: {
     credentials: 'same-origin',
     cache: 'no-store',
     headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
-    body: JSON.stringify({
+    body: JSON.stringify(serializeSportsPlaceBody({
+      selections: params.selections,
       stake: params.stake,
-      mode: params.mode,
       idempotencyKey: params.idempotencyKey ?? newIdempotencyKey(),
-      selections: params.selections.map((row) => ({
-        provider: row.provider ?? 'lsports',
-        feedType: row.feedType ?? (row.isLive ? 'inplay' : 'prematch'),
-        fixtureId: row.fixtureId ?? row.matchId,
-        marketId: row.marketId,
-        marketKey: row.marketKey,
-        line: row.line,
-        outcomeId: row.outcomeId,
-        price: row.odds,
-        matchLabel: row.matchLabel,
-        league: row.league,
-        outcomeName: row.outcome,
-      })),
-    }),
+    })),
   });
   const body = await readJson(res);
   if (!res.ok || body.ok === false) {

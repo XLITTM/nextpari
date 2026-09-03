@@ -1,5 +1,5 @@
 import type { BetSelection, MarketGroup, MatchEvent } from '../types';
-import { inferMarketKey, inferSelection } from './liveMarketCheck';
+import { inferSelection } from './liveMarketCheck';
 
 export function isTwoWaySport(sport: string): boolean {
   return ['basketball', 'tennis', 'volleyball', 'esports'].includes(sport.toLowerCase());
@@ -26,9 +26,15 @@ export function mainOutcomeButtons(match: MatchEvent): CardOutcomeButton[] {
   ];
 }
 
+export interface ExtraCardOutcome {
+  label: string;
+  odds: number;
+  selection?: BetSelection;
+}
+
 export function extraMarketRows(
   match: MatchEvent,
-): Array<{ name: string; outcomes: Array<{ label: string; odds: number }> }> {
+): Array<{ name: string; outcomes: ExtraCardOutcome[] }> {
   const groups = match.marketGroups ?? [];
   const pick = (test: (group: MarketGroup) => boolean, limit = 2) => {
     const group = groups.find(test);
@@ -63,7 +69,6 @@ export function buildCardSelection(
     market,
     outcome,
     odds,
-    marketKey: inferMarketKey(market),
     selectionKey: inferSelection(outcome),
     homeTeam: match.team1,
     awayTeam: match.team2,

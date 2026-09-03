@@ -10,6 +10,7 @@ import {
 } from './sportsPlaceHttp.js';
 import { handleSportsSettleRequest, INTERNAL_SPORTS_SETTLE_PATH } from '../sports/settleHttp.js';
 import { SPORTS_PLACE_SERVER_RPC } from '../sports/placeRpc.js';
+import { mapPlayerGameRpcError } from './playerGameRpc.js';
 import type { SportsPlacePorts } from './sportsPlaceService.js';
 import { PLAYER_ACCESS_COOKIE, PLAYER_REFRESH_COOKIE } from './playerCookies.js';
 import type { SportsQuote } from '../sports/types.js';
@@ -343,5 +344,64 @@ describe('internal settlement webhook', () => {
     assert.match(settle, /createServiceRoleClient/);
     const example = read('deploy/lsports-worker.env.example');
     assert.match(example, /LSPORTS_SETTLEMENT_WEBHOOK_URL=https:\/\/nextpari\.net\/api\/internal\/sports\/settle/);
+  });
+});
+
+describe('player sports place mode and RPC mapping', () => {
+  it('keeps express requiring at least two legs', async () => {
+    const ports = createPorts();
+    const result = await place(ports, { ...PLACE_BODY, mode: 'express' });
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error, 'SPORTS_EXPRESS_REQUIRES_LEGS');
+    assert.equal(ports.places.length, 0);
+  });
+
+  it('maps known sports codes and sanitizes ambiguous-column SQL to GAME_RPC_FAILED', () => {
+    assert.equal(mapPlayerGameRpcError({ message: 'EVENT_UNAVAILABLE' }).code, 'EVENT_UNAVAILABLE');
+    assert.equal(mapPlayerGameRpcError({ message: 'ODDS_CHANGED' }).code, 'ODDS_CHANGED');
+    assert.equal(mapPlayerGameRpcError({ message: 'MARKET_SUSPENDED' }).code, 'MARKET_SUSPENDED');
+    assert.equal(mapPlayerGameRpcError({ message: 'FEED_STALE' }).code, 'FEED_STALE');
+    assert.equal(mapPlayerGameRpcError({ message: 'INSUFFICIENT_AVAILABLE_BALANCE' }).code, 'INSUFFICIENT_AVAILABLE_BALANCE');
+    assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_SINGLE_REQUIRES_ONE_LEG' }).code, 'SPORTS_SINGLE_REQUIRES_ONE_LEG');
+    assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_EXPRESS_REQUIRES_LEGS' }).code, 'SPORTS_EXPRESS_REQUIRES_LEGS');
+    assert.equal(mapPlayerGameRpcError({ message: 'MISSING_BET_ID' }).code, 'MISSING_BET_ID');
+    const ambiguous = mapPlayerGameRpcError({ message: 'column reference "v_leg" is ambiguous' });
+    assert.equal(ambiguous.code, 'GAME_RPC_FAILED');
+    assert.equal(ambiguous.message.includes('v_leg'), false);
+  });
+});
+
+describe('sports place 037 alias fix', () => {
+  it('replaces only the engine function and removes the v_leg SQL alias collision', () => {
+    const sql = read('supabase/migrations/20260903_037_fix_sports_leg_alias.sql');
+    assert.match(sql, /CREATE OR REPLACE FUNCTION private\.sports_engine_place_as\(/);
+    assert.match(sql, /FROM jsonb_array_elements\(p_legs\) AS t\(leg_json\)/);
+    assert.match(sql, /t\.leg_json->>'fixtureId'/);
+    assert.match(sql, /t\.leg_json->>'marketId'/);
+    assert.match(sql, /t\.leg_json->>'marketKey'/);
+    assert.match(sql, /t\.leg_json->>'line'/);
+    assert.match(sql, /t\.leg_json->>'outcomeId'/);
+    assert.match(sql, /t\.leg_json->>'acceptedOdds'/);
+    assert.match(sql, /FOR v_leg_json IN SELECT value FROM jsonb_array_elements\(p_legs\)/);
+    assert.equal(sql.includes('AS t(v_leg)'), false);
+    assert.equal(/DECLARE[\s\S]*v_leg JSONB;/.test(sql), false);
+    assert.match(sql, /private\.sports_require_player_by_id\(p_player_user_id\)/);
+    assert.match(sql, /pg_advisory_xact_lock/);
+    assert.match(sql, /INSERT INTO private\.sports_bets/);
+    assert.match(sql, /INSERT INTO private\.sports_bet_legs/);
+    assert.match(sql, /private\.apply_wallet_entry\(/);
+    assert.match(sql, /'CASINO_BET'/);
+    assert.equal(sql.includes('CREATE OR REPLACE FUNCTION public.sports_place_for_player'), false);
+    assert.equal(sql.includes('CREATE OR REPLACE FUNCTION public.player_sports_place'), false);
+    assert.equal(sql.includes('CREATE OR REPLACE FUNCTION private.apply_wallet_entry'), false);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION public.sports_place_for_player'), false);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION public.player_sports_place'), false);
+    assert.equal(sql.includes('auth.uid()'), false);
+    assert.equal(sql.includes('UPDATE public.wallets'), false);
+
+    const lock = read('supabase/migrations/20260903_036_server_only_sports_place.sql');
+    assert.match(lock, /REVOKE ALL ON FUNCTION public\.player_sports_place\(TEXT, NUMERIC, TEXT, JSONB\) FROM anon, authenticated, service_role/);
+    assert.match(lock, /GRANT EXECUTE ON FUNCTION public\.sports_place_for_player\(UUID, TEXT, NUMERIC, TEXT, JSONB\) TO service_role/);
+    assert.match(lock, /REVOKE ALL ON FUNCTION public\.sports_place_for_player\(UUID, TEXT, NUMERIC, TEXT, JSONB\) FROM anon, authenticated/);
   });
 });
