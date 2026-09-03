@@ -7,8 +7,13 @@ import { OddsFlashValue } from './OddButton';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks/useOddsFlash';
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
-import { extraMarketRows, buildCardSelection, mainOutcomeButtons } from '../lib/cardOdds';
-import { extraLsportsMarketRows, isSelectableLsportsOutcome, withLsportsIdentity } from '../lib/sportsSelection';
+import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
+import {
+  clickableCardSelection,
+  extraLsportsMarketRows,
+  hasCompleteLsportsIdentity,
+  isLsportsMatch,
+} from '../lib/sportsSelection';
 
 interface MatchCardProps {
   match: MatchEvent;
@@ -67,15 +72,12 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
   const outcomeButtons = mainOutcomeButtons(match);
   const liveMinute = formatCardMinute(match.liveStatus);
+  const lsports = isLsportsMatch(match);
   const lsportsExtras = extraLsportsMarketRows(match);
-  const extraRows = lsportsExtras.length ? lsportsExtras : extraMarketRows(match);
+  const extraRows = lsports ? lsportsExtras : extraMarketRows(match);
   const extraCount = match.feedTag === 'lsports'
     ? Math.max(Number(match.extraMarkets) || 0, extraRows.length)
     : Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
-
-  const buildSelection = (outcome: string, odds: number): BetSelection => (
-    withLsportsIdentity(buildCardSelection(match, outcome, odds, '1X2'), match, outcome, '1X2')
-  );
 
   return (
     <div
@@ -166,36 +168,39 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
       <div className="px-3 pb-2">
         <div className="grid grid-cols-3 gap-1.5">
-          {outcomeButtons.map((o) => (
-            <MatchOddButton
-              key={o.key}
-              selection={buildSelection(o.key, o.odds)}
-              label={o.key}
-              odds={o.odds}
-              locked={o.locked || !isSelectableLsportsOutcome(match, o.key, '1X2')}
-              isActive={isSelectionActive(match.id, o.key, '1X2')}
-            />
-          ))}
+          {outcomeButtons.map((o) => {
+            const clickable = clickableCardSelection(match, o.key, '1X2', o.odds);
+            return (
+              <MatchOddButton
+                key={o.key}
+                selection={clickable.selection}
+                label={o.key}
+                odds={o.odds}
+                locked={o.locked || clickable.locked}
+                isActive={isSelectionActive(match.id, o.key, clickable.selection.market)}
+              />
+            );
+          })}
         </div>
         {extrasOpen && extraRows.map((row) => (
           <div key={row.name} className="mt-1.5">
             <div className="mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">{row.name}</div>
             <div className="grid grid-cols-2 gap-1.5">
-              {row.outcomes.map((item) => (
-                <MatchOddButton
-                  key={`${row.name}-${item.label}`}
-                  selection={item.selection ?? withLsportsIdentity(
-                    buildCardSelection(match, item.label, item.odds, row.name),
-                    match,
-                    item.label,
-                    row.name,
-                  )}
-                  label={item.label}
-                  odds={item.odds}
-                  locked={!item.selection?.outcomeId}
-                  isActive={isSelectionActive(match.id, item.label, item.selection?.market ?? row.name)}
-                />
-              ))}
+              {row.outcomes.map((item) => {
+                const clickable = item.selection && hasCompleteLsportsIdentity(item.selection)
+                  ? { selection: item.selection, locked: false }
+                  : clickableCardSelection(match, item.label, row.name, item.odds);
+                return (
+                  <MatchOddButton
+                    key={`${row.name}-${item.label}`}
+                    selection={clickable.selection}
+                    label={item.label}
+                    odds={item.odds}
+                    locked={clickable.locked}
+                    isActive={isSelectionActive(match.id, item.label, clickable.selection.market)}
+                  />
+                );
+              })}
             </div>
           </div>
         ))}
@@ -241,7 +246,7 @@ function MatchOddButton({
     <button
       {...(canBet ? handlers : { onClick: (e: React.MouseEvent) => e.stopPropagation() })}
       disabled={!canBet}
-      className={`flex items-center justify-between px-2.5 py-1.5 rounded-2xl border select-none transition-[background-color,border-color,box-shadow,color] duration-500 ${
+      className={`flex items-center justify-between px-2.5 py-1.5 rounded-2xl border select-none touch-manipulation transition-[background-color,border-color,box-shadow,color] duration-500 ${
         !canBet
           ? 'bg-gray-100 dark:bg-[#0f172a] border-gray-200 dark:border-gray-700 opacity-80'
           : flashBtn

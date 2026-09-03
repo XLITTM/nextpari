@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ArrowLeft, Search, Monitor, Link as LinkIcon, Bell, Star } from 'lucide-react';
-import type { MatchEvent, BetSelection } from '../types';
+import type { MatchEvent } from '../types';
 import { mainOutcomeButtons } from '../lib/cardOdds';
 import { OddButton } from '../components/OddButton';
+import { clickableCardSelection } from '../lib/sportsSelection';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { SkeletonLoader } from '../components/SkeletonLoader';
@@ -34,22 +35,7 @@ function MatchRowCard({
   const outcomeButtons = getOutcomeButtons(match);
   const columnsCount = outcomeButtons.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
 
-  const buildSelection = (outcome: string, odds: number): BetSelection => ({
-    id: `${match.id}-${outcome}`,
-    matchId: match.id,
-    matchLabel: `${match.team1} — ${match.team2}`,
-    market: outcomeButtons.length === 3 ? '1X2' : 'Победитель',
-    outcome,
-    odds,
-    homeTeam: match.team1,
-    awayTeam: match.team2,
-    sport: match.sport,
-    country: match.country,
-    league: match.league,
-    isLive: match.isLive,
-    startTime: match.startTime,
-    liveStatus: match.liveStatus,
-  });
+  const marketName = outcomeButtons.length === 3 ? '1X2' : 'Победитель';
 
   return (
     <div
@@ -117,15 +103,19 @@ function MatchRowCard({
       <div className="px-3 pb-3">
         <div className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-1.5">1X2</div>
         <div className="grid grid-cols-3 gap-2">
-          {outcomeButtons.map((outcome) => (
-            <OddButton
-              key={outcome.key}
-              label={outcome.key}
-              odds={outcome.odds}
-              selection={buildSelection(outcome.key, outcome.odds)}
-              size="sm"
-            />
-          ))}
+          {outcomeButtons.map((outcome) => {
+            const clickable = clickableCardSelection(match, outcome.key, marketName, outcome.odds);
+            return (
+              <OddButton
+                key={outcome.key}
+                label={outcome.key}
+                odds={outcome.odds}
+                selection={clickable.selection}
+                locked={outcome.locked || clickable.locked}
+                size="sm"
+              />
+            );
+          })}
         </div>
       </div>
     </div>

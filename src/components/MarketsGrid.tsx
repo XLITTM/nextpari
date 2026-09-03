@@ -6,6 +6,8 @@ import { useOddsFlash } from '@/hooks/useOddsFlash';
 import { formatOdds } from '@/lib/matchOdds';
 import { outcomeLabel, type ParsedMarket, type ParsedMarketEntry } from '@/lib/odds-parser';
 import { isLsportsDisplayEvent } from '@/lib/lsportsFeed';
+import { hasCompleteLsportsIdentity } from '@/lib/sportsPlaceIdentity';
+import { selectionFromProviderBetId } from '@/lib/sportsSelection';
 import { useSportsStore } from '@/stores/sportsStore';
 import type { BetSelection, MatchEvent, SportId } from '@/types';
 
@@ -456,8 +458,8 @@ function OutcomeButton({
   const marketKey = String(outcome.marketKey ?? '').trim();
   const marketId = String(outcome.marketId ?? market.marketId ?? '').trim();
   const providerBetId = String(outcome.providerBetId ?? '').trim();
-  const locked = odds <= 1 || (lsports && (!providerBetId || !marketKey.includes(':')));
-  const selection: BetSelection = {
+  const fromStore = selectionFromProviderBetId(match, providerBetId);
+  const fallback: BetSelection = {
     id: providerBetId && marketKey
       ? `lsports:${eventId}:${marketKey}:${providerBetId}`
       : `${eventId}-${marketName}-${label}`,
@@ -476,12 +478,14 @@ function OutcomeButton({
     liveStatus: match.liveStatus,
     provider: lsports ? 'lsports' : undefined,
     feedType: lsports ? 'inplay' : undefined,
-    fixtureId: lsports ? eventId : undefined,
-    marketId: lsports ? marketId : outcome.marketId ?? market.marketId,
-    marketKey: lsports ? marketKey : outcome.marketKey ?? market.key,
+    fixtureId: eventId,
+    marketId,
+    marketKey,
     line: outcome.line ?? '',
     outcomeId: providerBetId || undefined,
   };
+  const selection = fromStore ?? fallback;
+  const locked = odds <= 1 || ((lsports || selection.provider === 'lsports') && !hasCompleteLsportsIdentity(selection));
   const handlers = useOddInteraction(selection);
   const active = isSelectionActive(eventId, label, marketName);
   const oddsColor = active
@@ -495,9 +499,9 @@ function OutcomeButton({
   return (
     <button
       type="button"
-      {...(locked ? { onClick: (event: MouseEvent) => event.preventDefault() } : handlers)}
+      {...(locked ? { onClick: (event: MouseEvent) => { event.preventDefault(); event.stopPropagation(); } } : handlers)}
       disabled={locked}
-      className={`flex min-h-[44px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left shadow-sm transition-[transform,background-color,border-color,box-shadow] duration-150 active:scale-[0.97] ${
+      className={`flex min-h-[44px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left shadow-sm select-none touch-manipulation transition-[transform,background-color,border-color,box-shadow] duration-150 active:scale-[0.97] ${
         locked
           ? 'border-[#E5E7EB] bg-[#F3F4F6] opacity-70'
           : active

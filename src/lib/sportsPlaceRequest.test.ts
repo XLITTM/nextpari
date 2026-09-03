@@ -134,22 +134,23 @@ describe('betslip place mode', () => {
     const two = mustSelect(marketTotals(), 'over');
     two.matchId = '19999999';
     two.fixtureId = '19999999';
+    two.marketKey = '19999999:2:2.5';
     two.id = `lsports:19999999:${two.marketKey}:${two.outcomeId}`;
 
     let slip = addSlipSelection([], one);
     assert.equal(slipPlaceMode(slip), 'single');
-    assert.equal(serializeSportsPlaceBody({ selections: slip, stake: 10, idempotencyKey: 'k' }).mode, 'single');
+    assert.equal(serializeSportsPlaceBody({ selections: slip, stake: 10, idempotencyKey: 'k' })?.mode, 'single');
 
     slip = addSlipSelection(slip, two);
     assert.equal(slip.length, 2);
     assert.equal(slipPlaceMode(slip), 'express');
-    assert.equal(serializeSportsPlaceBody({ selections: slip, stake: 10, idempotencyKey: 'k' }).mode, 'express');
+    assert.equal(serializeSportsPlaceBody({ selections: slip, stake: 10, idempotencyKey: 'k' })?.mode, 'express');
 
     slip = removeSlipSelection(slip, two.matchId, two.outcome);
     assert.equal(slip.length, 1);
     assert.equal(slipPlaceMode(slip), 'single');
     assert.equal(slip[0]?.outcomeId, HOME_BET);
-    assert.equal(serializeSportsPlaceBody({ selections: slip, stake: 10, idempotencyKey: 'k' }).mode, 'single');
+    assert.equal(serializeSportsPlaceBody({ selections: slip, stake: 10, idempotencyKey: 'k' })?.mode, 'single');
   });
 });
 
@@ -224,6 +225,18 @@ describe('real LSports place identity', () => {
     assert.equal(assertLsportsPlaceLeg(incomplete), false);
     assert.notEqual(incomplete.outcomeId, 'over');
     assert.notEqual(incomplete.marketKey, 'total');
+    assert.equal(serializeSportsPlaceBody({
+      selections: [{
+        id: `${FIXTURE}-Тотал-ТБ`,
+        matchId: FIXTURE,
+        matchLabel: 'Home FC — Away FC',
+        market: 'Тотал',
+        outcome: 'over',
+        odds: 2.1,
+      }],
+      stake: 10,
+      idempotencyKey: 'k',
+    }), null);
   });
 });
 

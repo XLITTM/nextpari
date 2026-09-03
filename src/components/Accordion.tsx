@@ -2,9 +2,12 @@ import { useState } from 'react';
 import { ChevronDown, Pin } from 'lucide-react';
 import type { MarketGroup, BetSelection, SportId, MarketLayout } from '../types';
 import { useBetSlip } from '../BetSlipContext';
-import { useOddInteraction } from '../hooks/useOddInteraction';
+import { canInteractWithOdd, useOddInteraction } from '../hooks/useOddInteraction';
 import { OddsFlashValue } from './OddButton';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks/useOddsFlash';
+import { isLsportsDisplayEvent } from '../lib/lsportsFeed';
+import { clickableCardSelection } from '../lib/sportsSelection';
+import { useSportsStore } from '../stores/sportsStore';
 
 interface AccordionProps {
   group: MarketGroup;
@@ -39,22 +42,25 @@ export function Accordion({
   const layout: MarketLayout = group.layout ?? 'grid';
 
   const teams = matchLabel.split(/\s+[—–-]\s+/);
-  const buildSelection = (outcome: string, odds: number): BetSelection => ({
-    id: `${matchId}-${group.id}-${outcome}`,
-    matchId,
-    matchLabel,
-    market: group.name,
-    outcome,
-    odds,
-    homeTeam: teams[0]?.trim(),
-    awayTeam: teams[1]?.trim(),
-    sport,
-    country,
-    league,
-    isLive,
-    startTime,
-    liveStatus,
-  });
+  const stored = useSportsStore.getState().getEvent(matchId);
+  const feedTag = stored?.event && isLsportsDisplayEvent(stored.event) ? 'lsports' : undefined;
+  const buildSelection = (outcome: string, odds: number) =>
+    clickableCardSelection({
+      id: matchId,
+      sport: sport ?? 'football',
+      league: league ?? '',
+      country: country ?? '',
+      team1: teams[0]?.trim() ?? '',
+      team2: teams[1]?.trim() ?? '',
+      team1Color: '#000',
+      team2Color: '#fff',
+      startTime: startTime ?? 0,
+      isLive: Boolean(isLive),
+      extraMarkets: 0,
+      markets: { '1': odds, x: odds, '2': odds },
+      liveStatus,
+      feedTag,
+    }, outcome, group.name, odds);
 
   return (
     <div className="bg-white dark:bg-[#1e293b] rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-colors">
@@ -92,21 +98,25 @@ function GridLayout({
   activeOutcome,
 }: {
   group: MarketGroup;
-  buildSelection: (outcome: string, odds: number) => BetSelection;
+  buildSelection: (outcome: string, odds: number) => { selection: BetSelection; locked: boolean };
   activeOutcome: (outcome: string) => boolean;
 }) {
   const cols = group.outcomes.length === 2 ? 'grid-cols-2' : 'grid-cols-3';
   return (
     <div className={`grid ${cols} gap-2`}>
-      {group.outcomes.map((o) => (
-        <AccordionOddButton
-          key={o.label}
-          selection={buildSelection(o.label, o.odds)}
-          label={o.label}
-          odds={o.odds}
-          isActive={activeOutcome(o.label)}
-        />
-      ))}
+      {group.outcomes.map((o) => {
+        const clickable = buildSelection(o.label, o.odds);
+        return (
+          <AccordionOddButton
+            key={o.label}
+            selection={clickable.selection}
+            locked={clickable.locked}
+            label={o.label}
+            odds={o.odds}
+            isActive={activeOutcome(o.label)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -117,17 +127,19 @@ function TableLayout({
   activeOutcome,
 }: {
   group: MarketGroup;
-  buildSelection: (outcome: string, odds: number) => BetSelection;
+  buildSelection: (outcome: string, odds: number) => { selection: BetSelection; locked: boolean };
   activeOutcome: (outcome: string) => boolean;
 }) {
   return (
     <div className="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
       {group.outcomes.map((o, i) => {
         const isOdd = i % 2 === 1;
+        const clickable = buildSelection(o.label, o.odds);
         return (
           <AccordionOddButton
             key={o.label}
-            selection={buildSelection(o.label, o.odds)}
+            selection={clickable.selection}
+            locked={clickable.locked}
             label={o.label}
             odds={o.odds}
             isActive={activeOutcome(o.label)}
@@ -146,21 +158,25 @@ function ComboLayout({
   activeOutcome,
 }: {
   group: MarketGroup;
-  buildSelection: (outcome: string, odds: number) => BetSelection;
+  buildSelection: (outcome: string, odds: number) => { selection: BetSelection; locked: boolean };
   activeOutcome: (outcome: string) => boolean;
 }) {
   return (
     <div className="grid grid-cols-2 gap-2">
-      {group.outcomes.map((o) => (
-        <AccordionOddButton
-          key={o.label}
-          selection={buildSelection(o.label, o.odds)}
-          label={o.label}
-          odds={o.odds}
-          isActive={activeOutcome(o.label)}
-          variant="combo"
-        />
-      ))}
+      {group.outcomes.map((o) => {
+        const clickable = buildSelection(o.label, o.odds);
+        return (
+          <AccordionOddButton
+            key={o.label}
+            selection={clickable.selection}
+            locked={clickable.locked}
+            label={o.label}
+            odds={o.odds}
+            isActive={activeOutcome(o.label)}
+            variant="combo"
+          />
+        );
+      })}
     </div>
   );
 }
@@ -170,6 +186,7 @@ function AccordionOddButton({
   label,
   odds,
   isActive,
+  locked: lockedProp = false,
   variant = 'default',
   bgClass = '',
 }: {
@@ -177,6 +194,7 @@ function AccordionOddButton({
   label: string;
   odds: number;
   isActive: boolean;
+  locked?: boolean;
   variant?: 'default' | 'row' | 'combo';
   bgClass?: string;
 }) {
@@ -187,12 +205,17 @@ function AccordionOddButton({
   const flashText = oddsFlashTextClass(flash);
   const selected = selections.some((row) => row.id === selection.id) || isActive;
   const text = flashText ? flashText : selected ? 'text-white' : 'text-gray-900 dark:text-white';
+  const locked = lockedProp || !canInteractWithOdd(selection) || odds <= 1;
+  const eventHandlers = locked
+    ? { onClick: (event: React.MouseEvent) => { event.preventDefault(); event.stopPropagation(); } }
+    : handlers;
 
   if (variant === 'row') {
     return (
       <button
-        {...handlers}
-        className={`flex items-center justify-between w-full px-3 py-2.5 border-b border-gray-200 dark:border-gray-600 last:border-b-0 transition-all duration-500 active:scale-[0.98] select-none ${bgClass} ${
+        {...eventHandlers}
+        disabled={locked}
+        className={`flex items-center justify-between w-full px-3 py-2.5 border-b border-gray-200 dark:border-gray-600 last:border-b-0 transition-all duration-500 active:scale-[0.98] select-none touch-manipulation ${bgClass} ${
           flash === 'up'
             ? 'bg-[rgba(16,185,129,0.12)]'
             : flash === 'down'
@@ -227,8 +250,9 @@ function AccordionOddButton({
   if (variant === 'combo') {
     return (
       <button
-        {...handlers}
-        className={`flex flex-col items-center justify-center gap-0.5 w-full px-2.5 py-3 rounded-lg border active:scale-95 select-none transition-[background-color,border-color,box-shadow,color] duration-500 ${
+        {...eventHandlers}
+        disabled={locked}
+        className={`flex flex-col items-center justify-center gap-0.5 w-full px-2.5 py-3 rounded-lg border active:scale-95 select-none touch-manipulation transition-[background-color,border-color,box-shadow,color] duration-500 ${
           flashBtn
             ? flashBtn
             : selected
@@ -244,8 +268,9 @@ function AccordionOddButton({
 
   return (
     <button
-      {...handlers}
-      className={`flex flex-row justify-between items-center w-full px-3 py-2.5 rounded-lg border active:scale-95 select-none transition-[background-color,border-color,box-shadow,color] duration-500 ${
+      {...eventHandlers}
+      disabled={locked}
+      className={`flex flex-row justify-between items-center w-full px-3 py-2.5 rounded-lg border active:scale-95 select-none touch-manipulation transition-[background-color,border-color,box-shadow,color] duration-500 ${
         flashBtn
           ? flashBtn
             : selected
