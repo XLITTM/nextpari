@@ -12,9 +12,14 @@ import type { BetSelection, MatchEvent, SportId } from '@/types';
 type MarketTab = 'all' | 'main' | 'totals' | 'handicaps' | 'goals' | 'corners' | '1st-half' | '2nd-half' | 'sets' | 'games' | 'quarters' | 'halves';
 
 const FOOTBALL_TABS: { id: MarketTab; label: string }[] = [
+  { id: 'all', label: 'Все' },
   { id: 'main', label: 'Основная игра' },
+  { id: 'totals', label: 'Тоталы' },
+  { id: 'handicaps', label: 'Форы' },
   { id: '1st-half', label: '1-й тайм' },
   { id: '2nd-half', label: '2-й тайм' },
+  { id: 'corners', label: 'Угловые' },
+  { id: 'goals', label: 'Голы' },
 ];
 
 const TENNIS_TABS: { id: MarketTab; label: string }[] = [
@@ -143,11 +148,17 @@ function parseMatchMinute(...raw: Array<string | undefined>): number | null {
   return null;
 }
 
-function isMarketVisible(market: ParsedMarket, minute: number | null, sport: SportId | string): boolean {
+function isMarketVisible(
+  market: ParsedMarket,
+  minute: number | null,
+  sport: SportId | string,
+  lsports = false,
+): boolean {
   if (!isAllowedForSport(market, sport)) return false;
+  if (lsports) return true;
   if (sport !== 'football' && sport !== 'all') return true;
   if (minute == null) return true;
-  if (minute > 45 && market.category === 'half') return false;
+  if (minute > 45 && market.category === 'half' && !/2nd|2-й/i.test(market.name)) return false;
   if (minute > 90 && market.category === 'main') return false;
   return true;
 }
@@ -177,7 +188,7 @@ function toDisplayMarket(market: ParsedMarket): DisplayMarket | null {
       odds: row.odds,
       providerBetId: row.providerBetId,
       marketId: market.marketId,
-      marketKey: market.key,
+      marketKey: entry.canonicalKey ?? market.canonicalKey ?? market.key,
       line: entry.line,
     }));
     return isMoneyline ? sortDisplayOutcomes(rows) : rows;
@@ -196,23 +207,34 @@ function toDisplayMarket(market: ParsedMarket): DisplayMarket | null {
 function matchesTab(market: ParsedMarket, tab: MarketTab): boolean {
   const name = market.name.toLowerCase();
   if (tab === 'all') return true;
-  if (tab === 'totals') return /тотал/.test(name) && !/гол|забьют|точный/i.test(name) || market.marketId === '3' || market.marketId === '6' || market.marketId === '9';
-  if (tab === 'handicaps') return /фора/.test(name) || market.marketId === '2' || market.marketId === '5';
-  if (tab === 'goals') return /голы|забьют|точный счёт|btts|both teams|индивидуальный тотал|team total/i.test(name) || market.marketId === 'btts';
-  if (tab === 'corners') return market.category === 'corners' || /угл/.test(name);
-  if (tab === '1st-half') return (market.category === 'half' || /1-й тайм|1st/.test(name)) && !/2-й|2nd/.test(name);
-  if (tab === '2nd-half') return /2-й тайм|2nd/.test(name);
+  if (tab === 'totals') {
+    return /тотал|under\/over|total|exactly/.test(name) && !/corner|гол|забьют|точный|goal|btts/.test(name);
+  }
+  if (tab === 'handicaps') {
+    return /фора|handicap/.test(name) && !/corner/.test(name);
+  }
+  if (tab === 'goals') {
+    return /голы|забьют|точный счёт|btts|both teams|индивидуальный тотал|team total|next goal|correct score|last team to score/.test(name)
+      || market.marketId === 'btts';
+  }
+  if (tab === 'corners') return market.category === 'corners' || /угл|corner/.test(name);
+  if (tab === '1st-half') {
+    return (market.category === 'half' || /1-й тайм|1st period|1st half|first half/.test(name))
+      && !/2-й|2nd/.test(name);
+  }
+  if (tab === '2nd-half') return /2-й тайм|2nd period|2nd half/.test(name);
   if (tab === 'sets') return /сет/.test(name);
   if (tab === 'games') return /гейм/.test(name);
   if (tab === 'quarters') return market.category === 'quarter' || /четверт/.test(name);
   if (tab === 'halves') return /половин/.test(name) || (market.category === 'half' && !/1-й тайм|2-й тайм/.test(name));
-  return (market.category === 'main' || /победитель|1x2/.test(name)) && !/тотал|фора|угл/.test(name);
+  return (market.category === 'main' || /победитель|1x2|double chance|both teams|draw no bet/.test(name))
+    && !/тотал|фора|угл|under\/over|handicap|corner|1st period|1st half|2nd period|2nd half/.test(name);
 }
 
 function gridClass(market: DisplayMarket): string {
   const isMoneyline = market.marketId === '1' || market.marketId === '8' || /1x2|победитель/i.test(market.name);
   if (isMoneyline) return market.outcomes.length <= 2 ? 'grid-cols-2' : 'grid-cols-3';
-  if (/фора|тотал|угл/i.test(market.name) || market.marketId === '2' || market.marketId === '3') {
+  if (/фора|тотал|угл|under\/over|handicap|corner/i.test(market.name) || market.marketId === '2' || market.marketId === '3') {
     return 'grid-cols-2';
   }
   if (market.outcomes.length === 3) return 'grid-cols-3';
@@ -235,8 +257,9 @@ export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchE
   const markets = useMemo(() => {
     const raw = state ? Object.values(state.markets) : [];
     const minute = parseMatchMinute(state?.event.time_str, state?.matchTime, match.liveStatus);
+    const lsports = isLsportsDisplayEvent(state?.event);
     const filtered = raw
-      .filter((market) => isMarketVisible(market, minute, match.sport))
+      .filter((market) => isMarketVisible(market, minute, match.sport, lsports))
       .filter((market) => matchesTab(market, tab));
     const display = filtered
       .map(toDisplayMarket)
@@ -433,7 +456,7 @@ function OutcomeButton({
   const locked = odds <= 1 || (lsports && !outcome.providerBetId);
   const selection: BetSelection = {
     id: outcome.providerBetId
-      ? `lsports:${eventId}:${market.key}:${outcome.providerBetId}`
+      ? `lsports:${eventId}:${outcome.marketKey ?? market.key}:${outcome.providerBetId}`
       : `${eventId}-${marketName}-${label}`,
     matchId: eventId,
     matchLabel: `${match.team1} — ${match.team2}`,

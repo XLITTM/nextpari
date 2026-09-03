@@ -68,7 +68,9 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
   const outcomeButtons = mainOutcomeButtons(match);
   const liveMinute = formatCardMinute(match.liveStatus);
   const extraRows = extraMarketRows(match);
-  const extraCount = Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
+  const extraCount = match.feedTag === 'lsports'
+    ? Math.max(Number(match.extraMarkets) || 0, extraRows.length)
+    : Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
 
   const buildSelection = (outcome: string, odds: number): BetSelection => (
     withLsportsIdentity(buildCardSelection(match, outcome, odds, '1X2'), match, outcome, '1X2')

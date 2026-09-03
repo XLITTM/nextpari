@@ -10,6 +10,7 @@ export function lsportsQuoteUrl(
     fixtureId: string;
     marketId?: string;
     marketKey?: string;
+    line?: string;
     outcomeId: string;
     feedType?: string;
   },
@@ -21,6 +22,7 @@ export function lsportsQuoteUrl(
   params.set('betId', query.outcomeId);
   if (query.marketId) params.set('marketId', query.marketId);
   if (query.marketKey) params.set('marketKey', query.marketKey);
+  if (query.line) params.set('line', query.line);
   params.set('feedType', query.feedType === 'prematch' ? 'prematch' : 'inplay');
   return `${base}/quote?${params.toString()}`;
 }
@@ -30,6 +32,7 @@ export async function fetchLsportsCanonicalQuote(
     fixtureId: string;
     marketId?: string;
     marketKey?: string;
+    line?: string;
     outcomeId: string;
     feedType?: string;
   },

@@ -16,6 +16,7 @@ export interface ParsedMarketEntry {
   ss?: string;
   time?: string;
   updatedAt: number;
+  canonicalKey?: string;
 }
 
 export interface ParsedMarket {
@@ -25,6 +26,7 @@ export interface ParsedMarket {
   name: string;
   category: 'main' | 'half' | 'corners' | 'quarter' | 'specials';
   entries: ParsedMarketEntry[];
+  canonicalKey?: string;
 }
 
 const NAMES: Record<string, { n: string; c: ParsedMarket['category'] }> = {
@@ -74,6 +76,9 @@ const OUTCOME_LABEL: Record<string, string> = {
   x2: 'X2',
   yes: 'Да',
   no: 'Нет',
+  odd: 'Нечет',
+  even: 'Чет',
+  exactly: 'Ровно',
 };
 
 const MAIN_MARKET_IDS = new Set(['1', '2', '3']);
@@ -206,7 +211,7 @@ function categoryOfParsed(market: ParsedMarket): MarketCategory {
   if (market.category === 'half') return /2-й|2nd/i.test(market.name) ? '2nd-half' : '1st-half';
   if (market.category === 'corners') return 'corners';
   if (market.category === 'quarter') return 'intervals';
-  if (/тотал|total/i.test(market.name)) return 'totals';
+  if (/тотал|total|under\/over/i.test(market.name)) return 'totals';
   if (/фора|handicap/i.test(market.name)) return 'handicaps';
   if (/карт/i.test(market.name)) return 'cards';
   return 'main';
@@ -238,7 +243,7 @@ export function groupsFromParsedMarkets(markets: ParsedMarket[]): MarketGroup[] 
       if (!outcomes.length) continue;
       groups.push({
         id: market.key,
-        name: [market.name, entry?.line && !/фора|тотал|угл/i.test(market.name) ? entry.line : '']
+        name: [market.name, entry?.line && !/фора|тотал|угл|under\/over|handicap|corner/i.test(market.name) ? entry.line : '']
           .filter(Boolean)
           .join(' '),
         category: categoryOfParsed(market),

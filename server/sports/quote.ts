@@ -1,3 +1,4 @@
+import { parseCanonicalMarketKey } from '../lsports/state/keys.js';
 import { LSPORTS_HEARTBEAT_STALE_MS } from '../lsports/state/types.js';
 import type { SportsQuote, SportsQuoteDecision, SportsQuoteRequest } from './types.js';
 
@@ -7,6 +8,27 @@ export function roundPrice(value: number): number {
 
 export function pricesEqual(left: number, right: number): boolean {
   return roundPrice(left) === roundPrice(right);
+}
+
+function isLsportsQuoteRequest(request: SportsQuoteRequest): boolean {
+  const provider = String(request.provider ?? 'lsports').trim().toLowerCase();
+  return provider === '' || provider === 'lsports';
+}
+
+function lsportsIdentityMismatch(request: SportsQuoteRequest, quote: SportsQuote): boolean {
+  const marketId = String(request.marketId ?? '').trim();
+  const marketKey = String(request.marketKey ?? '').trim();
+  const parsed = parseCanonicalMarketKey(marketKey);
+  if (!marketId || !parsed) return true;
+  if (parsed.fixtureId !== String(request.fixtureId ?? '').trim()) return true;
+  if (parsed.marketId !== marketId) return true;
+  if (String(quote.fixtureId) !== parsed.fixtureId) return true;
+  if (String(quote.marketId) !== marketId) return true;
+  if (String(quote.marketKey) !== marketKey) return true;
+  const storeLine = String(quote.line ?? '');
+  const requestedLine = String(request.line ?? '').trim();
+  if (storeLine) return requestedLine !== storeLine || parsed.line !== storeLine;
+  return Boolean(requestedLine) || parsed.line !== '';
 }
 
 export function decideSportsQuote(
@@ -28,14 +50,15 @@ export function decideSportsQuote(
     || heartbeatAge > LSPORTS_HEARTBEAT_STALE_MS;
   if (stale) return { ok: false, reason: 'FEED_STALE', quote };
 
+  if (isLsportsQuoteRequest(request) && lsportsIdentityMismatch(request, quote)) {
+    return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
+  }
+
   if (quote.status === 'missing' || String(quote.fixtureId) !== fixtureId) {
     return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
   }
   if (String(quote.outcomeId) !== outcomeId) {
     return { ok: false, reason: 'MISSING_BET_ID', quote };
-  }
-  if (request.marketId && String(request.marketId) !== String(quote.marketId)) {
-    return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
   }
 
   if (quote.status === 'suspended' || !quote.selectable) {

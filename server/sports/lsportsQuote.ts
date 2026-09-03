@@ -5,7 +5,7 @@ import {
   outcomeSelectable,
 } from '../lsports/adapter/markets.js';
 import { toDecimalPrice } from '../lsports/adapter/read.js';
-import { normalizeFixtureId } from '../lsports/state/keys.js';
+import { normalizeFixtureId, parseCanonicalMarketKey } from '../lsports/state/keys.js';
 import { readBetId } from '../lsports/state/parse.js';
 import { betById, type LsportsInPlayStore } from '../lsports/state/store.js';
 import type { LsportsMarketRecord } from '../lsports/state/types.js';
@@ -33,23 +33,27 @@ function emptyQuote(partial: Partial<SportsQuote> & Pick<SportsQuote, 'fixtureId
 function findMarket(
   store: LsportsInPlayStore,
   fixtureId: number,
-  input: { marketId?: string; marketKey?: string; outcomeId: string },
+  input: { marketId?: string; marketKey?: string; line?: string; outcomeId: string },
 ): LsportsMarketRecord | undefined {
   const fixture = store.getFixture(fixtureId);
   if (!fixture) return undefined;
-  if (input.marketKey && fixture.markets.has(input.marketKey)) {
-    return fixture.markets.get(input.marketKey);
+  const parsed = parseCanonicalMarketKey(input.marketKey);
+  if (!parsed) return undefined;
+  if (parsed.fixtureId !== String(fixtureId)) return undefined;
+  const marketId = String(input.marketId ?? '').trim();
+  if (!marketId || parsed.marketId !== marketId) return undefined;
+  const record = fixture.markets.get(String(input.marketKey).trim());
+  if (!record) return undefined;
+  if (String(record.marketId ?? '') !== marketId) return undefined;
+  if (String(record.line ?? '') !== parsed.line) return undefined;
+  const requestedLine = String(input.line ?? '').trim();
+  if (parsed.line) {
+    if (requestedLine !== parsed.line) return undefined;
+  } else if (requestedLine) {
+    return undefined;
   }
-  for (const market of fixture.markets.values()) {
-    if (input.marketId && String(market.marketId ?? '') !== String(input.marketId)) continue;
-    if (betById(market, input.outcomeId)) return market;
-  }
-  if (input.marketId) {
-    for (const market of fixture.markets.values()) {
-      if (betById(market, input.outcomeId)) return market;
-    }
-  }
-  return undefined;
+  if (!betById(record, input.outcomeId)) return undefined;
+  return record;
 }
 
 export function lookupCanonicalQuote(
@@ -58,6 +62,7 @@ export function lookupCanonicalQuote(
     fixtureId: string;
     marketId?: string;
     marketKey?: string;
+    line?: string;
     outcomeId: string;
     feedType?: SportsFeedType;
   },
@@ -85,6 +90,7 @@ export function lookupCanonicalQuote(
   const market = findMarket(store, numericId, {
     marketId: input.marketId,
     marketKey: input.marketKey,
+    line: input.line,
     outcomeId,
   });
   if (!market) return emptyQuote({ ...base, fixtureId: String(numericId) });
@@ -129,6 +135,7 @@ export function lookupCanonicalQuoteRecord(
     fixtureId: query.fixtureId ?? query.fixture_id ?? '',
     marketId: query.marketId ?? query.market_id,
     marketKey: query.marketKey ?? query.market_key,
+    line: query.line,
     outcomeId: query.outcomeId ?? query.betId ?? query.bet_id ?? '',
     feedType: query.feedType === 'prematch' ? 'prematch' : 'inplay',
   });

@@ -89,6 +89,7 @@ async function defaultFetchQuote(request: SportsQuoteRequest): Promise<SportsQuo
     fixtureId: request.fixtureId,
     marketId: request.marketId,
     marketKey: request.marketKey,
+    line: request.line,
     outcomeId: request.outcomeId,
     feedType: request.feedType,
   });

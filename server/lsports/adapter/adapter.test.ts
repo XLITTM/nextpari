@@ -165,7 +165,11 @@ describe('lsports display adapter', () => {
     assert.deepEqual(keys, ['home', 'draw', 'away']);
     assert.equal(market.entries[0]?.outcomes.find((outcome) => outcome.key === 'home')?.odds, 1.85);
     assert.equal(market.entries[0]?.outcomes.find((outcome) => outcome.key === 'home')?.providerBetId, String(HOME_BET));
-    assert.equal(diagnostics.unsupportedMarkets.some((item) => item.marketId === '59'), true);
+    const nextGoal = row.markets.find((item) => item.marketId === '59');
+    assert.ok(nextGoal);
+    assert.equal(nextGoal.name, 'Next Goal');
+    assert.equal(nextGoal.entries[0]?.outcomes[0]?.providerBetId, '46928646919981250');
+    assert.equal(diagnostics.unsupportedMarkets.some((item) => item.marketId === '59'), false);
     assert.equal(formatClockSeconds(3120), '52:00');
     assert.equal(mapConfirmedPeriod(10), '1');
     assert.equal(mapConfirmedPeriod(20), '2');
@@ -274,8 +278,11 @@ describe('lsports display adapter', () => {
     assert.equal(matches.every((row) => row.event.sport_id === '1'), true);
     assert.equal(matches.some((row) => row.event.id === String(FIXTURE_B)), false);
     assert.equal(diagnostics.skippedReasons.not_football, 1);
-    assert.equal(diagnostics.unsupportedMarkets[0]?.marketId, '59');
-    assert.equal(diagnostics.unsupportedMarkets[0]?.name, 'Next Goal');
+    const nextGoal = matches.find((row) => row.event.id === String(FIXTURE_A))
+      ?.markets.find((market) => market.marketId === '59');
+    assert.ok(nextGoal);
+    assert.equal(nextGoal.name, 'Next Goal');
+    assert.equal(diagnostics.unsupportedMarkets.some((item) => item.marketId === '59'), false);
   });
 
   it('does not remove unrelated fixtures when a Type 3 update is republished', () => {
@@ -326,5 +333,377 @@ describe('lsports display adapter', () => {
     assert.equal(isLsportsDisplayFeedEnabled({ LSPORTS_DISPLAY_FEED: '1' }), true);
     assert.equal(isLsportsDisplayFeedEnabled({ LSPORTS_DISPLAY_FEED: 'true' }), false);
     assert.equal(JSON.stringify(adaptLsportsStore(seededStore(false)).diagnostics).includes('shared-secret'), false);
+  });
+});
+
+const OVER_25 = '220000000000000001';
+const UNDER_25 = '220000000000000002';
+const OVER_35 = '220000000000000003';
+const UNDER_35 = '220000000000000004';
+const OVER_45 = '220000000000000005';
+const UNDER_45 = '220000000000000006';
+const AH_HOME_05 = '330000000000000001';
+const AH_AWAY_05 = '330000000000000002';
+const AH_HOME_15 = '330000000000000003';
+const AH_AWAY_15 = '330000000000000004';
+const BTTS_YES = '170000000000000001';
+const BTTS_NO = '170000000000000002';
+const DC_1X = '457000000000000001';
+const DC_12 = '457000000000000002';
+const DC_X2 = '457000000000000003';
+const BAD_PRICE_BET = '990000000000000001';
+const UNKNOWN_BET = '880000000000000001';
+
+function footballType3(markets: unknown[], fixtureId = FIXTURE_A) {
+  return {
+    Header: { Type: 3, ServerTimestamp: 3000 },
+    Body: { Events: [{ FixtureId: fixtureId, Markets: markets }] },
+  };
+}
+
+function open1x2Bets(priceHome = '1.85', lastUpdate = '2026-09-03T12:00:00Z') {
+  return {
+    Id: 1,
+    Name: '1X2',
+    Status: 1,
+    Bets: [
+      { Id: HOME_BET, Name: '1', Price: priceHome, Status: 1, BetStatusId: 1, LastUpdate: lastUpdate },
+      { Id: DRAW_BET, Name: 'X', Price: '3.40', Status: 1, BetStatusId: 1, LastUpdate: lastUpdate },
+      { Id: AWAY_BET, Name: '2', Price: '4.20', Status: 1, BetStatusId: 1, LastUpdate: lastUpdate },
+    ],
+  };
+}
+
+describe('lsports multi-market football adapter', () => {
+  it('adapts 1X2, multi-line totals, multi-line handicap, BTTS, and double chance from observed names', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets(),
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        BaseLine: '2.5',
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.90', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '1.95', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        BaseLine: '3.5',
+        Bets: [
+          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 1439,
+        Name: 'Asian Handicap - Full Time',
+        Status: 1,
+        Line: '-0.5',
+        Bets: [
+          { Id: AH_HOME_05, Name: '1', Line: '-0.5', Price: '1.88', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: AH_AWAY_05, Name: '2', Line: '-0.5', Price: '1.98', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 1439,
+        Name: 'Asian Handicap - Full Time',
+        Status: 1,
+        Line: '-1.5',
+        Bets: [
+          { Id: AH_HOME_15, Name: '1', Line: '-1.5', Price: '2.40', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: AH_AWAY_15, Name: '2', Line: '-1.5', Price: '1.55', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 1439,
+        Name: 'Asian Handicap - Full Time',
+        Status: 1,
+        Line: '+0.5',
+        Bets: [
+          { Id: '330000000000000005', Name: '1', Line: '+0.5', Price: '1.62', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: '330000000000000006', Name: '2', Line: '+0.5', Price: '2.30', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 17,
+        Name: 'Both Teams To Score',
+        Status: 1,
+        Bets: [
+          { Id: BTTS_YES, Name: 'Yes', Price: '1.80', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: BTTS_NO, Name: 'No', Price: '2.05', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 457,
+        Name: 'Double Chance 2nd Period',
+        Status: 1,
+        Bets: [
+          { Id: DC_1X, Name: '1X', Price: '1.40', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: DC_12, Name: '12', Price: '1.30', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: DC_X2, Name: 'X2', Price: '1.60', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+    ]));
+    const { matches } = adaptLsportsStore(store);
+    const adapted = matches[0]?.markets ?? [];
+    assert.equal(adapted.some((market) => market.key === NEXTPARI_1X2_MARKET_KEY), true);
+    const totals = adapted.find((market) => market.marketId === '2');
+    assert.ok(totals);
+    assert.equal(totals.entries.length, 2);
+    assert.deepEqual(totals.entries.map((entry) => entry.line).sort(), ['2.5', '3.5']);
+    assert.equal(totals.entries.find((entry) => entry.line === '2.5')?.outcomes.find((row) => row.key === 'over')?.providerBetId, String(OVER_25));
+    assert.equal(totals.entries.find((entry) => entry.line === '3.5')?.outcomes.find((row) => row.key === 'over')?.odds, 2.2);
+    const handicap = adapted.find((market) => market.marketId === '1439');
+    assert.ok(handicap);
+    assert.equal(handicap.entries.length, 3);
+    assert.equal(handicap.category, 'main');
+    const minusHalf = handicap.entries.find((entry) => entry.line === '-0.5');
+    const plusHalf = handicap.entries.find((entry) => entry.line === '+0.5');
+    assert.equal(minusHalf?.canonicalKey, `${FIXTURE_A}:1439:-0.5`);
+    assert.equal(plusHalf?.canonicalKey, `${FIXTURE_A}:1439:+0.5`);
+    assert.equal(minusHalf?.outcomes.find((row) => row.key === 'home')?.providerBetId, String(AH_HOME_05));
+    assert.equal(plusHalf?.outcomes.find((row) => row.key === 'home')?.providerBetId, '330000000000000005');
+    assert.notEqual(minusHalf?.canonicalKey, plusHalf?.canonicalKey);
+    const btts = adapted.find((market) => market.marketId === '17');
+    assert.deepEqual(btts?.entries[0]?.outcomes.map((row) => row.key), ['yes', 'no']);
+    const dc = adapted.find((market) => market.marketId === '457');
+    assert.equal(dc?.category, 'half');
+    assert.deepEqual(dc?.entries[0]?.outcomes.map((row) => row.key), ['1x', '12', 'x2']);
+    assert.equal(JSON.stringify(adapted).includes('2.1'), false);
+    assert.equal(JSON.stringify(adapted).includes('3.25'), false);
+  });
+
+  it('prunes exploded totals lines omitted from a later Type 3 Market.Id replacement', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets('1.85'),
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        MainLine: '2.5',
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.90', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '1.95', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_45, Name: 'Over', Line: '4.5', BaseLine: '4.5', Price: '3.10', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_45, Name: 'Under', Line: '4.5', BaseLine: '4.5', Price: '1.35', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+      {
+        Id: 17,
+        Name: 'Both Teams To Score',
+        Status: 1,
+        Bets: [
+          { Id: BTTS_YES, Name: 'Yes', Price: '1.80', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: BTTS_NO, Name: 'No', Price: '2.05', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+    ]));
+    store.ingestRmq(footballType3([{
+      Id: 2,
+      Name: 'Under/Over',
+      Status: 1,
+      MainLine: '2.5',
+      Bets: [
+        { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.72', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '2.10', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+      ],
+    }]));
+    const { matches } = adaptLsportsStore(store);
+    const totals = matches[0]?.markets.find((market) => market.marketId === '2');
+    assert.deepEqual(totals?.entries.map((entry) => entry.line).sort(), ['2.5', '3.5']);
+    assert.equal(totals?.entries.find((entry) => entry.line === '2.5')?.outcomes.find((row) => row.key === 'over')?.odds, 1.72);
+    assert.equal(totals?.entries.find((entry) => entry.line === '3.5')?.outcomes.find((row) => row.key === 'over')?.odds, 2.2);
+    assert.equal(totals?.entries.some((entry) => entry.line === '4.5'), false);
+    const btts = matches[0]?.markets.find((market) => market.marketId === '17');
+    assert.deepEqual(btts?.entries[0]?.outcomes.map((row) => row.key), ['yes', 'no']);
+    assert.equal(mainOdds(matches[0]?.markets ?? [])['1'], 1.85);
+  });
+
+  it('unions same-Market.Id objects in one Type 3 event before pruning siblings', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets(),
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        MainLine: '2.5',
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.90', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '1.95', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.20', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.70', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: OVER_45, Name: 'Over', Line: '4.5', BaseLine: '4.5', Price: '3.10', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+          { Id: UNDER_45, Name: 'Under', Line: '4.5', BaseLine: '4.5', Price: '1.35', Status: 1, LastUpdate: '2026-09-03T12:00:00Z' },
+        ],
+      },
+    ]));
+    store.ingestRmq(footballType3([
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        BaseLine: '2.5',
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Line: '2.5', BaseLine: '2.5', Price: '1.72', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', BaseLine: '2.5', Price: '2.10', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        ],
+      },
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        BaseLine: '3.5',
+        Bets: [
+          { Id: OVER_35, Name: 'Over', Line: '3.5', BaseLine: '3.5', Price: '2.05', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+          { Id: UNDER_35, Name: 'Under', Line: '3.5', BaseLine: '3.5', Price: '1.80', Status: 1, LastUpdate: '2026-09-03T12:05:00Z' },
+        ],
+      },
+    ]));
+    const { matches } = adaptLsportsStore(store);
+    const totals = matches[0]?.markets.find((market) => market.marketId === '2');
+    assert.deepEqual(totals?.entries.map((entry) => entry.line).sort(), ['2.5', '3.5']);
+    assert.equal(totals?.entries.find((entry) => entry.line === '3.5')?.outcomes.find((row) => row.key === 'over')?.odds, 2.05);
+    assert.equal(totals?.entries.some((entry) => entry.line === '4.5'), false);
+  });
+
+  it('does not publish suspended or settled extra markets and never uses invalid Price', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets(),
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 2,
+        BaseLine: '2.5',
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Line: '2.5', Price: '1.90', Status: 1 },
+          { Id: UNDER_25, Name: 'Under', Line: '2.5', Price: '1.95', Status: 1 },
+        ],
+      },
+      {
+        Id: 17,
+        Name: 'Both Teams To Score',
+        Status: 3,
+        Bets: [
+          { Id: BTTS_YES, Name: 'Yes', Price: '1.80', Status: 3, Settlement: 2 },
+          { Id: BTTS_NO, Name: 'No', Price: '2.05', Status: 3, Settlement: 1 },
+        ],
+      },
+      {
+        Id: 59,
+        Name: 'Next Goal',
+        Status: 1,
+        Bets: [
+          { Id: BAD_PRICE_BET, Name: '1', Price: '1', Status: 1 },
+        ],
+      },
+      {
+        Id: 99999,
+        Name: 'Unknown Widget',
+        Status: 1,
+        Bets: [
+          { Id: UNKNOWN_BET, Name: 'Widget', Price: '1.55', Status: 1 },
+        ],
+      },
+    ]));
+    const { matches, diagnostics } = adaptLsportsStore(store);
+    const adapted = matches[0]?.markets ?? [];
+    assert.equal(adapted.some((market) => market.marketId === '2'), false);
+    assert.equal(adapted.some((market) => market.marketId === '17'), false);
+    assert.equal(adapted.some((market) => market.marketId === '59'), false);
+    const unknown = adapted.find((market) => market.marketId === '99999');
+    assert.ok(unknown);
+    assert.equal(unknown.entries[0]?.outcomes[0]?.providerBetId, String(UNKNOWN_BET));
+    assert.equal(unknown.entries[0]?.outcomes[0]?.odds, 1.55);
+    assert.equal(mainOdds(adapted)['1'], 1.85);
+    assert.equal(diagnostics.unsupportedMarkets.some((item) => item.marketId === '59'), true);
+    assert.equal(JSON.stringify(adapted).includes('"odds":1}'), false);
+  });
+
+  it('omits a suspended extra-market Bet without dropping sibling outcomes', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets(),
+      {
+        Id: 17,
+        Name: 'Both Teams To Score',
+        Status: 1,
+        Bets: [
+          { Id: BTTS_YES, Name: 'Yes', Price: '1.80', Status: 2, BetStatusId: 2 },
+          { Id: BTTS_NO, Name: 'No', Price: '2.05', Status: 1, BetStatusId: 1 },
+        ],
+      },
+    ]));
+    const { matches } = adaptLsportsStore(store);
+    const btts = matches[0]?.markets.find((market) => market.marketId === '17');
+    assert.equal(btts?.entries[0]?.outcomes.some((row) => row.key === 'yes'), false);
+    assert.equal(btts?.entries[0]?.outcomes.find((row) => row.key === 'no')?.odds, 2.05);
+    assert.equal(btts?.entries[0]?.outcomes.find((row) => row.key === 'no')?.providerBetId, String(BTTS_NO));
+  });
+
+  it('splits a packed live Under/Over + opposite-line handicap object into distinct canonical keys', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestFixturesSnapshot(snapshotFixtures());
+    store.ingestRmq(type2());
+    store.ingestRmq(footballType3([
+      open1x2Bets(),
+      {
+        Id: 2,
+        Name: 'Under/Over',
+        Status: 1,
+        MainLine: '2.5',
+        BaseLine: null,
+        Line: null,
+        Bets: [
+          { Id: OVER_25, Name: 'Over', Status: 1, Line: '2.5', BaseLine: '2.5', Price: '2.14' },
+          { Id: UNDER_25, Name: 'Under', Status: 1, Line: '2.5', BaseLine: '2.5', Price: '1.675' },
+          { Id: OVER_35, Name: 'Over', Status: 1, Line: '3.5', BaseLine: '3.5', Price: '4.08' },
+          { Id: UNDER_35, Name: 'Under', Status: 1, Line: '3.5', BaseLine: '3.5', Price: '1.22' },
+        ],
+      },
+      {
+        Id: 1439,
+        Name: 'Asian Handicap - Full Time',
+        Status: 1,
+        MainLine: '-1.0',
+        BaseLine: null,
+        Line: null,
+        Bets: [
+          { Id: AH_HOME_05, Name: '1', Status: 1, Line: '-1.0', BaseLine: '-1.0', Price: '1.97' },
+          { Id: AH_AWAY_05, Name: '2', Status: 1, Line: '1.0', BaseLine: '-1.0', Price: '1.795' },
+        ],
+      },
+    ]));
+    const { matches } = adaptLsportsStore(store);
+    const totals = matches[0]?.markets.find((market) => market.marketId === '2');
+    assert.deepEqual(totals?.entries.map((entry) => entry.line).sort(), ['2.5', '3.5']);
+    assert.equal(totals?.entries.find((entry) => entry.line === '2.5')?.canonicalKey, `${FIXTURE_A}:2:2.5`);
+    assert.equal(totals?.entries.find((entry) => entry.line === '3.5')?.canonicalKey, `${FIXTURE_A}:2:3.5`);
+    const handicap = matches[0]?.markets.find((market) => market.marketId === '1439');
+    assert.equal(handicap?.entries.length, 1);
+    assert.equal(handicap?.entries[0]?.line, '-1.0');
+    assert.equal(handicap?.entries[0]?.canonicalKey, `${FIXTURE_A}:1439:-1.0`);
+    assert.equal(handicap?.entries[0]?.outcomes.length, 2);
   });
 });

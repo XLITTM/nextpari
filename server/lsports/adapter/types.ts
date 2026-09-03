@@ -38,6 +38,8 @@ export interface AdaptedMarketEntry {
   ss?: string;
   time?: string;
   updatedAt: number;
+  /** Canonical store key `fixtureId:marketId:line`. Required for quote/settlement. */
+  canonicalKey?: string;
 }
 
 export interface AdaptedMarket {
@@ -47,6 +49,7 @@ export interface AdaptedMarket {
   name: string;
   category: 'main' | 'half' | 'corners' | 'quarter' | 'specials';
   entries: AdaptedMarketEntry[];
+  canonicalKey?: string;
 }
 
 export type LsportsSkipReason =
