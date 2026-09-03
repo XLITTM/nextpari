@@ -4,6 +4,7 @@ import { useSportsStore } from '@/stores/sportsStore';
 import { isLineEvent, isLive, type BetsEvent } from '@/lib/betsapi';
 import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
 import type { ParsedMarket } from '@/lib/odds-parser';
+import { isLsportsDisplayFeedEnabled } from '@/lib/lsportsFeed';
 import {
   isArcadeSportsPaused,
   subscribeArcadeSportsPause,
@@ -46,6 +47,9 @@ export function useEventsList(tab: EventTab, _sportId = '1') {
   const events = useMemo(() => safeEvents(tab, eventsMap), [eventsMap, tab]);
 
   const loadLive = useCallback(async () => {
+    if (isLsportsDisplayFeedEnabled()) {
+      return;
+    }
     if (liveAbort.current) liveAbort.current.abort();
     liveAbort.current = new AbortController();
     const { signal } = liveAbort.current;

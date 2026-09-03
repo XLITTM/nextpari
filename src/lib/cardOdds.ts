@@ -12,10 +12,17 @@ export interface CardOutcomeButton {
 }
 
 export function mainOutcomeButtons(match: MatchEvent): CardOutcomeButton[] {
+  const lockMissing = Boolean(match.marketsLocked);
+  const button = (key: string, odds: number, fallback: number): CardOutcomeButton => {
+    if (lockMissing) {
+      return { key, odds: odds > 1 ? odds : 0, locked: odds <= 1 };
+    }
+    return { key, odds: odds > 1 ? odds : fallback, locked: false };
+  };
   return [
-    { key: 'П1', odds: match.markets['1'] > 1 ? match.markets['1'] : 2.1, locked: false },
-    { key: 'X', odds: match.markets.x > 1 ? match.markets.x : 3.25, locked: false },
-    { key: 'П2', odds: match.markets['2'] > 1 ? match.markets['2'] : 2.8, locked: false },
+    button('П1', match.markets['1'], 2.1),
+    button('X', match.markets.x, 3.25),
+    button('П2', match.markets['2'], 2.8),
   ];
 }
 

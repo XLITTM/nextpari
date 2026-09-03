@@ -5,6 +5,8 @@ export interface ParsedOutcome {
   key: string;
   odds: number;
   raw: string;
+  /** Exact provider outcome id. LSports uses Bet.Id; never treat Bet.Name as identity. */
+  providerBetId?: string;
 }
 
 export interface ParsedMarketEntry {

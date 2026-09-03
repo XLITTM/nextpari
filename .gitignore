@@ -10,7 +10,9 @@ node_modules
 dist
 dist-ssr
 .tmp
+.tmp/
 *.local
+.env.lsports.local
 
 .vscode/*
 !.vscode/extensions.json

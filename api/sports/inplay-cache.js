@@ -7,7 +7,6 @@ const CACHE_TTL_MS = 4_000;
 const SPORT_TTL_MS = 24_000;
 const PAUSE_429_MS = 30_000;
 const CLOSED = new Set(['3', '4', '5', '8']);
-const FALLBACK_TOKEN = '264390-ZTbtCqHFCvyhXS';
 const SPORT_IDS = ['1', '13', '17', '18', '91'];
 
 const sportCache = new Map();
@@ -18,7 +17,7 @@ let inflight = null;
 let rotateAt = 0;
 
 function resolveToken() {
-  return getBetsApiGatewayToken() || FALLBACK_TOKEN;
+  return getBetsApiGatewayToken();
 }
 
 function timeStatusOf(row) {

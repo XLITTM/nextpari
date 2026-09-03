@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { betsapiGatewayPlugin } from './plugins/betsapi-gateway';
 import { betsapiLiveWsPlugin } from './plugins/betsapi-live-ws';
 import { ownerStaffOnboardingPlugin } from './plugins/owner-staff-onboarding';
+import { lsportsShadowPlugin } from './plugins/lsports-shadow';
 import { sportsCatalogPlugin } from './plugins/sports-catalog';
 import { sportsInplayPlugin } from './plugins/sports-inplay';
 
@@ -25,6 +26,7 @@ export default defineConfig(({ mode }) => {
       react(),
       sportsCatalogPlugin(),
       sportsInplayPlugin(),
+      lsportsShadowPlugin(env.VITE_LSPORTS_FEED_BASE_URL),
       betsapiGatewayPlugin(),
       betsapiLiveWsPlugin(token),
       ownerStaffOnboardingPlugin(),

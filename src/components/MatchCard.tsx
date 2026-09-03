@@ -8,6 +8,7 @@ import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
 import { extraMarketRows, buildCardSelection, mainOutcomeButtons } from '../lib/cardOdds';
+import { isSelectableLsportsOutcome, withLsportsIdentity } from '../lib/sportsSelection';
 
 interface MatchCardProps {
   match: MatchEvent;
@@ -69,24 +70,9 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
   const extraRows = extraMarketRows(match);
   const extraCount = Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
 
-  const buildSelection = (outcome: string, odds: number): BetSelection => ({
-    id: `${match.id}-1X2-${outcome}`,
-    matchId: match.id,
-    matchLabel: `${match.team1} — ${match.team2}`,
-    market: '1X2',
-    outcome,
-    odds,
-    marketKey: '1x2',
-    selectionKey: outcome === 'П1' ? 'p1' : outcome === 'П2' ? 'p2' : 'draw',
-    homeTeam: match.team1,
-    awayTeam: match.team2,
-    sport: match.sport,
-    country: match.country,
-    league: match.league,
-    isLive: match.isLive,
-    startTime: match.startTime,
-    liveStatus: match.liveStatus,
-  });
+  const buildSelection = (outcome: string, odds: number): BetSelection => (
+    withLsportsIdentity(buildCardSelection(match, outcome, odds, '1X2'), match, outcome, '1X2')
+  );
 
   return (
     <div
@@ -183,7 +169,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
               selection={buildSelection(o.key, o.odds)}
               label={o.key}
               odds={o.odds}
-              locked={o.locked}
+              locked={o.locked || !isSelectableLsportsOutcome(match, o.key, '1X2')}
               isActive={isSelectionActive(match.id, o.key, '1X2')}
             />
           ))}
@@ -195,7 +181,12 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
               {row.outcomes.map((item) => (
                 <MatchOddButton
                   key={`${row.name}-${item.label}`}
-                  selection={buildCardSelection(match, item.label, item.odds, row.name)}
+                  selection={withLsportsIdentity(
+                    buildCardSelection(match, item.label, item.odds, row.name),
+                    match,
+                    item.label,
+                    row.name,
+                  )}
                   label={item.label}
                   odds={item.odds}
                   isActive={isSelectionActive(match.id, item.label, row.name)}

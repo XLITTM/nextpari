@@ -152,6 +152,16 @@ export interface BetSelection {
   isLive?: boolean;
   startTime?: number;
   liveStatus?: string;
+  provider?: 'lsports' | 'betsapi';
+  feedType?: 'inplay' | 'prematch';
+  fixtureId?: string;
+  marketId?: string;
+  line?: string;
+  outcomeId?: string;
+  providerLastUpdate?: string;
+  marketStatus?: string;
+  betStatus?: string;
+  betStatusId?: string;
 }
 
 export interface Transaction {

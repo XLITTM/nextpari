@@ -1,6 +1,7 @@
 import { fetchEventOdds, pickClockFromOdds, tournamentPriority } from '@/lib/betsapi';
 import { parseOdds } from '@/lib/odds-parser';
 import { enrichProviderMarkets } from '@/lib/matchOdds';
+import { isLsportsDisplayEvent } from '@/lib/lsportsFeed';
 import { useSportsStore } from '@/stores/sportsStore';
 
 const MAX_LIVE = 16;
@@ -25,11 +26,13 @@ export function pickCatalogIds(liveLimit = MAX_LIVE, lineLimit = MAX_LINE): stri
   };
   const live = store
     .getLiveEvents()
+    .filter((event) => !isLsportsDisplayEvent(event))
     .map((event) => event.id)
     .sort((a, b) => rank(b) - rank(a))
     .slice(0, liveLimit);
   const line = store
     .getUpcomingEvents()
+    .filter((event) => !isLsportsDisplayEvent(event))
     .map((event) => event.id)
     .sort((a, b) => rank(b) - rank(a))
     .slice(0, lineLimit);
@@ -43,7 +46,7 @@ export async function hydrateCatalogOdds(eventIds: string[], signal?: AbortSigna
     for (const id of eventIds) {
       if (signal?.aborted) return;
       const state = useSportsStore.getState().getEvent(id);
-      if (!state) continue;
+      if (!state || isLsportsDisplayEvent(state.event)) continue;
       const prevAt = lastHydrated.get(id) ?? 0;
       if (hasMainMarket(id) && Date.now() - prevAt < STALE_MS) continue;
 
