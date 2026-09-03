@@ -2,6 +2,7 @@ import { GAME_NO_STORE_HEADERS, serverTimingHeader } from '../games/httpCache.js
 import { isCanonicalSportsBetEnabled } from '../sports/enabled.js';
 import { fetchLsportsCanonicalQuote } from '../sports/feedClient.js';
 import { createSportsPlaceAsPlayerRpc, type SportsPlaceAsPlayer } from '../sports/placeRpc.js';
+import { sanitizeChangedLeg } from '../sports/changedLeg.js';
 import { decideSportsQuote } from '../sports/quote.js';
 import { evaluateSportsRisk } from '../sports/risk.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
@@ -212,9 +213,13 @@ export async function placeSportsBet(
       bettingEnabled: isCanonicalSportsBetEnabled(env),
     });
     if (!decision.ok) {
+      const currentPrice = decision.currentPrice ?? decision.quote?.price ?? quote.price ?? null;
       throw new StaffOnboardingError(decision.reason, quoteHttpStatus(decision.reason), decision.reason, {
-        currentPrice: decision.currentPrice ?? decision.quote?.price ?? null,
+        currentPrice,
         quote: decision.quote ?? quote,
+        ...(decision.reason === 'ODDS_CHANGED'
+          ? { changedLeg: sanitizeChangedLeg(decision.quote ?? quote, currentPrice) }
+          : {}),
       });
     }
     const raw = asRecord(rawLegs[quotes.length]);

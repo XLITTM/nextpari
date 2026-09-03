@@ -13,7 +13,7 @@ import { SPORTS_PLACE_SERVER_RPC } from '../sports/placeRpc.js';
 import { mapPlayerGameRpcError } from './playerGameRpc.js';
 import type { SportsPlacePorts } from './sportsPlaceService.js';
 import { PLAYER_ACCESS_COOKIE, PLAYER_REFRESH_COOKIE } from './playerCookies.js';
-import type { SportsQuote } from '../sports/types.js';
+import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const PLAYER_ID = 'aaaaaaaa-1111-4111-8111-bbbbbbbbbbbb';
@@ -68,6 +68,7 @@ const PLACE_BODY = {
 
 function createPorts(init?: {
   quote?: SportsQuote;
+  fetchQuote?: (request: SportsQuoteRequest) => Promise<SportsQuote>;
   rpcPayload?: Record<string, unknown>;
   rpcError?: string;
   placeImpl?: SportsPlacePorts['placeAsVerifiedPlayer'];
@@ -108,7 +109,7 @@ function createPorts(init?: {
       return { balance: 50, currency: 'TMTM', status: 'active', publicId: '110790' };
     },
     async savePlayerProfile() {},
-    fetchQuote: async () => init?.quote ?? OPEN,
+    fetchQuote: init?.fetchQuote ?? (async () => init?.quote ?? OPEN),
     placeAsVerifiedPlayer: init?.placeImpl ?? (async (args) => {
       places.push({
         playerUserId: args.playerUserId,
@@ -204,6 +205,14 @@ describe('player sports place HTTP', () => {
     });
     assert.equal(changed.body.error, 'ODDS_CHANGED');
     assert.equal(changed.body.currentPrice, 1.85);
+    assert.deepEqual(changed.body.changedLeg, {
+      fixtureId: '19981248',
+      marketId: '1',
+      marketKey: '19981248:1:',
+      line: '',
+      outcomeId: '117469638719981250',
+      currentPrice: 1.85,
+    });
     assert.equal(changedPorts.places.length, 0);
 
     const missingKey = await place(createPorts(), {
@@ -240,6 +249,38 @@ describe('player sports place HTTP', () => {
     assert.equal(poor.status, 409);
     assert.equal(poor.body.error, 'INSUFFICIENT_AVAILABLE_BALANCE');
     assert.equal(broke.places.length, 1);
+  });
+
+  it('identifies only the exact express leg that failed with ODDS_CHANGED and does not debit', async () => {
+    const quotes: Record<string, SportsQuote> = {
+      o1: { ...OPEN, fixtureId: '100', marketId: '1', marketKey: '100:1:', outcomeId: 'o1', price: 1.4 },
+      o2: { ...OPEN, fixtureId: '200', marketId: '1', marketKey: '200:1:', outcomeId: 'o2', price: 2.2 },
+      o3: { ...OPEN, fixtureId: '300', marketId: '1', marketKey: '300:1:', outcomeId: 'o3', price: 3.1 },
+    };
+    const ports = createPorts({
+      fetchQuote: async (request) => quotes[String(request.outcomeId)] ?? OPEN,
+    });
+    const result = await place(ports, {
+      stake: 10,
+      mode: 'express',
+      idempotencyKey: 'express-odds-leg-2',
+      selections: [
+        { fixtureId: '100', marketId: '1', marketKey: '100:1:', outcomeId: 'o1', price: 1.4 },
+        { fixtureId: '200', marketId: '1', marketKey: '200:1:', outcomeId: 'o2', price: 1.8 },
+        { fixtureId: '300', marketId: '1', marketKey: '300:1:', outcomeId: 'o3', price: 3.1 },
+      ],
+    });
+    assert.equal(result.body.error, 'ODDS_CHANGED');
+    assert.equal(result.body.currentPrice, 2.2);
+    assert.deepEqual(result.body.changedLeg, {
+      fixtureId: '200',
+      marketId: '1',
+      marketKey: '200:1:',
+      line: '',
+      outcomeId: 'o2',
+      currentPrice: 2.2,
+    });
+    assert.equal(ports.places.length, 0);
   });
 
   it('debits once for the same idempotency key and for two concurrent identical requests', async () => {
