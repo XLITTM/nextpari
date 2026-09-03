@@ -194,6 +194,145 @@ describe('quote revalidation', () => {
     assert.match(adapter, /toDecimalPrice\(bet\.Price/);
     assert.equal(adapter.includes('ProviderMarkets'), false);
   });
+
+  it('revalidates extra-market quotes by FixtureId + Market.Id + line + Bet.Id', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestHeartbeat({ Header: { Type: 32, ServerTimestamp: 1 } }, Date.now());
+    store.ingestFixturesSnapshot({
+      Header: { Type: 1, ServerTimestamp: 1 },
+      Body: [{
+        FixtureId: FIXTURE,
+        Fixture: {
+          Sport: { Id: 6046, Name: 'Football' },
+          Participants: [
+            { Name: 'Home FC', Position: '1' },
+            { Name: 'Away FC', Position: '2' },
+          ],
+        },
+      }],
+    });
+    store.ingestMarketDelta({
+      Header: { Type: 3, ServerTimestamp: 2 },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE,
+          Markets: [
+            {
+              Id: 1,
+              Name: '1X2',
+              Status: 1,
+              Bets: [{ Id: HOME_BET, Name: '1', Status: 1, Price: 1.85 }],
+            },
+            {
+              Id: 2,
+              Name: 'Under/Over',
+              Status: 1,
+              BaseLine: '2.5',
+              Bets: [
+                { Id: '2201', Name: 'Over', Line: '2.5', BaseLine: '2.5', Status: 1, Price: 1.9 },
+                { Id: '2202', Name: 'Under', Line: '2.5', BaseLine: '2.5', Status: 1, Price: 1.95 },
+              ],
+            },
+            {
+              Id: 2,
+              Name: 'Under/Over',
+              Status: 1,
+              BaseLine: '3.5',
+              Bets: [
+                { Id: '2301', Name: 'Over', Line: '3.5', BaseLine: '3.5', Status: 1, Price: 2.2 },
+                { Id: '2302', Name: 'Under', Line: '3.5', BaseLine: '3.5', Status: 1, Price: 1.7 },
+              ],
+            },
+          ],
+        }],
+      },
+    });
+    const over25 = lookupCanonicalQuote(store, {
+      fixtureId: String(FIXTURE),
+      marketId: '2',
+      marketKey: `${FIXTURE}:2:2.5`,
+      line: '2.5',
+      outcomeId: '2201',
+    });
+    assert.equal(over25.selectable, true);
+    assert.equal(over25.price, 1.9);
+    assert.equal(over25.marketId, '2');
+    assert.equal(over25.line, '2.5');
+    assert.equal(over25.outcomeName, 'Over');
+    const wrongLine = lookupCanonicalQuote(store, {
+      fixtureId: String(FIXTURE),
+      marketId: '2',
+      line: '3.5',
+      outcomeId: '2201',
+    });
+    assert.equal(wrongLine.selectable, false);
+    assert.equal(wrongLine.status, 'missing');
+    const changed = decideSportsQuote(
+      {
+        fixtureId: String(FIXTURE),
+        marketId: '2',
+        marketKey: `${FIXTURE}:2:2.5`,
+        line: '2.5',
+        outcomeId: '2201',
+        price: 9.99,
+      },
+      over25,
+    );
+    assert.equal(changed.ok, false);
+    if (!changed.ok) {
+      assert.equal(changed.reason, 'ODDS_CHANGED');
+      assert.equal(changed.currentPrice, 1.9);
+    }
+    const lineMismatch = decideSportsQuote(
+      {
+        fixtureId: String(FIXTURE),
+        marketId: '2',
+        line: '3.5',
+        outcomeId: '2201',
+        price: 1.9,
+      },
+      over25,
+    );
+    assert.equal(lineMismatch.ok, false);
+    if (!lineMismatch.ok) assert.equal(lineMismatch.reason, 'EVENT_UNAVAILABLE');
+
+    store.ingestMarketDelta({
+      Header: { Type: 3, ServerTimestamp: 3 },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE,
+          Markets: [{
+            Id: 2,
+            Name: 'Under/Over',
+            Status: 2,
+            BaseLine: '2.5',
+            Bets: [
+              { Id: '2201', Name: 'Over', Line: '2.5', BaseLine: '2.5', Status: 2, Price: 1.9 },
+            ],
+          }],
+        }],
+      },
+    });
+    const suspended = lookupCanonicalQuote(store, {
+      fixtureId: String(FIXTURE),
+      marketId: '2',
+      line: '2.5',
+      outcomeId: '2201',
+    });
+    assert.equal(suspended.selectable, false);
+    const afterSelect = decideSportsQuote(
+      {
+        fixtureId: String(FIXTURE),
+        marketId: '2',
+        line: '2.5',
+        outcomeId: '2201',
+        price: 1.9,
+      },
+      suspended,
+    );
+    assert.equal(afterSelect.ok, false);
+    if (!afterSelect.ok) assert.equal(afterSelect.reason, 'MARKET_SUSPENDED');
+  });
 });
 
 describe('Type35 settlement math', () => {
@@ -252,6 +391,78 @@ describe('Type35 settlement math', () => {
     });
     assert.equal(unknown.action, 'unknown');
     assert.equal(unknown.creditPayout, 0);
+  });
+
+  it('settles an extra-market Bet.Id and reverses on Type 35 code -1 without paying unknown codes', () => {
+    const store = new LsportsInPlayStore();
+    store.ingestHeartbeat({ Header: { Type: 32, ServerTimestamp: 1 } }, Date.now());
+    store.ingestMarketDelta({
+      Header: { Type: 3, ServerTimestamp: 2 },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE,
+          Markets: [{
+            Id: 2,
+            Name: 'Under/Over',
+            Status: 1,
+            BaseLine: '2.5',
+            Bets: [
+              { Id: '2201', Name: 'Over', Line: '2.5', BaseLine: '2.5', Status: 1, Price: 1.9 },
+            ],
+          }],
+        }],
+      },
+    });
+    store.ingestRmq({
+      Header: { Type: 35, ServerTimestamp: 4, MsgGuid: 'totals-win' },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE,
+          Markets: [{
+            Id: 2,
+            Name: 'Under/Over',
+            BaseLine: '2.5',
+            Bets: [
+              { Id: '2201', Name: 'Over', Line: '2.5', Settlement: 2, LastUpdate: '2026-09-03T12:10:00Z' },
+            ],
+          }],
+        }],
+      },
+    });
+    const notices = store.takeSettlementNotices();
+    assert.equal(notices[0]?.betId, '2201');
+    assert.equal(notices[0]?.marketId, '2');
+    assert.equal(notices[0]?.marketKey, `${FIXTURE}:2:2.5`);
+    assert.equal(notices[0]?.settlement, 2);
+    assert.equal(settlementPayout(10, 1.9, notices[0]!.settlement), 19);
+
+    store.ingestRmq({
+      Header: { Type: 35, ServerTimestamp: 5, MsgGuid: 'totals-revert' },
+      Body: {
+        Events: [{
+          FixtureId: FIXTURE,
+          Markets: [{
+            Id: 2,
+            BaseLine: '2.5',
+            Bets: [
+              { Id: '2201', Settlement: -1, LastUpdate: '2026-09-03T12:11:00Z' },
+            ],
+          }],
+        }],
+      },
+    });
+    const reverted = store.takeSettlementNotices();
+    assert.equal(reverted[0]?.settlement, -1);
+    const reverse = planSettlementTransition({
+      previousCode: 2,
+      previousPayout: 19,
+      incoming: -1,
+      stake: 10,
+      acceptedOdds: 1.9,
+      sameFingerprint: false,
+    });
+    assert.equal(reverse.action, 'reverse');
+    assert.equal(reverse.debitLastPayout, 19);
   });
 
   it('keeps express pending until every leg has a terminal code', () => {

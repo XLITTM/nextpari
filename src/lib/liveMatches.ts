@@ -285,10 +285,13 @@ export function matchEventFromStore(state: EventState): MatchEvent {
     liveStatus: status,
     liveScore: score ? { team1: score.home, team2: score.away } : base.liveScore,
     markets: projected.markets,
-    extraMarkets: Math.max(marketCount, parsedGroups.length),
+    extraMarkets: lsports
+      ? Object.values(state.markets).filter((market) => market.marketId !== '1' && market.key !== '1_1').length
+      : Math.max(marketCount, parsedGroups.length),
     marketGroups: parsedGroups.length ? parsedGroups : base.marketGroups,
     marketsEstimated: false,
     marketsLocked: projected.marketsLocked,
+    feedTag: lsports ? 'lsports' : undefined,
   };
 }
 

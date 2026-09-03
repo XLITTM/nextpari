@@ -96,6 +96,7 @@ export interface MatchEvent {
   marketGroups?: MarketGroup[];
   marketsLocked?: boolean;
   marketsEstimated?: boolean;
+  feedTag?: 'lsports';
   stats?: MatchStat[];
   h2h?: H2HGame[];
   stadium?: { name: string; city: string; capacity: string };

@@ -37,6 +37,14 @@ export function decideSportsQuote(
   if (request.marketId && String(request.marketId) !== String(quote.marketId)) {
     return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
   }
+  const requestedLine = String(request.line ?? '').trim();
+  if (requestedLine && requestedLine !== String(quote.line ?? '')) {
+    return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
+  }
+  const requestedKey = String(request.marketKey ?? '').trim();
+  if (requestedKey && /^\d+:[^:]*:/.test(requestedKey) && requestedKey !== String(quote.marketKey ?? '')) {
+    return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
+  }
 
   if (quote.status === 'suspended' || !quote.selectable) {
     return { ok: false, reason: 'MARKET_SUSPENDED', quote };

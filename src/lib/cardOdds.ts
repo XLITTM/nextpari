@@ -37,16 +37,16 @@ export function extraMarketRows(
     return outcomes.length ? { name: group.name, outcomes } : null;
   };
   const totals = groups
-    .filter((group) => group.category === 'totals' || /тотал/i.test(group.name))
+    .filter((group) => group.category === 'totals' || /тотал|under\/over|total/i.test(group.name))
     .slice(0, 3)
     .map((group) => ({
       name: group.name,
       outcomes: group.outcomes.filter((row) => row.odds > 0).slice(0, 2),
     }))
     .filter((row) => row.outcomes.length);
-  const handicap = pick((group) => group.category === 'handicaps' || /фора/i.test(group.name));
-  const dc = pick((group) => /двойной шанс/i.test(group.name), 3);
-  const btts = pick((group) => /обе забьют|btts/i.test(group.name));
+  const handicap = pick((group) => group.category === 'handicaps' || /фора|handicap/i.test(group.name));
+  const dc = pick((group) => /двойной шанс|double chance/i.test(group.name), 3);
+  const btts = pick((group) => /обе забьют|btts|both teams to score/i.test(group.name));
   return [...totals, handicap, dc, btts].filter((row): row is NonNullable<typeof row> => Boolean(row));
 }
 

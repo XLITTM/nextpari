@@ -30,24 +30,29 @@ function emptyQuote(partial: Partial<SportsQuote> & Pick<SportsQuote, 'fixtureId
   };
 }
 
+function canonicalMarketKeyLookup(value: string | undefined): boolean {
+  return Boolean(value && /^\d+:[^:]*:/.test(value));
+}
+
 function findMarket(
   store: LsportsInPlayStore,
   fixtureId: number,
-  input: { marketId?: string; marketKey?: string; outcomeId: string },
+  input: { marketId?: string; marketKey?: string; line?: string; outcomeId: string },
 ): LsportsMarketRecord | undefined {
   const fixture = store.getFixture(fixtureId);
   if (!fixture) return undefined;
   if (input.marketKey && fixture.markets.has(input.marketKey)) {
     return fixture.markets.get(input.marketKey);
   }
+  const wantedLine = String(input.line ?? '').trim();
   for (const market of fixture.markets.values()) {
     if (input.marketId && String(market.marketId ?? '') !== String(input.marketId)) continue;
+    if (wantedLine && String(market.line ?? '') !== wantedLine) continue;
     if (betById(market, input.outcomeId)) return market;
   }
-  if (input.marketId) {
-    for (const market of fixture.markets.values()) {
-      if (betById(market, input.outcomeId)) return market;
-    }
+  for (const market of fixture.markets.values()) {
+    if (wantedLine && String(market.line ?? '') !== wantedLine) continue;
+    if (betById(market, input.outcomeId)) return market;
   }
   return undefined;
 }
@@ -58,6 +63,7 @@ export function lookupCanonicalQuote(
     fixtureId: string;
     marketId?: string;
     marketKey?: string;
+    line?: string;
     outcomeId: string;
     feedType?: SportsFeedType;
   },
@@ -84,7 +90,8 @@ export function lookupCanonicalQuote(
 
   const market = findMarket(store, numericId, {
     marketId: input.marketId,
-    marketKey: input.marketKey,
+    marketKey: canonicalMarketKeyLookup(input.marketKey) ? input.marketKey : undefined,
+    line: input.line,
     outcomeId,
   });
   if (!market) return emptyQuote({ ...base, fixtureId: String(numericId) });
@@ -129,6 +136,7 @@ export function lookupCanonicalQuoteRecord(
     fixtureId: query.fixtureId ?? query.fixture_id ?? '',
     marketId: query.marketId ?? query.market_id,
     marketKey: query.marketKey ?? query.market_key,
+    line: query.line,
     outcomeId: query.outcomeId ?? query.betId ?? query.bet_id ?? '',
     feedType: query.feedType === 'prematch' ? 'prematch' : 'inplay',
   });
