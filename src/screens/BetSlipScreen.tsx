@@ -24,6 +24,7 @@ import { buildPlacedBet } from '../betslipLogic';
 import { SportIcon } from '../components/SportIcon';
 import type { BetSelection, Screen } from '../types';
 import { formatOdds } from '../lib/matchOdds';
+import { createBetSlipSubmitLock } from '../lib/betSlipSubmitLock';
 
 interface BetSlipScreenProps {
   balance: number;
@@ -94,6 +95,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
   const [liveAcceptMs, setLiveAcceptMs] = useState<number | null>(null);
   const [oddsPrompt, setOddsPrompt] = useState<OddsUpdate[] | null>(null);
   const snapshotsRef = useRef<BetPlacementSnapshot[] | null>(null);
+  const submitLockRef = useRef(createBetSlipSubmitLock());
 
   // Action sheet (three-dot menu)
   const [actionSheetOpen, setActionSheetOpen] = useState(false);
@@ -129,11 +131,15 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
     }
   }, [showSuccess]);
 
-  const submitCoupon = async (skipDelay = false, overrideSelections?: BetSelection[]) => {
-    if (isPlacing) return;
+  const submitCoupon = async (
+    skipDelay = false,
+    overrideSelections?: BetSelection[],
+    alreadyLocked = false,
+  ) => {
+    if (!alreadyLocked && !submitLockRef.current.tryAcquire()) return;
     const slip = overrideSelections ?? selections;
     setIsPlacing(true);
-    setOddsPrompt(null);
+    if (!alreadyLocked) setOddsPrompt(null);
     try {
       if (!skipDelay) {
         snapshotsRef.current = snapshotCoupon(slip);
@@ -168,8 +174,8 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
 
       const result = await placeBet({ selections: pricedSlip, stake, mode, skipLiveCheck: true });
       if (!result.ok) {
-        if (result.reason === 'odds_changed' && result.updates?.length) {
-          setOddsPrompt(result.updates);
+        if (result.reason === 'odds_changed') {
+          if (result.updates?.length) setOddsPrompt(result.updates);
           toast.warning(result.error);
           return;
         }
@@ -190,6 +196,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
       addBet(entry);
       setSuccessSummary({ count: pricedSlip.length, odds: totalOdds, win: potentialWin });
       setPlacedTicketCode(entry.ticketCode ?? null);
+      setOddsPrompt(null);
       clearAll();
       snapshotsRef.current = null;
       setShowSuccess(true);
@@ -199,6 +206,7 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
       toast.error(error instanceof Error ? error.message : 'Не удалось принять ставку');
     } finally {
       setLiveAcceptMs(null);
+      submitLockRef.current.release();
       setIsPlacing(false);
     }
   };
@@ -209,13 +217,14 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
 
   const acceptNewOdds = () => {
     if (!oddsPrompt) return;
+    if (!submitLockRef.current.tryAcquire()) return;
+    setIsPlacing(true);
     const next = selections.map((row) => {
       const update = oddsPrompt.find((item) => item.id === row.id);
       return update ? { ...row, odds: update.odds } : row;
     });
     applyOddsUpdates(oddsPrompt.map((row) => ({ id: row.id, odds: row.odds })));
-    setOddsPrompt(null);
-    void submitCoupon(true, next);
+    void submitCoupon(true, next, true);
   };
 
   const handleSuccessDone = () => {
@@ -520,7 +529,12 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
 
         {oddsPrompt && (
           <div className="fixed inset-0 z-[140] max-w-lg mx-auto flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/50" onClick={() => setOddsPrompt(null)} />
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                if (!isPlacing) setOddsPrompt(null);
+              }}
+            />
             <div className="relative m-4 w-full rounded-2xl bg-white dark:bg-[#1e293b] p-4 shadow-2xl">
               <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
                 Коэффициент изменился. Принять новые условия?
@@ -540,16 +554,25 @@ export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: 
                 <button
                   type="button"
                   onClick={() => setOddsPrompt(null)}
-                  className="rounded-xl border border-gray-200 dark:border-gray-600 py-3 text-sm font-bold text-gray-700 dark:text-gray-200"
+                  disabled={isPlacing}
+                  className="rounded-xl border border-gray-200 dark:border-gray-600 py-3 text-sm font-bold text-gray-700 dark:text-gray-200 disabled:opacity-50"
                 >
                   Отклонить
                 </button>
                 <button
                   type="button"
                   onClick={acceptNewOdds}
-                  className="rounded-xl bg-brand-600 py-3 text-sm font-bold text-white"
+                  disabled={isPlacing}
+                  className="rounded-xl bg-brand-600 py-3 text-sm font-bold text-white disabled:opacity-70"
                 >
-                  Принять
+                  {isPlacing ? (
+                    <span className="inline-flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Проверка...
+                    </span>
+                  ) : (
+                    'Принять'
+                  )}
                 </button>
               </div>
             </div>

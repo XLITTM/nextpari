@@ -2,6 +2,7 @@ import { tournamentLine } from './betTicket';
 import { blockedSportsBet, SPORTS_BET_GATE_MESSAGE } from './playerMoneyGate';
 import { ensureOwnPlayerWallet } from './playerWallet';
 import { serializeSportsPlaceBody } from './sportsPlaceRequest';
+import { oddsUpdatesFromPlaceError } from './sportsOddsChanged';
 import type { OddsUpdate } from './liveBetGuard';
 import type { BetEvent, BetHistoryEntry, BetSelection, BetStatus, SportId } from '../types';
 
@@ -83,21 +84,14 @@ export async function placeBet(params: {
   const body = await readJson(res);
   if (!res.ok || body.ok === false) {
     const code = String(body.error ?? SPORTS_BET_GATE_MESSAGE);
-    const current = Number(body.currentPrice);
-    const updates = Number.isFinite(current) && current > 1
-      ? params.selections.map((row) => ({
-        id: row.id,
-        previousOdds: row.odds,
-        odds: current,
-        matchLabel: row.matchLabel,
-        outcome: row.outcome,
-      }))
-      : undefined;
+    const reason = rejectReason(code);
     return {
       ok: false,
       error: code,
-      reason: rejectReason(code),
-      updates,
+      reason,
+      updates: reason === 'odds_changed'
+        ? oddsUpdatesFromPlaceError(body, params.selections)
+        : undefined,
     };
   }
   const balance = Number(body.balanceAfter ?? body.balance_after);
