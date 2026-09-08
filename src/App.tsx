@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AuthScreen } from './screens/AuthScreen';
 import { Header } from './components/Header';
 import { MainTabs } from './components/MainTabs';
@@ -136,12 +136,19 @@ function AppContent() {
   const [screen, setScreenState] = useState<Screen>(screenFromPath);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('top');
+  const [walletOrigin, setWalletOrigin] = useState<Screen>({ name: 'menu' });
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
   const favoriteMatchIds = useFavoritesStore((s) => s.favoriteMatchIds);
   const toggleMatchFavorite = useFavoritesStore((s) => s.toggleMatchFavorite);
   const { showToast } = useToast();
   const { count } = useBetSlip();
 
   const setScreen = useCallback((next: Screen) => {
+    const current = screenRef.current;
+    if (next.name === 'wallet' && current.name !== 'wallet') {
+      setWalletOrigin(current);
+    }
     setScreenState(next);
     syncPath(next);
   }, []);
@@ -255,7 +262,13 @@ function AppContent() {
       case 'menu':
         return <MenuScreen balance={balance} balanceLabel={moneyLabel} onNavigate={setScreen} onLogout={handleLogout} />;
       case 'wallet':
-        return <WalletScreen balance={balance} onBack={() => setScreen({ name: 'menu' })} onNavigate={setScreen} />;
+        return (
+          <WalletScreen
+            balance={balance}
+            onBack={() => setScreen(walletOrigin.name === 'wallet' ? { name: 'menu' } : walletOrigin)}
+            onNavigate={setScreen}
+          />
+        );
       case 'promo':
         return <PromoScreen onBack={() => setScreen({ name: 'menu' })} onNavigate={setScreen} />;
       case 'personal-data':
