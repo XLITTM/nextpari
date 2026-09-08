@@ -9,17 +9,18 @@ interface SearchModalProps {
   onSelectMatch?: (match: MatchEvent) => void;
 }
 
-export function SearchModal({ onClose }: SearchModalProps) {
+export function SearchModal({ onClose, onSelectMatch }: SearchModalProps) {
   const [query, setQuery] = useState('');
   const { liveMatches, upcomingMatches } = useLiveMatches();
   const allMatches = [...liveMatches, ...upcomingMatches];
+  const q = query.trim().toLowerCase();
 
-  const results = query.trim()
+  const results = q
     ? allMatches.filter(
         (m) =>
-          m.team1.toLowerCase().includes(query.toLowerCase()) ||
-          m.team2.toLowerCase().includes(query.toLowerCase()) ||
-          m.league.toLowerCase().includes(query.toLowerCase())
+          m.team1.toLowerCase().includes(q) ||
+          m.team2.toLowerCase().includes(q) ||
+          m.league.toLowerCase().includes(q)
       )
     : [];
 
@@ -57,9 +58,11 @@ export function SearchModal({ onClose }: SearchModalProps) {
         ) : (
           <div className="space-y-2">
             {results.map((m) => (
-              <div
+              <button
                 key={m.id}
-                className="bg-white dark:bg-[#1e293b] rounded-xl p-3 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between transition-colors"
+                type="button"
+                onClick={() => onSelectMatch?.(m)}
+                className="w-full bg-white dark:bg-[#1e293b] rounded-xl p-3 border border-gray-200 dark:border-gray-700 shadow-sm flex items-center justify-between transition-colors text-left active:scale-[0.99]"
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -76,7 +79,7 @@ export function SearchModal({ onClose }: SearchModalProps) {
                     LIVE
                   </span>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}

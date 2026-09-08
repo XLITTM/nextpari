@@ -300,6 +300,7 @@ function AppContent() {
             initialMode={screen.mode}
             onBack={() => setScreen({ name: 'menu' })}
             onNavigate={setScreen}
+            onSearchClick={() => setSearchOpen(true)}
           />
         );
       case 'championships':
@@ -423,7 +424,15 @@ function AppContent() {
         />
       )}
 
-      {searchOpen && <SearchModal onClose={() => setSearchOpen(false)} />}
+      {searchOpen && (
+        <SearchModal
+          onClose={() => setSearchOpen(false)}
+          onSelectMatch={(match) => {
+            setSearchOpen(false);
+            openMatch(match.id);
+          }}
+        />
+      )}
     </div>
   );
 }
