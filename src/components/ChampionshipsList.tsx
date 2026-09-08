@@ -13,14 +13,18 @@ function colorFromName(name: string): string {
 
 interface ChampionshipsListProps {
   onOpenLeague: (leagueId: string) => void;
+  excludeEsports?: boolean;
 }
 
-export function ChampionshipsList({ onOpenLeague }: ChampionshipsListProps) {
+export function ChampionshipsList({ onOpenLeague, excludeEsports = false }: ChampionshipsListProps) {
   const { liveMatches } = useLiveMatches();
   const favoriteLeagueIds = useFavoritesStore((s) => s.favoriteLeagueIds);
   const toggleLeagueFavorite = useFavoritesStore((s) => s.toggleLeagueFavorite);
+  const sourceMatches = excludeEsports
+    ? liveMatches.filter((match) => match.sport !== 'esports')
+    : liveMatches;
   const fromLive = Object.values(
-    liveMatches.reduce<Record<string, { name: string; country: string; count: number; color: string }>>((acc, match) => {
+    sourceMatches.reduce<Record<string, { name: string; country: string; count: number; color: string }>>((acc, match) => {
       const key = `${match.country}|${match.league}`;
       const prev = acc[key] ?? {
         name: match.league,
