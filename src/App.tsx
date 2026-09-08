@@ -97,10 +97,80 @@ function pathForScreen(screen: Screen): string {
   return '/';
 }
 
-function syncPath(screen: Screen) {
-  const target = pathForScreen(screen);
-  if (currentPath() === target) return;
-  window.history.pushState({ name: screen.name }, '', target);
+type PlayerHistoryState = {
+  nextpari: true;
+  screen: Screen;
+  depth: number;
+  overlay?: 'search';
+};
+
+function screensEqual(a: Screen, b: Screen): boolean {
+  if (a.name !== b.name) return false;
+  switch (a.name) {
+    case 'match':
+      return a.matchId === (b as { matchId: string }).matchId;
+    case 'bet-details':
+      return a.betId === (b as { betId: string }).betId;
+    case 'gamelist':
+      return a.mode === (b as { mode: 'live' | 'line' }).mode;
+    case 'sports':
+      return a.mode === (b as { mode: 'live' | 'line' | 'cybers' }).mode;
+    case 'championships':
+      return a.sport === (b as { sport: string }).sport && a.mode === (b as { mode: 'live' | 'line' }).mode;
+    case 'league':
+      return a.leagueId === (b as { leagueId: string }).leagueId;
+    default:
+      return true;
+  }
+}
+
+function readPlayerHistory(state: unknown): PlayerHistoryState | null {
+  if (!state || typeof state !== 'object') return null;
+  const raw = state as { nextpari?: unknown; screen?: Screen; depth?: unknown; overlay?: unknown };
+  if (raw.nextpari !== true || !raw.screen || typeof raw.screen !== 'object' || typeof raw.screen.name !== 'string') {
+    return null;
+  }
+  const depth = typeof raw.depth === 'number' && Number.isInteger(raw.depth) && raw.depth >= 0 ? raw.depth : 0;
+  const parsed: PlayerHistoryState = { nextpari: true, screen: raw.screen, depth };
+  if (raw.overlay === 'search') parsed.overlay = 'search';
+  return parsed;
+}
+
+function fallbackScreen(screen: Screen): Screen {
+  switch (screen.name) {
+    case 'bet-details':
+      return { name: 'history' };
+    case 'wallet':
+    case 'promo':
+    case 'personal-data':
+    case 'info':
+    case 'sports':
+    case 'slots':
+    case 'live-casino':
+      return { name: 'menu' };
+    case 'championships':
+      return { name: 'sports', mode: screen.mode };
+    case 'blackjack':
+    case 'aviator':
+    case 'apples':
+    case 'crystal':
+    case 'dice':
+    case 'pharaoh':
+      return { name: 'games' };
+    case 'vip-cashback':
+      return { name: 'promo' };
+    default:
+      return { name: 'home' };
+  }
+}
+
+function writeHistory(screen: Screen, depth: number, mode: 'push' | 'replace', overlay?: 'search') {
+  const state: PlayerHistoryState = overlay
+    ? { nextpari: true, screen, depth, overlay }
+    : { nextpari: true, screen, depth };
+  const url = pathForScreen(screen);
+  if (mode === 'replace') window.history.replaceState(state, '', url);
+  else window.history.pushState(state, '', url);
 }
 
 function navActive(name: Screen['name']): Screen['name'] {
@@ -136,25 +206,126 @@ function AppContent() {
   const [screen, setScreenState] = useState<Screen>(screenFromPath);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('top');
-  const [walletOrigin, setWalletOrigin] = useState<Screen>({ name: 'menu' });
   const screenRef = useRef(screen);
+  const depthRef = useRef(0);
   screenRef.current = screen;
   const favoriteMatchIds = useFavoritesStore((s) => s.favoriteMatchIds);
   const toggleMatchFavorite = useFavoritesStore((s) => s.toggleMatchFavorite);
   const { showToast } = useToast();
   const { count } = useBetSlip();
 
-  const setScreen = useCallback((next: Screen) => {
-    const current = screenRef.current;
-    if (next.name === 'wallet' && current.name !== 'wallet') {
-      setWalletOrigin(current);
-    }
+  const replaceScreen = useCallback((next: Screen) => {
+    setSearchOpen(false);
+    writeHistory(next, 0, 'replace');
+    depthRef.current = 0;
+    screenRef.current = next;
     setScreenState(next);
-    syncPath(next);
+  }, []);
+
+  const setScreen = useCallback((next: Screen) => {
+    const hist = readPlayerHistory(window.history.state);
+    if (hist?.overlay === 'search') {
+      if (screensEqual(screenRef.current, next)) {
+        window.history.back();
+        return;
+      }
+      writeHistory(next, hist.depth, 'replace');
+      depthRef.current = hist.depth;
+      screenRef.current = next;
+      setSearchOpen(false);
+      setScreenState(next);
+      return;
+    }
+    if (screensEqual(screenRef.current, next)) return;
+    const depth = depthRef.current + 1;
+    writeHistory(next, depth, 'push');
+    depthRef.current = depth;
+    screenRef.current = next;
+    setScreenState(next);
+  }, []);
+
+  const openSearch = useCallback(() => {
+    const hist = readPlayerHistory(window.history.state);
+    if (hist?.overlay === 'search') {
+      setSearchOpen(true);
+      return;
+    }
+    const depth = depthRef.current + 1;
+    writeHistory(screenRef.current, depth, 'push', 'search');
+    depthRef.current = depth;
+    setSearchOpen(true);
+  }, []);
+
+  const closeSearch = useCallback(() => {
+    const hist = readPlayerHistory(window.history.state);
+    if (hist?.overlay === 'search') {
+      window.history.back();
+      return;
+    }
+    setSearchOpen(false);
+  }, []);
+
+  const goBack = useCallback(() => {
+    const hist = readPlayerHistory(window.history.state);
+    if (hist?.overlay === 'search') {
+      window.history.back();
+      return;
+    }
+    setSearchOpen(false);
+    if (depthRef.current > 0) {
+      window.history.back();
+      return;
+    }
+    const fallback = fallbackScreen(screenRef.current);
+    if (screensEqual(fallback, screenRef.current)) return;
+    replaceScreen(fallback);
+  }, [replaceScreen]);
+
+  useEffect(() => {
+    const existing = readPlayerHistory(window.history.state);
+    const initial = screenFromPath();
+    const pathLocked = pathForScreen(initial) !== '/' || initial.name !== 'home';
+    if (pathLocked) {
+      if (!existing || !screensEqual(existing.screen, initial)) {
+        writeHistory(initial, 0, 'replace');
+        depthRef.current = 0;
+        screenRef.current = initial;
+        setScreenState(initial);
+        setSearchOpen(false);
+      } else {
+        depthRef.current = existing.depth;
+        setSearchOpen(existing.overlay === 'search');
+      }
+      return;
+    }
+    if (existing) {
+      depthRef.current = existing.depth;
+      screenRef.current = existing.screen;
+      setScreenState(existing.screen);
+      setSearchOpen(existing.overlay === 'search');
+      return;
+    }
+    writeHistory(initial, 0, 'replace');
+    depthRef.current = 0;
   }, []);
 
   useEffect(() => {
-    const onPop = () => setScreenState(screenFromPath());
+    const onPop = (event: PopStateEvent) => {
+      const parsed = readPlayerHistory(event.state);
+      if (parsed) {
+        depthRef.current = parsed.depth;
+        screenRef.current = parsed.screen;
+        setScreenState(parsed.screen);
+        setSearchOpen(parsed.overlay === 'search');
+        return;
+      }
+      setSearchOpen(false);
+      const fromPath = screenFromPath();
+      writeHistory(fromPath, 0, 'replace');
+      depthRef.current = 0;
+      screenRef.current = fromPath;
+      setScreenState(fromPath);
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
@@ -178,7 +349,7 @@ function AppContent() {
   const handleAuthSuccess = async () => {
     await Promise.all([refreshWallet(), refreshProfile()]);
     setIsAuthenticated(true);
-    setScreen(screenFromPath());
+    replaceScreen(screenFromPath());
   };
 
   const handleLogout = () => {
@@ -256,7 +427,7 @@ function AppContent() {
         return (
           <BetDetailsScreen
             betId={screen.betId}
-            onBack={() => setScreen({ name: 'history' })}
+            onBack={goBack}
           />
         );
       case 'menu':
@@ -265,30 +436,30 @@ function AppContent() {
         return (
           <WalletScreen
             balance={balance}
-            onBack={() => setScreen(walletOrigin.name === 'wallet' ? { name: 'menu' } : walletOrigin)}
+            onBack={goBack}
             onNavigate={setScreen}
           />
         );
       case 'promo':
-        return <PromoScreen onBack={() => setScreen({ name: 'menu' })} onNavigate={setScreen} />;
+        return <PromoScreen onBack={goBack} onNavigate={setScreen} />;
       case 'personal-data':
-        return <PersonalDataScreen onBack={() => setScreen({ name: 'menu' })} />;
+        return <PersonalDataScreen onBack={goBack} />;
       case 'settings':
         return (
           <SettingsScreen
-            onBack={() => setScreen({ name: 'home' })}
+            onBack={goBack}
             onNavigate={setScreen}
             onLogout={handleLogout}
           />
         );
       case 'info':
-        return <InfoScreen onBack={() => setScreen({ name: 'menu' })} />;
+        return <InfoScreen onBack={goBack} />;
       case 'gamelist':
         return (
           <GameListScreen
             mode={screen.mode}
-            onBack={goHome}
-            onSearchClick={() => setSearchOpen(true)}
+            onBack={goBack}
+            onSearchClick={openSearch}
             onOpenMatch={openMatch}
             favorites={favoriteMatchIds}
             onToggleFavorite={toggleFavorite}
@@ -298,9 +469,9 @@ function AppContent() {
         return (
           <SportsListScreen
             initialMode={screen.mode}
-            onBack={() => setScreen({ name: 'menu' })}
+            onBack={goBack}
             onNavigate={setScreen}
-            onSearchClick={() => setSearchOpen(true)}
+            onSearchClick={openSearch}
           />
         );
       case 'championships':
@@ -308,42 +479,42 @@ function AppContent() {
           <ChampionshipsScreen
             sport={screen.sport as SportId}
             initialMode={screen.mode as 'live' | 'line'}
-            onBack={() => setScreen({ name: 'sports', mode: screen.mode as 'live' | 'line' | 'cybers' })}
+            onBack={goBack}
             onNavigate={setScreen}
           />
         );
       case 'slots':
-        return <SlotsScreen onBack={() => setScreen({ name: 'menu' })} onNavigate={setScreen} />;
+        return <SlotsScreen onBack={goBack} onNavigate={setScreen} />;
       case 'live-casino':
-        return <LiveCasinoScreen onBack={() => setScreen({ name: 'menu' })} onNavigate={setScreen} />;
+        return <LiveCasinoScreen onBack={goBack} onNavigate={setScreen} />;
       case 'games':
-        return <GamesScreen onBack={goHome} onNavigate={setScreen} />;
+        return <GamesScreen onBack={goBack} onNavigate={setScreen} />;
       case 'crystal':
-        return <CrystalGame onBack={() => setScreen({ name: 'games' })} />;
+        return <CrystalGame onBack={goBack} />;
       case 'dice':
-        return <DiceGame onBack={() => setScreen({ name: 'games' })} />;
+        return <DiceGame onBack={goBack} />;
       case 'pharaoh':
-        return <PharaohTreasure onBack={() => setScreen({ name: 'games' })} />;
+        return <PharaohTreasure onBack={goBack} />;
       case 'vip-cashback':
         return (
           <VipCashbackScreen
-            onBack={() => setScreen({ name: 'promo' })}
+            onBack={goBack}
             onNavigate={setScreen}
           />
         );
       case 'promo-details':
-        return <PromoDetailsScreen onBack={() => setScreen({ name: 'home' })} onNavigate={setScreen} />;
+        return <PromoDetailsScreen onBack={goBack} onNavigate={setScreen} />;
       case 'promo-marathon':
-        return <PromoMarathonScreen onBack={() => setScreen({ name: 'home' })} onNavigate={setScreen} />;
+        return <PromoMarathonScreen onBack={goBack} onNavigate={setScreen} />;
       case 'promo-welcome':
-        return <PromoWelcomeScreen onBack={() => setScreen({ name: 'home' })} onNavigate={setScreen} />;
+        return <PromoWelcomeScreen onBack={goBack} onNavigate={setScreen} />;
       case 'promo-unbeatable':
-        return <PromoUnbeatableScreen onBack={() => setScreen({ name: 'home' })} onNavigate={setScreen} />;
+        return <PromoUnbeatableScreen onBack={goBack} onNavigate={setScreen} />;
       case 'match':
         return (
           <MatchDetailsScreen
             matchId={screen.matchId}
-            onBack={goHome}
+            onBack={goBack}
             onNavigate={setScreen}
           />
         );
@@ -351,22 +522,22 @@ function AppContent() {
         return (
           <BetSlipScreen
             balance={balance}
-            onClose={() => setScreen({ name: 'home' })}
+            onClose={goBack}
             onNavigateHome={goHome}
             onNavigate={setScreen}
           />
         );
       case 'blackjack':
-        return <BlackjackGame onBack={() => setScreen({ name: 'games' })} />;
+        return <BlackjackGame onBack={goBack} />;
       case 'aviator':
-        return <AviatorGame onBack={() => setScreen({ name: 'games' })} />;
+        return <AviatorGame onBack={goBack} />;
       case 'apples':
-        return <ApplesGame onBack={() => setScreen({ name: 'games' })} />;
+        return <ApplesGame onBack={goBack} />;
       case 'league':
         return (
           <LeagueScreen
             leagueId={screen.leagueId}
-            onBack={goHome}
+            onBack={goBack}
             onOpenMatch={openMatch}
             favorites={favoriteMatchIds}
             onToggleFavorite={toggleFavorite}
@@ -405,7 +576,7 @@ function AppContent() {
       : 'relative mx-auto flex h-screen max-w-lg flex-col overflow-hidden bg-[#f0f2f5] dark:bg-gray-900'
     }>
       {showHeader && (
-        <Header balanceLabel={moneyLabel} onSearchClick={() => setSearchOpen(true)} onNavigate={setScreen}>
+        <Header balanceLabel={moneyLabel} onSearchClick={openSearch} onNavigate={setScreen}>
           {screen.name === 'home' && <MainTabs active={mainTab} onChange={handleMainTab} />}
         </Header>
       )}
@@ -426,11 +597,8 @@ function AppContent() {
 
       {searchOpen && (
         <SearchModal
-          onClose={() => setSearchOpen(false)}
-          onSelectMatch={(match) => {
-            setSearchOpen(false);
-            openMatch(match.id);
-          }}
+          onClose={closeSearch}
+          onSelectMatch={(match) => openMatch(match.id)}
         />
       )}
     </div>
