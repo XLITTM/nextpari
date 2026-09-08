@@ -16,14 +16,19 @@ export function Header({ balanceLabel, onSearchClick, onNavigate, children }: He
   return (
     <header className="sticky top-0 z-50 w-full rounded-b-2xl bg-white shadow-sm dark:bg-zinc-900">
       <div className="flex h-14 items-center justify-between px-4">
-        <div className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 py-1 pl-1 pr-2.5 dark:border-gray-700 dark:bg-[#1e293b]">
-          <button className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 shadow-sm transition-transform active:scale-90">
+        <button
+          type="button"
+          onClick={() => onNavigate({ name: 'wallet' })}
+          className="flex items-center gap-1 rounded-full border border-gray-200 bg-gray-100 py-1 pl-1 pr-2.5 dark:border-gray-700 dark:bg-[#1e293b]"
+          aria-label="Управление счётом"
+        >
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-600 shadow-sm transition-transform active:scale-90">
             <Plus className="h-4 w-4 text-white" strokeWidth={2.5} />
-          </button>
+          </span>
           <span className="whitespace-nowrap text-sm font-bold tabular-nums text-gray-900 dark:text-white">
             {balanceLabel}
           </span>
-        </div>
+        </button>
 
         <button
           type="button"

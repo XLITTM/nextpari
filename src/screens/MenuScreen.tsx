@@ -184,7 +184,12 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
       {/* 2. Balance + deposit */}
       <div className="bg-white dark:bg-[#1e293b] px-4 pb-4 transition-colors">
         <div className="flex items-center gap-3">
-          <button className="flex-1 flex items-center gap-2.5 bg-gray-100 dark:bg-[#1e293b] rounded-xl px-3 py-2.5 active:scale-[0.98] transition-transform">
+          <button
+            type="button"
+            onClick={() => onNavigate({ name: 'wallet' })}
+            className="flex-1 flex items-center gap-2.5 bg-gray-100 dark:bg-[#1e293b] rounded-xl px-3 py-2.5 active:scale-[0.98] transition-transform"
+            aria-label="Управление счётом"
+          >
             <Wallet className="w-5 h-5 text-gray-600 dark:text-gray-200 shrink-0" />
             <div className="flex-1 text-left min-w-0">
               <p className="text-xs text-gray-500 dark:text-gray-200 leading-tight font-semibold">Баланс</p>

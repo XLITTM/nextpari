@@ -53,21 +53,13 @@ export function LeagueScreen({
     ? fromLive.slice(0, 3)
     : [0, 1, 2].map((index) => stubMatch(leagueId, index, name, country));
 
-  const handleBack = () => {
-    if (window.history.state?.name === 'league' && window.history.length > 1) {
-      window.history.back();
-      return;
-    }
-    onBack();
-  };
-
   return (
     <div className="min-h-full flex flex-col bg-[#f0f2f5] dark:bg-gray-900">
       <header className="sticky top-0 z-20 bg-white dark:bg-zinc-900 shadow-sm">
         <div className="flex h-14 items-center px-2">
           <button
             type="button"
-            onClick={handleBack}
+            onClick={onBack}
             className="flex h-10 w-10 items-center justify-center text-gray-700 dark:text-gray-200 active:scale-95"
             aria-label="Назад"
           >

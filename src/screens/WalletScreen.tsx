@@ -9,6 +9,7 @@ import { useToast } from '../ToastContext';
 import { useProfile } from '../ProfileContext';
 import { useWallet } from '../WalletContext';
 import { RestrictionModal } from '../components/RestrictionModal';
+import { DepositModal } from '../components/games/DepositModal';
 import { playerCreateCashPayout, playerListCashPayouts, type PlayerCashPayout } from '../lib/playerCashPayout';
 import {
   MOBCASH_CITIES,
@@ -39,6 +40,7 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
   const { publicId, applyBalance, refresh } = useWallet();
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const [showRestriction, setShowRestriction] = useState(false);
+  const [showDeposit, setShowDeposit] = useState(false);
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([]);
   const [cashPayouts, setCashPayouts] = useState<PlayerCashPayout[]>([]);
   const [loading, setLoading] = useState(true);
@@ -188,7 +190,14 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         )}
         {!publicId && <div className="mb-4" />}
         <div className="flex gap-3">
-          <button className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-green-900/20">
+          <button
+            type="button"
+            onClick={() => {
+              setShowWithdrawForm(false);
+              setShowDeposit(true);
+            }}
+            className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg shadow-green-900/20"
+          >
             <ArrowDownToLine className="w-5 h-5" />
             Пополнить
           </button>
@@ -235,6 +244,16 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         </h2>
         <HistorySection withdrawals={withdrawals} cashPayouts={cashPayouts} loading={loading} />
       </div>
+
+      {showDeposit && (
+        <div className="fixed inset-0 z-[80] max-w-lg mx-auto">
+          <DepositModal
+            publicId={publicId}
+            onClose={() => setShowDeposit(false)}
+            onWallet={() => setShowDeposit(false)}
+          />
+        </div>
+      )}
 
       {/* Restriction modal */}
       <RestrictionModal

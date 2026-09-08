@@ -9,6 +9,7 @@ interface SportsListScreenProps {
   initialMode?: 'live' | 'line' | 'cybers';
   onBack: () => void;
   onNavigate: (screen: Screen) => void;
+  onSearchClick: () => void;
 }
 
 // Моковые данные для списка (как на скринах)
@@ -27,7 +28,7 @@ const SPORTS_DATA: { id: SportId; name: string; count: number }[] = [
   { id: 'futsal', name: 'Футзал', count: 2 },
 ];
 
-export function SportsListScreen({ initialMode = 'live', onBack, onNavigate }: SportsListScreenProps) {
+export function SportsListScreen({ initialMode = 'live', onBack, onNavigate, onSearchClick }: SportsListScreenProps) {
   const [activeTab, setActiveTab] = useState<'live' | 'line' | 'cybers'>(initialMode);
   const { liveMatches, upcomingMatches } = useLiveMatches();
   const favoriteSportIds = useFavoritesStore((s) => s.favoriteSportIds);
@@ -66,7 +67,12 @@ export function SportsListScreen({ initialMode = 'live', onBack, onNavigate }: S
           </h1>
           
           <div className="flex items-center gap-1">
-            <button className="w-9 h-9 flex items-center justify-center text-gray-500">
+            <button
+              type="button"
+              onClick={onSearchClick}
+              className="w-9 h-9 flex items-center justify-center text-gray-500"
+              aria-label="Поиск"
+            >
               <Search className="w-5 h-5" />
             </button>
             <button className="w-9 h-9 flex items-center justify-center text-gray-500">
