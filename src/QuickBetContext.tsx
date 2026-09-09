@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { acceptLsportsSelection } from './lib/sportsOddGuard';
+import { acceptSportsSelection } from './lib/sportsOddGuard';
 import type { BetSelection } from './types';
 
 interface QuickBetContextValue {
@@ -14,7 +14,7 @@ export function QuickBetProvider({ children }: { children: ReactNode }) {
   const [pendingSelection, setPendingSelection] = useState<BetSelection | null>(null);
 
   const openQuickBet = useCallback((selection: BetSelection) => {
-    const accepted = acceptLsportsSelection(selection);
+    const accepted = acceptSportsSelection(selection);
     if (!accepted) return;
     setPendingSelection(accepted);
   }, []);

@@ -3,7 +3,7 @@ import type { BetSelection } from '../types';
 import { useBetSlip } from '../BetSlipContext';
 import { useQuickBet } from '../QuickBetContext';
 import { createOddPressController } from '../lib/oddPressController';
-import { acceptLsportsSelection } from '../lib/sportsOddGuard';
+import { acceptSportsSelection } from '../lib/sportsOddGuard';
 
 export function useOddInteraction(selection: BetSelection) {
   const { addSelection } = useBetSlip();
@@ -69,5 +69,5 @@ export function useOddInteraction(selection: BetSelection) {
 }
 
 export function canInteractWithOdd(selection: BetSelection): boolean {
-  return acceptLsportsSelection(selection) != null;
+  return acceptSportsSelection(selection) != null;
 }
