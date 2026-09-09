@@ -46,4 +46,35 @@ describe('sports selection acceptance', () => {
     assert.equal(acceptLsportsSelection(row), null);
     assert.equal(acceptSportsSelection(row)?.provider, 'provider-b');
   });
+
+  it('accepts provider-b with blank marketId and marketKey', () => {
+    const row = selection({
+      provider: 'provider-b',
+      fixtureId: 'fixture-x',
+      outcomeId: 'opaque-outcome',
+      marketId: '',
+      marketKey: '',
+    });
+    const accepted = acceptSportsSelection(row);
+    assert.equal(accepted?.provider, 'provider-b');
+    assert.equal(accepted?.fixtureId, 'fixture-x');
+    assert.equal(accepted?.outcomeId, 'opaque-outcome');
+    assert.equal(accepted?.marketId, '');
+    assert.equal(accepted?.marketKey, '');
+  });
+
+  it('rejects missing fixtureId, missing outcomeId, and non-positive odds', () => {
+    const base = selection({
+      provider: 'provider-b',
+      fixtureId: 'fixture-x',
+      outcomeId: 'opaque-outcome',
+      marketId: '',
+      marketKey: '',
+    });
+    assert.equal(acceptSportsSelection({ ...base, fixtureId: '', matchId: '' }), null);
+    assert.equal(acceptSportsSelection({ ...base, outcomeId: '' }), null);
+    assert.equal(acceptSportsSelection({ ...base, odds: 0 }), null);
+    assert.equal(acceptSportsSelection({ ...base, odds: -1 }), null);
+    assert.equal(acceptSportsSelection({ ...base, odds: Number.NaN }), null);
+  });
 });

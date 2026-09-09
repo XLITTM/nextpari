@@ -34,9 +34,7 @@ function genericIdentity(selection: BetSelection): {
 export function acceptSportsSelection(selection: BetSelection): BetSelection | null {
   const candidate = genericIdentity(selection);
   if (!candidate.provider) return null;
-  if (!candidate.fixtureId || !candidate.marketId || !candidate.marketKey || !candidate.outcomeId) {
-    return null;
-  }
+  if (!candidate.fixtureId || !candidate.outcomeId) return null;
   if (!Number.isFinite(candidate.odds) || candidate.odds <= 0) return null;
   if (candidate.provider === LSPORTS_PROVIDER) {
     return acceptLsportsSelection(selection);

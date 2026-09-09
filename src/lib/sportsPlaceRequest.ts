@@ -64,10 +64,8 @@ export function assertSportsPlaceLeg(leg: SportsPlaceLegPayload): boolean {
   const provider = readProviderId(leg.provider);
   if (!provider) return false;
   const fixtureId = String(leg.fixtureId ?? '').trim();
-  const marketId = String(leg.marketId ?? '').trim();
-  const marketKey = String(leg.marketKey ?? '').trim();
   const outcomeId = String(leg.outcomeId ?? '').trim();
-  if (!fixtureId || !marketId || !marketKey || !outcomeId) return false;
+  if (!fixtureId || !outcomeId) return false;
   if (provider === LSPORTS_PROVIDER) {
     return assertLsportsPlaceLeg(leg);
   }

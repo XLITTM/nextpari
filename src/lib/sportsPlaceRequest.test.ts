@@ -351,6 +351,67 @@ describe('provider-neutral place serialization', () => {
     assert.equal(labelKey, null);
   });
 
+  it('serializes provider-b with blank marketId and marketKey', () => {
+    const selection: BetSelection = {
+      id: 'provider-b:fixture-x:opaque-outcome',
+      matchId: 'fixture-x',
+      matchLabel: 'Home FC — Away FC',
+      market: 'Winner',
+      outcome: 'Home',
+      odds: 1.9,
+      provider: 'provider-b',
+      feedType: 'inplay',
+      fixtureId: 'fixture-x',
+      marketId: '',
+      marketKey: '',
+      line: '',
+      outcomeId: 'opaque-outcome',
+    };
+    assert.equal(acceptSportsSelection(selection)?.provider, 'provider-b');
+    const slip = addSlipSelection([], selection);
+    assert.equal(slip.length, 1);
+    const body = serializeSportsPlaceBody({
+      selections: slip,
+      stake: 10,
+      idempotencyKey: 'k-blank-market',
+    });
+    assert.equal(body?.selections[0]?.provider, 'provider-b');
+    assert.equal(body?.selections[0]?.fixtureId, 'fixture-x');
+    assert.equal(body?.selections[0]?.outcomeId, 'opaque-outcome');
+    assert.equal(body?.selections[0]?.marketId, '');
+    assert.equal(body?.selections[0]?.marketKey, '');
+  });
+
+  it('fails closed without fixtureId or outcomeId', () => {
+    const base = genericSelection('provider-b', 'fx-1', 'out-1');
+    assert.equal(serializeSportsPlaceBody({
+      selections: [{ ...base, fixtureId: '', matchId: '' }],
+      stake: 10,
+      idempotencyKey: 'k-no-fixture',
+    }), null);
+    assert.equal(serializeSportsPlaceBody({
+      selections: [{ ...base, outcomeId: '' }],
+      stake: 10,
+      idempotencyKey: 'k-no-outcome',
+    }), null);
+  });
+
+  it('keeps LSports marketId and marketKey required', () => {
+    const real = mustSelect(market1x2(), 'home');
+    assert.equal(serializeSportsPlaceBody({
+      selections: [{ ...real, marketId: '' }],
+      stake: 10,
+      idempotencyKey: 'k-lsports-market-id',
+    }), null);
+    assert.equal(addSlipSelection([], { ...real, marketId: '' }).length, 0);
+    assert.equal(serializeSportsPlaceBody({
+      selections: [{ ...real, marketKey: '' }],
+      stake: 10,
+      idempotencyKey: 'k-lsports-market-key',
+    }), null);
+    assert.equal(addSlipSelection([], { ...real, marketKey: '' }).length, 0);
+  });
+
   it('does not hardcode provider: lsports in the generic serializer source', () => {
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sportsPlaceRequest.ts'), 'utf8');
     assert.equal(/provider:\s*'lsports'/.test(src), false);
