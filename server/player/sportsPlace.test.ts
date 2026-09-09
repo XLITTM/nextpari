@@ -13,6 +13,7 @@ import { SPORTS_PLACE_SERVER_RPC } from '../sports/placeRpc.js';
 import { mapPlayerGameRpcError } from './playerGameRpc.js';
 import type { SportsPlacePorts } from './sportsPlaceService.js';
 import { PLAYER_ACCESS_COOKIE, PLAYER_REFRESH_COOKIE } from './playerCookies.js';
+import { resolveSportsQuoteProvider } from '../sports/quoteProvider.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -236,6 +237,24 @@ describe('player sports place HTTP', () => {
     const stale = await place(stalePorts, { ...PLACE_BODY, idempotencyKey: 'k-stale' });
     assert.equal(stale.body.error, 'FEED_STALE');
     assert.equal(stalePorts.places.length, 0);
+
+    const unknownProvider = createPorts({
+      fetchQuote: async (request) => resolveSportsQuoteProvider(request.provider).getQuote(request),
+    });
+    const unsupported = await place(unknownProvider, {
+      ...PLACE_BODY,
+      idempotencyKey: 'k-betsapi',
+      selections: [{
+        fixtureId: '19981248',
+        marketId: '1',
+        marketKey: '19981248:1:',
+        outcomeId: '117469638719981250',
+        price: 1.85,
+        provider: 'betsapi',
+      }],
+    });
+    assert.equal(unsupported.body.error, 'EVENT_UNAVAILABLE');
+    assert.equal(unknownProvider.places.length, 0);
 
     const missingBet = await place(createPorts(), {
       ...PLACE_BODY,

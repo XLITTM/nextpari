@@ -1,9 +1,9 @@
 import { GAME_NO_STORE_HEADERS, serverTimingHeader } from '../games/httpCache.js';
 import { isCanonicalSportsBetEnabled } from '../sports/enabled.js';
-import { fetchLsportsCanonicalQuote } from '../sports/feedClient.js';
 import { createSportsPlaceAsPlayerRpc, type SportsPlaceAsPlayer } from '../sports/placeRpc.js';
 import { sanitizeChangedLeg } from '../sports/changedLeg.js';
 import { decideSportsQuote } from '../sports/quote.js';
+import { resolveSportsQuoteProvider, SportsProviderUnsupportedError } from '../sports/quoteProvider.js';
 import { evaluateSportsRisk } from '../sports/risk.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 import { staffError, StaffOnboardingError } from '../staff/errors.js';
@@ -43,37 +43,6 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function parseQuote(value: unknown): SportsQuote {
-  const row = asRecord(value);
-  const health = row.health === 'HEALTHY' || row.health === 'STALE' || row.health === 'UNKNOWN'
-    ? row.health
-    : 'UNKNOWN';
-  const status = row.status === 'open' || row.status === 'suspended' || row.status === 'settled'
-    ? row.status
-    : 'missing';
-  const priceRaw = row.price;
-  const price = typeof priceRaw === 'number' && Number.isFinite(priceRaw) ? priceRaw : Number(priceRaw);
-  return {
-    provider: row.provider === 'betsapi' ? 'betsapi' : 'lsports',
-    feedType: row.feedType === 'prematch' ? 'prematch' : 'inplay',
-    fixtureId: String(row.fixtureId ?? ''),
-    marketId: String(row.marketId ?? ''),
-    marketKey: String(row.marketKey ?? ''),
-    line: String(row.line ?? ''),
-    outcomeId: String(row.outcomeId ?? row.betId ?? ''),
-    outcomeName: String(row.outcomeName ?? ''),
-    price: Number.isFinite(price) && price > 1 ? price : null,
-    status,
-    marketStatus: String(row.marketStatus ?? ''),
-    betStatus: String(row.betStatus ?? ''),
-    betStatusId: String(row.betStatusId ?? ''),
-    selectable: row.selectable === true,
-    updatedAt: row.updatedAt == null ? null : String(row.updatedAt),
-    health,
-    heartbeatAgeMs: row.heartbeatAgeMs == null ? null : Number(row.heartbeatAgeMs),
-  };
-}
-
 function quoteHttpStatus(reason: string): number {
   if (reason === 'SPORTS_BET_DISABLED') return 403;
   if (reason === 'INVALID_PRICE' || reason === 'MISSING_BET_ID' || reason === 'MISSING_FIXTURE') return 400;
@@ -86,21 +55,13 @@ export interface SportsPlacePorts extends PlayerGameGatewayPorts {
 }
 
 async function defaultFetchQuote(request: SportsQuoteRequest): Promise<SportsQuote> {
-  const json = await fetchLsportsCanonicalQuote({
-    fixtureId: request.fixtureId,
-    marketId: request.marketId,
-    marketKey: request.marketKey,
-    line: request.line,
-    outcomeId: request.outcomeId,
-    feedType: request.feedType,
-  });
-  return parseQuote(json);
+  return resolveSportsQuoteProvider(request.provider).getQuote(request);
 }
 
 function parseLeg(value: unknown): SportsQuoteRequest {
   const row = asRecord(value);
   return {
-    provider: String(row.provider ?? 'lsports'),
+    provider: String(row.provider ?? '').trim().toLowerCase() || 'lsports',
     feedType: String(row.feedType ?? row.feed_type ?? 'inplay'),
     fixtureId: requireText(row.fixtureId ?? row.fixture_id ?? row.matchId, 'MISSING_FIXTURE'),
     marketId: String(row.marketId ?? row.market_id ?? ''),
@@ -206,7 +167,11 @@ export async function placeSportsBet(
     let quote: SportsQuote;
     try {
       quote = await fetchQuote(request);
-    } catch {
+    } catch (error) {
+      if (error instanceof StaffOnboardingError) throw error;
+      if (error instanceof SportsProviderUnsupportedError) {
+        throw staffError('EVENT_UNAVAILABLE', 409);
+      }
       throw staffError('FEED_STALE', 409);
     }
     const decision = decideSportsQuote(request, quote, {

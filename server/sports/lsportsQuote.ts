@@ -9,11 +9,19 @@ import { normalizeFixtureId, parseCanonicalMarketKey } from '../lsports/state/ke
 import { readBetId } from '../lsports/state/parse.js';
 import { betById, type LsportsInPlayStore } from '../lsports/state/store.js';
 import type { LsportsMarketRecord } from '../lsports/state/types.js';
-import type { SportsFeedType, SportsQuote } from './types.js';
+import { fetchLsportsCanonicalQuote } from '../lsports/quoteHttp.js';
+import { readSportsQuote } from './quote.js';
+import {
+  SPORTS_PROVIDER_LSPORTS,
+  type SportsFeedType,
+  type SportsQuote,
+  type SportsQuoteProvider,
+  type SportsQuoteRequest,
+} from './types.js';
 
 function emptyQuote(partial: Partial<SportsQuote> & Pick<SportsQuote, 'fixtureId' | 'feedType' | 'health' | 'heartbeatAgeMs'>): SportsQuote {
   return {
-    provider: 'lsports',
+    provider: SPORTS_PROVIDER_LSPORTS,
     marketId: '',
     marketKey: '',
     line: '',
@@ -107,7 +115,7 @@ export function lookupCanonicalQuote(
   const lastUpdate = typeof bet.LastUpdate === 'string' ? bet.LastUpdate : market.lastUpdate;
 
   return {
-    provider: 'lsports',
+    provider: SPORTS_PROVIDER_LSPORTS,
     feedType,
     fixtureId: String(numericId),
     marketId: String(market.marketId ?? ''),
@@ -139,4 +147,30 @@ export function lookupCanonicalQuoteRecord(
     outcomeId: query.outcomeId ?? query.betId ?? query.bet_id ?? '',
     feedType: query.feedType === 'prematch' ? 'prematch' : 'inplay',
   });
+}
+
+export function createLsportsHttpQuoteProvider(
+  env: NodeJS.ProcessEnv = process.env,
+  fetchImpl: typeof fetch = fetch,
+): SportsQuoteProvider {
+  return {
+    id: SPORTS_PROVIDER_LSPORTS,
+    async getQuote(request: SportsQuoteRequest): Promise<SportsQuote> {
+      const json = await fetchLsportsCanonicalQuote(
+        {
+          fixtureId: request.fixtureId,
+          marketId: request.marketId,
+          marketKey: request.marketKey,
+          line: request.line,
+          outcomeId: request.outcomeId,
+          feedType: request.feedType,
+        },
+        env,
+        fetchImpl,
+      );
+      const quote = readSportsQuote(json);
+      if (quote.provider) return quote;
+      return { ...quote, provider: SPORTS_PROVIDER_LSPORTS };
+    },
+  };
 }
