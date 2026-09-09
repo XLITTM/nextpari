@@ -1,5 +1,5 @@
 import type { BetSelection } from '../types';
-import { acceptLsportsSelection } from './sportsOddGuard';
+import { acceptSportsSelection } from './sportsOddGuard';
 
 export const ODD_LONG_PRESS_MS = 520;
 export const ODD_MOVE_CANCEL_PX = 12;
@@ -38,7 +38,7 @@ export function createOddPressController(options: {
   }
 
   function accepted(): BetSelection | null {
-    return acceptLsportsSelection(options.selection);
+    return acceptSportsSelection(options.selection);
   }
 
   function handle(event: OddPressEvent): OddPressAction {

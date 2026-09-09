@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { ParsedMarket } from './odds-parser';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   assertLsportsPlaceLeg,
+  assertSportsPlaceLeg,
   serializeSportsPlaceBody,
   serializeSportsPlaceLeg,
 } from './sportsPlaceRequest';
 import { placeModeFromCount, placeModeLabel } from './sportsPlaceMode';
 import { addSlipSelection, removeSlipSelection, slipPlaceMode } from './sportsPlaceSlip';
+import { acceptLsportsSelection, acceptSportsSelection } from './sportsOddGuard';
 import { hasCompleteLsportsIdentity, selectionFromLsportsOutcome } from './sportsPlaceIdentity';
 import type { BetSelection, MatchEvent } from '../types';
 
@@ -243,3 +248,190 @@ describe('real LSports place identity', () => {
 function looksGenerated(outcomeId: string): boolean {
   return /^(over|under|home|away|draw|yes|no|1x2)$/i.test(outcomeId);
 }
+
+function genericSelection(provider: string, fixtureId: string, outcomeId = 'out-1'): BetSelection {
+  return {
+    id: `${provider}:${fixtureId}:${outcomeId}`,
+    matchId: fixtureId,
+    matchLabel: 'Home FC — Away FC',
+    market: 'Winner',
+    outcome: 'Home',
+    odds: 1.9,
+    provider,
+    feedType: 'inplay',
+    fixtureId,
+    marketId: 'm1',
+    marketKey: `${fixtureId}:m1:`,
+    line: '',
+    outcomeId,
+  };
+}
+
+describe('provider-neutral place serialization', () => {
+  it('preserves an arbitrary provider without rewriting it to lsports', () => {
+    const body = serializeSportsPlaceBody({
+      selections: [genericSelection('  provider-b  ', 'fx-b')],
+      stake: 10,
+      idempotencyKey: 'k-provider-b',
+    });
+    assert.equal(body?.selections[0]?.provider, 'provider-b');
+    assert.notEqual(body?.selections[0]?.provider, 'lsports');
+  });
+
+  it('preserves an explicit betsapi provider string without claiming it is placeable', () => {
+    const body = serializeSportsPlaceBody({
+      selections: [genericSelection('betsapi', 'fx-betsapi', 'bet-1')],
+      stake: 10,
+      idempotencyKey: 'k-betsapi',
+    });
+    assert.equal(body?.selections[0]?.provider, 'betsapi');
+    assert.equal(assertSportsPlaceLeg(body!.selections[0]!), true);
+    assert.equal(assertLsportsPlaceLeg(body!.selections[0]!), false);
+  });
+
+  it('fails closed when provider is missing, blank, or whitespace', () => {
+    const base = genericSelection('provider-b', 'fx-1');
+    for (const provider of [undefined, '', '   '] as const) {
+      assert.equal(serializeSportsPlaceBody({
+        selections: [{ ...base, provider }],
+        stake: 10,
+        idempotencyKey: 'k-missing',
+      }), null);
+    }
+  });
+
+  it('preserves mixed-provider express per leg', () => {
+    const body = serializeSportsPlaceBody({
+      selections: [
+        genericSelection('provider-a', 'fx-a', 'out-a'),
+        genericSelection('provider-b', 'fx-b', 'out-b'),
+      ],
+      stake: 20,
+      idempotencyKey: 'k-mixed',
+    });
+    assert.equal(body?.mode, 'express');
+    assert.equal(body?.selections[0]?.provider, 'provider-a');
+    assert.equal(body?.selections[1]?.provider, 'provider-b');
+  });
+
+  it('does not apply LSports Bet.Id rules to an unknown explicit provider', () => {
+    const selection = genericSelection('provider-b', 'fx-1', 'over');
+    selection.marketKey = 'total';
+    const body = serializeSportsPlaceBody({
+      selections: [selection],
+      stake: 10,
+      idempotencyKey: 'k-unknown',
+    });
+    assert.equal(body?.selections[0]?.provider, 'provider-b');
+    assert.equal(body?.selections[0]?.outcomeId, 'over');
+    assert.equal(body?.selections[0]?.marketKey, 'total');
+    assert.equal(assertSportsPlaceLeg(body!.selections[0]!), true);
+    assert.equal(assertLsportsPlaceLeg(body!.selections[0]!), false);
+  });
+
+  it('keeps LSports identity strict for fake Bet.Id and display-label marketKey', () => {
+    const fakeId = serializeSportsPlaceBody({
+      selections: [{
+        ...mustSelect(market1x2(), 'home'),
+        outcomeId: 'over',
+      }],
+      stake: 10,
+      idempotencyKey: 'k-fake-id',
+    });
+    assert.equal(fakeId, null);
+
+    const labelKey = serializeSportsPlaceBody({
+      selections: [{
+        ...mustSelect(market1x2(), 'home'),
+        marketKey: '1X2',
+      }],
+      stake: 10,
+      idempotencyKey: 'k-label-key',
+    });
+    assert.equal(labelKey, null);
+  });
+
+  it('does not hardcode provider: lsports in the generic serializer source', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sportsPlaceRequest.ts'), 'utf8');
+    assert.equal(/provider:\s*'lsports'/.test(src), false);
+    assert.equal(/provider\s*\?\?/.test(src), false);
+    assert.equal(/provider\s*\|\|/.test(src), false);
+  });
+});
+
+describe('provider-neutral betslip intake', () => {
+  it('accepts a complete provider-a selection without rewriting provider', () => {
+    const selection = genericSelection('provider-a', 'fx-a', 'out-a');
+    const slip = addSlipSelection([], selection);
+    assert.equal(slip.length, 1);
+    assert.equal(slip[0]?.provider, 'provider-a');
+    assert.equal(acceptSportsSelection(selection)?.provider, 'provider-a');
+  });
+
+  it('keeps mixed-provider express through addSlipSelection and serializeSportsPlaceBody', () => {
+    const providerA = genericSelection('provider-a', 'fx-a', 'out-a');
+    const providerB = genericSelection('provider-b', 'fx-b', 'opaque-id');
+    let slip = addSlipSelection([], providerA);
+    slip = addSlipSelection(slip, providerB);
+    assert.equal(slip.length, 2);
+    assert.equal(slip[0]?.provider, 'provider-a');
+    assert.equal(slip[1]?.provider, 'provider-b');
+    const body = serializeSportsPlaceBody({ selections: slip, stake: 20, idempotencyKey: 'k-slip-mixed' });
+    assert.equal(body?.mode, 'express');
+    assert.equal(body?.selections[0]?.provider, 'provider-a');
+    assert.equal(body?.selections[1]?.provider, 'provider-b');
+  });
+
+  it('rejects missing and blank providers at slip intake', () => {
+    const base = genericSelection('provider-a', 'fx-a');
+    assert.deepEqual(addSlipSelection([], { ...base, provider: undefined }), []);
+    assert.deepEqual(addSlipSelection([], { ...base, provider: '' }), []);
+    assert.deepEqual(addSlipSelection([], { ...base, provider: '   ' }), []);
+  });
+
+  it('accepts a real LSports selection and rejects a fake LSports outcomeId', () => {
+    const real = mustSelect(market1x2(), 'home');
+    const accepted = addSlipSelection([], real);
+    assert.equal(accepted.length, 1);
+    assert.equal(accepted[0]?.provider, 'lsports');
+    assert.equal(accepted[0]?.outcomeId, HOME_BET);
+    assert.deepEqual(addSlipSelection([], { ...real, outcomeId: 'over' }), []);
+  });
+
+  it('accepts provider-b with a non-numeric opaque outcomeId and does not use LSports Bet.Id rules', () => {
+    const selection = genericSelection('provider-b', 'fx-b', 'opaque-leg');
+    const slip = addSlipSelection([], selection);
+    assert.equal(slip.length, 1);
+    assert.equal(slip[0]?.outcomeId, 'opaque-leg');
+    assert.equal(acceptLsportsSelection(selection), null);
+    assert.equal(acceptSportsSelection(selection)?.outcomeId, 'opaque-leg');
+  });
+
+  it('does not let acceptLsportsSelection accept a non-lsports provider', () => {
+    const numericLookalike = genericSelection('provider-b', FIXTURE, HOME_BET);
+    numericLookalike.marketId = '1';
+    numericLookalike.marketKey = `${FIXTURE}:1:`;
+    numericLookalike.line = '';
+    assert.equal(acceptLsportsSelection(numericLookalike), null);
+    assert.equal(addSlipSelection([], numericLookalike).length, 1);
+    assert.equal(addSlipSelection([], numericLookalike)[0]?.provider, 'provider-b');
+  });
+
+  it('still keeps one selection per match', () => {
+    const first = genericSelection('provider-a', 'fx-same', 'out-1');
+    const second = genericSelection('provider-b', 'fx-same', 'out-2');
+    second.matchId = 'fx-same';
+    second.id = 'provider-b:fx-same:out-2';
+    const slip = addSlipSelection(addSlipSelection([], first), second);
+    assert.equal(slip.length, 1);
+    assert.equal(slip[0]?.provider, 'provider-b');
+    assert.equal(slip[0]?.outcomeId, 'out-2');
+  });
+
+  it('does not use LSports-only acceptance in the generic slip source', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sportsPlaceSlip.ts'), 'utf8');
+    assert.equal(src.includes('acceptLsportsSelection'), false);
+    assert.equal(src.includes('hasCompleteLsportsIdentity'), false);
+    assert.equal(/provider:\s*'lsports'/.test(src), false);
+  });
+});

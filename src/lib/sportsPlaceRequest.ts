@@ -2,8 +2,10 @@ import type { BetSelection } from '../types';
 import { hasCompleteLsportsIdentity } from './sportsPlaceIdentity';
 import { slipPlaceMode } from './sportsPlaceSlip';
 
+const LSPORTS_PROVIDER = 'lsports';
+
 export interface SportsPlaceLegPayload {
-  provider: 'lsports';
+  provider: string;
   feedType: 'inplay' | 'prematch';
   fixtureId: string;
   marketId: string;
@@ -16,9 +18,13 @@ export interface SportsPlaceLegPayload {
   outcomeName?: string;
 }
 
+function readProviderId(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
 export function serializeSportsPlaceLeg(row: BetSelection): SportsPlaceLegPayload {
   return {
-    provider: 'lsports',
+    provider: readProviderId(row.provider),
     feedType: row.feedType === 'prematch' ? 'prematch' : 'inplay',
     fixtureId: String(row.fixtureId ?? row.matchId ?? '').trim(),
     marketId: String(row.marketId ?? '').trim(),
@@ -43,7 +49,7 @@ export function serializeSportsPlaceBody(params: {
   selections: SportsPlaceLegPayload[];
 } | null {
   const selections = params.selections.map(serializeSportsPlaceLeg);
-  if (selections.some((leg) => !leg.outcomeId || !assertLsportsPlaceLeg(leg))) {
+  if (selections.some((leg) => !assertSportsPlaceLeg(leg))) {
     return null;
   }
   return {
@@ -52,6 +58,20 @@ export function serializeSportsPlaceBody(params: {
     idempotencyKey: params.idempotencyKey,
     selections,
   };
+}
+
+export function assertSportsPlaceLeg(leg: SportsPlaceLegPayload): boolean {
+  const provider = readProviderId(leg.provider);
+  if (!provider) return false;
+  const fixtureId = String(leg.fixtureId ?? '').trim();
+  const marketId = String(leg.marketId ?? '').trim();
+  const marketKey = String(leg.marketKey ?? '').trim();
+  const outcomeId = String(leg.outcomeId ?? '').trim();
+  if (!fixtureId || !marketId || !marketKey || !outcomeId) return false;
+  if (provider === LSPORTS_PROVIDER) {
+    return assertLsportsPlaceLeg(leg);
+  }
+  return true;
 }
 
 export function assertLsportsPlaceLeg(leg: SportsPlaceLegPayload): boolean {

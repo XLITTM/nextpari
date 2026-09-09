@@ -5,7 +5,7 @@ import { useToast } from '../ToastContext';
 import { useWallet } from '../WalletContext';
 import { useBetHistory } from '../BetHistoryContext';
 import { placeBet } from '../lib/bets';
-import { acceptLsportsSelection } from '../lib/sportsOddGuard';
+import { acceptSportsSelection } from '../lib/sportsOddGuard';
 import { formatOdds } from '../lib/matchOdds';
 import { formatPlayerMoney } from '../WalletContext';
 
@@ -31,7 +31,7 @@ export function QuickBetSheet() {
   }, [pendingSelection]);
 
   if (!pendingSelection) return null;
-  const selection = acceptLsportsSelection(pendingSelection);
+  const selection = acceptSportsSelection(pendingSelection);
   if (!selection) return null;
 
   const potentialWin = stake * selection.odds;

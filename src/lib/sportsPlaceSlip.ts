@@ -1,9 +1,9 @@
 import type { BetSelection } from '../types';
-import { acceptLsportsSelection } from './sportsOddGuard';
+import { acceptSportsSelection } from './sportsOddGuard';
 import { placeModeFromCount, type SportsPlaceMode } from './sportsPlaceMode';
 
 export function addSlipSelection(prev: BetSelection[], selection: BetSelection): BetSelection[] {
-  const accepted = acceptLsportsSelection(selection);
+  const accepted = acceptSportsSelection(selection);
   if (!accepted) return prev;
   if (prev.some((row) => row.id === accepted.id)) {
     return prev.filter((row) => row.id !== accepted.id);
