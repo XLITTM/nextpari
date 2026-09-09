@@ -117,8 +117,10 @@ function screensEqual(a: Screen, b: Screen): boolean {
       return a.mode === (b as { mode: 'live' | 'line' | 'cybers' }).mode;
     case 'championships':
       return a.sport === (b as { sport: string }).sport && a.mode === (b as { mode: 'live' | 'line' }).mode;
-    case 'league':
-      return a.leagueId === (b as { leagueId: string }).leagueId;
+    case 'league': {
+      const other = b as { leagueId: string; mode?: 'live' | 'line' };
+      return a.leagueId === other.leagueId && (a.mode ?? 'live') === (other.mode ?? 'live');
+    }
     default:
       return true;
   }
@@ -537,6 +539,7 @@ function AppContent() {
         return (
           <LeagueScreen
             leagueId={screen.leagueId}
+            mode={screen.mode}
             onBack={goBack}
             onOpenMatch={openMatch}
             favorites={favoriteMatchIds}

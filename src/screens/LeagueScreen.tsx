@@ -1,57 +1,33 @@
 import { ChevronLeft } from 'lucide-react';
 import { MatchCard } from '../components/MatchCard';
+import { SkeletonLoader } from '../components/SkeletonLoader';
 import { fromLeagueId } from '../lib/leagueRoute';
 import { useLiveMatches } from '../LiveMatchesContext';
-import type { MatchEvent } from '../types';
 
 interface LeagueScreenProps {
   leagueId: string;
+  mode?: 'live' | 'line';
   onBack: () => void;
   onOpenMatch: (matchId: string) => void;
   favorites: string[];
   onToggleFavorite: (matchId: string) => void;
 }
 
-function stubMatch(leagueId: string, index: number, league: string, country: string): MatchEvent {
-  const teams: Array<[string, string]> = [
-    ['ФК Оренбург', 'ФК Ахмат'],
-    ['Реал Мадрид', 'Жирона'],
-    ['Арсенал', 'Челси'],
-  ];
-  const [team1, team2] = teams[index] ?? teams[0];
-  return {
-    id: `league-stub-${leagueId}-${index}`,
-    sport: 'football',
-    league,
-    country: country || 'Международные',
-    team1,
-    team2,
-    team1Color: '#1d4ed8',
-    team2Color: '#16a34a',
-    startTime: Date.now() - (47 + index) * 60_000,
-    isLive: true,
-    liveStatus: `${47 + index}:00`,
-    liveScore: { team1: 1, team2: index % 2 },
-    markets: { '1': 2.1, x: 3.25, '2': 2.8 },
-    extraMarkets: 3,
-  };
-}
-
 export function LeagueScreen({
   leagueId,
+  mode,
   onBack,
   onOpenMatch,
   favorites,
   onToggleFavorite,
 }: LeagueScreenProps) {
-  const { liveMatches } = useLiveMatches();
+  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
   const { country, name } = fromLeagueId(leagueId);
-  const fromLive = liveMatches.filter(
+  const resolvedMode = mode ?? 'live';
+  const pool = resolvedMode === 'line' ? upcomingMatches : liveMatches;
+  const matches = pool.filter(
     (match) => match.league === name && (!country || match.country === country),
   );
-  const matches = fromLive.length > 0
-    ? fromLive.slice(0, 3)
-    : [0, 1, 2].map((index) => stubMatch(leagueId, index, name, country));
 
   return (
     <div className="min-h-full flex flex-col bg-[#f0f2f5] dark:bg-gray-900">
@@ -72,15 +48,21 @@ export function LeagueScreen({
       </header>
 
       <div className="space-y-3 px-4 py-4">
-        {matches.map((match) => (
-          <MatchCard
-            key={match.id}
-            match={match}
-            onOpenMatch={onOpenMatch}
-            isFavorite={favorites.includes(match.id)}
-            onToggleFavorite={() => onToggleFavorite(match.id)}
-          />
-        ))}
+        {loading && matches.length === 0 ? (
+          <SkeletonLoader count={3} variant="list" />
+        ) : matches.length === 0 ? (
+          <p className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">Сейчас матчей нет</p>
+        ) : (
+          matches.map((match) => (
+            <MatchCard
+              key={match.id}
+              match={match}
+              onOpenMatch={onOpenMatch}
+              isFavorite={favorites.includes(match.id)}
+              onToggleFavorite={() => onToggleFavorite(match.id)}
+            />
+          ))
+        )}
       </div>
     </div>
   );
