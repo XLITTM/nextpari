@@ -28,9 +28,11 @@ export function couponNumber(betId: string, ticketCode?: string): string {
 }
 
 export function betStatusLabel(status: BetStatus): string {
-  if (status === 'lost') return 'Проиграла';
-  if (status === 'won') return 'Выиграла';
-  if (status === 'pending') return 'В расчёте';
+  if (status === 'lost') return 'Проиграна';
+  if (status === 'won') return 'Выиграна';
+  if (status === 'refund') return 'Возврат';
+  if (status === 'cancelled') return 'Отменена';
+  if (status === 'pending' || status === 'in_progress') return 'В процессе';
   return 'Принята';
 }
 

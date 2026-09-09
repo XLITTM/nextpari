@@ -174,7 +174,8 @@ export interface Transaction {
   status: 'completed' | 'processing' | 'failed';
 }
 
-export type BetStatus = 'won' | 'lost' | 'in_progress' | 'pending';
+export type BetStatus = 'accepted' | 'in_progress' | 'won' | 'lost' | 'refund' | 'cancelled' | 'pending';
+export type BetDisplayStatus = 'accepted' | 'in_progress' | 'won' | 'lost' | 'refund' | 'cancelled';
 
 export interface BetEvent {
   matchId?: string;
@@ -185,6 +186,8 @@ export interface BetEvent {
   odds: number;
   homeTeam?: string;
   awayTeam?: string;
+  homeLogo?: string;
+  awayLogo?: string;
   sport?: SportId;
   country?: string;
   league?: string;
@@ -193,6 +196,10 @@ export interface BetEvent {
   liveStatus?: string;
   matchStatus?: string;
   finalScore?: string;
+  startTime?: number;
+  settlementCode?: number | null;
+  marketId?: string;
+  line?: string;
 }
 
 export interface BetHistoryEntry {
@@ -206,6 +213,8 @@ export interface BetHistoryEntry {
   status: BetStatus;
   date: string;
   ticketCode?: string;
+  settlementState?: string;
+  rawStatus?: string;
 }
 
 export type WithdrawalMethod = 'card' | 'crypto' | 'ewallet' | 'cash';
