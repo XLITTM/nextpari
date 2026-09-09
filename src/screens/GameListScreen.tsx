@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Search, Monitor, Link as LinkIcon, Bell, Star } from 'lucide-react';
+import { ArrowLeft, Search, Star } from 'lucide-react';
 import type { MatchEvent } from '../types';
 import { mainOutcomeButtons } from '../lib/cardOdds';
 import { OddButton } from '../components/OddButton';
@@ -15,6 +15,32 @@ interface GameListScreenProps {
   onOpenMatch: (matchId: string) => void;
   favorites: string[];
   onToggleFavorite: (matchId: string) => void;
+}
+
+function formatKickoff(ts: number): { date: string; time: string } {
+  const d = new Date(ts);
+  if (!Number.isFinite(ts) || ts <= 0) {
+    return { date: 'VS', time: 'Не начался' };
+  }
+  const now = new Date();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const isSameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  if (isSameDay(d, now)) return { date: 'Сегодня', time };
+  if (isSameDay(d, tomorrow)) return { date: 'Завтра', time };
+  const months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
+  return { date: `${d.getDate()} ${months[d.getMonth()]}`, time };
+}
+
+function hasRealLiveScore(match: MatchEvent): boolean {
+  return Boolean(
+    match.isLive &&
+      match.liveScore &&
+      match.liveScore.team1 != null &&
+      match.liveScore.team2 != null,
+  );
 }
 
 function getOutcomeButtons(match: MatchEvent) {
@@ -50,8 +76,6 @@ function MatchRowCard({
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <LinkIcon className="w-4 h-4 text-gray-600 dark:text-gray-300" />
-          <Bell className="w-4 h-4 text-gray-600 dark:text-gray-300" />
           <Star
             className={`w-4 h-4 transition-colors ${isFavorite ? 'fill-green-500 text-green-500' : 'text-gray-600 dark:text-gray-300'}`}
             onClick={(e) => {
@@ -82,12 +106,21 @@ function MatchRowCard({
 
         <div className="shrink-0 flex flex-col items-center px-2">
           {match.isLive ? (
-            <span className="text-2xl font-extrabold text-gray-900 dark:text-white tabular-nums leading-none">
-              {match.liveScore?.team1} : {match.liveScore?.team2}
-            </span>
+            hasRealLiveScore(match) ? (
+              <span className="text-2xl font-extrabold text-gray-900 dark:text-white tabular-nums leading-none">
+                {match.liveScore!.team1} : {match.liveScore!.team2}
+              </span>
+            ) : (
+              <span className="text-sm font-extrabold text-gray-900 dark:text-white">LIVE</span>
+            )
           ) : (
-            <span className="text-2xl font-extrabold text-gray-700 dark:text-gray-300 tabular-nums leading-none">
-              0 : 0
+            <span className="flex flex-col items-center leading-tight">
+              <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">
+                {formatKickoff(match.startTime).date}
+              </span>
+              <span className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums">
+                {formatKickoff(match.startTime).time}
+              </span>
             </span>
           )}
           <span className="text-[11px] text-gray-700 dark:text-gray-300 mt-1.5 text-center font-bold">
@@ -95,7 +128,7 @@ function MatchRowCard({
               ? /^\d{8,}$/.test((match.liveStatus ?? '').trim())
                 ? 'LIVE'
                 : ['LIVE', match.liveStatus].filter(Boolean).join(' ')
-              : 'Скоро начнётся'}
+              : 'Не начался'}
           </span>
         </div>
       </div>
@@ -146,12 +179,6 @@ export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favor
           >
             <Search className="w-5 h-5" />
           </button>
-          <button
-            className="w-9 h-9 flex items-center justify-center text-gray-700 dark:text-gray-200 active:scale-90 transition-transform"
-            aria-label="Трансляции"
-          >
-            <Monitor className="w-5 h-5" />
-          </button>
         </div>
       </header>
 
@@ -181,8 +208,12 @@ export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favor
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 pb-24">
-        {loading || matches.length === 0 ? (
+        {loading && matches.length === 0 ? (
           <SkeletonLoader count={6} />
+        ) : matches.length === 0 ? (
+          <p className="py-16 text-center text-sm font-bold text-gray-500 dark:text-gray-400">
+            Сейчас матчей нет
+          </p>
         ) : (
           matches.map((match) => (
             <MatchRowCard

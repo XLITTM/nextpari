@@ -7,59 +7,27 @@ import {
   Scale,
   CreditCard,
   BookOpen,
-  Ban,
-  Mail,
-  Send,
-  Copy,
-  ExternalLink,
 } from 'lucide-react';
-import { useToast } from '../ToastContext';
 
 interface InfoScreenProps {
   onBack: () => void;
 }
 
-type InfoView = 'root' | 'about' | 'contacts' | 'rules' | 'payments' | 'howto' | 'stoplist';
-
-const STOP_LIST = [
-  'Aviator (Spribe)',
-  'JetX (SmartSoft)',
-  'Lucky Jet',
-  'Mines',
-  'Plinko',
-  'Blackjack',
-  'Baccarat',
-  'Рулетка (все столы)',
-  'Poker',
-  'TV Bet',
-  'Crazy Time',
-  'Monopoly Live',
-];
+type InfoView = 'root' | 'about' | 'contacts' | 'rules' | 'payments' | 'howto';
 
 export function InfoScreen({ onBack }: InfoScreenProps) {
   const [view, setView] = useState<InfoView>('root');
-  const { showToast } = useToast();
-
-  const copy = async (value: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      showToast(`${label} скопирован`);
-    } catch {
-      showToast(value);
-    }
-  };
 
   if (view === 'about') {
     return (
       <SubPage title="О нас" onBack={() => setView('root')}>
         <article className="bg-gray-50 dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm text-sm leading-relaxed text-gray-700 dark:text-gray-200 space-y-3">
           <p>
-            <span className="font-bold text-gray-900 dark:text-white">Nextpari</span> — международная букмекерская
-            платформа для ставок на спорт, киберспорт и казино.
+            <span className="font-bold text-gray-900 dark:text-white">Nextpari</span> — платформа для ставок на спорт,
+            киберспорт и игровых разделов.
           </p>
           <p>
-            Мы работаем с 2024 года и предлагаем живую линию, высокие коэффициенты, быстрые выплаты и круглосуточную
-            поддержку.
+            Часть сервисов становится доступна после подключения соответствующих провайдеров.
           </p>
           <p>
             Играйте ответственно. Сервис доступен только лицам старше 18 лет.
@@ -72,38 +40,10 @@ export function InfoScreen({ onBack }: InfoScreenProps) {
   if (view === 'contacts') {
     return (
       <SubPage title="Контакты" onBack={() => setView('root')}>
-        <div className="space-y-3">
-          <button
-            type="button"
-            onClick={() => copy('support@nextpari.com', 'Email')}
-            className="w-full flex items-center gap-3 bg-gray-50 dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm text-left active:scale-[0.99] transition-transform"
-          >
-            <span className="w-11 h-11 rounded-2xl bg-brand-100 dark:bg-brand-900/40 text-brand-600 flex items-center justify-center shrink-0">
-              <Mail className="w-5 h-5" />
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-bold text-gray-900 dark:text-white">Email поддержки</span>
-              <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">support@nextpari.com</span>
-            </span>
-            <Copy className="w-4 h-4 text-gray-400 shrink-0" />
-          </button>
-
-          <a
-            href="https://t.me/nextpari"
-            target="_blank"
-            rel="noreferrer"
-            className="w-full flex items-center gap-3 bg-gray-50 dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm text-left active:scale-[0.99] transition-transform"
-          >
-            <span className="w-11 h-11 rounded-2xl bg-sky-100 dark:bg-sky-900/40 text-sky-600 flex items-center justify-center shrink-0">
-              <Send className="w-5 h-5" />
-            </span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-bold text-gray-900 dark:text-white">Telegram-чат</span>
-              <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">@nextpari · ответ 24/7</span>
-            </span>
-            <ExternalLink className="w-4 h-4 text-gray-400 shrink-0" />
-          </a>
-        </div>
+        <article className="bg-gray-50 dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm text-sm leading-relaxed text-gray-700 dark:text-gray-200 space-y-3">
+          <p className="font-bold text-gray-900 dark:text-white">Поддержка</p>
+          <p>Контакты поддержки будут опубликованы перед запуском сервиса.</p>
+        </article>
       </SubPage>
     );
   }
@@ -112,11 +52,11 @@ export function InfoScreen({ onBack }: InfoScreenProps) {
     return (
       <SubPage title="Правила" onBack={() => setView('root')}>
         <article className="bg-gray-50 dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm text-sm leading-relaxed text-gray-700 dark:text-gray-200 space-y-3">
-          <p className="font-bold text-gray-900 dark:text-white">Юридические условия</p>
-          <p>Регистрируясь, вы подтверждаете, что вам исполнилось 18 лет и вы действуете от своего имени.</p>
-          <p>Один аккаунт на человека. Мультиаккаунтинг, арбитраж и использование ботов запрещены.</p>
-          <p>Компания вправе приостановить выплаты при подозрении на мошенничество до завершения проверки.</p>
-          <p>Полная версия правил публикуется на сайте и имеет приоритет над кратким описанием в приложении.</p>
+          <p className="font-bold text-gray-900 dark:text-white">Основные условия</p>
+          <p>Сервис доступен только лицам старше 18 лет. Играйте ответственно.</p>
+          <p>
+            Полные юридические документы и правила будут опубликованы до запуска сервиса для клиентов.
+          </p>
         </article>
       </SubPage>
     );
@@ -125,11 +65,10 @@ export function InfoScreen({ onBack }: InfoScreenProps) {
   if (view === 'payments') {
     return (
       <SubPage title="Платежи" onBack={() => setView('root')}>
-        <div className="space-y-3">
-          <InfoCard title="Пополнение" text="Карты, криптовалюта и электронные кошельки. Комиссия со стороны Nextpari не взимается. Минимальный депозит — 10 EUR." />
-          <InfoCard title="Вывод" text="Заявка обрабатывается от 15 минут до 24 часов в рабочие дни. Минимальная сумма вывода — 20 EUR." />
-          <InfoCard title="Комиссии" text="Комиссия платёжной системы может удерживаться провайдером. При выводе в криптовалюту возможна сетевая комиссия сети." />
-        </div>
+        <InfoCard
+          title="Пополнение и вывод"
+          text="Актуальные способы, лимиты и условия пополнения и вывода отображаются в платёжном интерфейсе."
+        />
       </SubPage>
     );
   }
@@ -141,7 +80,7 @@ export function InfoScreen({ onBack }: InfoScreenProps) {
           {[
             'Выберите событие в LIVE или Линии.',
             'Нажмите на коэффициент — исход попадёт в купон.',
-            'Укажите сумму ставки. Можно использовать быстрые суммы.',
+            'Укажите сумму ставки.',
             'Проверьте тип пари (ординар / экспресс) и нажмите «Заключить».',
             'Статус купона смотрите в разделе «История».',
           ].map((step, i) => (
@@ -153,24 +92,6 @@ export function InfoScreen({ onBack }: InfoScreenProps) {
             </li>
           ))}
         </ol>
-      </SubPage>
-    );
-  }
-
-  if (view === 'stoplist') {
-    return (
-      <SubPage title="Стоп-лист игр" onBack={() => setView('root')}>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3 px-1">
-          Эти игры не участвуют в отыгрыше бонуса. Ставки по ним не засчитываются в вейджер.
-        </p>
-        <div className="bg-gray-50 dark:bg-[#1e293b] rounded-2xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-700 shadow-sm">
-          {STOP_LIST.map((game) => (
-            <div key={game} className="flex items-center gap-3 px-4 py-3">
-              <Ban className="w-4 h-4 text-red-500 shrink-0" />
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">{game}</span>
-            </div>
-          ))}
-        </div>
       </SubPage>
     );
   }
@@ -209,12 +130,6 @@ export function InfoScreen({ onBack }: InfoScreenProps) {
             iconClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400"
             label="Как сделать ставку?"
             onClick={() => setView('howto')}
-          />
-          <InfoRow
-            icon={Ban}
-            iconClass="bg-red-50 text-red-500 dark:bg-red-500/15 dark:text-red-400"
-            label="Стоп-лист игр для отыгрыша"
-            onClick={() => setView('stoplist')}
           />
         </div>
       </div>

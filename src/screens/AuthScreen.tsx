@@ -6,6 +6,22 @@ interface AuthScreenProps {
   onAuthSuccess: () => void | Promise<void>;
 }
 
+function playerFacingAuthError(raw: string): string {
+  const text = raw.toLowerCase();
+  if (
+    text.includes('invalid credentials') ||
+    text.includes('invalid login') ||
+    text.includes('invalid email or password')
+  ) {
+    return 'Неверный email или пароль';
+  }
+  if (text.includes('password too short')) return 'Пароль слишком короткий';
+  if (text.includes('invalid phone')) return 'Неверный номер телефона';
+  if (text.includes('invalid email')) return 'Неверный email';
+  if (/[а-яё]/i.test(raw)) return raw;
+  return 'Не удалось выполнить запрос. Попробуйте ещё раз.';
+}
+
 export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [loginEmail, setLoginEmail] = useState('');
@@ -26,12 +42,12 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     try {
       const session = await signInPlayer(loginEmail, loginPassword);
       if (!session?.user) {
-        setError('invalid credentials');
+        setError('Неверный email или пароль');
         return;
       }
       await onAuthSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'invalid credentials');
+      setError(playerFacingAuthError(err instanceof Error ? err.message : 'invalid credentials'));
     } finally {
       setBusy(false);
     }
@@ -64,7 +80,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
         setTab('login');
         return;
       }
-      setError(message);
+      setError(playerFacingAuthError(message));
     } finally {
       setBusy(false);
     }
@@ -291,7 +307,7 @@ function RegisterForm({
           {agreed && <Check className="w-3.5 h-3.5 text-white" />}
         </span>
         <span className="text-xs text-ink-600 dark:text-ink-300 leading-relaxed">
-          Я подтверждаю, что мне есть 18 лет и я согласен с правилами
+          Я подтверждаю, что мне есть 18 лет
         </span>
       </button>
 
