@@ -1,25 +1,20 @@
 import { SectionHeader } from './SectionHeader';
-import { casinoGames } from '../data';
 import { coverForGame } from '../lib/casinoCovers';
-import type { CasinoGame, Screen } from '../types';
+import { openCasinoGame, playableCasinoGames } from '../lib/casinoPlayable';
+import type { Screen } from '../types';
 
 interface CasinoGridProps {
   onNavigate?: (screen: Screen) => void;
 }
 
-function openCasinoGame(game: CasinoGame, onNavigate?: (screen: Screen) => void) {
-  if (game.id === 'apples') onNavigate?.({ name: 'apples' });
-  if (game.id === 'crystal') onNavigate?.({ name: 'crystal' });
-  if (game.id === 'dice') onNavigate?.({ name: 'dice' });
-  if (game.id === 'c4') onNavigate?.({ name: 'aviator' });
-}
-
 export function CasinoGrid({ onNavigate }: CasinoGridProps) {
+  const games = playableCasinoGames();
+
   return (
     <div className="space-y-3 pt-2">
-      <SectionHeader title="Популярные игры" onSeeAll={() => {}} />
+      <SectionHeader title="Популярные игры" />
       <div className="px-4 grid grid-cols-3 gap-2.5">
-        {casinoGames.map((game) => {
+        {games.map((game) => {
           const isApples = game.id === 'apples';
           const isCrystal = game.id === 'crystal';
           const cover = coverForGame(game.id, game.cover);

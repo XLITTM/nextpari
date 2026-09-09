@@ -6,7 +6,6 @@ import { SectionHeader } from '../components/SectionHeader';
 import { CasinoGrid } from '../components/CasinoGrid';
 import { CasinoCarousel } from '../components/CasinoCarousel';
 import { ChampionshipsList } from '../components/ChampionshipsList';
-import { CasinoCategoriesScroll } from '../components/CasinoCategoriesScroll';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { EsportsDisciplinesScroll } from '../components/EsportsDisciplinesScroll';
 import { useLiveMatches } from '../LiveMatchesContext';
@@ -203,10 +202,6 @@ export function HomeScreen({
 
         <section>
           <CasinoCarousel onNavigate={onNavigate} />
-        </section>
-
-        <section>
-          <CasinoCategoriesScroll />
         </section>
 
         <section>

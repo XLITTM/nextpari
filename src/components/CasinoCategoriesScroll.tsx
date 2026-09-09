@@ -4,12 +4,12 @@ import { casinoCategories } from '../data';
 export function CasinoCategoriesScroll() {
   return (
     <div>
-      <SectionHeader title="Категории Казино" onSeeAll={() => {}} />
+      <SectionHeader title="Категории Казино" />
       <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
         {casinoCategories.map((cat) => (
           <div
             key={cat.id}
-            className={`relative shrink-0 w-36 h-36 rounded-2xl bg-gradient-to-br ${cat.gradient} overflow-hidden active:scale-95 transition-transform cursor-pointer`}
+            className={`relative shrink-0 w-36 h-36 rounded-2xl bg-gradient-to-br ${cat.gradient} overflow-hidden`}
           >
             <div className="absolute -right-6 -top-6 w-20 h-20 rounded-full bg-white/25" />
             <div className="absolute -left-4 -bottom-4 w-16 h-16 rounded-full bg-white/15" />

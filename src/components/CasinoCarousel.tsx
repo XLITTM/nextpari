@@ -1,25 +1,20 @@
 import { SectionHeader } from './SectionHeader';
-import { casinoGames } from '../data';
 import { coverForGame } from '../lib/casinoCovers';
-import type { CasinoGame, Screen } from '../types';
+import { openCasinoGame, playableCasinoGames } from '../lib/casinoPlayable';
+import type { Screen } from '../types';
 
 interface CasinoCarouselProps {
   onNavigate?: (screen: Screen) => void;
 }
 
-function openCasinoGame(game: CasinoGame, onNavigate?: (screen: Screen) => void) {
-  if (game.id === 'apples') onNavigate?.({ name: 'apples' });
-  if (game.id === 'crystal') onNavigate?.({ name: 'crystal' });
-  if (game.id === 'dice') onNavigate?.({ name: 'dice' });
-  if (game.id === 'c4') onNavigate?.({ name: 'aviator' });
-}
-
 export function CasinoCarousel({ onNavigate }: CasinoCarouselProps) {
+  const games = playableCasinoGames();
+
   return (
     <div>
-      <SectionHeader title="Казино" onSeeAll={() => {}} />
+      <SectionHeader title="Казино" />
       <div className="no-scrollbar flex gap-2.5 overflow-x-auto px-4 pb-1">
-        {casinoGames.map((game) => {
+        {games.map((game) => {
           const isApples = game.id === 'apples';
           const isCrystal = game.id === 'crystal';
           const cover = coverForGame(game.id, game.cover);
