@@ -383,7 +383,7 @@ describe('internal settlement webhook', () => {
         method: 'POST',
         pathname: INTERNAL_SPORTS_SETTLE_PATH,
         authorization: 'Bearer expected-secret',
-        body: { items: [{ fingerprint: 'a', fixtureId: '1', outcomeId: '2', settlement: 2 }] },
+        body: { provider: 'lsports', items: [{ fingerprint: 'a', fixtureId: '1', outcomeId: '2', settlement: 2 }] },
       },
       { LSPORTS_SETTLEMENT_SECRET: 'expected-secret' },
       { error() {} },

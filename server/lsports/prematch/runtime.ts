@@ -24,6 +24,7 @@ import { LsportsRecoveryBuffer } from '../state/recovery.js';
 import { LsportsInPlayStore } from '../state/store.js';
 import { lookupCanonicalQuoteRecord } from '../../sports/lsportsQuote.js';
 import { dispatchSettlementNotices } from '../../sports/settlementDispatch.js';
+import { toCanonicalSettlementNotices } from '../settlementAdapter.js';
 import { startLsportsSdkFeed } from '../sdk/feed.js';
 import { resolveLsportsTransport } from '../sdk/mode.js';
 import { sdkShadowFor } from '../sdk/shadow.js';
@@ -269,7 +270,7 @@ export async function runLsportsPrematchBridge(
       }
       store.noteRmqTransport('parsed');
       bridge.handleRmq(json);
-      const notices = store.takeSettlementNotices();
+      const notices = toCanonicalSettlementNotices(store.takeSettlementNotices());
       if (notices.length) {
         void dispatchSettlementNotices(notices, env, { log });
       }

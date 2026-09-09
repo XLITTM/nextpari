@@ -11,6 +11,13 @@ import {
 } from '../staff/httpHandler.js';
 import { GAME_NO_STORE_HEADERS } from '../games/httpCache.js';
 import { readSettlementSecret, settlementSecretsEqual } from './settlementDispatch.js';
+import {
+  normalizeSettlementProviderId,
+  parseSportsSettlementNotice,
+  settlementNoticeToRpcItem,
+  uniformSettlementProvider,
+  type SportsSettlementNotice,
+} from './settlement.js';
 import type { StaffLog } from '../staff/types.js';
 
 export const INTERNAL_SPORTS_SETTLE_PATH = '/api/internal/sports/settle';
@@ -62,10 +69,28 @@ export async function handleSportsSettleRequest(
     return { status: 401, body: { ok: false, error: 'SETTLEMENT_UNAUTHORIZED' } };
   }
   const body = asRecord(parseJsonPayload(input.body));
-  const items = Array.isArray(body.items) ? body.items : [];
-  if (!items.length) {
+  const batchProvider = normalizeSettlementProviderId(body.provider ?? body.source);
+  const rawItems = Array.isArray(body.items) ? body.items : [];
+  if (!rawItems.length) {
     return { status: 400, body: { ok: false, error: 'SETTLEMENT_ITEMS_REQUIRED' } };
   }
+  const notices: SportsSettlementNotice[] = [];
+  for (const row of rawItems) {
+    const itemProvider = normalizeSettlementProviderId(asRecord(row).provider);
+    if (batchProvider && itemProvider && itemProvider !== batchProvider) {
+      return { status: 400, body: { ok: false, error: 'SETTLEMENT_PROVIDER_MISMATCH' } };
+    }
+    const parsed = parseSportsSettlementNotice(row, batchProvider);
+    if (!parsed.ok) {
+      return { status: 400, body: { ok: false, error: parsed.error } };
+    }
+    notices.push(parsed.notice);
+  }
+  const batch = uniformSettlementProvider(notices, batchProvider);
+  if (!batch.ok) {
+    return { status: 400, body: { ok: false, error: batch.error } };
+  }
+  const items = notices.map(settlementNoticeToRpcItem);
   console.log(`[sports] settlement-received items=${items.length}`);
   try {
     const invoke = rpc ?? (async (payload: unknown[]) => {

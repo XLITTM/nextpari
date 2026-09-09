@@ -1,4 +1,4 @@
-import { LSPORTS_SETTLEMENT, type LsportsSettlementCode } from '../lsports/state/settlement.js';
+import { SPORTS_SETTLEMENT, isSportsSettlementCode, type SportsSettlementCode } from './settlement.js';
 
 export function money2(value: number): number {
   if (!Number.isFinite(value)) return 0;
@@ -6,7 +6,7 @@ export function money2(value: number): number {
 }
 
 /**
- * Official Type 35 mapping for a single stake S and accepted decimal odds O.
+ * Canonical Nextpari sports payout for a single stake S and accepted decimal odds O.
  * Returns null when no financial movement should occur.
  */
 export function settlementPayout(
@@ -17,18 +17,18 @@ export function settlementPayout(
   const s = money2(stake);
   const o = acceptedOdds;
   if (!Number.isFinite(s) || s < 0 || !Number.isFinite(o) || o <= 0) return null;
-  if (code === LSPORTS_SETTLEMENT.NotSettled) return null;
-  if (code === LSPORTS_SETTLEMENT.Loser) return 0;
-  if (code === LSPORTS_SETTLEMENT.Winner) return money2(s * o);
-  if (code === LSPORTS_SETTLEMENT.Refund) return s;
-  if (code === LSPORTS_SETTLEMENT.HalfLost) return money2(s / 2);
-  if (code === LSPORTS_SETTLEMENT.HalfWon) return money2((s / 2) * o + s / 2);
-  if (code === LSPORTS_SETTLEMENT.Cancelled) return null;
+  if (code === SPORTS_SETTLEMENT.Pending) return null;
+  if (code === SPORTS_SETTLEMENT.Lost) return 0;
+  if (code === SPORTS_SETTLEMENT.Won) return money2(s * o);
+  if (code === SPORTS_SETTLEMENT.Refund) return s;
+  if (code === SPORTS_SETTLEMENT.HalfLost) return money2(s / 2);
+  if (code === SPORTS_SETTLEMENT.HalfWon) return money2((s / 2) * o + s / 2);
+  if (code === SPORTS_SETTLEMENT.Cancelled) return null;
   return null;
 }
 
-export function isKnownSettlementCode(code: number): code is LsportsSettlementCode {
-  return code === -1 || code === 0 || code === 1 || code === 2 || code === 3 || code === 4 || code === 5;
+export function isKnownSettlementCode(code: number): code is SportsSettlementCode {
+  return isSportsSettlementCode(code);
 }
 
 export interface SportsLegSettlement {
@@ -48,29 +48,29 @@ export function accumulatorPayout(
   let remaining = money2(stake);
   for (const leg of legs) {
     const code = leg.settlement;
-    if (code == null || code === LSPORTS_SETTLEMENT.NotSettled) {
+    if (code == null || code === SPORTS_SETTLEMENT.Pending) {
       return { pending: true, payout: null, unknown: false };
     }
     if (!isKnownSettlementCode(code)) {
       return { pending: false, payout: null, unknown: true };
     }
     const factorOdds = Number.isFinite(leg.acceptedOdds) && leg.acceptedOdds > 1 ? leg.acceptedOdds : 1;
-    if (code === LSPORTS_SETTLEMENT.Cancelled || code === LSPORTS_SETTLEMENT.Refund) {
+    if (code === SPORTS_SETTLEMENT.Cancelled || code === SPORTS_SETTLEMENT.Refund) {
       continue;
     }
-    if (code === LSPORTS_SETTLEMENT.Loser) {
+    if (code === SPORTS_SETTLEMENT.Lost) {
       remaining = 0;
       continue;
     }
-    if (code === LSPORTS_SETTLEMENT.Winner) {
+    if (code === SPORTS_SETTLEMENT.Won) {
       remaining = money2(remaining * factorOdds);
       continue;
     }
-    if (code === LSPORTS_SETTLEMENT.HalfLost) {
+    if (code === SPORTS_SETTLEMENT.HalfLost) {
       remaining = money2(remaining / 2);
       continue;
     }
-    if (code === LSPORTS_SETTLEMENT.HalfWon) {
+    if (code === SPORTS_SETTLEMENT.HalfWon) {
       remaining = money2((remaining / 2) * factorOdds + remaining / 2);
     }
   }
@@ -98,7 +98,7 @@ export function planSettlementTransition(input: {
       action: 'duplicate',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextState: input.previousCode == null || input.previousCode === 0 ? 'unsettled' : 'settled',
+      nextState: input.previousCode == null || input.previousCode === SPORTS_SETTLEMENT.Pending ? 'unsettled' : 'settled',
       nextCode: input.previousCode,
     };
   }
@@ -107,26 +107,26 @@ export function planSettlementTransition(input: {
       action: 'unknown',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextState: input.previousCode == null || input.previousCode === 0 ? 'unsettled' : 'settled',
+      nextState: input.previousCode == null || input.previousCode === SPORTS_SETTLEMENT.Pending ? 'unsettled' : 'settled',
       nextCode: input.previousCode,
     };
   }
-  if (input.incoming === LSPORTS_SETTLEMENT.NotSettled) {
+  if (input.incoming === SPORTS_SETTLEMENT.Pending) {
     return {
       action: 'none',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextState: input.previousCode == null || input.previousCode === 0 ? 'unsettled' : 'settled',
+      nextState: input.previousCode == null || input.previousCode === SPORTS_SETTLEMENT.Pending ? 'unsettled' : 'settled',
       nextCode: input.previousCode,
     };
   }
 
   const previousSettled = input.previousCode != null
-    && input.previousCode !== LSPORTS_SETTLEMENT.NotSettled
-    && input.previousCode !== LSPORTS_SETTLEMENT.Cancelled;
+    && input.previousCode !== SPORTS_SETTLEMENT.Pending
+    && input.previousCode !== SPORTS_SETTLEMENT.Cancelled;
   const lastPayout = money2(input.previousPayout);
 
-  if (input.incoming === LSPORTS_SETTLEMENT.Cancelled) {
+  if (input.incoming === SPORTS_SETTLEMENT.Cancelled) {
     if (!previousSettled && lastPayout <= 0) {
       const refund = money2(input.stake);
       return {
@@ -134,7 +134,7 @@ export function planSettlementTransition(input: {
         debitLastPayout: 0,
         creditPayout: refund,
         nextState: 'cancelled',
-        nextCode: -1,
+        nextCode: SPORTS_SETTLEMENT.Cancelled,
       };
     }
     return {
@@ -142,7 +142,7 @@ export function planSettlementTransition(input: {
       debitLastPayout: lastPayout,
       creditPayout: 0,
       nextState: 'cancelled',
-      nextCode: -1,
+      nextCode: SPORTS_SETTLEMENT.Cancelled,
     };
   }
 
@@ -166,7 +166,7 @@ export function planSettlementTransition(input: {
     };
   }
   return {
-    action: nextPayout === 0 && input.incoming === LSPORTS_SETTLEMENT.Loser ? 'payout' : 'payout',
+    action: nextPayout === 0 && input.incoming === SPORTS_SETTLEMENT.Lost ? 'payout' : 'payout',
     debitLastPayout: 0,
     creditPayout: money2(nextPayout),
     nextState: 'settled',
