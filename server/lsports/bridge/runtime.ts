@@ -20,6 +20,7 @@ import { createLsportsRecoveryIo } from './io.js';
 import type { LsportsBrowserFeed } from './payload.js';
 import { lookupCanonicalQuoteRecord } from '../../sports/lsportsQuote.js';
 import { dispatchSettlementNotices } from '../../sports/settlementDispatch.js';
+import { toCanonicalSettlementNotices } from '../settlementAdapter.js';
 import { startLsportsSdkFeed } from '../sdk/feed.js';
 import { resolveLsportsTransport } from '../sdk/mode.js';
 import { resetSdkShadowsForTests, sdkShadowFor } from '../sdk/shadow.js';
@@ -251,7 +252,7 @@ export async function runLsportsShadowBridge(
       }
       store.noteRmqTransport('parsed');
       bridge.handleRmq(json);
-      const notices = store.takeSettlementNotices();
+      const notices = toCanonicalSettlementNotices(store.takeSettlementNotices());
       if (notices.length) {
         void dispatchSettlementNotices(notices, env, { log });
       }
