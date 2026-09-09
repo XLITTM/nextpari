@@ -1,4 +1,4 @@
-import type { Sport, MatchEvent, CasinoGame, Transaction, Championship, CasinoCategory, EsportsDiscipline, BetHistoryEntry } from './types';
+import type { Sport, MatchEvent, CasinoGame, Championship, CasinoCategory, EsportsDiscipline, BetHistoryEntry } from './types';
 import { CASINO_COVERS } from './lib/casinoCovers';
 
 export const teamLogoMap: Record<string, string> = {
@@ -91,19 +91,6 @@ export const casinoGames: CasinoGame[] = [
   { id: 'c10', name: 'Book of Dead', provider: "Play'n GO", category: 'Слоты', rtp: '96.2%', color: '#7C3AED', cover: CASINO_COVERS.c10 },
   { id: 'c11', name: 'Plinko', provider: 'Spribe', category: 'Mini', rtp: '97.0%', new: true, color: '#14B8A6', cover: CASINO_COVERS.c11 },
   { id: 'c12', name: 'Monopoly Live', provider: 'Evolution', category: 'Live', rtp: '96.2%', color: '#0891B2', cover: CASINO_COVERS.c12 },
-];
-
-export const transactions: Transaction[] = [
-  { id: 't1', type: 'deposit', title: 'Пополнение счёта', date: '10 авг, 14:32', amount: 5000, status: 'completed' },
-  { id: 't2', type: 'bet', title: 'Ставка: Манчестер Сити — Арсенал', date: '10 авг, 14:15', amount: -1000, status: 'completed' },
-  { id: 't3', type: 'win', title: 'Выигрыш: Реал — Барселона', date: '09 авг, 22:40', amount: 2450, status: 'completed' },
-  { id: 't4', type: 'bet', title: 'Ставка: Лейкерс — Бостон', date: '09 авг, 20:00', amount: -500, status: 'completed' },
-  { id: 't5', type: 'withdraw', title: 'Вывод средств', date: '08 авг, 16:20', amount: -3000, status: 'processing' },
-  { id: 't6', type: 'deposit', title: 'Пополнение по карте', date: '07 авг, 10:05', amount: 2000, status: 'completed' },
-  { id: 't7', type: 'bet', title: 'Ставка: Алькарас — Синнер', date: '06 авг, 19:30', amount: -800, status: 'failed' },
-  { id: 't8', type: 'win', title: 'Выигрыш: ПСЖ — Бавария', date: '05 авг, 23:15', amount: 1750, status: 'completed' },
-  { id: 't9', type: 'deposit', title: 'Пополнение: Apple Pay', date: '04 авг, 09:45', amount: 10000, status: 'completed' },
-  { id: 't10', type: 'withdraw', title: 'Вывод на карту', date: '03 авг, 15:10', amount: -5000, status: 'completed' },
 ];
 
 export const championships: Championship[] = [
