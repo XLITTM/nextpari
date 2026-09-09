@@ -1,19 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useBetHistory } from '../BetHistoryContext';
 import { useLiveMatches } from '../LiveMatchesContext';
 import {
-  betStatusLabel,
-  compactLiveClock,
-  couponNumber,
-  eventLegBadge,
-  eventLegLabel,
-  selectionCaption,
-  tournamentLine,
-} from '../lib/betTicket';
-import { fetchMatchSnapshots, snapshotFromMatch, type MatchLiveSnapshot } from '../lib/liveMatches';
+  detailsView,
+  playerStatusClass,
+  type HistoryLiveOverlay,
+} from '../lib/betHistoryView';
 import { SportIcon } from '../components/SportIcon';
-import type { BetEvent, BetHistoryEntry, BetStatus } from '../types';
+import { TeamLogo } from '../components/TeamLogo';
+import type { MatchEvent } from '../types';
 
 interface BetDetailsScreenProps {
   betId: string;
@@ -24,48 +20,19 @@ export function BetDetailsScreen({ betId, onBack }: BetDetailsScreenProps) {
   const { entries, loading } = useBetHistory();
   const { liveMatches, upcomingMatches } = useLiveMatches();
   const bet = entries.find((entry) => entry.id === betId);
-  const [snapshots, setSnapshots] = useState<Record<string, MatchLiveSnapshot>>({});
 
-  const matchIds = useMemo(
-    () => [...new Set((bet?.events ?? []).map((event) => event.matchId).filter(Boolean) as string[])],
-    [bet],
-  );
-  const idsKey = matchIds.join(',');
-
-  const loadSnapshots = useCallback(async () => {
-    const ids = idsKey ? idsKey.split(',') : [];
-    if (!ids.length) {
-      setSnapshots({});
-      return;
+  const liveById = useMemo(() => {
+    const overlay: Record<string, HistoryLiveOverlay> = {};
+    for (const match of [...liveMatches, ...upcomingMatches]) {
+      overlay[match.id] = overlayFromMatch(match);
     }
-    const rows = await fetchMatchSnapshots(ids);
-    setSnapshots(Object.fromEntries(rows.map((row) => [row.id, row])));
-  }, [idsKey]);
-
-  useEffect(() => {
-    void loadSnapshots();
-  }, [loadSnapshots]);
-
-  useEffect(() => {
-    if (!idsKey) return undefined;
-    const timer = window.setInterval(() => {
-      void loadSnapshots();
-    }, 8000);
-    return () => window.clearInterval(timer);
-  }, [loadSnapshots, idsKey]);
-
-  const liveById = useMemo(
-    () =>
-      Object.fromEntries(
-        [...liveMatches, ...upcomingMatches].map((match) => [match.id, snapshotFromMatch(match)]),
-      ),
-    [liveMatches, upcomingMatches],
-  );
+    return overlay;
+  }, [liveMatches, upcomingMatches]);
 
   if (loading && !bet) {
     return (
       <div className="min-h-full bg-gray-100 dark:bg-gray-900">
-        <DetailsHeader onBack={onBack} title="Купон" />
+        <DetailsHeader onBack={onBack} />
         <p className="text-center py-16 text-sm font-bold text-gray-500">Загрузка...</p>
       </div>
     );
@@ -74,61 +41,111 @@ export function BetDetailsScreen({ betId, onBack }: BetDetailsScreenProps) {
   if (!bet) {
     return (
       <div className="min-h-full bg-gray-100 dark:bg-gray-900">
-        <DetailsHeader onBack={onBack} title="Купон" />
+        <DetailsHeader onBack={onBack} />
         <p className="text-center py-16 text-sm font-bold text-gray-500">Ставка не найдена</p>
       </div>
     );
   }
 
-  const receipt = couponNumber(bet.id, bet.ticketCode);
-  const isExpress = bet.events.length > 1 || bet.type === 'express';
-  const possibleWin = bet.payout || bet.amount * bet.totalOdds;
+  const view = detailsView(bet, liveById);
 
   return (
     <div className="min-h-full bg-gray-100 dark:bg-gray-900 pb-28">
-      <DetailsHeader onBack={onBack} title={`Купон № ${receipt}`} />
+      <DetailsHeader onBack={onBack} />
 
-      <section className="mx-4 mt-3 bg-white dark:bg-[#1e293b] rounded-3xl p-4 shadow-sm">
-        <p className="text-[11px] text-gray-400 font-medium">{bet.date}</p>
-        <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mt-0.5">
-          {isExpress ? 'Экспресс' : 'Одинар'}
-        </h2>
-        <dl className="mt-3 flex flex-col gap-1.5">
-          <MetaRow label="Коэффициент" value={bet.totalOdds.toFixed(2)} />
-          <MetaRow label="Сумма ставки" value={`${bet.amount.toLocaleString('ru-RU')} TMTM`} />
+      <section className="mx-4 mt-3 bg-white dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm">
+        <p className="text-[11px] text-gray-400 font-medium tabular-nums">
+          {view.dateTime} · №{view.couponNo}
+        </p>
+        <h2 className="text-lg font-extrabold text-gray-900 dark:text-white mt-0.5">{view.typeLabel}</h2>
+        {view.eventsLabel && (
+          <p className="text-xs text-gray-500 mt-1">{view.eventsLabel}</p>
+        )}
+        {view.progressLabel && (
+          <p className="text-xs text-gray-500 mt-0.5">{view.progressLabel}</p>
+        )}
+        <dl className="mt-3 flex flex-col gap-1">
+          <MetaRow label="Коэффициент" value={view.odds} />
+          <MetaRow label="Ставка" value={view.stake} />
+          <MetaRow label="Возможный выигрыш" value={view.potential} />
           <div className="flex items-baseline justify-between gap-3">
             <dt className="text-xs text-gray-400">Статус</dt>
-            <dd className={`text-sm font-semibold ${statusColor(bet.status)}`}>{betStatusLabel(bet.status)}</dd>
+            <dd className={`text-sm font-semibold ${playerStatusClass(view.status)}`}>{view.statusLabel}</dd>
           </div>
-          <MetaRow
-            label="Возможный выигрыш"
-            value={
-              bet.status === 'lost'
-                ? '0 TMTM'
-                : `${Number(possibleWin.toFixed(2)).toLocaleString('ru-RU')} TMTM`
-            }
-          />
         </dl>
       </section>
 
       <div className="px-4 mt-3 flex flex-col gap-3">
-        {bet.events.map((event, index) => {
-          const live = resolveLive(event, snapshots, liveById);
-          return (
-            <EventCard
-              key={`${event.matchId ?? event.matchLabel}-${event.outcome}-${index}`}
-              event={event}
-              live={live}
-              betStatus={bet.status}
-            />
-          );
-        })}
+        {view.legs.map((leg, index) => (
+          <article key={`${leg.homeTeam}-${leg.awayTeam}-${index}`} className="bg-white dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-start gap-2 min-w-0">
+                <SportIcon sport={leg.sport || 'football'} className="w-5 h-5 text-[#4ade80] shrink-0 mt-0.5" />
+                <p className="text-[11px] font-medium text-gray-500 leading-snug">
+                  {[leg.country, leg.league].filter(Boolean).join('. ') || 'Событие'}
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                {leg.isLive && (
+                  <span className="text-[9px] font-bold text-white bg-red-500 px-1.5 py-0.5 rounded leading-none">
+                    LIVE
+                  </span>
+                )}
+                {leg.statusLabel && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${legBadgeClass(leg.status)}`}>
+                    {leg.statusLabel}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex items-center gap-2">
+              <TeamLogo teamName={leg.homeTeam} logo={leg.homeLogo} size="sm" />
+              <p className="min-w-0 flex-1 text-sm font-extrabold text-gray-900 dark:text-white leading-snug">
+                {leg.homeTeam}
+              </p>
+            </div>
+            <div className="mt-1.5 flex items-center gap-2">
+              <TeamLogo teamName={leg.awayTeam} logo={leg.awayLogo} size="sm" />
+              <p className="min-w-0 flex-1 text-sm font-extrabold text-gray-900 dark:text-white leading-snug">
+                {leg.awayTeam}
+              </p>
+            </div>
+
+            {leg.score && (
+              <p className="mt-2 text-xl font-black text-gray-900 dark:text-white tabular-nums leading-none">
+                {leg.score}
+              </p>
+            )}
+
+            <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
+              {leg.market}: {leg.selection} ({leg.odds})
+            </p>
+          </article>
+        ))}
       </div>
     </div>
   );
 }
 
-function DetailsHeader({ onBack, title }: { onBack: () => void; title: string }) {
+function overlayFromMatch(match: MatchEvent): HistoryLiveOverlay {
+  return {
+    homeTeam: match.team1,
+    awayTeam: match.team2,
+    homeLogo: match.team1Logo,
+    awayLogo: match.team2Logo,
+    score: match.liveScore
+      ? `${match.liveScore.team1} : ${match.liveScore.team2}`
+      : undefined,
+    isLive: match.isLive,
+    liveStatus: match.liveStatus,
+    country: match.country,
+    league: match.league,
+    sport: match.sport,
+  };
+}
+
+function DetailsHeader({ onBack }: { onBack: () => void }) {
   return (
     <header className="bg-white dark:bg-[#1e293b] px-2 h-14 flex items-center gap-1">
       <button
@@ -139,7 +156,7 @@ function DetailsHeader({ onBack, title }: { onBack: () => void; title: string })
       >
         <ChevronLeft className="w-6 h-6" strokeWidth={2} />
       </button>
-      <h1 className="text-base font-bold text-gray-900 dark:text-white truncate">{title}</h1>
+      <h1 className="text-base font-bold text-gray-900 dark:text-white truncate">Информация о ставке</h1>
     </header>
   );
 }
@@ -153,98 +170,10 @@ function MetaRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EventCard({
-  event,
-  live,
-  betStatus,
-}: {
-  event: BetEvent;
-  live?: MatchLiveSnapshot;
-  betStatus: BetStatus;
-}) {
-  const home = live?.homeTeam || event.homeTeam || event.matchLabel.split(/\s+[—–-]\s+/)[0] || 'Команда 1';
-  const away = live?.awayTeam || event.awayTeam || event.matchLabel.split(/\s+[—–-]\s+/)[1] || 'Команда 2';
-  const tournament =
-    live?.tournament ||
-    event.tournament ||
-    tournamentLine({ sport: event.sport, country: event.country, league: event.league });
-  const isLive = live?.isLive ?? Boolean(event.isLive);
-  const liveStatus = live?.liveStatus || event.liveStatus;
-  const clock = compactLiveClock(liveStatus);
-  const badge = eventLegBadge({
-    event,
-    isLive,
-    liveStatus,
-    homeScore: live?.scoreHome,
-    awayScore: live?.scoreAway,
-    betStatus,
-  });
-
-  return (
-    <article className="bg-white dark:bg-[#1e293b] rounded-3xl p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-start gap-2 min-w-0">
-          <SportIcon sport={live?.sport || event.sport || 'football'} className="w-5 h-5 text-[#4ade80] shrink-0 mt-0.5" />
-          <p className="text-[11px] font-medium text-gray-500 leading-snug">
-            {tournament || 'Событие'}
-          </p>
-        </div>
-        <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${badgeClass(badge)}`}>
-          {eventLegLabel(badge)}
-        </span>
-      </div>
-
-      <p className="text-sm font-extrabold text-gray-900 dark:text-white mt-2 leading-snug">
-        {home} — {away}
-      </p>
-
-      {live ? (
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <p className="text-2xl font-black text-gray-900 dark:text-white tabular-nums leading-none">
-            {live.scoreHome} : {live.scoreAway}
-          </p>
-          <p className={`text-xs font-semibold ${isLive ? 'text-red-500' : 'text-gray-500'}`}>
-            {clock || (isLive ? 'LIVE' : 'Не начался')}
-          </p>
-        </div>
-      ) : (
-        <p className="mt-2 text-xs font-semibold text-gray-500">{clock || event.matchStatus || 'Счёт появится после старта'}</p>
-      )}
-
-      <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">
-        {selectionCaption(event)}
-      </p>
-    </article>
-  );
-}
-
-function resolveLive(
-  event: BetEvent,
-  snapshots: Record<string, MatchLiveSnapshot>,
-  liveById: Record<string, MatchLiveSnapshot>,
-): MatchLiveSnapshot | undefined {
-  const id = event.matchId;
-  if (id) {
-    const byId = liveById[id] ?? snapshots[id];
-    if (byId) return byId;
-  }
-  const home = (event.homeTeam || '').toLowerCase();
-  const away = (event.awayTeam || '').toLowerCase();
-  if (!home || !away) return undefined;
-  return Object.values(liveById).find(
-    (match) => match.homeTeam.toLowerCase() === home && match.awayTeam.toLowerCase() === away,
-  );
-}
-
-function statusColor(status: BetHistoryEntry['status']): string {
-  if (status === 'lost') return 'text-red-500';
-  if (status === 'won') return 'text-green-500';
-  return 'text-gray-500';
-}
-
-function badgeClass(badge: ReturnType<typeof eventLegBadge>): string {
-  if (badge === 'in_play') return 'bg-red-500 text-white';
-  if (badge === 'won') return 'bg-green-500 text-white';
-  if (badge === 'lost') return 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+function legBadgeClass(status: ReturnType<typeof detailsView>['legs'][number]['status']): string {
+  if (status === 'in_progress') return 'bg-red-500 text-white';
+  if (status === 'won') return 'bg-green-500 text-white';
+  if (status === 'lost') return 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300';
+  if (status === 'refund') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300';
   return 'bg-gray-100 dark:bg-gray-800 text-gray-500';
 }
