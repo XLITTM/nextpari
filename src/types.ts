@@ -269,4 +269,4 @@ export type Screen =
   | { name: 'dice' }
   | { name: 'pharaoh' }
   | { name: 'vip-cashback' }
-  | { name: 'league'; leagueId: string };
+  | { name: 'league'; leagueId: string; mode?: 'live' | 'line' };
