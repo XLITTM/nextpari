@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, Search, Globe, Tv, Star } from 'lucide-react';
+import { ChevronLeft, Search, Star } from 'lucide-react';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useFavoritesStore } from '../stores/favoritesStore';
@@ -12,20 +12,19 @@ interface SportsListScreenProps {
   onSearchClick: () => void;
 }
 
-// Моковые данные для списка (как на скринах)
-const SPORTS_DATA: { id: SportId; name: string; count: number }[] = [
-  { id: 'football', name: 'Футбол', count: 291 },
-  { id: 'tennis', name: 'Теннис', count: 22 },
-  { id: 'basketball', name: 'Баскетбол', count: 23 },
-  { id: 'hockey', name: 'Хоккей', count: 11 },
-  { id: 'volleyball', name: 'Волейбол', count: 12 },
-  { id: 'table-tennis', name: 'Настольный теннис', count: 41 },
-  { id: 'badminton', name: 'Бадминтон', count: 4 },
-  { id: 'esports', name: 'КиберСпорт', count: 17 },
-  { id: 'cricket', name: 'Крикет', count: 23 },
-  { id: 'beach-volleyball', name: 'Пляжный волейбол', count: 5 },
-  { id: 'snooker', name: 'Снукер', count: 1 },
-  { id: 'futsal', name: 'Футзал', count: 2 },
+const SUPPORTED_SPORTS: { id: SportId; name: string }[] = [
+  { id: 'football', name: 'Футбол' },
+  { id: 'tennis', name: 'Теннис' },
+  { id: 'basketball', name: 'Баскетбол' },
+  { id: 'hockey', name: 'Хоккей' },
+  { id: 'volleyball', name: 'Волейбол' },
+  { id: 'table-tennis', name: 'Настольный теннис' },
+  { id: 'badminton', name: 'Бадминтон' },
+  { id: 'esports', name: 'КиберСпорт' },
+  { id: 'cricket', name: 'Крикет' },
+  { id: 'beach-volleyball', name: 'Пляжный волейбол' },
+  { id: 'snooker', name: 'Снукер' },
+  { id: 'futsal', name: 'Футзал' },
 ];
 
 export function SportsListScreen({ initialMode = 'live', onBack, onNavigate, onSearchClick }: SportsListScreenProps) {
@@ -34,7 +33,7 @@ export function SportsListScreen({ initialMode = 'live', onBack, onNavigate, onS
   const favoriteSportIds = useFavoritesStore((s) => s.favoriteSportIds);
   const toggleSportFavorite = useFavoritesStore((s) => s.toggleSportFavorite);
   const pool = activeTab === 'line' ? upcomingMatches : liveMatches;
-  const sports = SPORTS_DATA
+  const sports = SUPPORTED_SPORTS
     .filter((sport) => (activeTab === 'cybers' ? sport.id === 'esports' : true))
     .map((sport) => ({
       ...sport,
@@ -74,12 +73,6 @@ export function SportsListScreen({ initialMode = 'live', onBack, onNavigate, onS
               aria-label="Поиск"
             >
               <Search className="w-5 h-5" />
-            </button>
-            <button className="w-9 h-9 flex items-center justify-center text-gray-500">
-              <Globe className="w-5 h-5" />
-            </button>
-            <button className="w-9 h-9 flex items-center justify-center text-gray-500">
-              <Tv className="w-5 h-5" />
             </button>
           </div>
         </div>

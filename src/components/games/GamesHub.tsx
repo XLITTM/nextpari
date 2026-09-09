@@ -14,19 +14,17 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { useToast } from '../../ToastContext';
 import { useWallet } from '../../WalletContext';
 import type { Screen } from '../../types';
 import { DepositModal } from './DepositModal';
 import { preloadGameAssets } from '../../lib/preloadGameAssets';
-import { CASINO_COVERS } from '../../lib/casinoCovers';
 
 interface GamesHubProps {
   onBack: () => void;
   onNavigate: (screen: Screen) => void;
 }
 
-type HubCategory = 'all' | 'foryou' | 'best' | 'crash' | 'cards' | 'slots' | 'lottery';
+type HubCategory = 'all' | 'foryou' | 'best' | 'crash' | 'cards' | 'lottery';
 type LobbyTab = 'all' | 'bonuses' | 'cashback' | 'favorites';
 type GameBadge = 'BEST' | 'HOT';
 
@@ -34,22 +32,21 @@ interface HubGame {
   id: string;
   name: string;
   badge?: GameBadge;
-  winLabel: string;
+  winLabel?: string;
   cover?: string;
   gradient: string;
-  route?: Screen;
+  route: Screen;
   categories: HubCategory[];
 }
 
 const FAVORITES_KEY = 'nextpari-game-favorites';
 
-const CATEGORIES: { id: HubCategory; label: string }[] = [
+const CATEGORY_DEFS: { id: HubCategory; label: string }[] = [
   { id: 'all', label: 'Все' },
   { id: 'foryou', label: 'Для Вас' },
   { id: 'best', label: 'Лучшее' },
   { id: 'crash', label: 'Crash / Быстрые' },
   { id: 'cards', label: 'Карты' },
-  { id: 'slots', label: 'Слоты' },
   { id: 'lottery', label: 'Лотереи' },
 ];
 
@@ -88,7 +85,6 @@ const GAMES: HubGame[] = [
     id: 'crystal',
     name: 'Crystal',
     badge: 'BEST',
-    winLabel: 'x500',
     cover: '/images/25953.png',
     gradient: 'from-cyan-500 via-fuchsia-600 to-indigo-900',
     route: { name: 'crystal' },
@@ -114,34 +110,11 @@ const GAMES: HubGame[] = [
     route: { name: 'pharaoh' },
     categories: ['all', 'foryou', 'best', 'lottery'],
   },
-  {
-    id: 'western-slot',
-    name: 'Western Slot',
-    badge: 'HOT',
-    winLabel: 'x250',
-    cover: CASINO_COVERS['western-slot'],
-    gradient: 'from-amber-600 via-orange-800 to-stone-900',
-    categories: ['all', 'slots'],
-  },
-  {
-    id: 'burning-hot',
-    name: 'Burning Hot',
-    badge: 'BEST',
-    winLabel: 'x1000',
-    cover: CASINO_COVERS['burning-hot'],
-    gradient: 'from-red-600 via-orange-600 to-yellow-700',
-    categories: ['all', 'best', 'slots'],
-  },
-  {
-    id: 'indian-poker',
-    name: 'Indian Poker',
-    badge: 'HOT',
-    winLabel: 'x50',
-    cover: CASINO_COVERS['indian-poker'],
-    gradient: 'from-purple-700 via-amber-700 to-rose-900',
-    categories: ['all', 'cards'],
-  },
 ];
+
+const CATEGORIES = CATEGORY_DEFS.filter(
+  (item) => item.id === 'all' || GAMES.some((game) => game.categories.includes(item.id)),
+);
 
 const LOBBY_TABS: { id: LobbyTab; label: string; icon: typeof Dices }[] = [
   { id: 'all', label: 'Все игры', icon: Dices },
@@ -161,7 +134,6 @@ function readFavorites(): string[] {
 }
 
 export function GamesHub({ onBack, onNavigate }: GamesHubProps) {
-  const { showToast } = useToast();
   const { balance, publicId } = useWallet();
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -185,11 +157,7 @@ export function GamesHub({ onBack, onNavigate }: GamesHubProps) {
   };
 
   const openGame = (game: HubGame) => {
-    if (game.route) {
-      onNavigate(game.route);
-      return;
-    }
-    showToast('Скоро будет доступно');
+    onNavigate(game.route);
   };
 
   const visibleGames = useMemo(() => {
@@ -320,14 +288,14 @@ export function GamesHub({ onBack, onNavigate }: GamesHubProps) {
         {lobby === 'bonuses' ? (
           <LobbyPanel
             title="Бонусы"
-            text="Приветственный бонус, фриспины и промокоды — в разделе Promo."
+            text="Акции и бонусы появятся после подключения бонусной системы. Сейчас в Promo — предварительная информация."
             action="Открыть Promo"
             onAction={() => onNavigate({ name: 'promo' })}
           />
         ) : lobby === 'cashback' ? (
           <LobbyPanel
             title="VIP кешбэк"
-            text="Повышайте уровень и забирайте кешбэк — от Медного до статуса VIP."
+            text="VIP-программа и кешбэк появятся после подключения бонусной системы."
             action="Открыть VIP кешбэк"
             onAction={() => onNavigate({ name: 'vip-cashback' })}
           />
@@ -421,8 +389,8 @@ function GameCard({
           />
         ) : (
           <div className={`absolute inset-0 bg-gradient-to-br ${game.gradient}`}>
-            <span className="absolute inset-0 flex items-center justify-center text-3xl">
-              {game.id === 'western-slot' ? '🤠' : game.id === 'burning-hot' ? '🔥' : '🃏'}
+            <span className="absolute inset-0 flex items-center justify-center px-3 text-center text-sm font-bold text-white/80">
+              {game.name}
             </span>
           </div>
         )}
@@ -431,11 +399,13 @@ function GameCard({
             {game.badge}
           </span>
         )}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-6 text-left">
-          <p className="text-[11px] font-semibold text-white">
-            Выигрыш до <span className="font-bold text-yellow-400">{game.winLabel}</span>
-          </p>
-        </div>
+        {game.winLabel && (
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-2 pb-1.5 pt-6 text-left">
+            <p className="text-[11px] font-semibold text-white">
+              Выигрыш до <span className="font-bold text-yellow-400">{game.winLabel}</span>
+            </p>
+          </div>
+        )}
       </button>
       <div className="mt-1.5 flex items-center gap-1">
         <p className="min-w-0 flex-1 truncate text-[12px] font-bold">{game.name}</p>
