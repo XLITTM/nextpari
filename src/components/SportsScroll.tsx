@@ -7,11 +7,15 @@ import { FEATURED_SPORT_IDS } from '../lib/featuredSports';
 interface SportsScrollProps {
   selected: SportId;
   onSelect: (id: SportId) => void;
+  excludeEsports?: boolean;
 }
 
-export function SportsScroll({ selected, onSelect }: SportsScrollProps) {
+export function SportsScroll({ selected, onSelect, excludeEsports = false }: SportsScrollProps) {
   const { liveMatches } = useLiveMatches();
-  const counts = liveMatches.reduce<Partial<Record<SportId, number>>>((acc, match) => {
+  const countedMatches = excludeEsports
+    ? liveMatches.filter((match) => match.sport !== 'esports')
+    : liveMatches;
+  const counts = countedMatches.reduce<Partial<Record<SportId, number>>>((acc, match) => {
     acc[match.sport] = (acc[match.sport] ?? 0) + 1;
     return acc;
   }, {});
@@ -24,11 +28,13 @@ export function SportsScroll({ selected, onSelect }: SportsScrollProps) {
     return ap - bp;
   });
 
+  const visible = excludeEsports ? ordered.filter((sport) => sport.id !== 'esports') : ordered;
+
   return (
     <div className="flex gap-2 overflow-x-auto px-4 pb-2 pt-3 scrollbar-hide">
-      {ordered.map((sport) => {
+      {visible.map((sport) => {
         const isActive = selected === sport.id;
-        const count = sport.id === 'all' ? liveMatches.length : counts[sport.id] ?? 0;
+        const count = sport.id === 'all' ? countedMatches.length : counts[sport.id] ?? 0;
         return (
           <button
             key={sport.id}

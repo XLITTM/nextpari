@@ -10,7 +10,7 @@ import { CasinoCategoriesScroll } from '../components/CasinoCategoriesScroll';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { EsportsDisciplinesScroll } from '../components/EsportsDisciplinesScroll';
 import { useLiveMatches } from '../LiveMatchesContext';
-import type { MainTab, Screen, SportId } from '../types';
+import type { MainTab, MatchEvent, Screen, SportId } from '../types';
 
 interface HomeScreenProps {
   mainTab: MainTab;
@@ -31,6 +31,7 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const [selectedSport, setSelectedSport] = useState<SportId>('all');
   const { liveMatches, upcomingMatches, loading } = useLiveMatches();
+  const sportFilter = mainTab === 'sport' && selectedSport === 'esports' ? 'all' : selectedSport;
 
   const filteredLive = useMemo(() => {
     const bySport = selectedSport === 'all' ? liveMatches : liveMatches.filter((match) => match.sport === selectedSport);
@@ -40,13 +41,120 @@ export function HomeScreen({
     const bySport = selectedSport === 'all' ? upcomingMatches : upcomingMatches.filter((match) => match.sport === selectedSport);
     return bySport.filter((match) => (selectedSport === 'all' ? match.sport !== 'esports' : true));
   }, [upcomingMatches, selectedSport]);
+  const sportLiveMatches = useMemo(() => {
+    const sportsOnly = liveMatches.filter((match) => match.sport !== 'esports');
+    return sportFilter === 'all' ? sportsOnly : sportsOnly.filter((match) => match.sport === sportFilter);
+  }, [liveMatches, sportFilter]);
+  const sportUpcomingMatches = useMemo(() => {
+    const sportsOnly = upcomingMatches.filter((match) => match.sport !== 'esports');
+    return sportFilter === 'all' ? sportsOnly : sportsOnly.filter((match) => match.sport === sportFilter);
+  }, [upcomingMatches, sportFilter]);
   const esportsLiveMatches = liveMatches.filter((match) => match.sport === 'esports');
   const esportsUpcomingMatches = upcomingMatches.filter((match) => match.sport === 'esports');
+
+  const renderCards = (matches: MatchEvent[]) => (
+    <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
+      {matches.map((match) => (
+        <MatchCard
+          key={match.id}
+          match={match}
+          onOpenMatch={onOpenMatch}
+          carousel
+          isFavorite={favorites.includes(match.id)}
+          onToggleFavorite={() => onToggleFavorite(match.id)}
+        />
+      ))}
+    </div>
+  );
 
   if (mainTab === 'casino') {
     return (
       <div>
         <CasinoGrid onNavigate={onNavigate} />
+      </div>
+    );
+  }
+
+  if (mainTab === 'esports') {
+    return (
+      <div>
+        <EsportsDisciplinesScroll />
+        <div className="flex flex-col gap-6 pt-2">
+          <section>
+            <SectionHeader
+              title="Киберспорт LIVE"
+              badge="Esports"
+              badgeColor="bg-[#0c1a2e] text-accent-400"
+              onSeeAll={() => onNavigate({ name: 'sports', mode: 'cybers' })}
+            />
+            {esportsLiveMatches.length > 0 ? (
+              renderCards(esportsLiveMatches)
+            ) : loading ? (
+              <SkeletonLoader count={2} variant="carousel" />
+            ) : (
+              <p className="px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">Матчи появятся скоро</p>
+            )}
+          </section>
+          <section>
+            <SectionHeader
+              title="Киберспорт Линия"
+              badge="Esports"
+              badgeColor="bg-[#0c1a2e] text-accent-400"
+              onSeeAll={() => onNavigate({ name: 'sports', mode: 'cybers' })}
+            />
+            {esportsUpcomingMatches.length > 0 ? (
+              renderCards(esportsUpcomingMatches)
+            ) : loading ? (
+              <SkeletonLoader count={2} variant="carousel" />
+            ) : (
+              <p className="px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">Матчи появятся скоро</p>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  if (mainTab === 'sport') {
+    return (
+      <div>
+        <SportsScroll selected={sportFilter} onSelect={setSelectedSport} excludeEsports />
+        <div className="flex flex-col gap-6 pt-2">
+          <section>
+            <SectionHeader
+              title="Популярное LIVE"
+              filterLabel="Спорт"
+              onFilterClick={() => onOpenGameList('live')}
+              onSeeAll={() => onOpenGameList('live')}
+            />
+            {sportLiveMatches.length > 0 ? (
+              renderCards(sportLiveMatches)
+            ) : loading ? (
+              <SkeletonLoader count={2} variant="carousel" />
+            ) : (
+              <p className="px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">Матчи появятся скоро</p>
+            )}
+          </section>
+          <section>
+            <SectionHeader
+              title="Популярное Линия"
+              filterLabel="Спорт"
+              onFilterClick={() => onOpenGameList('line')}
+              onSeeAll={() => onOpenGameList('line')}
+            />
+            {sportUpcomingMatches.length > 0 ? (
+              renderCards(sportUpcomingMatches)
+            ) : loading ? (
+              <SkeletonLoader count={2} variant="carousel" />
+            ) : (
+              <p className="px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">Матчи появятся скоро</p>
+            )}
+          </section>
+          <ChampionshipsList
+            excludeEsports
+            onOpenLeague={(leagueId) => onNavigate({ name: 'league', leagueId })}
+          />
+        </div>
       </div>
     );
   }
@@ -66,18 +174,7 @@ export function HomeScreen({
               onSeeAll={() => onOpenGameList('live')}
             />
             {filteredLive.length > 0 ? (
-              <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
-                {filteredLive.map((match) => (
-                  <MatchCard
-                    key={match.id}
-                    match={match}
-                    onOpenMatch={onOpenMatch}
-                    carousel
-                    isFavorite={favorites.includes(match.id)}
-                    onToggleFavorite={() => onToggleFavorite(match.id)}
-                  />
-                ))}
-              </div>
+              renderCards(filteredLive)
             ) : (
               <SkeletonLoader count={2} variant="carousel" />
             )}
@@ -92,18 +189,7 @@ export function HomeScreen({
             onSeeAll={() => onOpenGameList('line')}
           />
           {filteredUpcoming.length > 0 ? (
-            <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
-              {filteredUpcoming.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  onOpenMatch={onOpenMatch}
-                  carousel
-                  isFavorite={favorites.includes(match.id)}
-                  onToggleFavorite={() => onToggleFavorite(match.id)}
-                />
-              ))}
-            </div>
+            renderCards(filteredUpcoming)
           ) : loading ? (
             <SkeletonLoader count={2} variant="carousel" />
           ) : (
@@ -135,18 +221,7 @@ export function HomeScreen({
               badgeColor="bg-[#0c1a2e] text-accent-400"
               onSeeAll={() => onOpenGameList('live')}
             />
-            <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
-              {esportsLiveMatches.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  onOpenMatch={onOpenMatch}
-                  carousel
-                  isFavorite={favorites.includes(match.id)}
-                  onToggleFavorite={() => onToggleFavorite(match.id)}
-                />
-              ))}
-            </div>
+            {renderCards(esportsLiveMatches)}
           </section>
         )}
 
@@ -158,18 +233,7 @@ export function HomeScreen({
               badgeColor="bg-[#0c1a2e] text-accent-400"
               onSeeAll={() => onOpenGameList('line')}
             />
-            <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
-              {esportsUpcomingMatches.map((match) => (
-                <MatchCard
-                  key={match.id}
-                  match={match}
-                  onOpenMatch={onOpenMatch}
-                  carousel
-                  isFavorite={favorites.includes(match.id)}
-                  onToggleFavorite={() => onToggleFavorite(match.id)}
-                />
-              ))}
-            </div>
+            {renderCards(esportsUpcomingMatches)}
           </section>
         )}
       </div>
