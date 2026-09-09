@@ -3,8 +3,7 @@ import {
   ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Clock3, XCircle,
   CreditCard, Bitcoin, Wallet, ChevronLeft, ChevronDown, X, Banknote, Search, MapPin, Copy,
 } from 'lucide-react';
-import { transactions as staticTransactions } from '../data';
-import type { Transaction, WithdrawalMethod, WithdrawalRequest } from '../types';
+import type { WithdrawalMethod, WithdrawalRequest } from '../types';
 import { useToast } from '../ToastContext';
 import { useProfile } from '../ProfileContext';
 import { useWallet } from '../WalletContext';
@@ -593,9 +592,9 @@ function HistorySection({
 
       {tab === 'deposits' && (
         <div className="space-y-2">
-          {staticTransactions.filter((tx) => tx.type === 'deposit').map((tx) => (
-            <TransactionItem key={tx.id} tx={tx} />
-          ))}
+          <p className="text-center text-sm text-gray-500 dark:text-gray-200 py-8">
+            История пополнений пока недоступна
+          </p>
         </div>
       )}
     </>
@@ -709,47 +708,6 @@ function CashPayoutCard({ payout }: { payout: PlayerCashPayout }) {
       <p className="mt-2 text-xl font-extrabold text-red-500 tabular-nums leading-none">
         − {payout.amount.toLocaleString('ru-RU')} TMTM
       </p>
-    </div>
-  );
-}
-
-function TransactionItem({ tx }: { tx: Transaction }) {
-  const isPositive = tx.amount > 0;
-  const statusConfig = {
-    completed: { icon: CheckCircle2, text: 'Завершён', color: 'text-brand-600' },
-    processing: { icon: Clock3, text: 'В обработке', color: 'text-accent-400' },
-    failed: { icon: XCircle, text: 'Отклонён', color: 'text-red-500' },
-  };
-  const status = statusConfig[tx.status];
-  const StatusIcon = status.icon;
-
-  const typeIcon = {
-    deposit: { icon: ArrowDownToLine, color: 'text-brand-600' },
-    withdraw: { icon: ArrowUpFromLine, color: 'text-accent-400' },
-    bet: { icon: ArrowUpFromLine, color: 'text-red-500' },
-    win: { icon: ArrowDownToLine, color: 'text-brand-600' },
-  };
-  const type = typeIcon[tx.type];
-  const TypeIcon = type.icon;
-
-  return (
-    <div className="bg-white dark:bg-[#1e293b] rounded-xl border border-gray-200 dark:border-gray-700 p-3 flex items-center gap-3 transition-colors">
-      <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center shrink-0">
-        <TypeIcon className={`w-5 h-5 ${type.color}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">{tx.title}</p>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <StatusIcon className={`w-3 h-3 ${status.color}`} />
-          <span className="text-xs text-gray-500 dark:text-gray-200">{tx.date}</span>
-          <span className={`text-xs ${status.color}`}>· {status.text}</span>
-        </div>
-      </div>
-      <div className="text-right shrink-0">
-        <p className={`text-sm font-bold tabular-nums ${isPositive ? 'text-brand-600' : 'text-red-400'}`}>
-          {isPositive ? '+' : ''}{tx.amount.toLocaleString('ru-RU')}
-        </p>
-      </div>
     </div>
   );
 }
