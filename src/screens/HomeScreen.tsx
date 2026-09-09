@@ -3,9 +3,8 @@ import { SportsScroll } from '../components/SportsScroll';
 import { PromoScroll } from '../components/PromoScroll';
 import { MatchCard } from '../components/MatchCard';
 import { SectionHeader } from '../components/SectionHeader';
-import { CasinoGrid } from '../components/CasinoGrid';
-import { CasinoCarousel } from '../components/CasinoCarousel';
 import { ChampionshipsList } from '../components/ChampionshipsList';
+import { CasinoLanding } from '../components/CasinoLanding';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { EsportsDisciplinesScroll } from '../components/EsportsDisciplinesScroll';
 import { useLiveMatches } from '../LiveMatchesContext';
@@ -69,7 +68,7 @@ export function HomeScreen({
   if (mainTab === 'casino') {
     return (
       <div>
-        <CasinoGrid onNavigate={onNavigate} />
+        <CasinoLanding onNavigate={onNavigate} />
       </div>
     );
   }
@@ -199,10 +198,6 @@ export function HomeScreen({
         <ChampionshipsList
           onOpenLeague={(leagueId) => onNavigate({ name: 'league', leagueId })}
         />
-
-        <section>
-          <CasinoCarousel onNavigate={onNavigate} />
-        </section>
 
         <section>
           <EsportsDisciplinesScroll />

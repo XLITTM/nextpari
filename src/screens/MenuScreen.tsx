@@ -37,6 +37,8 @@ type SpecialType = 'teal' | 'security' | 'orange';
 
 type MenuIcon = LucideIcon | ((props: { className?: string; strokeWidth?: number }) => JSX.Element);
 
+type MenuAvailability = 'available' | 'soon';
+
 interface CardItem {
   icon: MenuIcon;
   label: string;
@@ -45,60 +47,66 @@ interface CardItem {
   iconColor: string;
   special?: SpecialType;
   route?: Screen;
+  availability?: MenuAvailability;
 }
 
 const grayIcon = { iconBg: '', iconColor: 'text-[#4ade80]' };
+const soon = { availability: 'soon' as const };
 
 const sections: Record<SubTabId, CardItem[]> = {
   top: [
     { icon: Flame, label: 'LIVE', desc: 'Ставь на события в прямом эфире', iconBg: '', iconColor: 'text-red-500', route: { name: 'sports', mode: 'live' } },
     { icon: Trophy, label: 'Линия', desc: 'Ставь на предстоящие события', ...grayIcon, route: { name: 'sports', mode: 'line' } },
     { icon: IconEsports, label: 'Киберспорт', desc: 'CS2, Dota 2, LoL и другие', ...grayIcon, route: { name: 'sports', mode: 'cybers' } },
-    { icon: LayoutGrid, label: 'Слоты', desc: 'Более 2000 азартных игр', ...grayIcon, route: { name: 'slots' } },
-    { icon: IconCasino, label: 'Лайв казино', desc: 'Рулетка, блэкджек с дилером', ...grayIcon, route: { name: 'live-casino' } },
+    { icon: LayoutGrid, label: 'Слоты', desc: 'Игры появятся после подключения провайдера', ...grayIcon, route: { name: 'slots' } },
+    { icon: IconCasino, label: 'Лайв казино', desc: 'Столы появятся после подключения провайдера', ...grayIcon, route: { name: 'live-casino' } },
     { icon: IconGames, label: 'Games', desc: 'Мини-игры и аркады', ...grayIcon, route: { name: 'games' } },
     { icon: Ticket, label: 'Промокоды', desc: 'Промо баллы: 0 PTS', iconBg: '', iconColor: 'text-white', special: 'teal', route: { name: 'promo' } },
     { icon: Trophy, label: 'Непобедимый', desc: 'Экспрессы — розыгрыш $9,000', ...grayIcon, route: { name: 'promo-unbeatable' } },
-    { icon: Headphones, label: 'Поддержка', desc: 'Чат с оператором 24/7', ...grayIcon, route: { name: 'info' } },
-    { icon: ShieldCheck, label: 'Аутентификатор', desc: 'Защити свой аккаунт', ...grayIcon },
+    { icon: Headphones, label: 'Поддержка', desc: 'Помощь, правила и контакты', ...grayIcon, route: { name: 'info' } },
+    { icon: ShieldCheck, label: 'Аутентификатор', desc: 'Защити свой аккаунт', ...grayIcon, ...soon },
   ],
   sport: [
     { icon: Flame, label: 'LIVE', desc: 'Ставь на события в прямом эфире', iconBg: '', iconColor: 'text-red-500', route: { name: 'sports', mode: 'live' } },
     { icon: Trophy, label: 'Линия', desc: 'Ставь на предстоящие события', ...grayIcon, route: { name: 'sports', mode: 'line' } },
-    { icon: Zap, label: 'Экспресс дня', desc: 'Ставки на выгодные экспрессы', ...grayIcon },
-    { icon: Video, label: 'Стрим', desc: 'Игры с онлайн-трансляцией', ...grayIcon },
+    { icon: Zap, label: 'Экспресс дня', desc: 'Ставки на выгодные экспрессы', ...grayIcon, ...soon },
+    { icon: Video, label: 'Стрим', desc: 'Игры с онлайн-трансляцией', ...grayIcon, ...soon },
     { icon: IconEsports, label: 'Киберспорт', desc: 'Лучшие киберспортивные события', ...grayIcon, route: { name: 'sports', mode: 'cybers' } },
-    { icon: CheckCircle, label: 'Результаты', desc: 'Итоги прошедших событий', ...grayIcon },
-    { icon: Flag, label: 'Ставь на своих', desc: 'События любимых стран', ...grayIcon },
+    { icon: CheckCircle, label: 'Результаты', desc: 'Итоги прошедших событий', ...grayIcon, ...soon },
+    { icon: Flag, label: 'Ставь на своих', desc: 'События любимых стран', ...grayIcon, ...soon },
   ],
   casino: [
-    { icon: IconCasino, label: 'Лайв казино', desc: 'Рулетка, блэкджек с дилером', ...grayIcon, route: { name: 'live-casino' } },
-    { icon: Dices, label: 'Слоты', desc: 'Pragmatic, EGT, Spinomenal', ...grayIcon, route: { name: 'slots' } },
-    { icon: Heart, label: 'My casino', desc: 'Личные акции, турниры, избранное', ...grayIcon, route: { name: 'live-casino' } },
-    { icon: LayoutGrid, label: 'Категории', desc: 'Игры казино на любой вкус', ...grayIcon },
-    { icon: Trophy, label: 'Турниры', desc: 'Все турниры казино', ...grayIcon },
+    { icon: IconCasino, label: 'Лайв казино', desc: 'Столы появятся после подключения провайдера', ...grayIcon, route: { name: 'live-casino' } },
+    { icon: Dices, label: 'Слоты', desc: 'Игры появятся после подключения провайдера', ...grayIcon, route: { name: 'slots' } },
+    { icon: Heart, label: 'My casino', desc: 'Личные акции, турниры, избранное', ...grayIcon, ...soon },
+    { icon: LayoutGrid, label: 'Категории', desc: 'Игры казино на любой вкус', ...grayIcon, ...soon },
+    { icon: Trophy, label: 'Турниры', desc: 'Все турниры казино', ...grayIcon, ...soon },
     { icon: Gift, label: 'Промо', desc: 'Подарки, бонусы и акции', ...grayIcon, route: { name: 'promo' } },
-    { icon: Boxes, label: 'Провайдеры', desc: 'Лучшие провайдеры в одном месте', ...grayIcon },
+    { icon: Boxes, label: 'Провайдеры', desc: 'Лучшие провайдеры в одном месте', ...grayIcon, ...soon },
   ],
   games: [
     { icon: IconGames, label: 'Games', desc: 'Мини-игры и аркады', ...grayIcon, route: { name: 'games' } },
-    { icon: Flame, label: 'Crash-игры', desc: 'Aviator, JetX', iconBg: '', iconColor: 'text-red-500' },
+    { icon: Flame, label: 'Aviator', desc: 'Crash-игра', iconBg: '', iconColor: 'text-red-500', route: { name: 'aviator' } },
   ],
   misc: [
-    { icon: ShieldCheck, label: 'Повысьте безопасность!', desc: 'Получите надежную защиту вашего аккаунта!', iconBg: '', iconColor: 'text-white', special: 'security' },
+    { icon: ShieldCheck, label: 'Повысьте безопасность!', desc: 'Получите надежную защиту вашего аккаунта!', iconBg: '', iconColor: 'text-white', special: 'security', ...soon },
     { icon: Star, label: 'Акции', desc: 'Участвуй и выигрывай призы', iconBg: '', iconColor: 'text-white', special: 'orange', route: { name: 'promo-unbeatable' } },
-    { icon: Wallet, label: 'Управление счетом', desc: 'Пополнение, вывод, история', ...grayIcon },
+    { icon: Wallet, label: 'Управление счетом', desc: 'Пополнение, вывод, история', ...grayIcon, route: { name: 'wallet' } },
     { icon: Ticket, label: 'Promo', desc: 'Промо баллы и бонусы', ...grayIcon, route: { name: 'promo' } },
-    { icon: KeyRound, label: 'Аутентификатор', desc: 'Двухфакторная аутентификация', ...grayIcon },
-    { icon: Target, label: 'ТОТО', desc: 'Тотализатор и джекпоты', ...grayIcon },
-    { icon: TrendingUp, label: 'Финставки', desc: 'Ставки на финансовые рынки', ...grayIcon },
-    { icon: Wrench, label: 'Бетконструктор', desc: 'Создай свою ставку', ...grayIcon },
-    { icon: ScanLine, label: 'Сканер купонов', desc: 'Проверь билет по коду', ...grayIcon },
-    { icon: Bell, label: 'Уведомления', desc: 'Настройки оповещений', ...grayIcon },
-    { icon: Headphones, label: 'Поддержка', desc: 'Чат с оператором 24/7', ...grayIcon, route: { name: 'info' } },
+    { icon: KeyRound, label: 'Аутентификатор', desc: 'Двухфакторная аутентификация', ...grayIcon, ...soon },
+    { icon: Target, label: 'ТОТО', desc: 'Тотализатор и джекпоты', ...grayIcon, ...soon },
+    { icon: TrendingUp, label: 'Финставки', desc: 'Ставки на финансовые рынки', ...grayIcon, ...soon },
+    { icon: Wrench, label: 'Бетконструктор', desc: 'Создай свою ставку', ...grayIcon, ...soon },
+    { icon: ScanLine, label: 'Сканер купонов', desc: 'Проверь билет по коду', ...grayIcon, ...soon },
+    { icon: Bell, label: 'Уведомления', desc: 'Настройки оповещений', ...grayIcon, ...soon },
+    { icon: Headphones, label: 'Поддержка', desc: 'Помощь, правила и контакты', ...grayIcon, route: { name: 'info' } },
     { icon: Info, label: 'Инфо', desc: 'О компании, правила, помощь', ...grayIcon, route: { name: 'info' } },
   ],
 };
+
+function isSoonItem(item: CardItem): boolean {
+  return item.availability === 'soon' || !item.route;
+}
 
 const specialStyles: Record<SpecialType, string> = {
   teal: 'bg-gradient-to-r from-teal-400 to-teal-500',
@@ -163,11 +171,10 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
           <button
             type="button"
             onClick={() => onNavigate({ name: 'settings' })}
-            className="relative w-9 h-9 rounded-xl bg-gray-100 dark:bg-[#1e293b] flex items-center justify-center text-gray-600 dark:text-gray-200 hover:text-gray-800 dark:hover:text-white transition-colors"
+            className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-[#1e293b] flex items-center justify-center text-gray-600 dark:text-gray-200 hover:text-gray-800 dark:hover:text-white transition-colors"
             aria-label="Настройки"
           >
             <Settings className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white dark:border-gray-800" />
           </button>
         </div>
       </div>
@@ -237,10 +244,27 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
       <div className="flex flex-col gap-2 mt-4 px-4">
         {sections[activeTab].map((item) => {
           const Icon = item.icon;
+          const soonItem = isSoonItem(item);
           if (item.special) {
+            if (soonItem) {
+              return (
+                <div
+                  key={item.label}
+                  className={`w-full flex items-center gap-3 ${specialStyles[item.special]} rounded-2xl p-4 text-left`}
+                >
+                  <Icon className="w-6 h-6 text-white shrink-0" strokeWidth={1.5} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-white">{item.label}</p>
+                    <p className="text-xs text-white/90 mt-0.5">{item.desc}</p>
+                  </div>
+                  <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-white/90">Скоро</span>
+                </div>
+              );
+            }
             return (
               <button
                 key={item.label}
+                type="button"
                 onClick={() => item.route && onNavigate(item.route)}
                 className={`w-full flex items-center gap-3 ${specialStyles[item.special]} rounded-2xl p-4 active:scale-[0.98] transition-transform text-left`}
               >
@@ -253,25 +277,25 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
               </button>
             );
           }
-          if (item.label === 'Управление счетом') {
+          if (soonItem) {
             return (
-              <button
+              <div
                 key={item.label}
-                onClick={() => onNavigate({ name: 'wallet' })}
-                className="w-full flex items-center gap-3 bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm active:scale-[0.98] transition-transform text-left"
+                className="w-full flex items-center gap-3 bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm text-left"
               >
-                <Icon className={`w-6 h-6 ${item.iconColor} hover:scale-105 transition-transform shrink-0`} strokeWidth={1.5} />
+                <Icon className={`w-6 h-6 ${item.iconColor} shrink-0`} strokeWidth={1.5} />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-extrabold text-gray-900 dark:text-white">{item.label}</p>
                   <p className="text-xs text-gray-500 dark:text-gray-200 mt-0.5 font-semibold">{item.desc}</p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-500 shrink-0" />
-              </button>
+                <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-gray-500">Скоро</span>
+              </div>
             );
           }
           return (
             <button
               key={item.label}
+              type="button"
               onClick={() => {
                 if (item.route) onNavigate(item.route);
               }}
