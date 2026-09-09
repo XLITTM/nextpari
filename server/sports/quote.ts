@@ -1,6 +1,9 @@
-import { parseCanonicalMarketKey } from '../lsports/state/keys.js';
-import { LSPORTS_HEARTBEAT_STALE_MS } from '../lsports/state/types.js';
-import type { SportsQuote, SportsQuoteDecision, SportsQuoteRequest } from './types.js';
+import type {
+  SportsQuote,
+  SportsQuoteDecision,
+  SportsQuoteDecisionOptions,
+  SportsQuoteRequest,
+} from './types.js';
 
 export function roundPrice(value: number): number {
   return Math.round(value * 1000) / 1000;
@@ -10,54 +13,97 @@ export function pricesEqual(left: number, right: number): boolean {
   return roundPrice(left) === roundPrice(right);
 }
 
-function isLsportsQuoteRequest(request: SportsQuoteRequest): boolean {
-  const provider = String(request.provider ?? 'lsports').trim().toLowerCase();
-  return provider === '' || provider === 'lsports';
+function text(value: unknown): string {
+  return String(value ?? '').trim();
 }
 
-function lsportsIdentityMismatch(request: SportsQuoteRequest, quote: SportsQuote): boolean {
-  const marketId = String(request.marketId ?? '').trim();
-  const marketKey = String(request.marketKey ?? '').trim();
-  const parsed = parseCanonicalMarketKey(marketKey);
-  if (!marketId || !parsed) return true;
-  if (parsed.fixtureId !== String(request.fixtureId ?? '').trim()) return true;
-  if (parsed.marketId !== marketId) return true;
-  if (String(quote.fixtureId) !== parsed.fixtureId) return true;
-  if (String(quote.marketId) !== marketId) return true;
-  if (String(quote.marketKey) !== marketKey) return true;
-  const storeLine = String(quote.line ?? '');
-  const requestedLine = String(request.line ?? '').trim();
-  if (storeLine) return requestedLine !== storeLine || parsed.line !== storeLine;
-  return Boolean(requestedLine) || parsed.line !== '';
+function identityFieldMismatch(requestValue: unknown, quoteValue: unknown): boolean {
+  const requested = text(requestValue);
+  const quoted = text(quoteValue);
+  if (!requested && !quoted) return false;
+  return requested !== quoted;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  return {};
+}
+
+export function readSportsQuote(value: unknown): SportsQuote {
+  const row = asRecord(value);
+  const health = row.health === 'HEALTHY' || row.health === 'STALE' || row.health === 'UNKNOWN'
+    ? row.health
+    : 'UNKNOWN';
+  const status = row.status === 'open' || row.status === 'suspended' || row.status === 'settled'
+    ? row.status
+    : 'missing';
+  const priceRaw = row.price;
+  const price = typeof priceRaw === 'number' && Number.isFinite(priceRaw) ? priceRaw : Number(priceRaw);
+  const provider = text(row.provider).toLowerCase();
+  const marketStatus = row.marketStatus == null ? undefined : String(row.marketStatus);
+  const betStatus = row.betStatus == null ? undefined : String(row.betStatus);
+  const betStatusId = row.betStatusId == null ? undefined : String(row.betStatusId);
+  return {
+    provider,
+    feedType: row.feedType === 'prematch' ? 'prematch' : 'inplay',
+    fixtureId: String(row.fixtureId ?? ''),
+    marketId: String(row.marketId ?? ''),
+    marketKey: String(row.marketKey ?? ''),
+    line: String(row.line ?? ''),
+    outcomeId: String(row.outcomeId ?? row.betId ?? ''),
+    outcomeName: String(row.outcomeName ?? ''),
+    price: Number.isFinite(price) && price > 1 ? price : null,
+    status,
+    selectable: row.selectable === true,
+    updatedAt: row.updatedAt == null ? null : String(row.updatedAt),
+    health,
+    heartbeatAgeMs: row.heartbeatAgeMs == null ? null : Number(row.heartbeatAgeMs),
+    ...(marketStatus === undefined ? {} : { marketStatus }),
+    ...(betStatus === undefined ? {} : { betStatus }),
+    ...(betStatusId === undefined ? {} : { betStatusId }),
+  };
 }
 
 export function decideSportsQuote(
   request: SportsQuoteRequest,
   quote: SportsQuote,
-  options: { bettingEnabled: boolean; now?: number } = { bettingEnabled: true },
+  options: SportsQuoteDecisionOptions = { bettingEnabled: true },
 ): SportsQuoteDecision {
   if (!options.bettingEnabled) {
     return { ok: false, reason: 'SPORTS_BET_DISABLED', quote };
   }
-  const fixtureId = String(request.fixtureId ?? '').trim();
-  const outcomeId = String(request.outcomeId ?? '').trim();
+  const fixtureId = text(request.fixtureId);
+  const outcomeId = text(request.outcomeId);
   if (!fixtureId) return { ok: false, reason: 'MISSING_FIXTURE', quote };
   if (!outcomeId) return { ok: false, reason: 'MISSING_BET_ID', quote };
 
-  const heartbeatAge = quote.heartbeatAgeMs;
-  const stale = quote.health !== 'HEALTHY'
-    || heartbeatAge == null
-    || heartbeatAge > LSPORTS_HEARTBEAT_STALE_MS;
-  if (stale) return { ok: false, reason: 'FEED_STALE', quote };
-
-  if (isLsportsQuoteRequest(request) && lsportsIdentityMismatch(request, quote)) {
+  const requestedProvider = text(request.provider).toLowerCase();
+  if (requestedProvider && requestedProvider !== text(quote.provider).toLowerCase()) {
     return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
   }
 
-  if (quote.status === 'missing' || String(quote.fixtureId) !== fixtureId) {
+  if (quote.health !== 'HEALTHY') {
+    return { ok: false, reason: 'FEED_STALE', quote };
+  }
+  if (options.maxHeartbeatAgeMs != null) {
+    const age = quote.heartbeatAgeMs;
+    if (age == null || !Number.isFinite(age) || age > options.maxHeartbeatAgeMs) {
+      return { ok: false, reason: 'FEED_STALE', quote };
+    }
+  }
+
+  if (
+    quote.status === 'missing'
+    || identityFieldMismatch(fixtureId, quote.fixtureId)
+    || identityFieldMismatch(request.marketId, quote.marketId)
+    || identityFieldMismatch(request.marketKey, quote.marketKey)
+    || identityFieldMismatch(request.line, quote.line)
+  ) {
     return { ok: false, reason: 'EVENT_UNAVAILABLE', quote };
   }
-  if (String(quote.outcomeId) !== outcomeId) {
+  if (identityFieldMismatch(outcomeId, quote.outcomeId)) {
     return { ok: false, reason: 'MISSING_BET_ID', quote };
   }
 

@@ -1,8 +1,10 @@
 export const SPORTS_PROVIDER_LSPORTS = 'lsports' as const;
 
-export type SportsProvider = typeof SPORTS_PROVIDER_LSPORTS | 'betsapi';
+/** Opaque provider id. Adapter-specific values stay valid (e.g. 'lsports'). */
+export type SportsProvider = string;
 export type SportsFeedType = 'inplay' | 'prematch';
 export type SportsBetMode = 'single' | 'express';
+export type SportsFeedHealth = 'HEALTHY' | 'STALE' | 'UNKNOWN';
 
 export type SportsQuoteRejectReason =
   | 'SPORTS_BET_DISABLED'
@@ -27,13 +29,14 @@ export interface SportsQuote {
   outcomeName: string;
   price: number | null;
   status: 'open' | 'suspended' | 'settled' | 'missing';
-  marketStatus: string;
-  betStatus: string;
-  betStatusId: string;
   selectable: boolean;
   updatedAt: string | null;
-  health: 'HEALTHY' | 'STALE' | 'UNKNOWN';
+  health: SportsFeedHealth;
   heartbeatAgeMs: number | null;
+  /** Provider diagnostics. Generic decision must not require these. */
+  marketStatus?: string;
+  betStatus?: string;
+  betStatusId?: string;
 }
 
 export interface SportsQuoteRequest {
@@ -47,6 +50,13 @@ export interface SportsQuoteRequest {
   price?: number;
 }
 
+export interface SportsQuoteDecisionOptions {
+  bettingEnabled: boolean;
+  now?: number;
+  /** Generic freshness cap. Omit to trust quote.health from the adapter. */
+  maxHeartbeatAgeMs?: number;
+}
+
 export type SportsQuoteDecision =
   | { ok: true; quote: SportsQuote }
   | {
@@ -55,3 +65,8 @@ export type SportsQuoteDecision =
     quote?: SportsQuote;
     currentPrice?: number | null;
   };
+
+export interface SportsQuoteProvider {
+  readonly id: SportsProvider;
+  getQuote(request: SportsQuoteRequest): Promise<SportsQuote>;
+}
