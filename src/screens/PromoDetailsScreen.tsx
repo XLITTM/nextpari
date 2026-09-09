@@ -32,6 +32,9 @@ export function PromoDetailsScreen({ onBack }: PromoDetailsScreenProps) {
           <p className="mt-3 text-sm leading-relaxed text-gray-300">
             Зарегистрируйся на платформе Nextpari и получи 100%-й бонус за первое пополнение!
           </p>
+          <p className="mt-4 rounded-xl bg-white/5 px-3 py-2 text-xs font-semibold leading-relaxed text-amber-200">
+            Предварительные условия будущей акции. Участие и начисление бонусов пока недоступны.
+          </p>
 
           <h3 className="mt-6 text-white text-base font-bold">Как получить бонус?</h3>
           <ol className="mt-2 list-decimal list-inside space-y-1.5 text-sm leading-relaxed text-gray-300">
