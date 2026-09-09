@@ -400,7 +400,6 @@ function AppContent() {
     return () => setArcadeSportsPaused(false);
   }, [isArcade]);
   const isGamesHub = screen.name === 'games';
-  const isVipCashback = screen.name === 'vip-cashback';
 
   const renderScreen = () => {
     switch (screen.name) {
@@ -584,13 +583,13 @@ function AppContent() {
         </Header>
       )}
 
-      <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub || isVipCashback ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>
+      <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>
         <ErrorBoundary resetKey={screen.name}>
           {renderScreen()}
         </ErrorBoundary>
       </div>
 
-      {!isArcade && !isGamesHub && !isVipCashback && (
+      {!isArcade && !isGamesHub && (
         <BottomNav
           active={navActive(screen.name)}
           onChange={setScreen}
