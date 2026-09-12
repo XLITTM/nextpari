@@ -14,6 +14,7 @@ import { mapPlayerGameRpcError } from './playerGameRpc.js';
 import type { SportsPlacePorts } from './sportsPlaceService.js';
 import { PLAYER_ACCESS_COOKIE, PLAYER_REFRESH_COOKIE } from './playerCookies.js';
 import { resolveSportsQuoteProvider } from '../sports/quoteProvider.js';
+import { parseSportsSettlementNotice } from '../sports/settlement.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -53,6 +54,7 @@ const PLACE_BODY = {
   mode: 'single' as const,
   idempotencyKey: 'k1',
   selections: [{
+    provider: 'lsports',
     fixtureId: '19981248',
     marketId: '1',
     marketKey: '19981248:1:',
@@ -75,14 +77,17 @@ function createPorts(init?: {
   placeImpl?: SportsPlacePorts['placeAsVerifiedPlayer'];
 }): SportsPlacePorts & {
   places: Array<{ playerUserId: string; idempotencyKey: string; stake: number }>;
+  quoteFetches: SportsQuoteRequest[];
   rpcs: Array<{ name: string; args?: Record<string, unknown> }>;
   authUsers: string[];
 } {
   const places: Array<{ playerUserId: string; idempotencyKey: string; stake: number }> = [];
+  const quoteFetches: SportsQuoteRequest[] = [];
   const rpcs: Array<{ name: string; args?: Record<string, unknown> }> = [];
   const authUsers: string[] = [];
   return {
     places,
+    quoteFetches,
     rpcs,
     authUsers,
     async signInWithPassword() {
@@ -110,7 +115,11 @@ function createPorts(init?: {
       return { balance: 50, currency: 'TMTM', status: 'active', publicId: '110790' };
     },
     async savePlayerProfile() {},
-    fetchQuote: init?.fetchQuote ?? (async () => init?.quote ?? OPEN),
+    fetchQuote: async (request) => {
+      quoteFetches.push(request);
+      if (init?.fetchQuote) return init.fetchQuote(request);
+      return init?.quote ?? OPEN;
+    },
     placeAsVerifiedPlayer: init?.placeImpl ?? (async (args) => {
       places.push({
         playerUserId: args.playerUserId,
@@ -197,6 +206,7 @@ describe('player sports place HTTP', () => {
       ...PLACE_BODY,
       idempotencyKey: 'k2',
       selections: [{
+        provider: 'lsports',
         fixtureId: '19981248',
         marketId: '1',
         marketKey: '19981248:1:',
@@ -220,6 +230,7 @@ describe('player sports place HTTP', () => {
       ...PLACE_BODY,
       idempotencyKey: 'k-missing-key',
       selections: [{
+        provider: 'lsports',
         fixtureId: '19981248',
         marketId: '1',
         outcomeId: '117469638719981250',
@@ -259,7 +270,7 @@ describe('player sports place HTTP', () => {
     const missingBet = await place(createPorts(), {
       ...PLACE_BODY,
       idempotencyKey: 'k4',
-      selections: [{ fixtureId: '19981248', outcomeId: '', price: 1.85 }],
+      selections: [{ fixtureId: '19981248', outcomeId: '', price: 1.85, provider: 'lsports' }],
     });
     assert.equal(missingBet.body.error, 'MISSING_BET_ID');
 
@@ -284,9 +295,9 @@ describe('player sports place HTTP', () => {
       mode: 'express',
       idempotencyKey: 'express-odds-leg-2',
       selections: [
-        { fixtureId: '100', marketId: '1', marketKey: '100:1:', outcomeId: 'o1', price: 1.4 },
-        { fixtureId: '200', marketId: '1', marketKey: '200:1:', outcomeId: 'o2', price: 1.8 },
-        { fixtureId: '300', marketId: '1', marketKey: '300:1:', outcomeId: 'o3', price: 3.1 },
+        { provider: 'lsports', fixtureId: '100', marketId: '1', marketKey: '100:1:', outcomeId: 'o1', price: 1.4 },
+        { provider: 'lsports', fixtureId: '200', marketId: '1', marketKey: '200:1:', outcomeId: 'o2', price: 1.8 },
+        { provider: 'lsports', fixtureId: '300', marketId: '1', marketKey: '300:1:', outcomeId: 'o3', price: 3.1 },
       ],
     });
     assert.equal(result.body.error, 'ODDS_CHANGED');
@@ -336,6 +347,217 @@ describe('player sports place HTTP', () => {
     assert.equal(concurrent.filter((row) => row.status === 200).length, 2);
     assert.equal(debits, 2);
     assert.equal(concurrent.filter((row) => row.body.isDuplicate === true).length, 1);
+  });
+});
+
+describe('explicit sports provider', () => {
+  async function assertProviderRequired(body: Record<string, unknown>) {
+    const ports = createPorts();
+    const result = await place(ports, body);
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error, 'SPORTS_PROVIDER_REQUIRED');
+    assert.equal(ports.quoteFetches.length, 0);
+    assert.equal(ports.places.length, 0);
+  }
+
+  it('rejects missing provider before quote lookup and place RPC', async () => {
+    await assertProviderRequired({
+      ...PLACE_BODY,
+      idempotencyKey: 'k-no-provider',
+      selections: [{
+        fixtureId: '19981248',
+        marketId: '1',
+        marketKey: '19981248:1:',
+        outcomeId: '117469638719981250',
+        price: 1.85,
+      }],
+    });
+    await assertProviderRequired({
+      ...PLACE_BODY,
+      idempotencyKey: 'k-null-provider',
+      selections: [{ ...PLACE_BODY.selections[0], provider: null }],
+    });
+  });
+
+  it('rejects blank provider before quote lookup and place RPC', async () => {
+    await assertProviderRequired({
+      ...PLACE_BODY,
+      idempotencyKey: 'k-blank-provider',
+      selections: [{ ...PLACE_BODY.selections[0], provider: '' }],
+    });
+  });
+
+  it('rejects whitespace provider before quote lookup and place RPC', async () => {
+    await assertProviderRequired({
+      ...PLACE_BODY,
+      idempotencyKey: 'k-ws-provider',
+      selections: [{ ...PLACE_BODY.selections[0], provider: '   ' }],
+    });
+  });
+
+  it('does not accept source, feedType, or feedTag as a provider substitute', async () => {
+    await assertProviderRequired({
+      ...PLACE_BODY,
+      idempotencyKey: 'k-source-alias',
+      selections: [{
+        source: 'lsports',
+        feedType: 'lsports',
+        feedTag: 'lsports',
+        fixtureId: '19981248',
+        marketId: '1',
+        marketKey: '19981248:1:',
+        outcomeId: '117469638719981250',
+        price: 1.85,
+      }],
+    });
+  });
+
+  it('canonicalizes explicit LSports and still quotes through the LSports provider id', async () => {
+    const seen: string[] = [];
+    const ports = createPorts({
+      fetchQuote: async (request) => {
+        seen.push(String(request.provider ?? ''));
+        return OPEN;
+      },
+    });
+    const result = await place(ports, {
+      ...PLACE_BODY,
+      idempotencyKey: 'k-lsports-explicit',
+      selections: [{ ...PLACE_BODY.selections[0], provider: 'LSports' }],
+    });
+    assert.equal(result.status, 200);
+    assert.deepEqual(seen, ['lsports']);
+    assert.deepEqual(ports.quoteFetches.map((row) => row.provider), ['lsports']);
+    assert.equal(ports.places.length, 1);
+  });
+
+  it('fails closed on explicit unsupported provider after quote lookup', async () => {
+    const ports = createPorts({
+      fetchQuote: async (request) => resolveSportsQuoteProvider(request.provider).getQuote(request),
+    });
+    const unsupported = await place(ports, {
+      ...PLACE_BODY,
+      idempotencyKey: 'k-unsupported-provider',
+      selections: [{ ...PLACE_BODY.selections[0], provider: 'provider-not-registered' }],
+    });
+    assert.equal(unsupported.status, 409);
+    assert.equal(unsupported.body.error, 'EVENT_UNAVAILABLE');
+    assert.deepEqual(ports.quoteFetches.map((row) => row.provider), ['provider-not-registered']);
+    assert.equal(ports.places.length, 0);
+  });
+
+  it('passes explicit provider-b to injected fetchQuote without rewriting', async () => {
+    const seen: string[] = [];
+    const ports = createPorts({
+      fetchQuote: async (request) => {
+        seen.push(String(request.provider ?? ''));
+        return {
+          ...OPEN,
+          provider: String(request.provider ?? ''),
+        };
+      },
+    });
+    const result = await place(ports, {
+      ...PLACE_BODY,
+      idempotencyKey: 'k-provider-b',
+      selections: [{ ...PLACE_BODY.selections[0], provider: 'provider-b' }],
+    });
+    assert.equal(result.status, 200);
+    assert.deepEqual(seen, ['provider-b']);
+    assert.deepEqual(ports.quoteFetches.map((row) => row.provider), ['provider-b']);
+    assert.equal(ports.places.length, 1);
+  });
+
+  it('parses mixed-provider express independently and preserves quote adapter providers', async () => {
+    const seen: string[] = [];
+    const accepted: Array<{ provider?: unknown; fixtureId?: unknown }> = [];
+    const ports = createPorts({
+      fetchQuote: async (request) => {
+        seen.push(String(request.provider ?? ''));
+        return {
+          ...OPEN,
+          provider: String(request.provider ?? ''),
+          fixtureId: String(request.fixtureId),
+          marketId: String(request.marketId ?? ''),
+          marketKey: String(request.marketKey ?? ''),
+          outcomeId: String(request.outcomeId),
+          price: Number(request.price),
+        };
+      },
+      placeImpl: async (args) => {
+        accepted.push(...args.legs.map((leg) => ({
+          provider: leg.provider,
+          fixtureId: leg.fixtureId,
+        })));
+        return {
+          ok: true,
+          isDuplicate: false,
+          betId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+          stake: args.stake,
+          acceptedOdds: 1.85,
+          balanceAfter: 40,
+        };
+      },
+    });
+    const result = await place(ports, {
+      stake: 10,
+      mode: 'express',
+      idempotencyKey: 'k-mixed-providers',
+      selections: [
+        { provider: 'provider-a', fixtureId: '100', marketId: 'm-a', marketKey: 'm-a', outcomeId: 'out-a', price: 1.4 },
+        { provider: 'provider-b', fixtureId: '200', marketId: 'm-b', marketKey: 'm-b', outcomeId: 'out-b', price: 2.2 },
+      ],
+    });
+    assert.equal(result.status, 200);
+    assert.deepEqual(seen, ['provider-a', 'provider-b']);
+    assert.deepEqual(ports.quoteFetches.map((row) => row.provider), ['provider-a', 'provider-b']);
+    assert.deepEqual(accepted, [
+      { provider: 'provider-a', fixtureId: '100' },
+      { provider: 'provider-b', fixtureId: '200' },
+    ]);
+  });
+
+  it('does not fall back to lsports in generic place/quote server code', () => {
+    const placeSrc = read('server/player/sportsPlaceService.ts');
+    const registry = read('server/sports/quoteProvider.ts');
+    const quote = read('server/sports/quote.ts');
+    assert.equal(placeSrc.includes("|| 'lsports'"), false);
+    assert.equal(placeSrc.includes("?? 'lsports'"), false);
+    assert.equal(registry.includes("|| 'lsports'"), false);
+    assert.equal(registry.includes("?? 'lsports'"), false);
+    assert.equal(quote.includes("|| 'lsports'"), false);
+    assert.equal(quote.includes("?? 'lsports'"), false);
+  });
+
+  it('keeps settlement provider-required behavior from Task 013/014', () => {
+    const missing = parseSportsSettlementNotice({
+      fingerprint: 'fp-016',
+      fixtureId: '1',
+      outcomeId: '2',
+      settlement: 2,
+    });
+    assert.equal(missing.ok, false);
+    if (!missing.ok) assert.equal(missing.error, 'SETTLEMENT_PROVIDER_REQUIRED');
+
+    const blank = parseSportsSettlementNotice({
+      provider: '   ',
+      fingerprint: 'fp-016',
+      fixtureId: '1',
+      outcomeId: '2',
+      settlement: 2,
+    });
+    assert.equal(blank.ok, false);
+    if (!blank.ok) assert.equal(blank.error, 'SETTLEMENT_PROVIDER_REQUIRED');
+
+    const ok = parseSportsSettlementNotice({
+      provider: 'provider-b',
+      fingerprint: 'fp-016',
+      fixtureId: '1',
+      outcomeId: '2',
+      settlement: 2,
+    });
+    assert.equal(ok.ok, true);
+    if (ok.ok) assert.equal(ok.notice.provider, 'provider-b');
   });
 });
 

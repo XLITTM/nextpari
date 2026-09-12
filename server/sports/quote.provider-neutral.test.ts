@@ -154,10 +154,15 @@ describe('provider-neutral quote decision', () => {
     assert.equal(decision.ok, true);
   });
 
-  it('defaults omitted and blank providers to LSports without calling other adapters', () => {
-    assert.equal(resolveSportsQuoteProvider().id, SPORTS_PROVIDER_LSPORTS);
-    assert.equal(resolveSportsQuoteProvider('').id, SPORTS_PROVIDER_LSPORTS);
-    assert.equal(resolveSportsQuoteProvider('   ').id, SPORTS_PROVIDER_LSPORTS);
+  it('fails closed on omitted and blank providers without using LSports', () => {
+    for (const provider of [undefined, '', '   '] as const) {
+      assert.throws(
+        () => resolveSportsQuoteProvider(provider),
+        (error: unknown) => error instanceof SportsProviderUnsupportedError
+          && error.code === 'SPORTS_PROVIDER_UNSUPPORTED'
+          && error.message === 'SPORTS_PROVIDER_UNSUPPORTED',
+      );
+    }
   });
 
   it('resolves explicit lsports to the LSports adapter', () => {
@@ -174,6 +179,13 @@ describe('provider-neutral quote decision', () => {
           && error.message === 'SPORTS_PROVIDER_UNSUPPORTED',
       );
     }
+  });
+
+  it('does not fall back to lsports in the generic quote registry', () => {
+    const source = readFileSync(join(root, 'server/sports/quoteProvider.ts'), 'utf8');
+    assert.equal(source.includes("|| 'lsports'"), false);
+    assert.equal(source.includes("?? 'lsports'"), false);
+    assert.equal(source.includes('default to LSports'), false);
   });
 
   it('does not coerce an arbitrary canonical provider to lsports when parsing quotes', () => {

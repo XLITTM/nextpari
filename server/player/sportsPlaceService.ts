@@ -3,7 +3,7 @@ import { isCanonicalSportsBetEnabled } from '../sports/enabled.js';
 import { createSportsPlaceAsPlayerRpc, type SportsPlaceAsPlayer } from '../sports/placeRpc.js';
 import { sanitizeChangedLeg } from '../sports/changedLeg.js';
 import { decideSportsQuote } from '../sports/quote.js';
-import { resolveSportsQuoteProvider, SportsProviderUnsupportedError } from '../sports/quoteProvider.js';
+import { resolveSportsQuoteProvider, SportsProviderUnsupportedError, normalizeSportsProviderId } from '../sports/quoteProvider.js';
 import { evaluateSportsRisk } from '../sports/risk.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 import { staffError, StaffOnboardingError } from '../staff/errors.js';
@@ -60,8 +60,9 @@ async function defaultFetchQuote(request: SportsQuoteRequest): Promise<SportsQuo
 
 function parseLeg(value: unknown): SportsQuoteRequest {
   const row = asRecord(value);
+  const provider = normalizeSportsProviderId(requireText(row.provider, 'SPORTS_PROVIDER_REQUIRED'));
   return {
-    provider: String(row.provider ?? '').trim().toLowerCase() || 'lsports',
+    provider,
     feedType: String(row.feedType ?? row.feed_type ?? 'inplay'),
     fixtureId: requireText(row.fixtureId ?? row.fixture_id ?? row.matchId, 'MISSING_FIXTURE'),
     marketId: String(row.marketId ?? row.market_id ?? ''),
