@@ -208,8 +208,8 @@ export function formatLegMarketLine(market: string, selection: string, line?: st
 export function legStatus(event: BetEvent): BetDisplayStatus | null {
   const code = event.settlementCode;
   if (code === 2 || code === 5) return 'won';
-  if (code === 1) return 'lost';
-  if (code === 3 || code === 4) return 'refund';
+  if (code === 1 || code === 4) return 'lost';
+  if (code === 3) return 'refund';
   if (code === -1) return 'cancelled';
   if (event.isLive) return 'in_progress';
   return null;

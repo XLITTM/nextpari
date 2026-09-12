@@ -10,6 +10,8 @@ import {
   historyPeriodStats,
   historyViewHasTechnicalIds,
   isExpressBet,
+  legResultLabel,
+  legStatus,
   playerStatus,
   playerStatusLabel,
   toHistoryEntry,
@@ -196,6 +198,26 @@ describe('bet history presentation', () => {
     assert.equal(month.some((row) => row.id === old.id), false);
     assert.equal(month.some((row) => row.id === invalid.id), false);
     assert.equal(filterHistoryEntries([recent, old, invalid], 'all', false, now).length, 3);
+  });
+
+  it('maps canonical settlement codes to existing coarse UI statuses', () => {
+    const eventWithCode = (settlementCode: number | null) => (
+      toHistoryEntry({
+        ...SINGLE_RAW,
+        legs: [{ ...SINGLE_RAW.legs[0], settlementCode }],
+      }).events[0]
+    );
+    assert.equal(legStatus(eventWithCode(1)), 'lost');
+    assert.equal(legStatus(eventWithCode(2)), 'won');
+    assert.equal(legStatus(eventWithCode(3)), 'refund');
+    assert.equal(legStatus(eventWithCode(4)), 'lost');
+    assert.equal(legStatus(eventWithCode(5)), 'won');
+    assert.equal(legStatus(eventWithCode(-1)), 'cancelled');
+    assert.equal(legResultLabel(legStatus(eventWithCode(4))), 'Проигрыш');
+    assert.equal(detailsView(toHistoryEntry({
+      ...SINGLE_RAW,
+      legs: [{ ...SINGLE_RAW.legs[0], settlementCode: 4 }],
+    })).legs[0]?.status, 'lost');
   });
 
   it('only treats a real cashout amount as sale-eligible', () => {
