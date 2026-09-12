@@ -23,6 +23,24 @@ export function authBackView(view: AuthView): AuthView {
   return 'login';
 }
 
+export const ONE_CLICK_LOGIN_NOTICE = 'Аккаунт создан. Войдите по ID и сохранённому паролю.';
+
+export type OneClickContinuePlan =
+  | { kind: 'enter-app' }
+  | { kind: 'login-with-id'; playerId: string; notice: string };
+
+export function planOneClickContinue(input: {
+  authenticated: boolean;
+  playerId: string;
+}): OneClickContinuePlan {
+  if (input.authenticated) return { kind: 'enter-app' };
+  return {
+    kind: 'login-with-id',
+    playerId: input.playerId,
+    notice: ONE_CLICK_LOGIN_NOTICE,
+  };
+}
+
 export function oneClickCopyAllText(playerId: string, password: string): string {
   return `ID игрока: ${playerId}\nПароль: ${password}`;
 }

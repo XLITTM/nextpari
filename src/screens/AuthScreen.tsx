@@ -9,7 +9,7 @@ import {
   validatePlayerPassword,
   validatePlayerPhone,
 } from '../lib/playerAuth';
-import { authBackView, authShowsBack, oneClickCopyAllText, type AuthView } from '../lib/authUiFlow';
+import { authBackView, authShowsBack, oneClickCopyAllText, planOneClickContinue, type AuthView } from '../lib/authUiFlow';
 import { AuthHero, AUTH_SPORTS_BG } from '../components/auth/AuthHero';
 import { AuthSheet } from '../components/auth/AuthSheet';
 import { AuthInput } from '../components/auth/AuthInput';
@@ -156,6 +156,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [busy, setBusy] = useState(false);
   const [issuedId, setIssuedId] = useState('');
   const [issuedSecret, setIssuedSecret] = useState('');
+  const [issuedAuthenticated, setIssuedAuthenticated] = useState(false);
   const [copied, setCopied] = useState('');
 
   const go = (next: AuthView) => {
@@ -165,6 +166,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
     if (next !== 'register-one-click-result') {
       setIssuedId('');
       setIssuedSecret('');
+      setIssuedAuthenticated(false);
     }
     setView(next);
   };
@@ -264,12 +266,35 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       const result = await signUpPlayerOneClick({ ageConfirmed: true });
       setIssuedId(result.playerId);
       setIssuedSecret(result.generatedPassword);
+      setIssuedAuthenticated(result.authenticated);
       setView('register-one-click-result');
     } catch (err) {
       setError(playerFacingAuthError(err instanceof Error ? err.message : 'registration failed'));
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleOneClickContinue = async () => {
+    const plan = planOneClickContinue({
+      authenticated: issuedAuthenticated,
+      playerId: issuedId,
+    });
+    setIssuedSecret('');
+    setIssuedAuthenticated(false);
+    setCopied('');
+    if (plan.kind === 'enter-app') {
+      setIssuedId('');
+      await onAuthSuccess();
+      return;
+    }
+    setLoginMode('identifier');
+    setLoginIdentifier(plan.playerId);
+    setLoginPassword('');
+    setIssuedId('');
+    setError('');
+    setView('login');
+    setNotice(plan.notice);
   };
 
   const copyText = async (key: string, value: string) => {
@@ -460,7 +485,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
               </button>
               <button
                 type="button"
-                onClick={() => { setIssuedSecret(''); void onAuthSuccess(); }}
+                onClick={() => { void handleOneClickContinue(); }}
                 className="flex h-[60px] w-full items-center justify-center rounded-[18px] bg-brand-600 text-[16px] font-extrabold text-white"
               >
                 Продолжить

@@ -14,6 +14,7 @@ import {
   signInPlayer,
   signOutPlayer,
   signUpPlayer,
+  signUpPlayerOneClick,
   validatePlayerEmail,
   validatePlayerPassword,
   validatePlayerPhone,
@@ -219,6 +220,39 @@ describe('player auth uses same-origin BFF', () => {
       assert.equal(path, '/api/player/auth/logout');
     } finally {
       restore();
+    }
+  });
+
+  it('one-click signup reports whether a real session exists', async () => {
+    const restoreSession = mockFetch(async () => jsonResponse(200, {
+      ...PLAYER_ME,
+      player: { publicId: '110790', email: '' },
+      oneClick: { playerId: '110790', password: 'generated-secret-1' },
+    }));
+    try {
+      const result = await signUpPlayerOneClick({ ageConfirmed: true });
+      assert.equal(result.playerId, '110790');
+      assert.equal(result.generatedPassword, 'generated-secret-1');
+      assert.equal(result.authenticated, true);
+      assert.equal(result.snapshot?.authenticated, true);
+    } finally {
+      restoreSession();
+    }
+
+    const restoreFallback = mockFetch(async () => jsonResponse(200, {
+      ok: true,
+      authenticated: false,
+      player: { publicId: '110790', email: '' },
+      oneClick: { playerId: '110790', password: 'generated-secret-2' },
+    }));
+    try {
+      const result = await signUpPlayerOneClick({ ageConfirmed: true });
+      assert.equal(result.playerId, '110790');
+      assert.equal(result.generatedPassword, 'generated-secret-2');
+      assert.equal(result.authenticated, false);
+      assert.equal(result.snapshot, null);
+    } finally {
+      restoreFallback();
     }
   });
 });
@@ -472,6 +506,13 @@ describe('new player profile onboarding', () => {
     assert.match(app, /refreshWallet/);
     assert.match(app, /refreshProfile/);
     assert.match(app, /await Promise\.all\(\[refreshWallet\(\), refreshProfile\(\)\]\)/);
+    assert.match(app, /const snapshot = await fetchPlayerMe\(\)/);
+    assert.match(app, /if \(!snapshot\?\.authenticated\)/);
+    assert.match(app, /setIsAuthenticated\(false\)/);
+    assert.match(app, /setIsAuthenticated\(true\)/);
+    const successFn = app.slice(app.indexOf('const handleAuthSuccess'), app.indexOf('const handleLogout'));
+    assert.ok(successFn.indexOf('fetchPlayerMe()') < successFn.indexOf('setIsAuthenticated(true)'));
+    assert.ok(successFn.indexOf('if (!snapshot?.authenticated)') < successFn.indexOf('setIsAuthenticated(true)'));
     assert.match(auth, /await onAuthSuccess\(\)/);
     assert.match(auth, /signInPlayer/);
     assert.match(auth, /signUpPlayer/);

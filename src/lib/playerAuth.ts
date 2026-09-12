@@ -411,6 +411,7 @@ export async function signUpPlayerOneClick(input: { ageConfirmed: boolean }) {
     snapshot,
     playerId,
     generatedPassword,
+    authenticated: snapshot?.authenticated === true,
   };
 }
 

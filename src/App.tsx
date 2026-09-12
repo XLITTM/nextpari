@@ -349,6 +349,11 @@ function AppContent() {
   const { refresh: refreshProfile, reset: resetProfile } = useProfile();
 
   const handleAuthSuccess = async () => {
+    const snapshot = await fetchPlayerMe();
+    if (!snapshot?.authenticated) {
+      setIsAuthenticated(false);
+      return;
+    }
     await Promise.all([refreshWallet(), refreshProfile()]);
     setIsAuthenticated(true);
     replaceScreen(screenFromPath());

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { authBackView, authShowsBack, oneClickCopyAllText, type AuthView } from './authUiFlow';
+import { authBackView, authShowsBack, oneClickCopyAllText, planOneClickContinue, ONE_CLICK_LOGIN_NOTICE, type AuthView } from './authUiFlow';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -42,7 +42,10 @@ describe('auth UI navigation', () => {
     assert.match(screen, /Телефон/);
     assert.match(screen, /Создать аккаунт/);
     assert.match(screen, /Скопировать всё/);
+    assert.match(screen, /handleOneClickContinue/);
+    assert.match(screen, /planOneClickContinue/);
     assert.match(screen, /await onAuthSuccess\(\)/);
+    assert.equal(screen.includes("setIssuedSecret(''); void onAuthSuccess()"), false);
     assert.match(screen, /Восстановление пароля скоро будет доступно/);
     assert.equal(screen.includes('publicId'), false);
     assert.equal(screen.includes('Math.random'), false);
@@ -56,5 +59,30 @@ describe('auth UI navigation', () => {
       oneClickCopyAllText('110790', 'ABC123'),
       'ID игрока: 110790\nПароль: ABC123',
     );
+  });
+
+  it('sends authenticated one-click players into the app', () => {
+    assert.deepEqual(
+      planOneClickContinue({ authenticated: true, playerId: '110790' }),
+      { kind: 'enter-app' },
+    );
+  });
+
+  it('sends unauthenticated one-click players back to ID login without a password', () => {
+    const plan = planOneClickContinue({ authenticated: false, playerId: '110790' });
+    assert.deepEqual(plan, {
+      kind: 'login-with-id',
+      playerId: '110790',
+      notice: ONE_CLICK_LOGIN_NOTICE,
+    });
+    const screen = readFileSync(join(here, '../screens/AuthScreen.tsx'), 'utf8');
+    assert.match(screen, /setLoginMode\('identifier'\)/);
+    assert.match(screen, /setLoginIdentifier\(plan\.playerId\)/);
+    assert.match(screen, /setLoginPassword\(''\)/);
+    assert.match(screen, /setIssuedSecret\(''\)/);
+    assert.equal(screen.includes('setLoginPassword(issuedSecret)'), false);
+    assert.equal(screen.includes('setLoginPassword(result.generatedPassword)'), false);
+    assert.match(screen, /if \(plan\.kind === 'enter-app'\)[\s\S]*await onAuthSuccess\(\)/);
+    assert.match(screen, /kind === 'enter-app'[\s\S]*return;[\s\S]*setLoginMode\('identifier'\)/);
   });
 });
