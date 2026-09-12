@@ -1,8 +1,8 @@
 import { create } from 'zustand';
-import type { BetsEvent } from '@/lib/betsapi';
-import { isClosedTimeStatus, isLineEvent, isLive, isUnixClock, laterClock } from '@/lib/betsapi';
-import type { ParsedMarket } from '@/lib/odds-parser';
-import { detectMatchSoundEvents } from '@/services/matchSoundService';
+import type { BetsEvent } from '../lib/betsapi';
+import { isClosedTimeStatus, isLineEvent, isLive, isUnixClock, laterClock } from '../lib/betsapi';
+import type { ParsedMarket } from '../lib/odds-parser';
+import { detectMatchSoundEvents } from '../services/matchSoundService';
 
 export interface EventState {
   event: BetsEvent;
