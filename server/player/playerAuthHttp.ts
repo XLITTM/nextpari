@@ -82,15 +82,13 @@ export async function handlePlayerAuthRequest(
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       const body = asRecord(parseJsonPayload(input.body));
-      return registerPlayerWithPassword(
-        ports,
-        {
-          email: String(body.email ?? ''),
-          password: String(body.password ?? ''),
-          phone: String(body.phone ?? ''),
-        },
-        secure,
-      );
+      return registerPlayerWithPassword(ports, {
+        method: String(body.method ?? ''),
+        email: String(body.email ?? ''),
+        password: String(body.password ?? ''),
+        phone: String(body.phone ?? ''),
+        ageConfirmed: body.ageConfirmed,
+      }, secure);
     }
     if (path === PLAYER_AUTH_LOGIN_PATH) {
       if (method !== 'POST') {
@@ -99,8 +97,13 @@ export async function handlePlayerAuthRequest(
       const body = asRecord(parseJsonPayload(input.body));
       return loginPlayerWithPassword(
         ports,
-        String(body.email ?? ''),
-        String(body.password ?? ''),
+        {
+          mode: String(body.mode ?? ''),
+          email: String(body.email ?? ''),
+          identifier: String(body.identifier ?? ''),
+          phone: String(body.phone ?? ''),
+          password: String(body.password ?? ''),
+        },
         secure,
       );
     }

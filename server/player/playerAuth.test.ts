@@ -171,7 +171,7 @@ describe('player same-origin auth gateway', () => {
       ports,
     );
     assert.equal(result.status, 400);
-    assert.equal(result.body.error, 'INVALID_EMAIL');
+    assert.equal(result.body.error, 'INVALID_PASSWORD');
     assert.deepEqual(ports.signIns, []);
   });
 
@@ -220,7 +220,7 @@ describe('player same-origin auth gateway', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD, phone: PLAYER_PHONE },
+        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true },
       },
       ports,
     );
@@ -228,7 +228,7 @@ describe('player same-origin auth gateway', () => {
     assert.deepEqual(ports.signUps, [{
       email: PLAYER_EMAIL,
       password: PLAYER_PASSWORD,
-      phone: PLAYER_PHONE,
+      phone: '',
     }]);
     assert.deepEqual(ports.ensureTokens, [ACCESS]);
     const wallet = result.body.wallet as Record<string, unknown>;
@@ -242,7 +242,7 @@ describe('player same-origin auth gateway', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD, phone: PLAYER_PHONE },
+        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true },
       },
       createPlayerPorts({ signUpError: 'confirm' }),
     );
