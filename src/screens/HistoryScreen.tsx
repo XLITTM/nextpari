@@ -1,15 +1,16 @@
 import { useMemo, useState } from 'react';
-import { Calendar, Plus, Tag, Ticket, TrendingUp } from 'lucide-react';
-import type { BetHistoryEntry, Screen } from '../types';
+import { Calendar, ChevronRight, Plus, Tag, Ticket, TrendingUp } from 'lucide-react';
+import type { Screen } from '../types';
 import { useBetHistory } from '../BetHistoryContext';
 import {
   filterHistoryEntries,
   formatStakeMoney,
-  hasRealCashout,
-  historyCardView,
   historyPeriodStats,
-  playerStatusClass,
 } from '../lib/betHistoryView';
+import { historyPeriodLabel } from '../lib/historyPeriodFilter';
+import { setHistoryPeriodSelection, useHistoryPeriodSelection } from '../lib/historyPeriodStore';
+import { BetHistoryCard } from '../components/history/BetHistoryCard';
+import { HistoryPeriodSheet } from '../components/history/HistoryPeriodSheet';
 
 interface HistoryScreenProps {
   onNavigate: (screen: Screen) => void;
@@ -18,150 +19,137 @@ interface HistoryScreenProps {
 
 export function HistoryScreen({ onNavigate, balance }: HistoryScreenProps) {
   const { entries, loading } = useBetHistory();
-  const [period, setPeriod] = useState<'all' | '30d'>('all');
+  const period = useHistoryPeriodSelection();
   const [saleOnly, setSaleOnly] = useState(false);
-  const canFilterSale = entries.some(hasRealCashout);
+  const [periodOpen, setPeriodOpen] = useState(false);
 
   const visible = useMemo(
-    () => filterHistoryEntries(entries, period, saleOnly && canFilterSale),
-    [entries, period, saleOnly, canFilterSale],
+    () => filterHistoryEntries(entries, period, saleOnly),
+    [entries, period, saleOnly],
   );
   const stats = historyPeriodStats(visible);
   const filteredEmpty = !loading && entries.length > 0 && visible.length === 0;
+  const periodLabel = historyPeriodLabel(period);
 
   return (
-    <div className="min-h-full bg-gray-100 dark:bg-gray-900 pb-28">
-      <header className="bg-white dark:bg-[#1e293b] px-4 h-12 flex items-center">
-        <h1 className="text-base font-bold text-gray-900 dark:text-white truncate">История ставок</h1>
+    <div className="np-page min-h-full px-3.5 pb-[calc(6.75rem+env(safe-area-inset-bottom))] pt-3">
+      <header className="flex h-12 items-center justify-center px-1">
+        <h1 className="text-[20px] font-extrabold tracking-tight text-[var(--np-text)]">История ставок</h1>
       </header>
 
-      <div className="bg-white dark:bg-[#1e293b] px-4 pb-3">
-        <div className="flex items-end justify-between gap-3">
+      <section
+        className="np-panel np-balance mt-2 overflow-hidden px-4 py-4"
+        style={{
+          background:
+            'linear-gradient(180deg, var(--np-surface-mint) 0%, var(--np-surface-elevated) 42%, var(--np-surface) 100%)',
+        }}
+      >
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[11px] text-gray-500 font-medium">Основной</p>
-            <p className="mt-0.5 text-xl font-extrabold text-gray-900 dark:text-white tabular-nums leading-none">
+            <p className="text-[12px] font-medium text-[var(--np-text-secondary)]">Основной</p>
+            <p className="mt-1 text-[28px] font-black leading-none tabular-nums text-[var(--np-text)]">
               {balance.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TMTM
             </p>
           </div>
           <button
             type="button"
             onClick={() => onNavigate({ name: 'wallet' })}
-            className="shrink-0 bg-gray-800 text-white rounded-xl px-3 py-1.5 text-sm font-medium flex items-center gap-1 active:scale-95 transition-transform"
+            className="np-press shrink-0 rounded-2xl bg-[var(--np-accent)] px-4 py-2.5 text-[15px] font-extrabold text-[var(--np-accent-ink)] shadow-[var(--np-glow)]"
           >
-            <Plus className="w-4 h-4" strokeWidth={2.4} />
-            Пополнить
+            <span className="inline-flex items-center gap-1">
+              <Plus className="h-4 w-4" strokeWidth={2.8} />
+              Пополнить
+            </span>
           </button>
         </div>
+      </section>
 
-        <div className="flex gap-2 mt-3">
-          <button
-            type="button"
-            onClick={() => setPeriod((current) => (current === '30d' ? 'all' : '30d'))}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#0f172a] text-xs font-medium ${
-              period === '30d' ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5" strokeWidth={1.8} />
-            {period === '30d' ? 'За 30 дней' : 'Все время'}
-          </button>
-          {canFilterSale && (
-            <button
-              type="button"
-              onClick={() => setSaleOnly((current) => !current)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-100 dark:bg-[#0f172a] text-xs font-medium ${
-                saleOnly ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-300'
-              }`}
-            >
-              <Tag className="w-3.5 h-3.5" strokeWidth={1.8} />
-              Продажа
-            </button>
-          )}
-        </div>
+      <div className="mt-3 grid grid-cols-2 gap-2.5">
+        <button
+          type="button"
+          onClick={() => setPeriodOpen(true)}
+          className="np-control np-press flex h-12 items-center justify-center gap-2 px-3 text-[14px] font-semibold text-[var(--np-text)]"
+        >
+          <Calendar className="h-4 w-4 shrink-0 text-[var(--np-accent)]" strokeWidth={2.2} />
+          <span className="truncate">{periodLabel}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setSaleOnly((current) => !current)}
+          className={`np-control np-press flex h-12 items-center justify-center gap-2 px-3 text-[14px] font-semibold ${
+            saleOnly ? 'text-[var(--np-text)]' : 'text-[var(--np-text-secondary)]'
+          }`}
+        >
+          <Tag className="h-4 w-4 text-[var(--np-accent)]" strokeWidth={2.2} />
+          Продажа
+        </button>
       </div>
 
-      <div className="w-full px-4 py-2.5">
-        <p className="text-sm font-semibold text-gray-900 dark:text-white">Статистика за период</p>
-        <p className="text-[11px] text-gray-500 mt-0.5 tabular-nums">
-          Ставок: {stats.count} · Сумма: {formatStakeMoney(stats.stakeTotal)}
-        </p>
+      <div className="np-card mt-3 flex items-center justify-between gap-3 px-4 py-3.5">
+        <div className="min-w-0">
+          <p className="text-[15px] font-bold text-[var(--np-text)]">Статистика за период</p>
+          <p className="mt-1 text-[12px] tabular-nums text-[var(--np-text-secondary)]">
+            Ставок: {stats.count} · {formatStakeMoney(stats.stakeTotal)}
+          </p>
+        </div>
+        <ChevronRight className="h-5 w-5 shrink-0 text-[var(--np-accent)]" strokeWidth={2.4} />
       </div>
 
       {loading && visible.length === 0 ? (
-        <div className="text-center py-16 text-sm font-bold text-gray-500">Загрузка...</div>
+        <div className="py-16 text-center text-sm font-bold text-[var(--np-text-secondary)]">Загрузка...</div>
       ) : visible.length > 0 ? (
-        <div className="px-3 space-y-2">
+        <div className="mt-3 flex flex-col gap-3">
           {visible.map((bet) => (
-            <HistoryItem
+            <BetHistoryCard
               key={bet.id}
               bet={bet}
               onOpen={() => onNavigate({ name: 'bet-details', betId: bet.id })}
             />
           ))}
         </div>
-      ) : filteredEmpty ? (
-        <p className="text-center py-16 text-sm font-bold text-gray-500">Нет ставок за выбранный период</p>
       ) : (
-        <EmptyState onNavigate={onNavigate} />
+        <EmptyState
+          onNavigate={onNavigate}
+          supportingText={
+            filteredEmpty
+              ? 'За выбранный период ставок нет.'
+              : 'Вы ещё не сделали ни одной ставки. Выберите матч и сделайте свой первый прогноз!'
+          }
+        />
       )}
+
+      <HistoryPeriodSheet
+        open={periodOpen}
+        value={period}
+        onApply={setHistoryPeriodSelection}
+        onClose={() => setPeriodOpen(false)}
+      />
     </div>
   );
 }
 
-function HistoryItem({
-  bet,
-  onOpen,
+function EmptyState({
+  onNavigate,
+  supportingText,
 }: {
-  bet: BetHistoryEntry;
-  onOpen: () => void;
+  onNavigate: (screen: Screen) => void;
+  supportingText: string;
 }) {
-  const view = historyCardView(bet);
-
-  return (
-    <article
-      className="bg-white dark:bg-[#1e293b] rounded-2xl px-3 py-2.5 shadow-sm cursor-pointer active:scale-[0.99] transition-transform"
-      onClick={onOpen}
-    >
-      <p className="text-[11px] text-gray-500 leading-none tabular-nums truncate">
-        {view.dateTime} · №{view.couponNo}
-      </p>
-      <p className="text-sm font-bold text-gray-900 dark:text-white mt-1">{view.typeLabel}</p>
-      <dl className="mt-1.5 flex flex-col gap-0.5">
-        <Row label="Коэффициент:" value={view.odds} />
-        <Row label="Ставка:" value={view.stake} />
-        <Row label="Возможный выигрыш:" value={view.potential} />
-        <div className="flex items-baseline justify-between gap-3">
-          <dt className="text-[11px] text-gray-400">Статус:</dt>
-          <dd className={`text-sm font-semibold ${playerStatusClass(view.status)}`}>{view.statusLabel}</dd>
-        </div>
-      </dl>
-    </article>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-[11px] text-gray-400">{label}</dt>
-      <dd className="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{value}</dd>
-    </div>
-  );
-}
-
-function EmptyState({ onNavigate }: { onNavigate: (screen: Screen) => void }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="w-20 h-20 rounded-2xl bg-white dark:bg-[#0f172a] flex items-center justify-center mb-5 shadow-sm">
-        <Ticket className="w-10 h-10 text-gray-400 dark:text-gray-500" strokeWidth={1.5} />
+      <div className="np-card mb-5 flex h-20 w-20 items-center justify-center">
+        <Ticket className="h-10 w-10 text-[var(--np-text-muted)]" strokeWidth={1.5} />
       </div>
-      <h3 className="text-base font-bold text-gray-900 dark:text-white mb-1.5">История ставок пуста</h3>
-      <p className="text-sm text-gray-600 dark:text-gray-200 mb-6 max-w-xs font-semibold">
-        Вы ещё не сделали ни одной ставки. Выберите матч и сделайте свой первый прогноз!
+      <h3 className="mb-1.5 text-base font-bold text-[var(--np-text)]">История ставок пуста</h3>
+      <p className="mb-6 max-w-xs text-sm font-semibold text-[var(--np-text-secondary)]">
+        {supportingText}
       </p>
       <button
+        type="button"
         onClick={() => onNavigate({ name: 'home' })}
-        className="bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm px-6 py-3 rounded-xl transition-all active:scale-[0.98] flex items-center gap-2"
+        className="np-press flex items-center gap-2 rounded-xl bg-[var(--np-accent)] px-6 py-3 text-sm font-bold text-[var(--np-accent-ink)]"
       >
-        <TrendingUp className="w-4 h-4" strokeWidth={2.5} />
+        <TrendingUp className="h-4 w-4" strokeWidth={2.5} />
         Сделать ставку
       </button>
     </div>

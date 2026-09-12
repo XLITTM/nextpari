@@ -1,4 +1,5 @@
 import type { BetDisplayStatus, BetEvent, BetHistoryEntry, BetStatus, SportId } from '../types';
+import { historyPeriodRange, type HistoryPeriodInput } from './historyPeriodFilter';
 
 const TECHNICAL_KEY = /^\d{5,}:\d*:/;
 const BARE_PROVIDER_ID = /^\d{6,}$/;
@@ -167,13 +168,41 @@ export function playerStatusLabel(status: BetDisplayStatus): string {
   return 'Принята';
 }
 
+export function detailsStatusLabel(status: BetDisplayStatus): string {
+  if (status === 'won') return 'Выплачена';
+  return playerStatusLabel(status);
+}
+
+export function legResultLabel(status: BetDisplayStatus | null | undefined): string {
+  if (status === 'won') return 'Выигрыш';
+  if (status === 'lost') return 'Проигрыш';
+  if (status === 'refund') return 'Возврат';
+  if (status === 'cancelled') return 'Отменена';
+  if (status === 'in_progress') return 'В процессе';
+  if (status === 'accepted') return 'Принята';
+  return '';
+}
+
+export function payoutRowLabel(status: BetDisplayStatus): string {
+  return status === 'won' ? 'Выигрыш:' : 'Возможный выигрыш:';
+}
+
 export function playerStatusClass(status: BetDisplayStatus): string {
-  if (status === 'won') return 'text-emerald-600 dark:text-emerald-400';
-  if (status === 'lost') return 'text-red-500';
-  if (status === 'refund') return 'text-amber-600 dark:text-amber-400';
-  if (status === 'cancelled') return 'text-gray-500';
-  if (status === 'in_progress') return 'text-gray-700 dark:text-gray-200';
-  return 'text-emerald-600 dark:text-emerald-400';
+  if (status === 'lost' || status === 'cancelled') return 'text-[var(--np-danger)]';
+  if (status === 'refund') return 'text-[var(--np-info)]';
+  if (status === 'in_progress') return 'text-[var(--np-text-secondary)]';
+  return 'text-[var(--np-success)]';
+}
+
+export function formatLegMarketLine(market: string, selection: string, line?: string): string {
+  const marketText = String(market || '').trim();
+  const selectionText = String(selection || '').trim();
+  const lineText = String(line || '').trim();
+  const withLine =
+    lineText && !marketText.includes(lineText) && !selectionText.includes(lineText)
+      ? `${marketText}. (${lineText}) ${selectionText}`
+      : `${marketText}. ${selectionText}`;
+  return withLine.replace(/\s+/g, ' ').replace(/^[\.\s]+|[\.\s]+$/g, '').trim();
 }
 
 export function legStatus(event: BetEvent): BetDisplayStatus | null {
@@ -191,10 +220,16 @@ export function isLegSettled(event: BetEvent): boolean {
   return code != null && code !== 0;
 }
 
+export function isExpressBet(entry: Pick<BetHistoryEntry, 'type' | 'events'>): boolean {
+  const type = String(entry.type ?? '').trim().toLowerCase();
+  if (type === 'express') return true;
+  if (type === 'single') return false;
+  // Fallback only when the existing model has no canonical type.
+  return Array.isArray(entry.events) && entry.events.length > 1;
+}
+
 export function betTypeLabel(entry: Pick<BetHistoryEntry, 'type' | 'events'>): string {
-  const count = entry.events.length;
-  if (entry.type === 'express' || count > 1) return `Экспресс ${count}`;
-  return 'Ординар';
+  return isExpressBet(entry) ? 'Экспресс' : 'Одиночная';
 }
 
 export function expressProgress(entry: Pick<BetHistoryEntry, 'type' | 'events'>): { total: number; completed: number; supported: boolean } {
@@ -236,17 +271,18 @@ export function hasRealCashout(entry: Pick<BetHistoryEntry, 'cashout'>): boolean
 
 export function filterHistoryEntries(
   entries: BetHistoryEntry[],
-  period: 'all' | '30d',
+  period: HistoryPeriodInput,
   saleOnly: boolean,
   now = Date.now(),
 ): BetHistoryEntry[] {
-  const cutoff = now - 30 * 24 * 60 * 60 * 1000;
+  const range = historyPeriodRange(period, now);
   return entries.filter((entry) => {
     if (saleOnly && !hasRealCashout(entry)) return false;
-    if (period === 'all') return true;
+    if (!range) return true;
+    if (!Number.isFinite(range.startMs) || !Number.isFinite(range.endMs)) return false;
     const ts = parseBetTimestamp(entry.date);
     if (ts == null) return false;
-    return ts >= cutoff;
+    return ts >= range.startMs && ts <= range.endMs;
   });
 }
 
@@ -354,6 +390,8 @@ export interface HistoryCardView {
   dateTime: string;
   couponNo: string;
   typeLabel: string;
+  isExpress: boolean;
+  legCount: number;
   odds: string;
   stake: string;
   potential: string;
@@ -365,10 +403,13 @@ export interface HistoryCardView {
 export function historyCardView(entry: BetHistoryEntry): HistoryCardView {
   const status = playerStatus(entry);
   const dateTime = formatBetDateTime(entry.date) || String(entry.date ?? '');
+  const isExpress = isExpressBet(entry);
   const view: HistoryCardView = {
     dateTime,
     couponNo: couponDisplayNumber(entry.id, entry.ticketCode),
     typeLabel: betTypeLabel(entry),
+    isExpress,
+    legCount: entry.events.length,
     odds: formatHistoryOdds(entry.totalOdds),
     stake: formatStakeMoney(entry.amount),
     potential: formatStakeMoney(potentialWin(entry)),
@@ -380,11 +421,12 @@ export function historyCardView(entry: BetHistoryEntry): HistoryCardView {
     view.dateTime,
     `№${view.couponNo}`,
     view.typeLabel,
+    isExpress ? String(view.legCount) : '',
     view.odds,
     view.stake,
     view.potential,
     view.statusLabel,
-  ].join(' ');
+  ].filter(Boolean).join(' ');
   return view;
 }
 
@@ -392,6 +434,7 @@ export interface DetailsLegView {
   sport?: SportId;
   country?: string;
   league?: string;
+  startTime?: string;
   isLive: boolean;
   score?: string;
   homeTeam: string;
@@ -400,6 +443,7 @@ export interface DetailsLegView {
   awayLogo?: string;
   market: string;
   selection: string;
+  marketLine: string;
   odds: string;
   status: BetDisplayStatus | null;
   statusLabel?: string;
@@ -415,6 +459,7 @@ export interface DetailsView {
   odds: string;
   stake: string;
   potential: string;
+  payoutLabel: string;
   status: BetDisplayStatus;
   statusLabel: string;
   legs: DetailsLegView[];
@@ -432,13 +477,14 @@ export interface HistoryLiveOverlay {
   country?: string;
   league?: string;
   sport?: SportId;
+  startTime?: number;
 }
 
 export function detailsView(entry: BetHistoryEntry, live?: Record<string, HistoryLiveOverlay>): DetailsView {
   const status = playerStatus(entry);
   const progress = expressProgress(entry);
-  const isExpress = entry.type === 'express' || progress.total > 1;
-  const typeLabel = isExpress ? 'Экспресс' : 'Ординар';
+  const isExpress = isExpressBet(entry);
+  const typeLabel = betTypeLabel(entry);
   const legs = entry.events.map((event) => {
     const overlay = event.matchId ? live?.[event.matchId] : undefined;
     const teams = parseTeamNames(event.matchLabel);
@@ -448,21 +494,26 @@ export function detailsView(entry: BetHistoryEntry, live?: Record<string, Histor
     const genuinelyLive = Boolean(overlay?.isLive ?? event.isLive);
     const leg = genuinelyLive ? 'in_progress' : legStatus({ ...event, isLive: false });
     const showSettlement = !genuinelyLive && leg != null;
+    const market = friendlyMarketName(event);
+    const selection = friendlySelectionName(event);
+    const startTime = formatBetDateTime(overlay?.startTime ?? event.startTime);
     return {
       sport: overlay?.sport || event.sport,
       country: overlay?.country || event.country,
       league: overlay?.league || event.league,
+      startTime: startTime || undefined,
       isLive: genuinelyLive,
       score,
       homeTeam: home,
       awayTeam: away,
       homeLogo: overlay?.homeLogo || event.homeLogo,
       awayLogo: overlay?.awayLogo || event.awayLogo,
-      market: friendlyMarketName(event),
-      selection: friendlySelectionName(event),
+      market,
+      selection,
+      marketLine: formatLegMarketLine(market, selection, event.line),
       odds: formatHistoryOdds(event.odds),
       status: showSettlement ? leg : genuinelyLive ? 'in_progress' : null,
-      statusLabel: showSettlement && leg ? playerStatusLabel(leg) : undefined,
+      statusLabel: showSettlement && leg ? legResultLabel(leg) : genuinelyLive ? legResultLabel('in_progress') : undefined,
     };
   });
   const view: DetailsView = {
@@ -475,8 +526,9 @@ export function detailsView(entry: BetHistoryEntry, live?: Record<string, Histor
     odds: formatHistoryOdds(entry.totalOdds),
     stake: formatStakeMoney(entry.amount),
     potential: formatStakeMoney(potentialWin(entry)),
+    payoutLabel: payoutRowLabel(status),
     status,
-    statusLabel: playerStatusLabel(status),
+    statusLabel: detailsStatusLabel(status),
     legs,
     visibleText: '',
   };
@@ -496,6 +548,7 @@ export function detailsView(entry: BetHistoryEntry, live?: Record<string, Histor
       leg.awayTeam,
       leg.market,
       leg.selection,
+      leg.marketLine,
       leg.odds,
       leg.statusLabel,
       leg.score,

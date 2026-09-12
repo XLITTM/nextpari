@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
+  betTypeLabel,
   detailsView,
   filterHistoryEntries,
   formatBetDateTime,
@@ -8,6 +9,7 @@ import {
   historyCardView,
   historyPeriodStats,
   historyViewHasTechnicalIds,
+  isExpressBet,
   playerStatus,
   playerStatusLabel,
   toHistoryEntry,
@@ -70,7 +72,7 @@ describe('bet history presentation', () => {
   it('renders a compact single bet history card', () => {
     const entry = toHistoryEntry(SINGLE_RAW);
     const card = historyCardView(entry);
-    assert.equal(card.typeLabel, 'Ординар');
+    assert.equal(card.typeLabel, 'Одиночная');
     assert.equal(card.odds, '2.20');
     assert.match(card.stake, /50/);
     assert.match(card.potential, /109/);
@@ -82,7 +84,8 @@ describe('bet history presentation', () => {
   it('renders an express history card with leg count', () => {
     const entry = toHistoryEntry(EXPRESS_RAW);
     const card = historyCardView(entry);
-    assert.equal(card.typeLabel, 'Экспресс 17');
+    assert.equal(card.typeLabel, 'Экспресс');
+    assert.equal(card.legCount, 17);
     assert.equal(entry.events.length, 17);
     assert.equal(historyViewHasTechnicalIds(card.visibleText), false);
   });
@@ -111,7 +114,7 @@ describe('bet history presentation', () => {
 
   it('renders friendly single details and all express legs', () => {
     const single = detailsView(toHistoryEntry(SINGLE_RAW));
-    assert.equal(single.typeLabel, 'Ординар');
+    assert.equal(single.typeLabel, 'Одиночная');
     assert.equal(single.legs.length, 1);
     const express = detailsView(toHistoryEntry(EXPRESS_RAW));
     assert.equal(express.typeLabel, 'Экспресс');
@@ -119,6 +122,48 @@ describe('bet history presentation', () => {
     assert.equal(express.progressLabel, 'Завершено: 3 из 17');
     assert.equal(express.legs.length, 17);
     assert.equal(express.legs.every((leg) => !historyViewHasTechnicalIds(leg.market + leg.selection)), true);
+  });
+
+  it('labels a single bet Одиночная from canonical type, not from a screenshot string', () => {
+    const entry = toHistoryEntry(SINGLE_RAW);
+    assert.equal(entry.type, 'single');
+    assert.equal(isExpressBet(entry), false);
+    assert.equal(betTypeLabel(entry), 'Одиночная');
+    assert.equal(historyCardView(entry).typeLabel, 'Одиночная');
+    assert.equal(detailsView(entry).typeLabel, 'Одиночная');
+  });
+
+  it('labels an express bet Экспресс from canonical type even if only one leg is present', () => {
+    const entry = toHistoryEntry({ ...EXPRESS_RAW, legs: EXPRESS_RAW.legs.slice(0, 1) });
+    assert.equal(entry.type, 'express');
+    assert.equal(entry.events.length, 1);
+    assert.equal(isExpressBet(entry), true);
+    assert.equal(betTypeLabel(entry), 'Экспресс');
+    assert.equal(historyCardView(entry).typeLabel, 'Экспресс');
+    assert.equal(detailsView(entry).typeLabel, 'Экспресс');
+  });
+
+  it('does not relabel a canonical single as express just because extra legs exist', () => {
+    const entry = { ...toHistoryEntry(SINGLE_RAW), type: 'single' as const, events: toHistoryEntry(EXPRESS_RAW).events };
+    assert.equal(entry.type, 'single');
+    assert.equal(entry.events.length > 1, true);
+    assert.equal(betTypeLabel(entry), 'Одиночная');
+    assert.equal(historyCardView(entry).typeLabel, 'Одиночная');
+    assert.equal(detailsView(entry).typeLabel, 'Одиночная');
+  });
+
+  it('falls back to leg count only when canonical type is missing', () => {
+    const untitledExpress = { type: undefined as unknown as 'single', events: toHistoryEntry(EXPRESS_RAW).events };
+    const untitledSingle = { type: undefined as unknown as 'single', events: toHistoryEntry(SINGLE_RAW).events };
+    assert.equal(betTypeLabel(untitledExpress), 'Экспресс');
+    assert.equal(betTypeLabel(untitledSingle), 'Одиночная');
+  });
+
+  it('renders every express leg on the detail view', () => {
+    const express = detailsView(toHistoryEntry(EXPRESS_RAW));
+    assert.equal(express.typeLabel, 'Экспресс');
+    assert.equal(express.legs.length, EXPRESS_RAW.legs.length);
+    assert.equal(express.legs.length, 17);
   });
 
   it('calculates statistics count and total stake from loaded history', () => {
