@@ -54,6 +54,10 @@ describe('auth UI navigation', () => {
     assert.match(hero, /\/logo\.png/);
     assert.match(hero, /alt="NextPari"/);
     assert.match(hero, /Ставки на спорт онлайн/);
+    assert.match(hero, /items-center/);
+    assert.match(hero, /justify-center/);
+    assert.match(hero, /absolute left-4/);
+    assert.match(hero, /h-20 w-20/);
     assert.equal(/<h1[\s\S]*?>[\s\S]*NextPari[\s\S]*<\/h1>/.test(hero), false);
     assert.match(screen, /view === 'login'[\s\S]*100svh/);
     assert.match(screen, /overflow-y-auto/);
