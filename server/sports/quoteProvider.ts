@@ -18,12 +18,15 @@ export function normalizeSportsProviderId(value: unknown): string {
 
 /**
  * Live quote source for the generic place path.
- * Missing/blank ids default to LSports for backward compatibility.
+ * Missing/blank ids fail closed. Explicit lsports uses the LSports adapter.
  * Any other explicit id without a registered adapter fails closed.
  */
 export function resolveSportsQuoteProvider(providerId?: string): SportsQuoteProvider {
   const id = normalizeSportsProviderId(providerId);
-  if (!id || id === SPORTS_PROVIDER_LSPORTS) {
+  if (!id) {
+    throw new SportsProviderUnsupportedError();
+  }
+  if (id === SPORTS_PROVIDER_LSPORTS) {
     return createLsportsHttpQuoteProvider();
   }
   throw new SportsProviderUnsupportedError();
