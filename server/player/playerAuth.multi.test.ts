@@ -89,7 +89,7 @@ function createPorts(init?: {
       deletedUsers.push(id);
     },
     generateOneClickPassword() {
-      const value = `clk_${generated.length}_${generateOneClickPassword()}`;
+      const value = generateOneClickPassword();
       generated.push(value);
       return value;
     },
@@ -325,7 +325,8 @@ describe('multi-identifier player auth', () => {
     assert.equal(created.status, 200);
     const oneClick = created.body.oneClick as { playerId: string; password: string };
     assert.equal(oneClick.playerId, '110790');
-    assert.ok(oneClick.password.length >= 16);
+    assert.equal(oneClick.password.length, 9);
+    assert.match(oneClick.password, /^[A-Za-z0-9]+$/);
     assert.equal(created.body.profile && (created.body.profile as { email: string }).email, '');
     assert.equal(JSON.stringify(created.body).includes('generatedPassword'), false);
     assert.equal(JSON.stringify(created.body.player).includes(oneClick.password), false);
@@ -361,10 +362,13 @@ describe('multi-identifier player auth', () => {
     const first = generateOneClickPassword();
     const second = generateOneClickPassword();
     assert.notEqual(first, second);
-    assert.ok(first.length >= 16);
+    assert.equal(first.length, 9);
+    assert.equal(second.length, 9);
+    assert.match(first, /^[A-Za-z0-9]+$/);
+    assert.match(second, /^[A-Za-z0-9]+$/);
     const source = readFileSync(join(root, 'server/auth/oneClickPassword.ts'), 'utf8');
     assert.equal(source.includes('Math.random'), false);
-    assert.match(source, /randomBytes/);
+    assert.match(source, /randomInt/);
   });
 
   it('phone register then phone login uses the same player', async () => {
