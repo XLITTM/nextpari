@@ -136,7 +136,7 @@ describe('player auth uses same-origin BFF', () => {
       return jsonResponse(200, PLAYER_ME);
     });
     try {
-      await assert.rejects(() => signInPlayer('a', 'a'), /invalid email/);
+      await assert.rejects(() => signInPlayer('a', 'a'), /password too short|invalid email|invalid credentials/);
       assert.equal(called, false);
     } finally {
       restore();
@@ -190,15 +190,16 @@ describe('player auth uses same-origin BFF', () => {
       const result = await signUpPlayer({
         email: 'new@nextpari.test',
         password: 'password1',
-        phone: '+99365123456',
+        ageConfirmed: true,
       });
       assert.equal(result.needsEmailConfirmation, true);
       assert.equal(result.session, null);
       assert.equal(calls[0]?.url, '/api/player/auth/register');
       assert.deepEqual(calls[0]?.body, {
+        method: 'email',
         email: 'new@nextpari.test',
         password: 'password1',
-        phone: '+99365123456',
+        ageConfirmed: true,
       });
     } finally {
       restore();

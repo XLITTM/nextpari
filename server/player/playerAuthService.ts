@@ -7,13 +7,22 @@ import {
   serializePlayerCookies,
 } from './playerCookies.js';
 import {
+  parseLoginPlayerId,
   normalizePlayerPhone,
   parsePlayerProfileFields,
+  requireAgeConfirmed,
   validatePlayerEmail,
   validatePlayerPassword,
   validatePlayerPhone,
   type PlayerProfileFields,
 } from './playerValidators.js';
+import { generateOneClickPassword, publicAuthEmail } from '../auth/oneClickPassword.js';
+import {
+  claimPlayerLoginPhone,
+  createManagedPasswordUser,
+  deleteManagedAuthUser,
+  resolvePlayerLoginEmail,
+} from '../auth/playerIdentityAdmin.js';
 
 export interface PlayerAuthTokens {
   accessToken: string;
@@ -58,6 +67,21 @@ export interface PlayerOwnWallet {
 export interface PlayerAuthGatewayPorts {
   signInWithPassword: (email: string, password: string) => Promise<PlayerAuthTokens>;
   signUp: (email: string, password: string, phone: string) => Promise<PlayerAuthTokens>;
+  resolveLoginEmail?: (kind: 'public_id' | 'phone', value: string) => Promise<{
+    ok: true;
+    email: string;
+  } | {
+    ok: false;
+    reason: 'missing' | 'ambiguous';
+  }>;
+  createManagedPasswordUser?: (input: {
+    password: string;
+    phone?: string;
+    metadata?: Record<string, unknown>;
+  }) => Promise<{ id: string; email: string }>;
+  claimLoginPhone?: (authUserId: string, phone: string) => Promise<void>;
+  deleteManagedAuthUser?: (id: string) => Promise<void>;
+  generateOneClickPassword?: () => string;
   refreshSession: (refreshToken: string) => Promise<PlayerAuthTokens>;
   getAuthUser: (accessToken: string) => Promise<PlayerAuthUser>;
   ensurePlayerAccount: (accessToken: string) => Promise<PlayerAccountProvision>;
@@ -96,8 +120,11 @@ function playerAuthError(err: unknown): StaffOnboardingError {
   if (code === 'STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER') {
     return staffError(code, 403);
   }
-  if (code === 'EMAIL_CONFIRMATION_REQUIRED') {
-    return staffError(code, 409);
+  if (code === 'EMAIL_CONFIRMATION_REQUIRED' || code === 'REGISTRATION_FAILED' || code === 'PHONE_TAKEN') {
+    return staffError(code === 'PHONE_TAKEN' ? 'REGISTRATION_FAILED' : code, 409);
+  }
+  if (code === 'AGE_REQUIRED' || code === 'INVALID_PHONE') {
+    return staffError(code, 400);
   }
   if (code === 'JWT_INVALID' || code === 'JWT_REQUIRED' || code === 'AUTH_REQUIRED') {
     return staffError(code, 401);
@@ -131,9 +158,9 @@ export function publicProfileFromUser(user: PlayerAuthUser): PlayerSafeProfile {
     birthDate: metaText(metadata, 'birthDate', 'birth_date'),
     passport: metaText(metadata, 'passport'),
     phone: String(user.phone ?? '').trim() || metaText(metadata, 'phone'),
-    email: String(user.email ?? '').trim(),
+    email: publicAuthEmail(String(user.email ?? '').trim()),
     phoneVerified: user.phoneConfirmed === true,
-    emailVerified: user.emailConfirmed === true,
+    emailVerified: user.emailConfirmed === true && Boolean(publicAuthEmail(String(user.email ?? ''))),
   };
 }
 
@@ -163,61 +190,186 @@ function publicPlayerSnapshot(input: {
   };
 }
 
+function snapshotPublicId(value: string | undefined, fallback = ''): string {
+  return parseLoginPlayerId(value ?? '') ?? parseLoginPlayerId(fallback) ?? '';
+}
+
 async function snapshotFromAccessToken(
   ports: PlayerAuthGatewayPorts,
   accessToken: string,
 ): Promise<Record<string, unknown>> {
-  const user = await ports.getAuthUser(accessToken);
-  if (!user.id) {
-    throw staffError('AUTH_REQUIRED', 401);
+  const boot = await bootstrapPlayerSession(ports, { accessToken, refreshToken: '' }, false);
+  if (boot.result.status !== 200 || !boot.result.body.ok) {
+    throw staffError(String(boot.result.body.error ?? 'WALLET_UNAVAILABLE'), boot.result.status || 503);
   }
-  const provision = await ports.ensurePlayerAccount(accessToken);
-  const publicId = provision.publicId.replace(/\D/g, '');
-  if (!provision.walletId || !publicId) {
-    throw staffError('WALLET_UNAVAILABLE', 503);
+  return boot.result.body;
+}
+
+type PlayerSessionBootstrap = {
+  provisioned: boolean;
+  publicId: string;
+  result: PlayerAuthHttpResult;
+};
+
+async function bootstrapPlayerSession(
+  ports: PlayerAuthGatewayPorts,
+  tokens: PlayerAuthTokens,
+  secure: boolean,
+): Promise<PlayerSessionBootstrap> {
+  let provisioned = false;
+  let publicId = '';
+  try {
+    const user = await ports.getAuthUser(tokens.accessToken);
+    if (!user.id) {
+      throw staffError('AUTH_REQUIRED', 401);
+    }
+    const provision = await ports.ensurePlayerAccount(tokens.accessToken);
+    publicId = parseLoginPlayerId(provision.publicId) ?? '';
+    if (!provision.walletId || !publicId) {
+      throw staffError('WALLET_UNAVAILABLE', 503);
+    }
+    provisioned = true;
+
+    const own = await ports.loadOwnWallet(tokens.accessToken, provision.walletId);
+    const tableBalance = Number(own.balance);
+    const rpcBalance = Number(provision.legacyBalance);
+    const balance = Number.isFinite(tableBalance)
+      ? tableBalance
+      : Number.isFinite(rpcBalance)
+        ? rpcBalance
+        : NaN;
+    if (!Number.isFinite(balance)) {
+      throw staffError('WALLET_UNAVAILABLE', 503);
+    }
+    const snapshotId = snapshotPublicId(own.publicId, publicId) || publicId;
+    return {
+      provisioned: true,
+      publicId: snapshotId,
+      result: {
+        status: 200,
+        body: publicPlayerSnapshot({
+          email: publicAuthEmail(user.email),
+          publicId: snapshotId,
+          balance,
+          currency: own.currency || 'TMTM',
+          status: own.status || 'active',
+          migrationState: provision.migrationState,
+          profile: publicProfileFromUser(user),
+        }),
+        cookies: tokens.refreshToken
+          ? serializePlayerCookies(tokens.accessToken, tokens.refreshToken, secure)
+          : undefined,
+      },
+    };
+  } catch (err) {
+    const mapped = playerAuthError(err);
+    return {
+      provisioned,
+      publicId,
+      result: {
+        status: mapped.httpStatus,
+        body: { ok: false, authenticated: false, error: mapped.code },
+        cookies: clearPlayerCookies(secure),
+      },
+    };
   }
-  const own = await ports.loadOwnWallet(accessToken, provision.walletId);
-  const tableBalance = Number(own.balance);
-  const rpcBalance = Number(provision.legacyBalance);
-  const balance = Number.isFinite(tableBalance)
-    ? tableBalance
-    : Number.isFinite(rpcBalance)
-      ? rpcBalance
-      : NaN;
-  if (!Number.isFinite(balance)) {
-    throw staffError('WALLET_UNAVAILABLE', 503);
+}
+
+async function abandonCreatedAuthUser(
+  ports: PlayerAuthGatewayPorts,
+  created: { id: string } | null,
+): Promise<void> {
+  const id = created?.id?.trim() ?? '';
+  if (!id || !ports.deleteManagedAuthUser) return;
+  try {
+    await ports.deleteManagedAuthUser(id);
+  } catch {
+    /* best-effort cleanup of the user created by this request only */
   }
-  return publicPlayerSnapshot({
-    email: user.email,
-    publicId: own.publicId?.replace(/\D/g, '') || publicId,
-    balance,
-    currency: own.currency || 'TMTM',
-    status: own.status || 'active',
-    migrationState: provision.migrationState,
-    profile: publicProfileFromUser(user),
-  });
+}
+
+function registrationFailure(
+  err: unknown,
+  secure: boolean,
+): PlayerAuthHttpResult {
+  const mapped = playerAuthError(err);
+  return {
+    status: mapped.httpStatus === 401 ? 409 : mapped.httpStatus,
+    body: {
+      ok: false,
+      authenticated: false,
+      error: mapped.code === 'AUTH_FAILED' ? 'REGISTRATION_FAILED' : mapped.code,
+    },
+    cookies: clearPlayerCookies(secure),
+  };
+}
+
+function failedRegistrationResult(
+  result: PlayerAuthHttpResult,
+  secure: boolean,
+): PlayerAuthHttpResult {
+  const error = String(result.body.error ?? 'REGISTRATION_FAILED');
+  return {
+    status: result.status === 401 ? 409 : result.status,
+    body: {
+      ok: false,
+      authenticated: false,
+      error: error === 'AUTH_FAILED' ? 'REGISTRATION_FAILED' : error,
+    },
+    cookies: result.cookies ?? clearPlayerCookies(secure),
+  };
 }
 
 async function issuedSession(
   ports: PlayerAuthGatewayPorts,
   tokens: PlayerAuthTokens,
   secure: boolean,
+  extra: Record<string, unknown> = {},
 ): Promise<PlayerAuthHttpResult> {
-  try {
-    const body = await snapshotFromAccessToken(ports, tokens.accessToken);
+  const boot = await bootstrapPlayerSession(ports, tokens, secure);
+  if (boot.result.status === 200 && Object.keys(extra).length) {
+    boot.result.body = { ...boot.result.body, ...extra };
+  }
+  return boot.result;
+}
+
+async function finishManagedRegistration(
+  ports: PlayerAuthGatewayPorts,
+  created: { id: string; email: string },
+  tokens: PlayerAuthTokens,
+  secure: boolean,
+  oneClickPassword?: string,
+): Promise<{ provisioned: boolean; result: PlayerAuthHttpResult }> {
+  const boot = await bootstrapPlayerSession(ports, tokens, secure);
+  if (!boot.provisioned) {
+    await abandonCreatedAuthUser(ports, created);
+    return { provisioned: false, result: failedRegistrationResult(boot.result, secure) };
+  }
+  if (boot.result.status === 200) {
+    if (oneClickPassword) {
+      boot.result.body.oneClick = {
+        playerId: boot.publicId,
+        password: oneClickPassword,
+      };
+    }
+    return { provisioned: true, result: boot.result };
+  }
+  if (oneClickPassword && boot.publicId) {
     return {
-      status: 200,
-      body,
-      cookies: serializePlayerCookies(tokens.accessToken, tokens.refreshToken, secure),
-    };
-  } catch (err) {
-    const mapped = playerAuthError(err);
-    return {
-      status: mapped.httpStatus,
-      body: { ok: false, authenticated: false, error: mapped.code },
-      cookies: clearPlayerCookies(secure),
+      provisioned: true,
+      result: {
+        status: 200,
+        body: {
+          ok: true,
+          authenticated: false,
+          player: { publicId: boot.publicId, email: '' },
+          oneClick: { playerId: boot.publicId, password: oneClickPassword },
+        },
+        cookies: clearPlayerCookies(secure),
+      },
     };
   }
+  return { provisioned: true, result: failedRegistrationResult(boot.result, secure) };
 }
 
 export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
@@ -238,7 +390,7 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
       const { data, error } = await client.auth.signUp({
         email,
         password,
-        options: { data: { phone } },
+        options: phone ? { data: { phone } } : undefined,
       });
       if (error) {
         throw staffError('AUTH_FAILED', 401);
@@ -253,6 +405,11 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
       }
       return { accessToken, refreshToken };
     },
+    resolveLoginEmail: resolvePlayerLoginEmail,
+    createManagedPasswordUser,
+    claimLoginPhone: claimPlayerLoginPhone,
+    deleteManagedAuthUser,
+    generateOneClickPassword,
     async refreshSession(refreshToken) {
       const client = createAnonAuthClient(env.supabaseUrl, env.supabaseAnonKey);
       const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
@@ -373,55 +530,50 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
 
 export async function registerPlayerWithPassword(
   ports: PlayerAuthGatewayPorts,
-  input: { email: string; password: string; phone: string },
+  input: {
+    method?: string;
+    email?: string;
+    password?: string;
+    phone?: string;
+    ageConfirmed?: unknown;
+  },
   secure: boolean,
 ): Promise<PlayerAuthHttpResult> {
-  const email = input.email.trim();
-  const phone = normalizePlayerPhone(input.phone);
-  if (validatePlayerEmail(email)) {
+  if (!requireAgeConfirmed(input.ageConfirmed)) {
     return {
       status: 400,
-      body: { ok: false, authenticated: false, error: 'INVALID_EMAIL' },
-      cookies: clearPlayerCookies(secure),
-    };
-  }
-  if (validatePlayerPassword(input.password)) {
-    return {
-      status: 400,
-      body: { ok: false, authenticated: false, error: 'INVALID_PASSWORD' },
-      cookies: clearPlayerCookies(secure),
-    };
-  }
-  if (validatePlayerPhone(phone)) {
-    return {
-      status: 400,
-      body: { ok: false, authenticated: false, error: 'INVALID_PHONE' },
+      body: { ok: false, authenticated: false, error: 'AGE_REQUIRED' },
       cookies: clearPlayerCookies(secure),
     };
   }
 
-  let tokens: PlayerAuthTokens;
-  try {
-    tokens = await ports.signUp(email, input.password, phone);
-  } catch (err) {
-    const mapped = playerAuthError(err);
-    return {
-      status: mapped.httpStatus,
-      body: { ok: false, authenticated: false, error: mapped.code },
-      cookies: clearPlayerCookies(secure),
-    };
+  const method = String(input.method ?? '').trim().toLowerCase().replace(/-/g, '_')
+    || (String(input.email ?? '').trim() ? 'email' : '');
+
+  if (method === 'one_click') {
+    return registerOneClick(ports, secure);
   }
-  return issuedSession(ports, tokens, secure);
+  if (method === 'phone') {
+    return registerWithPhone(ports, input, secure);
+  }
+  if (method === 'email') {
+    return registerWithEmail(ports, input, secure);
+  }
+  return {
+    status: 400,
+    body: { ok: false, authenticated: false, error: 'INVALID_REQUEST' },
+    cookies: clearPlayerCookies(secure),
+  };
 }
 
-export async function loginPlayerWithPassword(
+async function registerWithEmail(
   ports: PlayerAuthGatewayPorts,
-  email: string,
-  password: string,
+  input: { email?: string; password?: string },
   secure: boolean,
 ): Promise<PlayerAuthHttpResult> {
-  const trimmed = email.trim();
-  if (validatePlayerEmail(trimmed)) {
+  const email = String(input.email ?? '').trim();
+  const password = String(input.password ?? '');
+  if (validatePlayerEmail(email)) {
     return {
       status: 400,
       body: { ok: false, authenticated: false, error: 'INVALID_EMAIL' },
@@ -435,16 +587,176 @@ export async function loginPlayerWithPassword(
       cookies: clearPlayerCookies(secure),
     };
   }
+  let tokens: PlayerAuthTokens;
+  try {
+    tokens = await ports.signUp(email, password, '');
+  } catch (err) {
+    const mapped = playerAuthError(err);
+    return {
+      status: mapped.httpStatus,
+      body: { ok: false, authenticated: false, error: mapped.code },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+  return issuedSession(ports, tokens, secure);
+}
+
+async function registerWithPhone(
+  ports: PlayerAuthGatewayPorts,
+  input: { phone?: string; password?: string },
+  secure: boolean,
+): Promise<PlayerAuthHttpResult> {
+  const phone = normalizePlayerPhone(String(input.phone ?? ''));
+  const password = String(input.password ?? '');
+  if (validatePlayerPhone(phone)) {
+    return {
+      status: 400,
+      body: { ok: false, authenticated: false, error: 'INVALID_PHONE' },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+  if (validatePlayerPassword(password)) {
+    return {
+      status: 400,
+      body: { ok: false, authenticated: false, error: 'INVALID_PASSWORD' },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+  if (!ports.createManagedPasswordUser || !ports.signInWithPassword) {
+    return {
+      status: 503,
+      body: { ok: false, authenticated: false, error: 'REGISTRATION_UNAVAILABLE' },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+  if (ports.resolveLoginEmail) {
+    const existing = await ports.resolveLoginEmail('phone', phone);
+    if (existing.ok || existing.reason === 'ambiguous') {
+      return {
+        status: 409,
+        body: { ok: false, authenticated: false, error: 'REGISTRATION_FAILED' },
+        cookies: clearPlayerCookies(secure),
+      };
+    }
+  }
+
+  let created: { id: string; email: string } | null = null;
+  let provisioned = false;
+  try {
+    created = await ports.createManagedPasswordUser({
+      password,
+      phone,
+      metadata: { phone, loginKind: 'phone' },
+    });
+    if (ports.claimLoginPhone) {
+      await ports.claimLoginPhone(created.id, phone);
+    }
+    const tokens = await ports.signInWithPassword(created.email, password);
+    const finished = await finishManagedRegistration(ports, created, tokens, secure);
+    provisioned = finished.provisioned;
+    return finished.result;
+  } catch (err) {
+    if (!provisioned) {
+      await abandonCreatedAuthUser(ports, created);
+    }
+    return registrationFailure(err, secure);
+  }
+}
+
+async function registerOneClick(
+  ports: PlayerAuthGatewayPorts,
+  secure: boolean,
+): Promise<PlayerAuthHttpResult> {
+  if (!ports.createManagedPasswordUser) {
+    return {
+      status: 503,
+      body: { ok: false, authenticated: false, error: 'REGISTRATION_UNAVAILABLE' },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+  const password = ports.generateOneClickPassword
+    ? ports.generateOneClickPassword()
+    : generateOneClickPassword();
+  let created: { id: string; email: string } | null = null;
+  let provisioned = false;
+  try {
+    created = await ports.createManagedPasswordUser({
+      password,
+      metadata: { loginKind: 'one_click' },
+    });
+    const tokens = await ports.signInWithPassword(created.email, password);
+    const finished = await finishManagedRegistration(ports, created, tokens, secure, password);
+    provisioned = finished.provisioned;
+    return finished.result;
+  } catch (err) {
+    if (!provisioned) {
+      await abandonCreatedAuthUser(ports, created);
+    }
+    return registrationFailure(err, secure);
+  }
+}
+
+function loginFailed(secure: boolean): PlayerAuthHttpResult {
+  return {
+    status: 401,
+    body: { ok: false, authenticated: false, error: 'AUTH_FAILED' },
+    cookies: clearPlayerCookies(secure),
+  };
+}
+
+export async function loginPlayerWithPassword(
+  ports: PlayerAuthGatewayPorts,
+  input: {
+    mode?: string;
+    email?: string;
+    identifier?: string;
+    phone?: string;
+    password?: string;
+  },
+  secure: boolean,
+): Promise<PlayerAuthHttpResult> {
+  const password = String(input.password ?? '');
+  if (validatePlayerPassword(password)) {
+    return {
+      status: 400,
+      body: { ok: false, authenticated: false, error: 'INVALID_PASSWORD' },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+
+  const mode = String(input.mode ?? '').trim().toLowerCase();
+  let email = String(input.email ?? '').trim();
+
+  try {
+    if (mode === 'phone' || (!mode && String(input.phone ?? '').trim() && !email)) {
+      const phone = normalizePlayerPhone(String(input.phone ?? ''));
+      if (validatePlayerPhone(phone) || !ports.resolveLoginEmail) return loginFailed(secure);
+      const resolved = await ports.resolveLoginEmail('phone', phone);
+      if (!resolved.ok) return loginFailed(secure);
+      email = resolved.email;
+    } else if (mode === 'identifier') {
+      const identifier = String(input.identifier ?? '').trim();
+      if (!validatePlayerEmail(identifier)) {
+        email = identifier;
+      } else {
+        const playerId = parseLoginPlayerId(identifier);
+        if (!playerId || !ports.resolveLoginEmail) return loginFailed(secure);
+        const resolved = await ports.resolveLoginEmail('public_id', playerId);
+        if (!resolved.ok) return loginFailed(secure);
+        email = resolved.email;
+      }
+    } else if (validatePlayerEmail(email)) {
+      return loginFailed(secure);
+    }
+  } catch {
+    return loginFailed(secure);
+  }
 
   let tokens: PlayerAuthTokens;
   try {
-    tokens = await ports.signInWithPassword(trimmed, password);
+    tokens = await ports.signInWithPassword(email, password);
   } catch {
-    return {
-      status: 401,
-      body: { ok: false, authenticated: false, error: 'AUTH_FAILED' },
-      cookies: clearPlayerCookies(secure),
-    };
+    return loginFailed(secure);
   }
   return issuedSession(ports, tokens, secure);
 }

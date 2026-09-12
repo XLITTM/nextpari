@@ -23,6 +23,17 @@ export function normalizePlayerPhone(phone: string): string {
   return phone.replace(/[\s()-]/g, '');
 }
 
+const PLAYER_PUBLIC_ID_RE = /^[0-9]{6}$/;
+
+export function parseLoginPlayerId(value: string): string | null {
+  const trimmed = value.trim();
+  return PLAYER_PUBLIC_ID_RE.test(trimmed) ? trimmed : null;
+}
+
+export function requireAgeConfirmed(value: unknown): boolean {
+  return value === true;
+}
+
 const NAME_RE = /^[\p{L}\p{M}\s.'-]*$/u;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 

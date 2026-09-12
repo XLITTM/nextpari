@@ -113,6 +113,8 @@ export function mapPlayerAuthError(error: { message?: string; code?: string } | 
   if (/email_confirmation_required|email not confirmed|email_not_confirmed/.test(text)) {
     return 'email confirmation required';
   }
+  if (/age required|age_required/.test(text)) return 'age required';
+  if (/registration_failed/.test(text)) return 'registration failed';
   if (/invalid login credentials|invalid_credentials|invalid email or password|auth_failed/.test(text)) {
     return 'invalid credentials';
   }
@@ -166,11 +168,12 @@ function snapshotFromBody(body: Record<string, unknown>): PlayerMeSnapshot | nul
   const profile = body.profile && typeof body.profile === 'object' && !Array.isArray(body.profile)
     ? body.profile as Record<string, unknown>
     : {};
+  const email = sanitizePublicEmail(String(player.email ?? ''));
   return {
     authenticated: true,
     player: {
-      publicId: String(player.publicId ?? '').replace(/\D/g, ''),
-      email: String(player.email ?? ''),
+      publicId: parsePublicPlayerId(String(player.publicId ?? '')),
+      email,
     },
     wallet: {
       balance,
@@ -178,8 +181,20 @@ function snapshotFromBody(body: Record<string, unknown>): PlayerMeSnapshot | nul
       status: String(wallet.status ?? 'active') || 'active',
       migrationState: wallet.migrationState == null ? null : String(wallet.migrationState),
     },
-    profile: profileFromBody(profile, String(player.email ?? '')),
+    profile: profileFromBody(profile, email),
   };
+}
+
+function parsePublicPlayerId(value: string): string {
+  const trimmed = value.trim();
+  return /^[0-9]{6}$/.test(trimmed) ? trimmed : '';
+}
+
+function sanitizePublicEmail(email: string): string {
+  const value = email.trim();
+  const domain = value.split('@')[1] ?? '';
+  if (!value || /\.invalid$/i.test(domain)) return '';
+  return value;
 }
 
 function profileFromBody(profile: Record<string, unknown>, fallbackEmail = ''): PlayerProfileSnapshot {
@@ -260,47 +275,148 @@ export async function fetchPlayerMe(): Promise<PlayerMeSnapshot | null> {
   return snapshotFromBody(body);
 }
 
-export async function signInPlayer(email: string, password: string) {
-  const emailError = validatePlayerEmail(email);
-  if (emailError) throw new Error(emailError);
-  const passwordError = validatePlayerPassword(password);
-  if (passwordError) throw new Error(passwordError);
+export type SignInPlayerInput =
+  | { mode: 'identifier'; identifier: string; password: string }
+  | { mode: 'phone'; phone: string; password: string };
+
+export async function signInPlayer(
+  emailOrInput: string | SignInPlayerInput,
+  passwordArg?: string,
+) {
+  let body: Record<string, string>;
+  if (typeof emailOrInput === 'string') {
+    const password = passwordArg ?? '';
+    const passwordError = validatePlayerPassword(password);
+    if (passwordError) throw new Error(passwordError);
+    if (!validatePlayerEmail(emailOrInput)) {
+      body = { email: emailOrInput.trim(), password };
+    } else {
+      throw new Error('invalid credentials');
+    }
+  } else if (emailOrInput.mode === 'phone') {
+    const phoneError = validatePlayerPhone(emailOrInput.phone);
+    if (phoneError) throw new Error(phoneError);
+    const passwordError = validatePlayerPassword(emailOrInput.password);
+    if (passwordError) throw new Error(passwordError);
+    body = {
+      mode: 'phone',
+      phone: emailOrInput.phone.replace(/[\s()-]/g, ''),
+      password: emailOrInput.password,
+    };
+  } else {
+    const identifier = emailOrInput.identifier.trim();
+    const passwordError = validatePlayerPassword(emailOrInput.password);
+    if (passwordError) throw new Error(passwordError);
+    if (!identifier) throw new Error('invalid credentials');
+    body = {
+      mode: 'identifier',
+      identifier,
+      password: emailOrInput.password,
+    };
+  }
 
   const res = await fetch('/api/player/auth/login', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email.trim(), password }),
+    body: JSON.stringify(body),
   });
-  const body = await readJson(res);
+  const payload = await readJson(res);
   if (!res.ok) {
-    throw new Error(mapPlayerAuthError({ code: String(body.error ?? ''), message: String(body.error ?? '') }));
+    throw new Error(mapPlayerAuthError({ code: String(payload.error ?? ''), message: String(payload.error ?? '') }));
   }
-  const snapshot = snapshotFromBody(body);
+  const snapshot = snapshotFromBody(payload);
   if (!snapshot) throw new Error('invalid credentials');
   return { user: { email: snapshot.player.email, publicId: snapshot.player.publicId } };
 }
 
-export async function signUpPlayer(input: { email: string; password: string; phone: string }) {
+export async function signUpPlayer(input: {
+  email: string;
+  password: string;
+  ageConfirmed: boolean;
+}) {
   const emailError = validatePlayerEmail(input.email);
   if (emailError) throw new Error(emailError);
   const passwordError = validatePlayerPassword(input.password);
   if (passwordError) throw new Error(passwordError);
-  const phoneError = validatePlayerPhone(input.phone);
-  if (phoneError) throw new Error(phoneError);
+  if (input.ageConfirmed !== true) throw new Error('age required');
 
   const res = await fetch('/api/player/auth/register', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      method: 'email',
       email: input.email.trim(),
       password: input.password,
-      phone: input.phone.replace(/[\s()-]/g, ''),
+      ageConfirmed: true,
     }),
   });
-  const body = await readJson(res);
-  if (res.status === 409 && String(body.error ?? '') === 'EMAIL_CONFIRMATION_REQUIRED') {
+  return readRegisterResult(res);
+}
+
+export async function signUpPlayerByPhone(input: {
+  phone: string;
+  password: string;
+  ageConfirmed: boolean;
+}) {
+  const phoneError = validatePlayerPhone(input.phone);
+  if (phoneError) throw new Error(phoneError);
+  const passwordError = validatePlayerPassword(input.password);
+  if (passwordError) throw new Error(passwordError);
+  if (input.ageConfirmed !== true) throw new Error('age required');
+
+  const res = await fetch('/api/player/auth/register', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      method: 'phone',
+      phone: input.phone.replace(/[\s()-]/g, ''),
+      password: input.password,
+      ageConfirmed: true,
+    }),
+  });
+  return readRegisterResult(res);
+}
+
+export async function signUpPlayerOneClick(input: { ageConfirmed: boolean }) {
+  if (input.ageConfirmed !== true) throw new Error('age required');
+  const res = await fetch('/api/player/auth/register', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      method: 'one_click',
+      ageConfirmed: true,
+    }),
+  });
+  const payload = await readJson(res);
+  if (!res.ok) {
+    throw new Error(mapPlayerAuthError({ code: String(payload.error ?? ''), message: String(payload.error ?? '') }));
+  }
+  const snapshot = snapshotFromBody(payload);
+  const oneClick = payload.oneClick && typeof payload.oneClick === 'object' && !Array.isArray(payload.oneClick)
+    ? payload.oneClick as Record<string, unknown>
+    : {};
+  const player = payload.player && typeof payload.player === 'object' && !Array.isArray(payload.player)
+    ? payload.player as Record<string, unknown>
+    : {};
+  const playerId = parsePublicPlayerId(String(oneClick.playerId ?? player.publicId ?? ''));
+  const generatedPassword = String(oneClick.password ?? '');
+  if (!playerId || generatedPassword.length < 8) {
+    throw new Error('invalid credentials');
+  }
+  return {
+    snapshot,
+    playerId,
+    generatedPassword,
+  };
+}
+
+async function readRegisterResult(res: Response) {
+  const payload = await readJson(res);
+  if (res.status === 409 && String(payload.error ?? '') === 'EMAIL_CONFIRMATION_REQUIRED') {
     return {
       session: null,
       user: null,
@@ -308,9 +424,9 @@ export async function signUpPlayer(input: { email: string; password: string; pho
     };
   }
   if (!res.ok) {
-    throw new Error(mapPlayerAuthError({ code: String(body.error ?? ''), message: String(body.error ?? '') }));
+    throw new Error(mapPlayerAuthError({ code: String(payload.error ?? ''), message: String(payload.error ?? '') }));
   }
-  const snapshot = snapshotFromBody(body);
+  const snapshot = snapshotFromBody(payload);
   if (!snapshot) {
     return { session: null, user: null, needsEmailConfirmation: true };
   }

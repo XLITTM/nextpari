@@ -559,11 +559,7 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return (
-      <div className="max-w-lg mx-auto">
-        <AuthScreen onAuthSuccess={handleAuthSuccess} />
-      </div>
-    );
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
   }
 
   return (
