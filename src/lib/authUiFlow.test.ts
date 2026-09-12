@@ -52,6 +52,14 @@ describe('auth UI navigation', () => {
     const hero = readFileSync(join(here, '../components/auth/AuthHero.tsx'), 'utf8');
     assert.match(hero, /\/images\/auth\/nextpari-auth-sports-bg\.png/);
     assert.match(hero, /\/logo\.png/);
+    assert.match(hero, /alt="NextPari"/);
+    assert.match(hero, /Ставки на спорт онлайн/);
+    assert.equal(/<h1[\s\S]*?>[\s\S]*NextPari[\s\S]*<\/h1>/.test(hero), false);
+    assert.match(screen, /view === 'login'[\s\S]*100svh/);
+    assert.match(screen, /overflow-y-auto/);
+    assert.equal(screen.includes('overflow-y-hidden'), false);
+    assert.equal(screen.includes('min-h-[100vh]'), false);
+    assert.equal(screen.includes('min-h-screen'), false);
   });
 
   it('formats one-click copy text', () => {

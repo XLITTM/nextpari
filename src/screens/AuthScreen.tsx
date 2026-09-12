@@ -49,7 +49,7 @@ function PrimaryButton({
     <button
       type="submit"
       disabled={disabled}
-      className="mt-2 flex h-[60px] w-full items-center justify-center rounded-[18px] bg-brand-600 text-[17px] font-extrabold text-white transition-transform active:scale-[0.99] disabled:opacity-50"
+      className="mt-2 flex h-[60px] w-full items-center justify-center rounded-[18px] bg-brand-600 text-[17px] font-extrabold text-white transition-transform active:scale-[0.99] disabled:opacity-50 max-[480px]:mt-1 max-[480px]:h-14"
     >
       {children}
     </button>
@@ -90,7 +90,7 @@ function LoginModeSwitch({
       <button
         type="button"
         onClick={() => onChange('identifier')}
-        className={`h-11 rounded-[12px] text-[14px] font-extrabold transition-colors ${
+        className={`h-11 rounded-[12px] text-[14px] font-extrabold transition-colors max-[480px]:h-10 ${
           mode === 'identifier' ? 'bg-white text-ink-900 shadow-sm' : 'text-slate-500'
         }`}
       >
@@ -99,7 +99,7 @@ function LoginModeSwitch({
       <button
         type="button"
         onClick={() => onChange('phone')}
-        className={`h-11 rounded-[12px] text-[14px] font-extrabold transition-colors ${
+        className={`h-11 rounded-[12px] text-[14px] font-extrabold transition-colors max-[480px]:h-10 ${
           mode === 'phone' ? 'bg-white text-ink-900 shadow-sm' : 'text-slate-500'
         }`}
       >
@@ -318,7 +318,13 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   );
 
   return (
-    <div className="relative min-h-[100dvh] overflow-x-hidden overflow-y-auto">
+    <div
+      className={
+        view === 'login'
+          ? 'relative min-h-[100svh] h-[100svh] overflow-x-hidden overflow-y-auto overscroll-y-contain'
+          : 'relative min-h-[100svh] overflow-x-hidden overflow-y-auto'
+      }
+    >
       <div
         className="pointer-events-none fixed inset-0"
         style={{
@@ -330,7 +336,13 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
       />
       <div className="pointer-events-none fixed inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/35" />
 
-      <div className="relative z-10 mx-auto flex min-h-[100dvh] max-w-[560px] flex-col">
+      <div
+        className={
+          view === 'login'
+            ? 'relative z-10 mx-auto flex h-full min-h-0 max-w-[560px] flex-col'
+            : 'relative z-10 mx-auto flex min-h-[100svh] max-w-[560px] flex-col'
+        }
+      >
         <AuthHero
           showBack={authShowsBack(view)}
           onBack={() => go(authBackView(view))}
@@ -351,9 +363,9 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
           {view === 'login' && (
             <form
               onSubmit={(event) => { event.preventDefault(); if (!busy) void handleLogin(); }}
-              className="space-y-4"
+              className="space-y-4 max-[480px]:space-y-3 [@media(max-width:480px)_and_(max-height:740px)]:space-y-2"
             >
-              <h2 className="text-[34px] font-extrabold leading-none tracking-tight text-ink-900">Авторизация</h2>
+              <h2 className="text-[34px] font-extrabold leading-none tracking-tight text-ink-900 max-[480px]:text-[28px]">Авторизация</h2>
               <LoginModeSwitch mode={loginMode} onChange={setLoginMode} />
               {loginMode === 'identifier' ? (
                 <AuthInput
@@ -393,11 +405,11 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
               <button
                 type="button"
                 onClick={() => go('forgot-password')}
-                className="block w-full pt-1 text-center text-[15px] font-bold text-brand-600"
+                className="block w-full pt-1 text-center text-[15px] font-bold text-brand-600 max-[480px]:pt-0"
               >
                 Забыли пароль?
               </button>
-              <p className="pt-2 text-center text-[14px] font-medium text-slate-500">
+              <p className="pt-2 text-center text-[14px] font-medium text-slate-500 max-[480px]:pt-0">
                 Нет аккаунта?{' '}
                 <button type="button" onClick={() => go('register-menu')} className="font-bold text-brand-600">
                   Зарегистрируйтесь
