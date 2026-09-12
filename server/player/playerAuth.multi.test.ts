@@ -403,7 +403,7 @@ describe('multi-identifier player auth', () => {
   });
 
   it('login alias migration stays private and is not applied by source', () => {
-    const sql = readFileSync(join(root, 'supabase/migrations/20260912_039_player_login_aliases.sql'), 'utf8');
+    const sql = readFileSync(join(root, 'supabase/migrations/20260912193119_player_login_aliases_039.sql'), 'utf8');
     assert.match(sql, /CREATE TABLE IF NOT EXISTS private\.player_login_phones/);
     assert.match(sql, /REVOKE ALL ON FUNCTION public\.resolve_player_login_email\(TEXT, TEXT\) FROM PUBLIC/);
     assert.match(sql, /REVOKE ALL ON FUNCTION public\.resolve_player_login_email\(TEXT, TEXT\) FROM anon, authenticated/);
@@ -565,7 +565,7 @@ describe('multi-identifier player auth', () => {
 });
 
 function migrationSql(): string {
-  return readFileSync(join(root, 'supabase/migrations/20260912_039_player_login_aliases.sql'), 'utf8');
+  return readFileSync(join(root, 'supabase/migrations/20260912193119_player_login_aliases_039.sql'), 'utf8');
 }
 
 function sqlFunctionBody(sql: string, name: string): string {
