@@ -18,9 +18,9 @@ export function BottomNav({ active, onChange, betCount }: BottomNavProps) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 w-full z-50 bg-white dark:bg-[#1e293b] border-t border-gray-200 dark:border-gray-700 pb-safe overflow-visible">
-      <div className="max-w-lg mx-auto">
-        <div className="grid grid-cols-5 h-16 w-full">
+    <nav className="fixed bottom-0 left-1/2 z-50 w-full max-w-[720px] -translate-x-1/2 overflow-visible border-t border-[var(--np-border)] bg-[var(--np-nav)] pb-safe">
+      <div className="mx-auto w-full">
+        <div className="grid h-16 w-full grid-cols-5">
           {left.map((item) => (
             <NavButton
               key={item.id}
@@ -31,28 +31,22 @@ export function BottomNav({ active, onChange, betCount }: BottomNavProps) {
             />
           ))}
 
-          <div className="relative flex flex-col items-center justify-center gap-0.5 h-16 overflow-visible">
+          <div className="relative flex h-16 flex-col items-center justify-center gap-0.5 overflow-visible">
             <button
               type="button"
               aria-label="Купон"
               onClick={() => onChange({ name: 'betslip' })}
-              className="absolute -top-4 left-1/2 -translate-x-1/2 h-14 w-14 rounded-full bg-brand-600 shadow-lg shadow-brand-600/35 flex items-center justify-center active:scale-90 transition-transform z-10"
+              className="np-press absolute -top-5 left-1/2 z-10 flex h-[3.65rem] w-[3.65rem] -translate-x-1/2 items-center justify-center rounded-full bg-[var(--np-accent)] shadow-[var(--np-glow)]"
             >
-              <Ticket className="w-6 h-6 text-white" strokeWidth={2.4} />
+              <Ticket className="h-6 w-6 text-white" strokeWidth={2.4} />
               {betCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-white text-brand-600 text-[10px] font-bold rounded-full flex items-center justify-center border border-brand-600 leading-none">
+                <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border border-[var(--np-accent)] bg-white px-1 text-[10px] font-bold leading-none text-[var(--np-accent-ink)]">
                   {betCount}
                 </span>
               )}
             </button>
-            <span className="w-4 h-4" aria-hidden />
-            <span
-              className={`text-[10px] leading-none ${
-                active === 'betslip' ? 'text-brand-600 font-semibold' : 'text-gray-500 dark:text-gray-300 font-medium'
-              }`}
-            >
-              Купон
-            </span>
+            <span className="h-4 w-4" aria-hidden />
+            <span className="text-[10px] font-semibold leading-none text-[var(--np-accent)]">Купон</span>
           </div>
 
           {right.map((item) => (
@@ -85,11 +79,11 @@ function NavButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-0.5 h-16 transition-colors ${
-        active ? 'text-green-500' : 'text-gray-400'
+      className={`flex h-16 flex-col items-center justify-center gap-0.5 transition-colors duration-200 ${
+        active ? 'text-[var(--np-accent)]' : 'text-[var(--np-text-muted)]'
       }`}
     >
-      <Icon className="w-4 h-4" strokeWidth={active ? 2.4 : 2} />
+      <Icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.4 : 2} />
       <span className={`text-[10px] leading-none ${active ? 'font-semibold' : 'font-medium'}`}>{label}</span>
     </button>
   );

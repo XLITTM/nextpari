@@ -575,7 +575,11 @@ function AppContent() {
               ? 'bg-[#07140c]'
               : 'bg-[#031c1a]'
         }`
-      : 'relative mx-auto flex h-screen max-w-lg flex-col overflow-hidden bg-[#f0f2f5] dark:bg-gray-900'
+      : `relative mx-auto flex h-screen max-w-[720px] flex-col overflow-hidden ${
+          screen.name === 'history' || screen.name === 'bet-details'
+            ? 'bg-[var(--np-bg)]'
+            : 'bg-[#f0f2f5] dark:bg-gray-900'
+        }`
     }>
       {showHeader && (
         <Header balanceLabel={moneyLabel} onSearchClick={openSearch} onNavigate={setScreen}>

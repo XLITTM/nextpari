@@ -5,6 +5,25 @@ export default {
   theme: {
     extend: {
       colors: {
+        np: {
+          bg: 'var(--np-bg)',
+          surface: 'var(--np-surface)',
+          elevated: 'var(--np-surface-elevated)',
+          soft: 'var(--np-surface-soft)',
+          muted: 'var(--np-surface-muted)',
+          mint: 'var(--np-surface-mint)',
+          border: 'var(--np-border)',
+          text: 'var(--np-text)',
+          secondary: 'var(--np-text-secondary)',
+          quiet: 'var(--np-text-muted)',
+          accent: 'var(--np-accent)',
+          hover: 'var(--np-accent-hover)',
+          ink: 'var(--np-accent-ink)',
+          success: 'var(--np-success)',
+          danger: 'var(--np-danger)',
+          info: 'var(--np-info)',
+          nav: 'var(--np-nav)',
+        },
         brand: {
           50: '#f0fdf4',
           100: '#dcfce7',
