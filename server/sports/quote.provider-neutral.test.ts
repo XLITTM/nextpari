@@ -171,7 +171,7 @@ describe('provider-neutral quote decision', () => {
   });
 
   it('fails closed on explicit unknown providers without using LSports', () => {
-    for (const provider of ['provider-a', 'provider-b', 'betsapi', 'betb2b', 'softgaming', 'random-provider']) {
+    for (const provider of ['provider-a', 'provider-b', 'betsapi', 'betb2b', 'softgaming', 'random-provider', 'provider-not-registered']) {
       assert.throws(
         () => resolveSportsQuoteProvider(provider),
         (error: unknown) => error instanceof SportsProviderUnsupportedError
@@ -186,6 +186,16 @@ describe('provider-neutral quote decision', () => {
     assert.equal(source.includes("|| 'lsports'"), false);
     assert.equal(source.includes("?? 'lsports'"), false);
     assert.equal(source.includes('default to LSports'), false);
+  });
+
+  it('composes live LSports through the registry instead of an if/else router', () => {
+    const source = readFileSync(join(root, 'server/sports/quoteProvider.ts'), 'utf8');
+    assert.equal((source.match(/createSportsQuoteProviderRegistry\(/g) ?? []).length, 1);
+    assert.equal((source.match(/create: \(\) => createLsportsHttpQuoteProvider\(\)/g) ?? []).length, 1);
+    assert.equal(source.includes('if (id === SPORTS_PROVIDER_LSPORTS)'), false);
+    assert.equal(source.includes('if (!id || id === SPORTS_PROVIDER_LSPORTS)'), false);
+    assert.match(source, /liveRegistry\.resolve/);
+    assert.equal(source.includes('betb2b'), false);
   });
 
   it('does not coerce an arbitrary canonical provider to lsports when parsing quotes', () => {

@@ -1,33 +1,33 @@
 import { createLsportsHttpQuoteProvider } from './lsportsQuote.js';
+import {
+  createSportsQuoteProviderRegistry,
+} from './quoteProviderRegistry.js';
 import { SPORTS_PROVIDER_LSPORTS, type SportsQuoteProvider } from './types.js';
 
-export const SPORTS_PROVIDER_UNSUPPORTED = 'SPORTS_PROVIDER_UNSUPPORTED';
+export {
+  createSportsQuoteProviderRegistry,
+  normalizeSportsProviderId,
+  SportsProviderRegistrationError,
+  SportsProviderUnsupportedError,
+  SPORTS_PROVIDER_UNSUPPORTED,
+} from './quoteProviderRegistry.js';
+export type {
+  SportsQuoteProviderFactory,
+  SportsQuoteProviderRegistration,
+  SportsQuoteProviderRegistry,
+} from './quoteProviderRegistry.js';
 
-export class SportsProviderUnsupportedError extends Error {
-  readonly code = SPORTS_PROVIDER_UNSUPPORTED;
-
-  constructor() {
-    super(SPORTS_PROVIDER_UNSUPPORTED);
-    this.name = 'SportsProviderUnsupportedError';
-  }
-}
-
-export function normalizeSportsProviderId(value: unknown): string {
-  return String(value ?? '').trim().toLowerCase();
-}
+const liveRegistry = createSportsQuoteProviderRegistry([
+  {
+    id: SPORTS_PROVIDER_LSPORTS,
+    create: () => createLsportsHttpQuoteProvider(),
+  },
+]);
 
 /**
  * Live quote source for the generic place path.
- * Missing/blank ids fail closed. Explicit lsports uses the LSports adapter.
- * Any other explicit id without a registered adapter fails closed.
+ * Delegates to the composed registry. Missing/blank and unknown ids fail closed.
  */
 export function resolveSportsQuoteProvider(providerId?: string): SportsQuoteProvider {
-  const id = normalizeSportsProviderId(providerId);
-  if (!id) {
-    throw new SportsProviderUnsupportedError();
-  }
-  if (id === SPORTS_PROVIDER_LSPORTS) {
-    return createLsportsHttpQuoteProvider();
-  }
-  throw new SportsProviderUnsupportedError();
+  return liveRegistry.resolve(providerId);
 }

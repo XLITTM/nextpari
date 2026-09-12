@@ -519,10 +519,13 @@ describe('explicit sports provider', () => {
 
   it('does not fall back to lsports in generic place/quote server code', () => {
     const placeSrc = read('server/player/sportsPlaceService.ts');
-    const registry = read('server/sports/quoteProvider.ts');
+    const composition = read('server/sports/quoteProvider.ts');
+    const registry = read('server/sports/quoteProviderRegistry.ts');
     const quote = read('server/sports/quote.ts');
     assert.equal(placeSrc.includes("|| 'lsports'"), false);
     assert.equal(placeSrc.includes("?? 'lsports'"), false);
+    assert.equal(composition.includes("|| 'lsports'"), false);
+    assert.equal(composition.includes("?? 'lsports'"), false);
     assert.equal(registry.includes("|| 'lsports'"), false);
     assert.equal(registry.includes("?? 'lsports'"), false);
     assert.equal(quote.includes("|| 'lsports'"), false);
