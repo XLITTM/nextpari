@@ -411,4 +411,178 @@ describe('provider accounting GGR engine', () => {
     assert.equal(dumped.includes('wallet_ledger'), false);
     assert.equal(dumped.includes('available_balance'), false);
   });
+
+  it('accepts exact replay and returns stored values', async () => {
+    const store = new MemoryProviderAccountingStore();
+    const payload = {
+      providerKey: 'lsports',
+      product: 'sports' as const,
+      externalTransactionId: 'replay-1',
+      kind: 'stake' as const,
+      amount: 40,
+      currency: 'TMTM',
+      occurredAt: '2026-09-13T12:00:00.000Z',
+      metadata: { attempt: 1 },
+    };
+    const first = await ingestProviderAccountingEvent(payload, store);
+    const replay = await ingestProviderAccountingEvent({ ...payload, metadata: { attempt: 2 } }, store);
+    assert.equal(first.inserted, true);
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.inserted, false);
+    assert.equal(replay.row.id, first.row.id);
+    assert.equal(replay.row.amount, 40);
+    assert.equal(replay.row.economicEffect, 40);
+    assert.equal(store.rows.size, 1);
+    assert.equal(aggregateGgrByCurrency([...store.rows.values()])[0].internalGgr, 40);
+  });
+
+  it('rejects mismatched replays without changing ledger or GGR', async () => {
+    const base = {
+      providerKey: 'lsports',
+      product: 'sports' as const,
+      externalTransactionId: 'conflict-1',
+      relatedTransactionId: null as string | null,
+      kind: 'stake' as const,
+      amount: 100,
+      currency: 'TMTM',
+      occurredAt: '2026-09-13T12:00:00.000Z',
+    };
+    async function rejectPatch(label: string, patch: Partial<CanonicalProviderEvent>) {
+      const store = new MemoryProviderAccountingStore();
+      await ingestProviderAccountingEvent(base, store);
+      const ggr = aggregateGgrByCurrency([...store.rows.values()])[0].internalGgr;
+      const count = store.rows.size;
+      await assert.rejects(
+        () => ingestProviderAccountingEvent({ ...base, ...patch }, store),
+        (err: unknown) => {
+          assert.equal(err instanceof Error && err.message === 'PROVIDER_TRANSACTION_CONFLICT', true, label);
+          return true;
+        },
+      );
+      assert.equal(store.rows.size, count, label);
+      assert.equal(aggregateGgrByCurrency([...store.rows.values()])[0].internalGgr, ggr, label);
+      assert.equal([...store.rows.values()][0].amount, 100, label);
+    }
+    await rejectPatch('amount', { amount: 90 });
+    await rejectPatch('currency', { currency: 'USD' });
+    await rejectPatch('product', { product: 'casino' });
+    await rejectPatch('kind', { kind: 'payout' });
+    await rejectPatch('related', { relatedTransactionId: 'other-tx' });
+    await rejectPatch('occurred_at', { occurredAt: '2026-09-13T12:00:01.000Z' });
+  });
+
+  it('rejects partial neutralization and leaves ledger/settlement unchanged', async () => {
+    const store = new MemoryProviderAccountingStore();
+    await ingestAll(store, [
+      {
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 's-100',
+        kind: 'stake',
+        amount: 100,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:00:00.000Z',
+      },
+      {
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 'p-160',
+        kind: 'payout',
+        amount: 160,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:05:00.000Z',
+      },
+    ]);
+    const beforeRows = store.rows.size;
+    const beforeGgr = aggregateGgrByCurrency([...store.rows.values()])[0].internalGgr;
+    const beforePeriod = (await store.listPeriods())[0].internalGgr;
+    await assert.rejects(
+      () => ingestProviderAccountingEvent({
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 'r-50',
+        relatedTransactionId: 's-100',
+        kind: 'refund',
+        amount: 50,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:10:00.000Z',
+      }, store),
+      /PROVIDER_NEUTRALIZATION_AMOUNT_MISMATCH/,
+    );
+    await assert.rejects(
+      () => ingestProviderAccountingEvent({
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 'rb-100',
+        relatedTransactionId: 'p-160',
+        kind: 'rollback',
+        amount: 100,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:11:00.000Z',
+      }, store),
+      /PROVIDER_NEUTRALIZATION_AMOUNT_MISMATCH/,
+    );
+    assert.equal(store.rows.size, beforeRows);
+    assert.equal(aggregateGgrByCurrency([...store.rows.values()])[0].internalGgr, beforeGgr);
+    assert.equal((await store.listPeriods())[0].internalGgr, beforePeriod);
+  });
+
+  it('accepts full refund and full payout rollback only', async () => {
+    const store = new MemoryProviderAccountingStore();
+    await ingestAll(store, [
+      {
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 's-full',
+        kind: 'stake',
+        amount: 100,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:00:00.000Z',
+      },
+      {
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 'r-full',
+        relatedTransactionId: 's-full',
+        kind: 'refund',
+        amount: 100,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:10:00.000Z',
+      },
+    ]);
+    assert.equal(aggregateGgrByCurrency([...store.rows.values()])[0].internalGgr, 0);
+
+    const payoutStore = new MemoryProviderAccountingStore();
+    await ingestAll(payoutStore, [
+      {
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 's-rb',
+        kind: 'stake',
+        amount: 100,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:00:00.000Z',
+      },
+      {
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 'p-rb',
+        kind: 'payout',
+        amount: 160,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:05:00.000Z',
+      },
+      {
+        providerKey: 'lsports',
+        product: 'sports',
+        externalTransactionId: 'rb-full',
+        relatedTransactionId: 'p-rb',
+        kind: 'rollback',
+        amount: 160,
+        currency: 'TMTM',
+        occurredAt: '2026-09-13T12:20:00.000Z',
+      },
+    ]);
+    assert.equal(aggregateGgrByCurrency([...payoutStore.rows.values()])[0].internalGgr, 100);
+  });
 });

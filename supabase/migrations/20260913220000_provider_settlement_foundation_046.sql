@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS private.provider_ledger (
 );
 
 COMMENT ON TABLE private.provider_ledger IS
-'Canonical provider transaction ledger for internal GGR. Separate from Wallet Ledger / player money. Idempotent on (provider_key, external_transaction_id).';
+'Append-only canonical provider transaction ledger for internal GGR. Separate from Wallet Ledger / player money. Idempotent on (provider_key, external_transaction_id). Corrections are new refund/void/rollback rows only. Direct UPDATE/DELETE is not granted.';
 
 COMMENT ON COLUMN private.provider_ledger.economic_effect IS
 'Normalized GGR contribution: stake/bet = +amount, payout/win = -amount, refund/void/rollback = inverse of the referenced event.';
@@ -151,9 +151,10 @@ CREATE INDEX IF NOT EXISTS provider_settlement_status_idx
 
 REVOKE ALL ON TABLE private.provider_ledger FROM PUBLIC;
 REVOKE ALL ON TABLE private.provider_ledger FROM anon, authenticated;
+REVOKE ALL ON TABLE private.provider_ledger FROM service_role;
 REVOKE ALL ON TABLE private.provider_settlement_periods FROM PUBLIC;
 REVOKE ALL ON TABLE private.provider_settlement_periods FROM anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON TABLE private.provider_ledger TO service_role;
+GRANT SELECT ON TABLE private.provider_ledger TO service_role;
 GRANT SELECT, INSERT, UPDATE ON TABLE private.provider_settlement_periods TO service_role;
 
 
@@ -378,6 +379,7 @@ CREATE OR REPLACE FUNCTION private.ingest_provider_transaction(
 RETURNS jsonb
 LANGUAGE plpgsql
 VOLATILE
+SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
@@ -391,11 +393,12 @@ DECLARE
     v_effect NUMERIC(20, 2);
     v_existing UUID;
     v_related_effect NUMERIC(20, 2);
+    v_related_amount NUMERIC(20, 2);
     v_related_kind TEXT;
     v_related_product TEXT;
     v_related_currency TEXT;
     v_id UUID;
-    v_replayed BOOLEAN := false;
+    v_stored private.provider_ledger%ROWTYPE;
 BEGIN
     v_provider := private.provider_normalize_key(p_provider_key);
     v_product := lower(BTRIM(COALESCE(p_product, '')));
@@ -408,12 +411,6 @@ BEGIN
         RAISE EXCEPTION 'PROVIDER_PRODUCT_INVALID';
     END IF;
     IF v_kind NOT IN ('stake', 'bet', 'payout', 'win', 'refund', 'void', 'rollback') THEN
-        RAISE EXCEPTION 'PROVIDER_KIND_INVALID';
-    END IF;
-    IF v_product = 'sports' AND v_kind IN ('bet', 'win') THEN
-        RAISE EXCEPTION 'PROVIDER_KIND_INVALID';
-    END IF;
-    IF v_product = 'casino' AND v_kind IN ('stake', 'payout') THEN
         RAISE EXCEPTION 'PROVIDER_KIND_INVALID';
     END IF;
     IF char_length(v_external) < 1 OR char_length(v_external) > 128 THEN
@@ -439,24 +436,43 @@ BEGIN
     FOR UPDATE;
 
     IF v_existing IS NOT NULL THEN
-        v_replayed := true;
-        SELECT
-            l.id,
-            l.economic_effect
-        INTO v_id, v_effect
+        SELECT l.*
+        INTO v_stored
         FROM private.provider_ledger AS l
         WHERE l.id = v_existing;
+        IF v_stored.provider_key IS DISTINCT FROM v_provider
+           OR v_stored.product IS DISTINCT FROM v_product
+           OR v_stored.external_transaction_id IS DISTINCT FROM v_external
+           OR v_stored.related_transaction_id IS DISTINCT FROM v_related
+           OR v_stored.kind IS DISTINCT FROM v_kind
+           OR v_stored.amount IS DISTINCT FROM v_amount
+           OR v_stored.currency IS DISTINCT FROM v_currency
+           OR v_stored.occurred_at IS DISTINCT FROM p_occurred_at
+        THEN
+            RAISE EXCEPTION 'PROVIDER_TRANSACTION_CONFLICT';
+        END IF;
         RETURN jsonb_build_object(
             'ok', true,
             'inserted', false,
             'replayed', true,
-            'id', v_id,
-            'providerKey', v_provider,
-            'product', v_product,
-            'externalTransactionId', v_external,
-            'economicEffect', v_effect,
-            'currency', v_currency
+            'id', v_stored.id,
+            'providerKey', v_stored.provider_key,
+            'product', v_stored.product,
+            'externalTransactionId', v_stored.external_transaction_id,
+            'relatedTransactionId', v_stored.related_transaction_id,
+            'kind', v_stored.kind,
+            'amount', v_stored.amount,
+            'economicEffect', v_stored.economic_effect,
+            'currency', v_stored.currency,
+            'occurredAt', v_stored.occurred_at
         );
+    END IF;
+
+    IF v_product = 'sports' AND v_kind IN ('bet', 'win') THEN
+        RAISE EXCEPTION 'PROVIDER_KIND_INVALID';
+    END IF;
+    IF v_product = 'casino' AND v_kind IN ('stake', 'payout') THEN
+        RAISE EXCEPTION 'PROVIDER_KIND_INVALID';
     END IF;
 
     IF v_kind IN ('stake', 'bet') THEN
@@ -469,10 +485,11 @@ BEGIN
         END IF;
         SELECT
             src.economic_effect,
+            src.amount,
             src.kind,
             src.product,
             src.currency
-        INTO v_related_effect, v_related_kind, v_related_product, v_related_currency
+        INTO v_related_effect, v_related_amount, v_related_kind, v_related_product, v_related_currency
         FROM private.provider_ledger AS src
         WHERE src.provider_key = v_provider
           AND src.external_transaction_id = v_related
@@ -488,6 +505,9 @@ BEGIN
         END IF;
         IF v_related_currency IS DISTINCT FROM v_currency THEN
             RAISE EXCEPTION 'PROVIDER_CURRENCY_MISMATCH';
+        END IF;
+        IF v_amount IS DISTINCT FROM ROUND(v_related_amount, 2) THEN
+            RAISE EXCEPTION 'PROVIDER_NEUTRALIZATION_AMOUNT_MISMATCH';
         END IF;
         v_effect := ROUND(-v_related_effect, 2);
     END IF;
@@ -797,6 +817,39 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION public.provider_ingest_transaction(
+    p_provider_key TEXT,
+    p_product TEXT,
+    p_external_transaction_id TEXT,
+    p_related_transaction_id TEXT,
+    p_kind TEXT,
+    p_amount NUMERIC,
+    p_currency TEXT,
+    p_occurred_at TIMESTAMPTZ,
+    p_metadata JSONB DEFAULT '{}'::jsonb
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    RETURN private.ingest_provider_transaction(
+        p_provider_key,
+        p_product,
+        p_external_transaction_id,
+        p_related_transaction_id,
+        p_kind,
+        p_amount,
+        p_currency,
+        p_occurred_at,
+        p_metadata
+    );
+END;
+$fn$;
+
+
 REVOKE ALL ON FUNCTION private.provider_normalize_key(TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.provider_normalize_currency(TEXT) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.provider_utc_month_start(TIMESTAMPTZ) FROM PUBLIC, anon, authenticated;
@@ -822,6 +875,11 @@ REVOKE ALL ON FUNCTION public.owner_list_provider_settlements(TEXT, DATE, DATE, 
 GRANT EXECUTE ON FUNCTION public.owner_provider_ggr_summary(TEXT, DATE, DATE, TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.owner_list_provider_settlements(TEXT, DATE, DATE, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 
+REVOKE ALL ON FUNCTION public.provider_ingest_transaction(TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TIMESTAMPTZ, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.provider_ingest_transaction(TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TIMESTAMPTZ, JSONB) FROM anon;
+REVOKE ALL ON FUNCTION public.provider_ingest_transaction(TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TIMESTAMPTZ, JSONB) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.provider_ingest_transaction(TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TIMESTAMPTZ, JSONB) TO service_role;
+
 COMMENT ON FUNCTION public.owner_provider_ggr_summary(TEXT, DATE, DATE, TEXT, TEXT, TEXT) IS
 'Owner JWT read-only internal GGR summary. UTC periods. Never mixes currencies. Does not ingest provider events.';
 
@@ -829,6 +887,9 @@ COMMENT ON FUNCTION public.owner_list_provider_settlements(TEXT, DATE, DATE, TEX
 'Owner JWT read-only settlement period list. Manager/cashier/player are denied via get_current_owner_context.';
 
 COMMENT ON FUNCTION private.ingest_provider_transaction(TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TIMESTAMPTZ, JSONB) IS
-'Service-role provider accounting ingest. Idempotent. No Wallet Ledger writes. No browser GRANT.';
+'Canonical append-only provider ingest. Idempotent exact replay. Conflicts raise PROVIDER_TRANSACTION_CONFLICT. No Wallet Ledger writes. No browser GRANT.';
+
+COMMENT ON FUNCTION public.provider_ingest_transaction(TEXT, TEXT, TEXT, TEXT, TEXT, NUMERIC, TEXT, TIMESTAMPTZ, JSONB) IS
+'Service-role PostgREST wrapper around private.ingest_provider_transaction. EXECUTE granted only to service_role. Not a browser or owner-session RPC.';
 
 COMMIT;

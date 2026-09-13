@@ -116,6 +116,17 @@ export async function ingestProviderAccountingEvent(
 
   const existing = await store.findByProviderTx(providerKey, externalTransactionId);
   if (existing) {
+    const sameIdentity = existing.providerKey === providerKey
+      && existing.product === event.product
+      && existing.externalTransactionId === externalTransactionId
+      && (existing.relatedTransactionId ?? null) === (relatedTransactionId ?? null)
+      && existing.kind === event.kind
+      && existing.amount === amount
+      && existing.currency === currency
+      && existing.occurredAt.getTime() === occurredAt.getTime();
+    if (!sameIdentity) {
+      throw new Error('PROVIDER_TRANSACTION_CONFLICT');
+    }
     return { inserted: false, replayed: true, row: existing };
   }
 
@@ -124,6 +135,9 @@ export async function ingestProviderAccountingEvent(
     if (!relatedTransactionId) throw new Error('PROVIDER_RELATED_TRANSACTION_REQUIRED');
     related = await store.findByProviderTx(providerKey, relatedTransactionId);
     if (!related) throw new Error('PROVIDER_RELATED_TRANSACTION_NOT_FOUND');
+    if (amount !== related.amount) {
+      throw new Error('PROVIDER_NEUTRALIZATION_AMOUNT_MISMATCH');
+    }
   }
 
   const row: ProviderLedgerRow = {

@@ -31,3 +31,8 @@ export {
   MemoryProviderAccountingStore,
   ingestProviderAccountingEvent,
 } from './ingest.js';
+export {
+  PROVIDER_INGEST_RPC,
+  ingestProviderTransactionWithServiceRole,
+  providerIngestRpcArgs,
+} from './serviceRoleIngest.js';

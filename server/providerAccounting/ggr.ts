@@ -59,7 +59,7 @@ function assertProductKind(product: ProviderProduct, kind: ProviderTxKind): void
 
 export function economicEffectFor(
   event: Pick<CanonicalProviderEvent, 'kind' | 'amount' | 'product'>,
-  related?: Pick<ProviderLedgerRow, 'economicEffect' | 'kind' | 'product' | 'currency'> | null,
+  related?: Pick<ProviderLedgerRow, 'economicEffect' | 'kind' | 'product' | 'currency' | 'amount'> | null,
   currency?: string,
 ): number {
   assertProductKind(event.product, event.kind);
@@ -73,6 +73,9 @@ export function economicEffectFor(
   }
   if (related.product !== event.product) throw new Error('PROVIDER_PRODUCT_MISMATCH');
   if (currency && related.currency !== currency) throw new Error('PROVIDER_CURRENCY_MISMATCH');
+  if (amount !== money2(related.amount)) {
+    throw new Error('PROVIDER_NEUTRALIZATION_AMOUNT_MISMATCH');
+  }
   return money2(-related.economicEffect);
 }
 
