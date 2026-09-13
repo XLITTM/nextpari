@@ -84,6 +84,21 @@ function requireAmount(value: unknown): number {
   return n;
 }
 
+function requireScaledAmount(value: unknown): number {
+  const n = requireAmount(value);
+  if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-8) {
+    throw staffError('AMOUNT_SCALE_INVALID', 400);
+  }
+  return n;
+}
+
+function requireReason(value: unknown): string {
+  const reason = String(value ?? '').trim();
+  if (!reason) throw staffError('REASON_REQUIRED', 400);
+  if (reason.length > 500) throw staffError('REASON_TOO_LONG', 400);
+  return reason;
+}
+
 function requireIdempotencyKey(value: unknown): string {
   const key = String(value ?? '').trim();
   if (!key) throw staffError('IDEMPOTENCY_KEY_REQUIRED', 400);
@@ -230,6 +245,9 @@ function sanitizeMoneyResult(data: unknown): unknown {
   if (rec.player_public_id != null || rec.playerPublicId != null) {
     out.player_public_id = rec.player_public_id ?? rec.playerPublicId;
   }
+  if (rec.treasury_balance_after != null || rec.treasuryBalanceAfter != null) {
+    out.treasury_balance_after = rec.treasury_balance_after ?? rec.treasuryBalanceAfter;
+  }
   return out;
 }
 
@@ -242,6 +260,7 @@ type ControlAction =
   | { kind: 'risk' }
   | { kind: 'players' }
   | { kind: 'dossier'; playerId: string }
+  | { kind: 'playerDebit'; playerId: string }
   | { kind: 'block'; playerId: string }
   | { kind: 'withdrawals' }
   | { kind: 'withdrawalApprove'; withdrawalId: string }
@@ -265,6 +284,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 
   const freeze = path.match(/^\/api\/owner\/cashiers\/([^/]+)\/freeze$/);
   if (freeze) return m === 'POST' ? { kind: 'freeze', cashierId: freeze[1] } : 'method';
+
+  const debit = path.match(/^\/api\/owner\/players\/([^/]+)\/debit$/);
+  if (debit) return m === 'POST' ? { kind: 'playerDebit', playerId: debit[1] } : 'method';
 
   const block = path.match(/^\/api\/owner\/players\/([^/]+)\/block$/);
   if (block) return m === 'POST' ? { kind: 'block', playerId: block[1] } : 'method';
@@ -352,6 +374,15 @@ async function runControl(
         p_blocked: requireBoolean(rec.blocked, 'BLOCKED_REQUIRED'),
         p_reason: rec.reason == null ? null : String(rec.reason).trim() || null,
       });
+    case 'playerDebit': {
+      rejectForbiddenFinanceFields(rec);
+      return sanitizeMoneyResult(await rpc.invoke('owner_debit_player', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_amount: requireScaledAmount(rec.amount),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+        p_reason: requireReason(rec.reason),
+      }));
+    }
     case 'managers':
       return rpc.invoke('owner_list_managers');
     case 'managerDetail':

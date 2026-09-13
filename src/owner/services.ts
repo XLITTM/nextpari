@@ -754,6 +754,7 @@ export interface OwnerMoneyResult {
   fromBalanceAfter: number | null;
   toBalanceAfter: number | null;
   playerBalanceAfter: number | null;
+  treasuryBalanceAfter: number | null;
   managerId: string | null;
   cashierId: string | null;
   playerPublicId: string | null;
@@ -800,6 +801,7 @@ function parseOwnerMoneyResult(raw: Record<string, unknown>): OwnerMoneyResult {
     fromBalanceAfter: nullableNum(raw.from_balance_after ?? raw.fromBalanceAfter),
     toBalanceAfter: nullableNum(raw.to_balance_after ?? raw.toBalanceAfter),
     playerBalanceAfter: nullableNum(raw.player_balance_after ?? raw.playerBalanceAfter),
+    treasuryBalanceAfter: nullableNum(raw.treasury_balance_after ?? raw.treasuryBalanceAfter),
     managerId: raw.manager_id == null && raw.managerId == null ? null : str(raw.manager_id ?? raw.managerId),
     cashierId: raw.cashier_id == null && raw.cashierId == null ? null : str(raw.cashier_id ?? raw.cashierId),
     playerPublicId: raw.player_public_id == null && raw.playerPublicId == null
@@ -860,6 +862,23 @@ export async function postOwnerFund(input: {
       amount: input.amount,
       idempotencyKey: input.idempotencyKey,
       note: input.note?.trim() || null,
+    }),
+  });
+  return parseOwnerMoneyResult(asRecord(data));
+}
+
+export async function postOwnerPlayerDebit(input: {
+  playerId: string;
+  amount: number;
+  idempotencyKey: string;
+  reason: string;
+}): Promise<OwnerMoneyResult> {
+  const data = await ownerData(`/api/owner/players/${encodeURIComponent(input.playerId)}/debit`, {
+    method: 'POST',
+    body: JSON.stringify({
+      amount: input.amount,
+      idempotencyKey: input.idempotencyKey,
+      reason: input.reason,
     }),
   });
   return parseOwnerMoneyResult(asRecord(data));

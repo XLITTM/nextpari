@@ -297,6 +297,7 @@ describe('cashier player finance BFF', () => {
       'cashier_deposit_player',
       'cashier_lookup_player_payout',
       'cashier_confirm_player_payout',
+      'cashier_reverse_player_deposit',
     ]);
     assert.match(httpSrc, /assertCashierPayoutRateLimit/);
   });

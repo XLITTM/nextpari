@@ -39,11 +39,19 @@ export function mapCashierRpcError(error: { message?: string; code?: string }): 
     || code === 'PAYOUT_CANCELLED'
     || code === 'PAYOUT_NOT_PENDING'
     || code === 'CASHIER_NOT_ACTIVE'
+    || code === 'CASHIER_REVERSAL_WINDOW_EXPIRED'
+    || code === 'CASHIER_REVERSAL_PLAYER_ACTIVITY'
+    || code === 'CASHIER_DEPOSIT_ALREADY_REVERSED'
+    || code === 'CASHIER_REVERSAL_NOT_ALLOWED'
+    || code === 'CASHIER_REVERSAL_DEPOSIT_ENTRY_NOT_FOUND'
   ) {
     return staffError(code, 409);
   }
   if (/Could not find the function|schema cache|PGRST202/i.test(text)) {
     return staffError('FINANCE_RPC_UNAVAILABLE', 503);
+  }
+  if (code === 'FIELD_FORBIDDEN') {
+    return staffError(code, 400);
   }
   if (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED'))) {
     return staffError(code, 400);
