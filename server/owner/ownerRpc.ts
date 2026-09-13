@@ -17,6 +17,7 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     || code === 'STAFF_ACCOUNT_NOT_FOUND'
     || code === 'STAFF_ACCOUNT_BLOCKED'
     || code === 'STAFF_ACCOUNT_DISABLED'
+    || code === 'SECURITY_RESTRICTION_ACTOR_DENIED'
   ) {
     return staffError(code, 403);
   }
@@ -38,6 +39,9 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     || code === 'WITHDRAWAL_NOT_PENDING'
     || code === 'WITHDRAWAL_NOT_APPROVED'
     || code === 'WITHDRAWAL_CASH_REQUIRES_CASHIER'
+    || code === 'SECURITY_RESTRICTION_ALREADY_ACTIVE'
+    || code === 'SECURITY_RESTRICTION_NOT_ACTIVE'
+    || (code != null && code.endsWith('_RESTRICTED'))
   ) {
     return staffError(code, 409);
   }

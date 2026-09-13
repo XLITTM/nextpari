@@ -44,6 +44,7 @@ export function mapCashierRpcError(error: { message?: string; code?: string }): 
     || code === 'CASHIER_DEPOSIT_ALREADY_REVERSED'
     || code === 'CASHIER_REVERSAL_NOT_ALLOWED'
     || code === 'CASHIER_REVERSAL_DEPOSIT_ENTRY_NOT_FOUND'
+    || (code != null && code.endsWith('_RESTRICTED'))
   ) {
     return staffError(code, 409);
   }

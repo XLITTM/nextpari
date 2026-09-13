@@ -54,6 +54,7 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'PAYOUT_EXPIRED'
     || code === 'PAYOUT_CANCELLED'
     || code === 'PAYOUT_ALREADY_PAID'
+    || (code != null && code.endsWith('_RESTRICTED'))
   ) {
     return staffError(code, code === 'SPORTS_BET_DISABLED' ? 403 : 409);
   }

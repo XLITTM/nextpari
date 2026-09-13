@@ -21,11 +21,11 @@ import {
   fetchOwnerRiskBets,
   fetchOwnerSecurityFlags,
   fetchOwnerSecurityOverview,
-  fetchOwnerPlayerDossier,
   fetchOwnerPlayerSecurity,
+  fetchOwnerPlayerSecurityRestriction,
   fetchOwnerTreasury,
   resolveOwnerSecurityFlag,
-  setOwnerPlayerBlocked,
+  setOwnerPlayerSecurityRestriction,
   ledgerPeriodFrom,
   cashierOpLabel,
   cashierOpRef,
@@ -49,9 +49,10 @@ import {
 import {
   OWNER_SECURITY_ACCOUNT_LABEL,
   OWNER_SECURITY_DOSSIER_LABEL,
+  OWNER_SECURITY_RESTRICTION_POLICY,
   OWNER_SECURITY_REVIEW_LABEL,
   ownerSecurityAccountStatusLabel,
-  ownerSecurityAccountToggle,
+  ownerSecurityRestrictionToggle,
   requireOwnerSecurityAccountReason,
 } from './securityAccountActions';
 
@@ -980,7 +981,7 @@ function SecurityPanel() {
   const [reason, setReason] = useState('');
   const [dossierId, setDossierId] = useState('');
   const [accountFor, setAccountFor] = useState<OwnerSecurityFlag | null>(null);
-  const [accountBlocked, setAccountBlocked] = useState<boolean | null>(null);
+  const [accountRestricted, setAccountRestricted] = useState<boolean | null>(null);
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountConfirm, setAccountConfirm] = useState(false);
   const [accountReason, setAccountReason] = useState('');
@@ -1054,14 +1055,14 @@ function SecurityPanel() {
 
   const openAccount = async (flag: OwnerSecurityFlag) => {
     setAccountFor(flag);
-    setAccountBlocked(null);
+    setAccountRestricted(null);
     setAccountConfirm(false);
     setAccountReason('');
     setAccountLoading(true);
     setError('');
     try {
-      const dossier = await fetchOwnerPlayerDossier(flag.playerPublicId);
-      setAccountBlocked(Boolean(dossier.risk.is_blocked));
+      const status = await fetchOwnerPlayerSecurityRestriction(flag.playerPublicId);
+      setAccountRestricted(Boolean(status.restricted));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить статус игрока');
       setAccountFor(null);
@@ -1071,7 +1072,7 @@ function SecurityPanel() {
   };
 
   const submitAccount = async () => {
-    if (!accountFor || accountBlocked === null) return;
+    if (!accountFor || accountRestricted === null) return;
     let text: string;
     try {
       text = requireOwnerSecurityAccountReason(accountReason);
@@ -1079,24 +1080,24 @@ function SecurityPanel() {
       setError('Укажите причину');
       return;
     }
-    const toggle = ownerSecurityAccountToggle(accountBlocked);
+    const toggle = ownerSecurityRestrictionToggle(accountRestricted);
     setBusyId(accountFor.id);
     setError('');
     setNotice('');
     try {
-      await setOwnerPlayerBlocked({
+      await setOwnerPlayerSecurityRestriction({
         playerId: accountFor.playerPublicId,
-        blocked: toggle.nextBlocked,
+        restricted: toggle.nextRestricted,
         reason: text,
       });
       setNotice(toggle.successMessage(accountFor.playerPublicId));
-      const dossier = await fetchOwnerPlayerDossier(accountFor.playerPublicId);
-      setAccountBlocked(Boolean(dossier.risk.is_blocked));
+      const status = await fetchOwnerPlayerSecurityRestriction(accountFor.playerPublicId);
+      setAccountRestricted(Boolean(status.restricted));
       setAccountConfirm(false);
       setAccountReason('');
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось изменить статус аккаунта');
+      setError(err instanceof Error ? err.message : 'Не удалось изменить ограничение');
     } finally {
       setBusyId('');
     }
@@ -1115,7 +1116,7 @@ function SecurityPanel() {
     <section>
       <HeaderRow
         title="Мошенничество и безопасность"
-        subtitle="Сигналы для ручного разбора. Деньги и блокировка игрока не меняются автоматически"
+        subtitle="Сигналы для ручного разбора. Ограничение аккаунта не закрывает флаг и не меняет баланс"
         onRefresh={() => void load()}
         loading={loading}
       />
@@ -1278,20 +1279,25 @@ function SecurityPanel() {
             <h3 className="text-lg font-extrabold text-ink-900 mb-3">Аккаунт игрока</h3>
             {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
             {notice && <p className="text-sm font-semibold text-emerald-700 mb-3">{notice}</p>}
-            {accountLoading || accountBlocked === null ? (
+            {accountLoading || accountRestricted === null ? (
               <p className="text-sm text-gray-500 mb-4">Загрузка статуса…</p>
             ) : (
               <>
                 <p className="text-sm text-ink-900 mb-1">Игрок: #{accountFor.playerPublicId}</p>
-                <p className="text-sm text-ink-900 mb-4">
-                  Статус: {ownerSecurityAccountStatusLabel(accountBlocked)}
+                <p className="text-sm text-ink-900 mb-3">
+                  Статус: {ownerSecurityAccountStatusLabel(accountRestricted)}
                 </p>
+                <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 mb-4 space-y-0.5">
+                  {OWNER_SECURITY_RESTRICTION_POLICY.map((row) => (
+                    <p key={row.label}>{row.label}: {row.value}</p>
+                  ))}
+                </div>
                 {accountConfirm ? (
                   <>
                     <p className="text-sm font-semibold text-ink-900 mb-2">
-                      {ownerSecurityAccountToggle(accountBlocked).confirmLabel}
+                      {ownerSecurityRestrictionToggle(accountRestricted).confirmLabel}
                     </p>
-                    <p className="text-xs text-gray-500 mb-2">Причина обязательна. Баланс и ставки не изменяются.</p>
+                    <p className="text-xs text-gray-500 mb-2">Причина обязательна. Баланс, ставки и жёсткая блокировка не изменяются.</p>
                     <textarea
                       value={accountReason}
                       onChange={(e) => setAccountReason(e.target.value)}
@@ -1312,10 +1318,10 @@ function SecurityPanel() {
                         disabled={busyId === accountFor.id}
                         onClick={() => void submitAccount()}
                         className={`text-sm font-bold px-3 py-2 rounded-xl text-white disabled:opacity-40 ${
-                          accountBlocked ? 'bg-emerald-600' : 'bg-red-600'
+                          accountRestricted ? 'bg-emerald-600' : 'bg-red-600'
                         }`}
                       >
-                        {ownerSecurityAccountToggle(accountBlocked).buttonLabel}
+                        {ownerSecurityRestrictionToggle(accountRestricted).buttonLabel}
                       </button>
                     </div>
                   </>
@@ -1325,10 +1331,10 @@ function SecurityPanel() {
                     disabled={busyId === accountFor.id}
                     onClick={() => { setAccountConfirm(true); setAccountReason(''); setError(''); }}
                     className={`w-full text-sm font-bold px-3 py-2 rounded-xl text-white mb-4 disabled:opacity-40 ${
-                      accountBlocked ? 'bg-emerald-600' : 'bg-red-600'
+                      accountRestricted ? 'bg-emerald-600' : 'bg-red-600'
                     }`}
                   >
-                    {ownerSecurityAccountToggle(accountBlocked).buttonLabel}
+                    {ownerSecurityRestrictionToggle(accountRestricted).buttonLabel}
                   </button>
                 )}
               </>

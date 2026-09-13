@@ -499,6 +499,44 @@ export async function resolveOwnerSecurityFlag(input: {
   });
 }
 
+export interface OwnerPlayerSecurityRestriction {
+  playerPublicId: string;
+  restricted: boolean;
+  reason: string | null;
+  updatedAt: string | null;
+}
+
+export async function fetchOwnerPlayerSecurityRestriction(
+  playerId: string,
+): Promise<OwnerPlayerSecurityRestriction> {
+  const data = await ownerData(
+    `/api/owner/players/${encodeURIComponent(playerId)}/security-restriction`,
+  );
+  const rec = asRecord(data);
+  return {
+    playerPublicId: str(rec.player_public_id ?? rec.playerPublicId, playerId),
+    restricted: Boolean(rec.restricted),
+    reason: rec.reason == null ? null : str(rec.reason),
+    updatedAt: rec.updated_at == null && rec.updatedAt == null
+      ? null
+      : str(rec.updated_at ?? rec.updatedAt),
+  };
+}
+
+export async function setOwnerPlayerSecurityRestriction(params: {
+  playerId: string;
+  restricted: boolean;
+  reason: string;
+}): Promise<void> {
+  await ownerData(`/api/owner/players/${encodeURIComponent(params.playerId)}/security-restriction`, {
+    method: 'POST',
+    body: JSON.stringify({
+      restricted: params.restricted,
+      reason: params.reason,
+    }),
+  });
+}
+
 export interface OwnerPlayerListItem {
   id: string;
   profileId: string | null;

@@ -2,29 +2,38 @@ export const OWNER_SECURITY_REVIEW_LABEL = 'Отметить просмотре�
 export const OWNER_SECURITY_ACCOUNT_LABEL = 'Аккаунт';
 export const OWNER_SECURITY_DOSSIER_LABEL = 'Открыть досье безопасности';
 
-export function ownerSecurityAccountStatusLabel(blocked: boolean): string {
-  return blocked ? 'Заблокирован' : 'Активен';
+export const OWNER_SECURITY_RESTRICTION_POLICY = [
+  { label: 'Спорт', value: 'Разрешён' },
+  { label: 'Мини-игры Nextpari', value: 'Разрешены' },
+  { label: 'Казино/слоты', value: 'Запрещены' },
+  { label: 'Live Casino', value: 'Запрещено' },
+  { label: 'Пополнение', value: 'Запрещено' },
+  { label: 'Вывод', value: 'Запрещён' },
+] as const;
+
+export function ownerSecurityAccountStatusLabel(restricted: boolean): string {
+  return restricted ? 'Ограничен службой безопасности' : 'Активен';
 }
 
-export function ownerSecurityAccountToggle(blocked: boolean): {
-  nextBlocked: boolean;
+export function ownerSecurityRestrictionToggle(restricted: boolean): {
+  nextRestricted: boolean;
   buttonLabel: string;
   confirmLabel: string;
   successMessage: (playerPublicId: string) => string;
 } {
-  if (blocked) {
+  if (restricted) {
     return {
-      nextBlocked: false,
-      buttonLabel: 'Разблокировать аккаунт',
-      confirmLabel: 'Подтвердите разблокировку',
-      successMessage: (playerPublicId) => `Игрок #${playerPublicId} разблокирован`,
+      nextRestricted: false,
+      buttonLabel: 'Снять ограничения',
+      confirmLabel: 'Подтвердите снятие ограничений',
+      successMessage: (playerPublicId) => `Ограничения игрока #${playerPublicId} сняты`,
     };
   }
   return {
-    nextBlocked: true,
-    buttonLabel: 'Заблокировать аккаунт',
-    confirmLabel: 'Подтвердите блокировку',
-    successMessage: (playerPublicId) => `Игрок #${playerPublicId} заблокирован`,
+    nextRestricted: true,
+    buttonLabel: 'Ограничить аккаунт',
+    confirmLabel: 'Подтвердите ограничение аккаунта',
+    successMessage: (playerPublicId) => `Игрок #${playerPublicId} ограничен службой безопасности`,
   };
 }
 
