@@ -260,6 +260,33 @@ describe('owner control center same-origin BFF', () => {
     }
   });
 
+  it('4d. manager, cashier, and player cannot POST owner player block', async () => {
+    const denied = async (role: string) => {
+      const rpc = createRpc();
+      const result = await handleOwnerControlRequest(
+        {
+          method: 'POST',
+          pathname: `/api/owner/players/${PLAYER_ID}/block`,
+          cookie: cookieHeader(ACCESS, REFRESH),
+          cookieSecure: true,
+          body: { blocked: true, reason: 'nope' },
+        },
+        {
+          sessionPorts: createAuthPorts({
+            context: { role, status: 'active', auth_user_id: `${role}-uid` },
+          }),
+          rpcFactory: rpc.rpcFactory,
+        },
+      );
+      assert.equal(result.status, 403, role);
+      assert.equal(result.body.error, 'OWNER_REQUIRED');
+      assert.equal(rpc.calls.length, 0);
+    };
+    await denied('manager');
+    await denied('cashier');
+    await denied('player');
+  });
+
   it('5. players list', async () => {
     const { result, rpc } = await ownerGet('/api/owner/players', {
       search: '?search=aziz&limit=20&offset=10',
@@ -305,6 +332,17 @@ describe('owner control center same-origin BFF', () => {
       p_blocked: true,
       p_reason: 'risk',
     });
+    assert.equal(rpc.calls.some((call) => call.name === 'owner_resolve_security_flag'), false);
+    assert.equal(rpc.calls.some((call) => call.name === 'apply_wallet_entry'), false);
+
+    const unblocked = await ownerPost(`/api/owner/players/${PLAYER_ID}/block`, {
+      blocked: false,
+      reason: 'clear',
+    });
+    assert.equal(unblocked.result.status, 200);
+    assert.equal(unblocked.rpc.calls[0]?.name, 'owner_set_player_blocked');
+    assert.equal(unblocked.rpc.calls[0]?.args?.p_blocked, false);
+    assert.equal(unblocked.rpc.calls.some((call) => call.name === 'owner_resolve_security_flag'), false);
   });
 
   it('9. cashier freeze POST', async () => {

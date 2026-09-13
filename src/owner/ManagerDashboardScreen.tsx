@@ -21,9 +21,11 @@ import {
   fetchOwnerRiskBets,
   fetchOwnerSecurityFlags,
   fetchOwnerSecurityOverview,
+  fetchOwnerPlayerDossier,
   fetchOwnerPlayerSecurity,
   fetchOwnerTreasury,
   resolveOwnerSecurityFlag,
+  setOwnerPlayerBlocked,
   ledgerPeriodFrom,
   cashierOpLabel,
   cashierOpRef,
@@ -44,6 +46,14 @@ import {
   type OwnerPlayerSecurityDossier,
   type VerticalKpi,
 } from './services';
+import {
+  OWNER_SECURITY_ACCOUNT_LABEL,
+  OWNER_SECURITY_DOSSIER_LABEL,
+  OWNER_SECURITY_REVIEW_LABEL,
+  ownerSecurityAccountStatusLabel,
+  ownerSecurityAccountToggle,
+  requireOwnerSecurityAccountReason,
+} from './securityAccountActions';
 
 type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'agents' | 'players' | 'messages' | 'risk';
 
@@ -969,6 +979,12 @@ function SecurityPanel() {
   const [reasonFor, setReasonFor] = useState<{ flag: OwnerSecurityFlag; action: 'resolve' | 'dismiss' } | null>(null);
   const [reason, setReason] = useState('');
   const [dossierId, setDossierId] = useState('');
+  const [accountFor, setAccountFor] = useState<OwnerSecurityFlag | null>(null);
+  const [accountBlocked, setAccountBlocked] = useState<boolean | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [accountConfirm, setAccountConfirm] = useState(false);
+  const [accountReason, setAccountReason] = useState('');
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1019,6 +1035,7 @@ function SecurityPanel() {
     }
     setBusyId(reasonFor.flag.id);
     setError('');
+    setNotice('');
     try {
       await resolveOwnerSecurityFlag({
         flagId: reasonFor.flag.id,
@@ -1030,6 +1047,56 @@ function SecurityPanel() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось обновить флаг');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const openAccount = async (flag: OwnerSecurityFlag) => {
+    setAccountFor(flag);
+    setAccountBlocked(null);
+    setAccountConfirm(false);
+    setAccountReason('');
+    setAccountLoading(true);
+    setError('');
+    try {
+      const dossier = await fetchOwnerPlayerDossier(flag.playerPublicId);
+      setAccountBlocked(Boolean(dossier.risk.is_blocked));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить статус игрока');
+      setAccountFor(null);
+    } finally {
+      setAccountLoading(false);
+    }
+  };
+
+  const submitAccount = async () => {
+    if (!accountFor || accountBlocked === null) return;
+    let text: string;
+    try {
+      text = requireOwnerSecurityAccountReason(accountReason);
+    } catch {
+      setError('Укажите причину');
+      return;
+    }
+    const toggle = ownerSecurityAccountToggle(accountBlocked);
+    setBusyId(accountFor.id);
+    setError('');
+    setNotice('');
+    try {
+      await setOwnerPlayerBlocked({
+        playerId: accountFor.playerPublicId,
+        blocked: toggle.nextBlocked,
+        reason: text,
+      });
+      setNotice(toggle.successMessage(accountFor.playerPublicId));
+      const dossier = await fetchOwnerPlayerDossier(accountFor.playerPublicId);
+      setAccountBlocked(Boolean(dossier.risk.is_blocked));
+      setAccountConfirm(false);
+      setAccountReason('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось изменить статус аккаунта');
     } finally {
       setBusyId('');
     }
@@ -1088,6 +1155,7 @@ function SecurityPanel() {
           className="text-sm border border-slate-200 rounded-xl px-3 py-2 w-32"
         />
       </div>
+      {notice && <p className="text-sm font-semibold text-emerald-700 mb-3">{notice}</p>}
       {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         <table className="w-full text-sm">
@@ -1134,14 +1202,14 @@ function SecurityPanel() {
                 <td className="px-4 py-3 text-xs text-gray-500">{formatBackofficeDateTime(row.lastSeenAt)}</td>
                 <td className="px-4 py-3">{securityStatusLabel(row.status)}</td>
                 <td className="px-4 py-3">
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <button
                       type="button"
                       disabled={busyId === row.id || row.status !== 'open'}
                       onClick={() => void runReview(row)}
                       className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 disabled:opacity-40"
                     >
-                      Просмотр
+                      {OWNER_SECURITY_REVIEW_LABEL}
                     </button>
                     <button
                       type="button"
@@ -1158,6 +1226,14 @@ function SecurityPanel() {
                       className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-800 disabled:opacity-40"
                     >
                       Отклонить
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === row.id || !row.playerPublicId}
+                      onClick={() => void openAccount(row)}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-800 text-white disabled:opacity-40"
+                    >
+                      {OWNER_SECURITY_ACCOUNT_LABEL}
                     </button>
                   </div>
                 </td>
@@ -1191,6 +1267,96 @@ function SecurityPanel() {
               </button>
               <button type="button" onClick={() => void submitReason()} className="text-sm font-bold px-3 py-2 rounded-xl bg-brand-600 text-white">
                 Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {accountFor && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5">
+            <h3 className="text-lg font-extrabold text-ink-900 mb-3">Аккаунт игрока</h3>
+            {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
+            {notice && <p className="text-sm font-semibold text-emerald-700 mb-3">{notice}</p>}
+            {accountLoading || accountBlocked === null ? (
+              <p className="text-sm text-gray-500 mb-4">Загрузка статуса…</p>
+            ) : (
+              <>
+                <p className="text-sm text-ink-900 mb-1">Игрок: #{accountFor.playerPublicId}</p>
+                <p className="text-sm text-ink-900 mb-4">
+                  Статус: {ownerSecurityAccountStatusLabel(accountBlocked)}
+                </p>
+                {accountConfirm ? (
+                  <>
+                    <p className="text-sm font-semibold text-ink-900 mb-2">
+                      {ownerSecurityAccountToggle(accountBlocked).confirmLabel}
+                    </p>
+                    <p className="text-xs text-gray-500 mb-2">Причина обязательна. Баланс и ставки не изменяются.</p>
+                    <textarea
+                      value={accountReason}
+                      onChange={(e) => setAccountReason(e.target.value)}
+                      rows={3}
+                      className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 mb-4"
+                      placeholder="Причина решения"
+                    />
+                    <div className="flex justify-end gap-2 mb-4">
+                      <button
+                        type="button"
+                        onClick={() => { setAccountConfirm(false); setAccountReason(''); }}
+                        className="text-sm font-bold px-3 py-2 rounded-xl bg-slate-100"
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busyId === accountFor.id}
+                        onClick={() => void submitAccount()}
+                        className={`text-sm font-bold px-3 py-2 rounded-xl text-white disabled:opacity-40 ${
+                          accountBlocked ? 'bg-emerald-600' : 'bg-red-600'
+                        }`}
+                      >
+                        {ownerSecurityAccountToggle(accountBlocked).buttonLabel}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={busyId === accountFor.id}
+                    onClick={() => { setAccountConfirm(true); setAccountReason(''); setError(''); }}
+                    className={`w-full text-sm font-bold px-3 py-2 rounded-xl text-white mb-4 disabled:opacity-40 ${
+                      accountBlocked ? 'bg-emerald-600' : 'bg-red-600'
+                    }`}
+                  >
+                    {ownerSecurityAccountToggle(accountBlocked).buttonLabel}
+                  </button>
+                )}
+              </>
+            )}
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const playerId = accountFor.playerPublicId;
+                  setAccountFor(null);
+                  setAccountConfirm(false);
+                  setAccountReason('');
+                  setDossierId(playerId);
+                }}
+                className="text-sm font-bold px-3 py-2 rounded-xl bg-slate-100 text-slate-800"
+              >
+                {OWNER_SECURITY_DOSSIER_LABEL}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAccountFor(null);
+                  setAccountConfirm(false);
+                  setAccountReason('');
+                }}
+                className="text-sm font-bold px-3 py-2 rounded-xl bg-white border border-slate-200"
+              >
+                Закрыть окно
               </button>
             </div>
           </div>
