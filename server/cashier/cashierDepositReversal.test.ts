@@ -238,6 +238,39 @@ describe('cashier deposit reversal SQL/UI contract (not executed)', () => {
     assert.match(sql, /REVOKE ALL ON FUNCTION public\.manager_adjust_player_balance/);
   });
 
+  it('extends wallet_ledger checks so CASH_DEPOSIT_REVERSAL and owner source remain valid', () => {
+    const start = sql.indexOf('wallet_ledger_operation_type_check');
+    const srcStart = sql.indexOf('wallet_ledger_source_module_check');
+    const opSrcStart = sql.indexOf('operational_ledger_source_module_check');
+    const end = sql.indexOf('-- 2. SHAPE TRIGGER');
+    assert.equal(start >= 0 && srcStart > start && opSrcStart > srcStart && end > opSrcStart, true);
+    const walletOps = sql.slice(start, srcStart);
+    const walletSrc = sql.slice(srcStart, opSrcStart);
+    const operationalSrc = sql.slice(opSrcStart, end);
+    for (const value of [
+      'CASH_DEPOSIT',
+      'TREASURY_FUNDING',
+      'WITHDRAWAL_HOLD',
+      'WITHDRAWAL_RELEASE',
+      'WITHDRAWAL_COMPLETE',
+      'CASINO_BET',
+      'CASINO_WIN',
+      'CASINO_REFUND',
+      'OPENING_BALANCE',
+      'OWNER_DEBIT',
+      'CASH_DEPOSIT_REVERSAL',
+    ]) {
+      assert.equal(walletOps.includes(`'${value}'`), true, `wallet op ${value}`);
+    }
+    for (const value of ['mobcash', 'treasury', 'casino', 'withdrawal', 'system', 'manager', 'owner']) {
+      assert.equal(walletSrc.includes(`'${value}'`), true, `wallet source ${value}`);
+    }
+    for (const value of ['treasury', 'manager', 'mobcash', 'migration', 'system', 'owner']) {
+      assert.equal(operationalSrc.includes(`'${value}'`), true, `operational source ${value}`);
+    }
+    assert.match(sql, /pg_catalog\.pg_get_constraintdef/);
+  });
+
   it('preserves manager collection and does not add manager player debit', () => {
     assert.match(managerSql, /CREATE OR REPLACE FUNCTION public\.manager_collect_cashier\(/);
     assert.match(managerSql, /'CASHIER_TO_MANAGER'/);

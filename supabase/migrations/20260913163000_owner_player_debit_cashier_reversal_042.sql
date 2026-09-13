@@ -102,6 +102,130 @@ ALTER TABLE private.operational_ledger
 
 
 -- ============================================================
+-- 1b. WALLET CORE + OPERATIONAL SOURCE_MODULE CHECKS
+-- Preserve ALL existing values on the named live constraints,
+-- then add OWNER_DEBIT, CASH_DEPOSIT_REVERSAL, and owner.
+-- ============================================================
+
+DO $chk$
+DECLARE
+    r RECORD;
+    v_def TEXT;
+    v_vals TEXT[] := ARRAY[]::TEXT[];
+    v_tok TEXT;
+    v_sql TEXT;
+    v_matches TEXT[];
+BEGIN
+    PERFORM pg_catalog.set_config('search_path', '', true);
+
+    FOR r IN
+        SELECT *
+        FROM (
+            VALUES
+            (
+                'wallet_ledger'::TEXT,
+                'wallet_ledger_operation_type_check'::TEXT,
+                'operation_type'::TEXT,
+                ARRAY[
+                    'CASH_DEPOSIT',
+                    'TREASURY_FUNDING',
+                    'WITHDRAWAL_HOLD',
+                    'WITHDRAWAL_RELEASE',
+                    'WITHDRAWAL_COMPLETE',
+                    'CASINO_BET',
+                    'CASINO_WIN',
+                    'CASINO_REFUND',
+                    'OPENING_BALANCE',
+                    'OWNER_DEBIT',
+                    'CASH_DEPOSIT_REVERSAL'
+                ]::TEXT[]
+            ),
+            (
+                'wallet_ledger'::TEXT,
+                'wallet_ledger_source_module_check'::TEXT,
+                'source_module'::TEXT,
+                ARRAY[
+                    'mobcash',
+                    'treasury',
+                    'casino',
+                    'withdrawal',
+                    'system',
+                    'manager',
+                    'owner'
+                ]::TEXT[]
+            ),
+            (
+                'operational_ledger'::TEXT,
+                'operational_ledger_source_module_check'::TEXT,
+                'source_module'::TEXT,
+                ARRAY[
+                    'treasury',
+                    'manager',
+                    'mobcash',
+                    'migration',
+                    'system',
+                    'owner'
+                ]::TEXT[]
+            )
+        ) AS t(tbl, cons, col, extras)
+    LOOP
+        SELECT pg_catalog.pg_get_constraintdef(c.oid)
+        INTO v_def
+        FROM pg_catalog.pg_constraint AS c
+        INNER JOIN pg_catalog.pg_class AS rel ON rel.oid = c.conrelid
+        INNER JOIN pg_catalog.pg_namespace AS n ON n.oid = rel.relnamespace
+        WHERE n.nspname = 'private'
+          AND rel.relname = r.tbl
+          AND c.conname = r.cons;
+
+        IF v_def IS NULL THEN
+            RAISE EXCEPTION '% not found', r.cons;
+        END IF;
+
+        v_vals := ARRAY[]::TEXT[];
+        FOR v_matches IN
+            SELECT pg_catalog.regexp_matches(v_def, '''([^'']+)''', 'g')
+        LOOP
+            v_tok := v_matches[1];
+            IF v_tok IS NOT NULL AND NOT v_tok = ANY (v_vals) THEN
+                v_vals := pg_catalog.array_append(v_vals, v_tok);
+            END IF;
+        END LOOP;
+
+        IF COALESCE(pg_catalog.array_length(v_vals, 1), 0) = 0 THEN
+            RAISE EXCEPTION 'failed to parse existing values for %', r.cons;
+        END IF;
+
+        FOREACH v_tok IN ARRAY r.extras LOOP
+            IF NOT v_tok = ANY (v_vals) THEN
+                v_vals := pg_catalog.array_append(v_vals, v_tok);
+            END IF;
+        END LOOP;
+
+        v_sql := pg_catalog.format(
+            'ALTER TABLE private.%I DROP CONSTRAINT %I',
+            r.tbl,
+            r.cons
+        );
+        EXECUTE v_sql;
+
+        v_sql := pg_catalog.format(
+            'ALTER TABLE private.%I ADD CONSTRAINT %I CHECK (%I IN (%s))',
+            r.tbl,
+            r.cons,
+            r.col,
+            (
+                SELECT pg_catalog.string_agg(pg_catalog.quote_literal(x), ', ' ORDER BY x)
+                FROM pg_catalog.unnest(v_vals) AS x
+            )
+        );
+        EXECUTE v_sql;
+    END LOOP;
+END
+$chk$;
+
+
+-- ============================================================
 -- 2. SHAPE TRIGGER
 -- ============================================================
 

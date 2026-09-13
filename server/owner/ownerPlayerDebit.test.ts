@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -227,6 +227,67 @@ describe('owner player debit SQL/UI contract (not executed)', () => {
     assert.equal(/GRANT EXECUTE ON FUNCTION public\.manager_adjust_player_balance/.test(sql), false);
     assert.match(sql, /WITHDRAWAL_COMPLETE/);
     assert.equal(/operation_type = 'WITHDRAWAL_COMPLETE'[\s\S]{0,80}PLAYER_TO_TREASURY/.test(sql), false);
+  });
+
+  it('extends wallet_ledger and operational_ledger checks without dropping existing values', () => {
+    const start = sql.indexOf('1b. WALLET CORE + OPERATIONAL SOURCE_MODULE CHECKS');
+    const end = sql.indexOf('-- 2. SHAPE TRIGGER');
+    assert.equal(start >= 0, true);
+    assert.equal(end > start, true);
+    const block = sql.slice(start, end);
+    assert.match(block, /wallet_ledger_operation_type_check/);
+    assert.match(block, /wallet_ledger_source_module_check/);
+    assert.match(block, /operational_ledger_source_module_check/);
+    assert.match(block, /pg_catalog\.pg_get_constraintdef/);
+    assert.match(block, /failed to parse existing values/);
+    assert.match(block, /not found/);
+    for (const value of [
+      'CASH_DEPOSIT',
+      'TREASURY_FUNDING',
+      'WITHDRAWAL_HOLD',
+      'WITHDRAWAL_RELEASE',
+      'WITHDRAWAL_COMPLETE',
+      'CASINO_BET',
+      'CASINO_WIN',
+      'CASINO_REFUND',
+      'OPENING_BALANCE',
+      'OWNER_DEBIT',
+      'CASH_DEPOSIT_REVERSAL',
+    ]) {
+      assert.equal(block.includes(`'${value}'`), true, value);
+    }
+    const opStart = block.indexOf('wallet_ledger_operation_type_check');
+    const srcStart = block.indexOf('wallet_ledger_source_module_check');
+    const opSrcStart = block.indexOf('operational_ledger_source_module_check');
+    const walletOps = block.slice(opStart, srcStart);
+    const walletSrc = block.slice(srcStart, opSrcStart);
+    const operationalSrc = block.slice(opSrcStart);
+    for (const value of [
+      'CASH_DEPOSIT',
+      'TREASURY_FUNDING',
+      'WITHDRAWAL_HOLD',
+      'WITHDRAWAL_RELEASE',
+      'WITHDRAWAL_COMPLETE',
+      'CASINO_BET',
+      'CASINO_WIN',
+      'CASINO_REFUND',
+      'OPENING_BALANCE',
+      'OWNER_DEBIT',
+      'CASH_DEPOSIT_REVERSAL',
+    ]) {
+      assert.equal(walletOps.includes(`'${value}'`), true, `wallet op ${value}`);
+    }
+    for (const value of ['mobcash', 'treasury', 'casino', 'withdrawal', 'system', 'manager', 'owner']) {
+      assert.equal(walletSrc.includes(`'${value}'`), true, `wallet source ${value}`);
+    }
+    for (const value of ['treasury', 'manager', 'mobcash', 'migration', 'system', 'owner']) {
+      assert.equal(operationalSrc.includes(`'${value}'`), true, `operational source ${value}`);
+    }
+    assert.equal(existsSync(join(root, 'supabase/migrations/20260913163001_owner_player_debit_cashier_reversal_043.sql')), false);
+    assert.equal(
+      readdirSync(join(root, 'supabase/migrations')).some((name) => name.includes('_043.sql')),
+      false,
+    );
   });
 
   it('UI exposes Списать beside fund and never manager_adjust_player_balance', () => {
