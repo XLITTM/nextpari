@@ -3,6 +3,7 @@ import { loadStaffOnboardingEnv } from '../staff/env.js';
 import { mapPlayerGameRpcError } from '../player/playerGameRpc.js';
 
 export const SPORTS_PLACE_SERVER_RPC = 'sports_place_for_player';
+export const SPORTS_LOOKUP_SERVER_RPC = 'sports_lookup_existing_place_for_player';
 
 export interface SportsPlaceAsPlayerArgs {
   playerUserId: string;
@@ -15,6 +16,10 @@ export interface SportsPlaceAsPlayerArgs {
 export type SportsPlaceAsPlayer = (
   args: SportsPlaceAsPlayerArgs,
 ) => Promise<Record<string, unknown>>;
+
+export type SportsLookupExistingPlace = (
+  args: SportsPlaceAsPlayerArgs,
+) => Promise<Record<string, unknown> | null>;
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -36,5 +41,23 @@ export function createSportsPlaceAsPlayerRpc(): SportsPlaceAsPlayer {
     });
     if (error) throw mapPlayerGameRpcError(error);
     return asRecord(data);
+  };
+}
+
+export function createSportsLookupExistingPlaceRpc(): SportsLookupExistingPlace {
+  return async (args) => {
+    const staff = loadStaffOnboardingEnv();
+    const client = createServiceRoleClient(staff.supabaseUrl, staff.supabaseServiceRoleKey);
+    const { data, error } = await client.rpc(SPORTS_LOOKUP_SERVER_RPC, {
+      p_player_user_id: args.playerUserId,
+      p_idempotency_key: args.idempotencyKey,
+      p_stake: args.stake,
+      p_mode: args.mode,
+      p_legs: args.legs,
+    });
+    if (error) throw mapPlayerGameRpcError(error);
+    if (data == null) return null;
+    const row = asRecord(data);
+    return Object.keys(row).length === 0 ? null : row;
   };
 }

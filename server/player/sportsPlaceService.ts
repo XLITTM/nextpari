@@ -1,6 +1,6 @@
 import { GAME_NO_STORE_HEADERS, serverTimingHeader } from '../games/httpCache.js';
 import { isCanonicalSportsBetEnabled } from '../sports/enabled.js';
-import { createSportsPlaceAsPlayerRpc, type SportsPlaceAsPlayer } from '../sports/placeRpc.js';
+import { createSportsPlaceAsPlayerRpc, createSportsLookupExistingPlaceRpc, type SportsLookupExistingPlace, type SportsPlaceAsPlayer } from '../sports/placeRpc.js';
 import { sanitizeChangedLeg } from '../sports/changedLeg.js';
 import { decideSportsQuote } from '../sports/quote.js';
 import { resolveSportsQuoteProvider, SportsProviderUnsupportedError, normalizeSportsProviderId } from '../sports/quoteProvider.js';
@@ -62,11 +62,30 @@ function quoteHttpStatus(reason: string): number {
 export interface SportsPlacePorts extends PlayerGameGatewayPorts {
   fetchQuote?: (request: SportsQuoteRequest) => Promise<SportsQuote>;
   placeAsVerifiedPlayer?: SportsPlaceAsPlayer;
+  lookupExistingPlace?: SportsLookupExistingPlace;
   recordAcceptance?: (event: SportsAcceptanceAuditInput) => Promise<void>;
 }
 
 async function defaultFetchQuote(request: SportsQuoteRequest): Promise<SportsQuote> {
   return resolveSportsQuoteProvider(request.provider).getQuote(request);
+}
+
+function replayLegsFromRequests(requests: SportsQuoteRequest[]): Array<Record<string, unknown>> | null {
+  const legs: Array<Record<string, unknown>> = [];
+  for (const request of requests) {
+    const price = Number(request.price);
+    if (!Number.isFinite(price) || price <= 1) return null;
+    legs.push({
+      provider: request.provider,
+      fixtureId: request.fixtureId,
+      marketId: request.marketId ?? '',
+      marketKey: request.marketKey ?? '',
+      line: request.line ?? '',
+      outcomeId: request.outcomeId,
+      acceptedOdds: price,
+    });
+  }
+  return legs;
 }
 
 function parseLeg(value: unknown): SportsQuoteRequest {
@@ -147,10 +166,6 @@ export async function placeSportsBet(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<PlayerAuthHttpResult> {
   const totalStart = Date.now();
-  if (!isCanonicalSportsBetEnabled(env)) {
-    throw staffError('SPORTS_BET_DISABLED', 403);
-  }
-
   const session = await resolveVerifiedPlayerUserId(ports, cookieHeader, secure);
 
   const stake = requireStake(body.stake);
@@ -171,6 +186,64 @@ export async function placeSportsBet(
   }
 
   const requests = rawLegs.map(parseLeg);
+  const replayLegs = replayLegsFromRequests(requests);
+  if (replayLegs) {
+    const lookup = ports.lookupExistingPlace ?? createSportsLookupExistingPlaceRpc();
+    const lookupStart = Date.now();
+    try {
+      const existing = await lookup({
+        playerUserId: session.userId,
+        idempotencyKey,
+        stake,
+        mode,
+        legs: replayLegs,
+      });
+      if (existing?.ok === true && existing.betId) {
+        return {
+          status: 200,
+          body: existing,
+          cookies: session.cookies,
+          headers: {
+            ...GAME_NO_STORE_HEADERS,
+            'Server-Timing': serverTimingHeader({
+              authMs: session.authMs,
+              rpcMs: Date.now() - lookupStart,
+              totalMs: Date.now() - totalStart,
+              refreshed: session.refreshed,
+            }),
+          },
+        };
+      }
+    } catch (error) {
+      const code = error instanceof StaffOnboardingError ? error.code : 'GAME_RPC_FAILED';
+      if (code === 'SPORTS_BET_IDEMPOTENCY_CONFLICT') {
+        await recordPlaceDecision(ports, {
+          idempotencyKey,
+          playerUserId: session.userId,
+          providers: requests.map((row) => String(row.provider ?? '')).filter(Boolean).join(','),
+          mode,
+          stake,
+          decision: 'rejected',
+          decisionCode: code,
+        });
+      }
+      throw error;
+    }
+  }
+
+  if (!isCanonicalSportsBetEnabled(env)) {
+    await recordPlaceDecision(ports, {
+      idempotencyKey,
+      playerUserId: session.userId,
+      providers: requests.map((row) => String(row.provider ?? '')).filter(Boolean).join(','),
+      mode,
+      stake,
+      decision: 'rejected',
+      decisionCode: 'SPORTS_BET_DISABLED',
+    });
+    throw staffError('SPORTS_BET_DISABLED', 403);
+  }
+
   const fetchQuote = ports.fetchQuote ?? defaultFetchQuote;
   const accepted: Array<Record<string, unknown>> = [];
   const quotes: SportsQuote[] = [];
@@ -335,6 +408,7 @@ export async function listSportsBets(
 export function liveSportsPlacePorts(): SportsPlacePorts {
   return {
     ...livePlayerGamePorts(),
+    lookupExistingPlace: createSportsLookupExistingPlaceRpc(),
     placeAsVerifiedPlayer: createSportsPlaceAsPlayerRpc(),
   };
 }

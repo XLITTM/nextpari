@@ -67,7 +67,7 @@ interface EngineBet {
   id: string;
   playerUserId: string;
   idempotencyKey: string;
-  fingerprint: string;
+    fingerprint: string | null;
   stake: number;
   acceptedOdds: number;
   potentialPayout: number;
@@ -195,12 +195,6 @@ class SportsAcceptanceEngine {
 
     const combined = acceptedOdds.reduce((product, price) => product * price, 1);
     const payout = potentialPayoutFromAcceptedOdds(stake, acceptedOdds);
-    const guard = evaluateSportsAcceptanceGuardrails(
-      { stake, mode: input.mode, legCount: input.legs.length, potentialPayout: payout },
-      this.settings,
-    );
-    if (!guard.ok) throw new PlaceAttemptError(guard.code);
-
     const fingerprint = sportsPlaceRequestFingerprint({
       stake,
       mode: input.mode,
@@ -215,7 +209,7 @@ class SportsAcceptanceEngine {
           await Promise.resolve();
           const existing = this.bets.get(lockKey);
           if (existing) {
-            if (existing.fingerprint && existing.fingerprint !== fingerprint) {
+            if (existing.fingerprint == null || existing.fingerprint !== fingerprint) {
               throw new PlaceAttemptError('SPORTS_BET_IDEMPOTENCY_CONFLICT');
             }
             return {
@@ -224,6 +218,12 @@ class SportsAcceptanceEngine {
               acceptedOdds: existing.acceptedOdds,
             };
           }
+
+          const guard = evaluateSportsAcceptanceGuardrails(
+            { stake, mode: input.mode, legCount: input.legs.length, potentialPayout: payout },
+            this.settings,
+          );
+          if (!guard.ok) throw new PlaceAttemptError(guard.code);
 
           if (this.failBet) throw new PlaceAttemptError('SPORTS_BET_INSERT_FAILED');
 
@@ -388,6 +388,26 @@ describe('047 sports bet acceptance SQL contract', () => {
     assert.equal(sql.includes('BETB2B_'), false);
     assert.equal(sql.includes('https://'), false);
     assert.equal(/event liability|full risk management|fraud scoring/i.test(sql), false);
+    assert.match(sql, /SET request_fingerprint = private\.sports_place_request_fingerprint/);
+    assert.match(sql, /FROM private\.sports_bet_legs AS l/);
+    assert.match(sql, /WHERE b\.request_fingerprint IS NULL/);
+    assert.match(sql, /CREATE OR REPLACE FUNCTION public\.sports_lookup_existing_place_for_player\(/);
+    assert.match(
+      sql,
+      /GRANT EXECUTE ON FUNCTION public\.sports_lookup_existing_place_for_player\(UUID, TEXT, NUMERIC, TEXT, JSONB\) TO service_role/,
+    );
+    assert.equal(
+      sql.includes('GRANT EXECUTE ON FUNCTION public.sports_lookup_existing_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) TO authenticated'),
+      false,
+    );
+    const engineSql = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION private.sports_engine_place_as'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION private.sports_lookup_existing_place_as'),
+    );
+    assert.ok(engineSql.indexOf('pg_advisory_xact_lock') > 0);
+    assert.ok(engineSql.indexOf('pg_advisory_xact_lock') < engineSql.indexOf("RAISE EXCEPTION 'SPORTS_STAKE_LIMIT'"));
+    assert.ok(engineSql.indexOf('request_fingerprint IS NULL') < engineSql.indexOf("RAISE EXCEPTION 'SPORTS_STAKE_LIMIT'"));
+    assert.ok(engineSql.indexOf("RAISE EXCEPTION 'SPORTS_BET_IDEMPOTENCY_CONFLICT'") < engineSql.indexOf("RAISE EXCEPTION 'SPORTS_BET_DISABLED'"));
   });
 
   it('keeps settings and audit off browser roles and forbids secret material in audit inserts', () => {
@@ -413,6 +433,14 @@ describe('047 sports bet acceptance SQL contract', () => {
     assert.match(
       sql,
       /GRANT EXECUTE ON FUNCTION public\.sports_record_acceptance_event\([^)]+\) TO service_role/,
+    );
+    assert.match(
+      sql,
+      /REVOKE ALL ON FUNCTION public\.sports_lookup_existing_place_for_player\([^)]+\) FROM anon/,
+    );
+    assert.match(
+      sql,
+      /REVOKE ALL ON FUNCTION public\.sports_lookup_existing_place_for_player\([^)]+\) FROM authenticated/,
     );
     assert.match(sql, /SPORTS_ACCEPTANCE_SECRET_FORBIDDEN/);
     assert.match(sql, /password\|authorization\|bearer \|service_role/);
@@ -599,6 +627,107 @@ describe('atomic sports place engine', () => {
     assert.equal(engine.ledger.length, 1);
     assert.equal(engine.bets.size, 1);
     assert.equal(engine.wallet.available, 90);
+  });
+
+  it('replays an accepted bet after later guardrail tightening without a second debit', async () => {
+    const engine = new SportsAcceptanceEngine();
+    const single = {
+      playerUserId: PLAYER_ID,
+      idempotencyKey: 'after-limits',
+      stake: 10,
+      mode: 'single' as const,
+      legs: [singleLeg({ acceptedOdds: 3 })],
+    };
+    await engine.place(single);
+    engine.settings = {
+      sportsBettingEnabled: false,
+      maxStake: 1,
+      maxPotentialPayout: 1,
+      maxExpressLegs: 2,
+    };
+    const replay = await engine.place(single);
+    assert.equal(replay.isDuplicate, true);
+    assert.equal(engine.bets.size, 1);
+    assert.equal(engine.ledger.length, 1);
+    assert.equal(engine.legs.length, 1);
+    assert.equal(engine.wallet.available, 90);
+
+    const expressEngine = new SportsAcceptanceEngine();
+    const express = {
+      playerUserId: PLAYER_ID,
+      idempotencyKey: 'after-legs',
+      stake: 5,
+      mode: 'express' as const,
+      legs: [
+        singleLeg({ acceptedOdds: 1.2 }),
+        singleLeg({ fixtureId: '200', outcomeId: 'out-2', acceptedOdds: 1.2 }),
+        singleLeg({ fixtureId: '300', outcomeId: 'out-3', acceptedOdds: 1.2 }),
+      ],
+    };
+    await expressEngine.place(express);
+    expressEngine.settings.maxExpressLegs = 2;
+    const expressReplay = await expressEngine.place(express);
+    assert.equal(expressReplay.isDuplicate, true);
+    assert.equal(expressEngine.ledger.length, 1);
+    assert.equal(expressEngine.legs.length, 3);
+  });
+
+  it('backfills pre-047 fingerprints from stored legs and fails closed on NULL fingerprints', async () => {
+    const storedLegs = [{
+      provider: 'provider-a',
+      fixtureId: '100',
+      marketId: '1',
+      marketKey: '100:1:',
+      line: '',
+      outcomeId: 'out-1',
+      acceptedOdds: 1.85,
+    }];
+    const backfilled = sportsPlaceRequestFingerprint({
+      stake: 10,
+      mode: 'single',
+      legs: storedLegs,
+    });
+    assert.equal(backfilled, sportsPlaceRequestFingerprint({
+      stake: 10,
+      mode: 'single',
+      legs: [singleLeg()],
+    }));
+    assert.match(sql, /incomplete\.accepted_odds <= 1/);
+    assert.equal(/UPDATE private\.sports_bet_legs/.test(sql), false);
+
+    const engine = new SportsAcceptanceEngine();
+    await engine.place({
+      playerUserId: PLAYER_ID,
+      idempotencyKey: 'legacy-null',
+      stake: 10,
+      mode: 'single',
+      legs: [singleLeg()],
+    });
+    const existing = engine.bets.get(`${PLAYER_ID}:legacy-null`);
+    assert.ok(existing);
+    existing.fingerprint = null;
+    await assert.rejects(
+      () => engine.place({
+        playerUserId: PLAYER_ID,
+        idempotencyKey: 'legacy-null',
+        stake: 20,
+        mode: 'single',
+        legs: [singleLeg()],
+      }),
+      (error: unknown) => error instanceof PlaceAttemptError && error.code === 'SPORTS_BET_IDEMPOTENCY_CONFLICT',
+    );
+    await assert.rejects(
+      () => engine.place({
+        playerUserId: PLAYER_ID,
+        idempotencyKey: 'legacy-null',
+        stake: 10,
+        mode: 'single',
+        legs: [singleLeg()],
+      }),
+      (error: unknown) => error instanceof PlaceAttemptError && error.code === 'SPORTS_BET_IDEMPOTENCY_CONFLICT',
+    );
+    assert.equal(engine.bets.size, 1);
+    assert.equal(engine.ledger.length, 1);
   });
 
   it('rejects same-key retries that change stake, selection, or odds', async () => {
@@ -853,6 +982,9 @@ describe('player sports place HTTP acceptance integrity', () => {
       async recordAcceptance(event) {
         audits.push({ decision: event.decision, decisionCode: event.decisionCode });
       },
+      async lookupExistingPlace() {
+        return null;
+      },
       gameRpc() {
         return { async invoke() { return { ok: true }; } };
       },
@@ -969,6 +1101,201 @@ describe('player sports place HTTP acceptance integrity', () => {
     assert.equal(placeSrc.includes('player_sports_place'), false);
     assert.equal(placeSrc.includes('UPDATE public.wallets'), false);
     assert.equal(rpcSrc.includes('sports_place_for_player'), true);
+    assert.equal(rpcSrc.includes('sports_lookup_existing_place_for_player'), true);
     assert.equal(rpcSrc.includes('player_sports_place'), false);
+    assert.match(placeSrc, /lookupExistingPlace/);
+  });
+});
+
+describe('HTTP exact replay before quote fetch', () => {
+  const enabled = { CANONICAL_SPORTS_BET_ENABLED: '1' };
+  const quoteOpen: SportsQuote = {
+    ...OPEN,
+    fixtureId: '19981248',
+    marketId: '1',
+    marketKey: '19981248:1:',
+    outcomeId: '117469638719981250',
+    price: 1.85,
+  };
+  const placeBody = {
+    stake: 10,
+    mode: 'single' as const,
+    idempotencyKey: 'replay-1',
+    selections: [{
+      provider: 'provider-a',
+      fixtureId: '19981248',
+      marketId: '1',
+      marketKey: '19981248:1:',
+      outcomeId: '117469638719981250',
+      price: 1.85,
+    }],
+  };
+
+  function createReplayPorts(init?: { quote?: SportsQuote }) {
+    const original = {
+      ok: true,
+      isDuplicate: false,
+      betId: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      stake: 10,
+      acceptedOdds: 1.85,
+      balanceAfter: 40,
+    };
+    const stored = new Map<string, { fingerprint: string; payload: Record<string, unknown> }>();
+    const quoteFetches: SportsQuoteRequest[] = [];
+    const places: Array<Record<string, unknown>> = [];
+    let liveQuote = init?.quote ?? quoteOpen;
+    const ports: SportsPlacePorts & {
+      quoteFetches: SportsQuoteRequest[];
+      places: Array<Record<string, unknown>>;
+      setQuote: (quote: SportsQuote) => void;
+    } = {
+      quoteFetches,
+      places,
+      setQuote(quote) {
+        liveQuote = quote;
+      },
+      async signInWithPassword() {
+        throw staffError('AUTH_FAILED', 401);
+      },
+      async signUp() {
+        throw staffError('AUTH_FAILED', 401);
+      },
+      async refreshSession() {
+        return { accessToken: 'a', refreshToken: 'r' };
+      },
+      async getAuthUser() {
+        return { id: PLAYER_ID, email: 'player@nextpari.test' };
+      },
+      async ensurePlayerAccount() {
+        return {
+          walletId: '11111111-2222-3333-4444-555555555555',
+          publicId: '110790',
+          legacyBalance: 50,
+          migrationState: 'staging',
+        };
+      },
+      async loadOwnWallet() {
+        return { balance: 50, currency: 'TMTM', status: 'active', publicId: '110790' };
+      },
+      async savePlayerProfile() {},
+      fetchQuote: async (request) => {
+        quoteFetches.push(request);
+        return { ...liveQuote, fixtureId: String(request.fixtureId), outcomeId: String(request.outcomeId) };
+      },
+      async lookupExistingPlace(args) {
+        const row = stored.get(`${args.playerUserId}:${args.idempotencyKey}`);
+        if (!row) return null;
+        const fingerprint = sportsPlaceRequestFingerprint({
+          stake: args.stake,
+          mode: args.mode,
+          legs: args.legs,
+        });
+        if (row.fingerprint !== fingerprint) {
+          throw staffError('SPORTS_BET_IDEMPOTENCY_CONFLICT', 409);
+        }
+        return { ...row.payload, isDuplicate: true };
+      },
+      async placeAsVerifiedPlayer(args) {
+        places.push(args as unknown as Record<string, unknown>);
+        const fingerprint = sportsPlaceRequestFingerprint({
+          stake: args.stake,
+          mode: args.mode,
+          legs: args.legs,
+        });
+        stored.set(`${args.playerUserId}:${args.idempotencyKey}`, {
+          fingerprint,
+          payload: { ...original, stake: args.stake, acceptedOdds: args.legs[0]?.acceptedOdds },
+        });
+        return { ...original, stake: args.stake, acceptedOdds: args.legs[0]?.acceptedOdds };
+      },
+      async recordAcceptance() {},
+      gameRpc() {
+        return { async invoke() { return { ok: true }; } };
+      },
+    };
+    return ports;
+  }
+
+  async function placeReplay(
+    ports: SportsPlacePorts,
+    body: Record<string, unknown> = placeBody,
+    env: NodeJS.ProcessEnv = enabled,
+  ) {
+    return handlePlayerSportsRequest(
+      {
+        method: 'POST',
+        pathname: PLAYER_SPORTS_PLACE_PATH,
+        cookie: `${PLAYER_ACCESS_COOKIE}=player-access-token; ${PLAYER_REFRESH_COOKIE}=player-refresh-token`,
+        cookieSecure: true,
+        body,
+      },
+      ports,
+      { error() {} },
+      env,
+    );
+  }
+
+  it('returns the original bet on exact retry when odds changed, market suspended, or feed stale', async () => {
+    const ports = createReplayPorts();
+    const first = await placeReplay(ports);
+    assert.equal(first.status, 200);
+    assert.equal(first.body.isDuplicate, false);
+    assert.equal(ports.quoteFetches.length, 1);
+    assert.equal(ports.places.length, 1);
+
+    ports.setQuote({ ...quoteOpen, price: 1.9 });
+    const oddsChanged = await placeReplay(ports);
+    assert.equal(oddsChanged.status, 200);
+    assert.equal(oddsChanged.body.isDuplicate, true);
+    assert.equal(oddsChanged.body.betId, first.body.betId);
+    assert.equal(oddsChanged.body.acceptedOdds, 1.85);
+    assert.equal(ports.quoteFetches.length, 1);
+    assert.equal(ports.places.length, 1);
+
+    ports.setQuote({ ...quoteOpen, status: 'suspended', selectable: false });
+    const suspended = await placeReplay(ports);
+    assert.equal(suspended.status, 200);
+    assert.equal(suspended.body.isDuplicate, true);
+    assert.equal(ports.quoteFetches.length, 1);
+
+    ports.setQuote({ ...quoteOpen, health: 'STALE', heartbeatAgeMs: 20_000 });
+    const stale = await placeReplay(ports);
+    assert.equal(stale.status, 200);
+    assert.equal(stale.body.isDuplicate, true);
+    assert.equal(ports.quoteFetches.length, 1);
+    assert.equal(ports.places.length, 1);
+  });
+
+  it('returns the original bet when the global sports switch is later disabled', async () => {
+    const ports = createReplayPorts();
+    const first = await placeReplay(ports);
+    assert.equal(first.status, 200);
+    const replay = await placeReplay(ports, placeBody, { CANONICAL_SPORTS_BET_ENABLED: '0' });
+    assert.equal(replay.status, 200);
+    assert.equal(replay.body.isDuplicate, true);
+    assert.equal(replay.body.betId, first.body.betId);
+    assert.equal(ports.quoteFetches.length, 1);
+    assert.equal(ports.places.length, 1);
+  });
+
+  it('conflicts on same-key stake, selection, or requested-odds changes without fetching quotes', async () => {
+    const ports = createReplayPorts();
+    await placeReplay(ports);
+    ports.setQuote({ ...quoteOpen, price: 9.99, status: 'suspended', health: 'STALE' });
+
+    const stake = await placeReplay(ports, { ...placeBody, stake: 15 });
+    assert.equal(stake.body.error, 'SPORTS_BET_IDEMPOTENCY_CONFLICT');
+    const selection = await placeReplay(ports, {
+      ...placeBody,
+      selections: [{ ...placeBody.selections[0], outcomeId: 'other-outcome', price: 1.85 }],
+    });
+    assert.equal(selection.body.error, 'SPORTS_BET_IDEMPOTENCY_CONFLICT');
+    const odds = await placeReplay(ports, {
+      ...placeBody,
+      selections: [{ ...placeBody.selections[0], price: 1.9 }],
+    });
+    assert.equal(odds.body.error, 'SPORTS_BET_IDEMPOTENCY_CONFLICT');
+    assert.equal(ports.quoteFetches.length, 1);
+    assert.equal(ports.places.length, 1);
   });
 });

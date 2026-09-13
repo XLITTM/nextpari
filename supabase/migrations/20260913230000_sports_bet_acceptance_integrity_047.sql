@@ -123,6 +123,49 @@ AS $fn$
     );
 $fn$;
 
+
+-- Pre-047 rows: derive fingerprint from stored stake/mode/legs, never from live quotes.
+-- Incomplete/unverifiable bets stay NULL and fail closed on reuse.
+UPDATE private.sports_bets AS b
+SET request_fingerprint = private.sports_place_request_fingerprint(
+    b.stake,
+    b.mode,
+    COALESCE((
+        SELECT jsonb_agg(
+            jsonb_build_object(
+                'provider', l.provider,
+                'fixtureId', l.fixture_id::TEXT,
+                'marketId', l.market_id,
+                'marketKey', l.market_key,
+                'line', l.line,
+                'outcomeId', l.outcome_id,
+                'acceptedOdds', l.accepted_odds
+            )
+        )
+        FROM private.sports_bet_legs AS l
+        WHERE l.bet_id = b.id
+    ), '[]'::jsonb)
+)
+WHERE b.request_fingerprint IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM private.sports_bet_legs AS complete
+      WHERE complete.bet_id = b.id
+  )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM private.sports_bet_legs AS incomplete
+      WHERE incomplete.bet_id = b.id
+        AND (
+            NULLIF(BTRIM(COALESCE(incomplete.provider, '')), '') IS NULL
+            OR incomplete.fixture_id IS NULL
+            OR NULLIF(BTRIM(COALESCE(incomplete.outcome_id, '')), '') IS NULL
+            OR incomplete.accepted_odds IS NULL
+            OR incomplete.accepted_odds <= 1
+        )
+  );
+
+
 CREATE OR REPLACE FUNCTION private.sports_record_acceptance_event(
     p_idempotency_key TEXT,
     p_player_user_id UUID,
@@ -274,20 +317,6 @@ BEGIN
         RAISE EXCEPTION 'SPORTS_LEGS_REQUIRED';
     END IF;
 
-    SELECT s.*
-    INTO v_settings
-    FROM private.sports_acceptance_settings AS s
-    WHERE s.id = 1;
-    IF NOT FOUND THEN
-        v_settings.sports_betting_enabled := true;
-        v_settings.max_stake := NULL;
-        v_settings.max_potential_payout := NULL;
-        v_settings.max_express_legs := NULL;
-    END IF;
-    IF v_settings.sports_betting_enabled IS DISTINCT FROM true THEN
-        RAISE EXCEPTION 'SPORTS_BET_DISABLED';
-    END IF;
-
     FOR v_leg_json IN SELECT value FROM jsonb_array_elements(p_legs)
     LOOP
         v_count := v_count + 1;
@@ -324,18 +353,8 @@ BEGIN
     IF v_mode = 'express' AND v_count < 2 THEN
         RAISE EXCEPTION 'SPORTS_EXPRESS_REQUIRES_LEGS';
     END IF;
-    IF v_settings.max_express_legs IS NOT NULL AND v_mode = 'express' AND v_count > v_settings.max_express_legs THEN
-        RAISE EXCEPTION 'SPORTS_EXPRESS_LEG_LIMIT';
-    END IF;
-    IF v_settings.max_stake IS NOT NULL AND v_stake > v_settings.max_stake THEN
-        RAISE EXCEPTION 'SPORTS_STAKE_LIMIT';
-    END IF;
 
     v_payout := private.game_money(v_stake * v_odds);
-    IF v_settings.max_potential_payout IS NOT NULL AND v_payout > v_settings.max_potential_payout THEN
-        RAISE EXCEPTION 'SPORTS_PAYOUT_LIMIT';
-    END IF;
-
     v_fp := private.sports_place_request_fingerprint(v_stake, v_mode, p_legs);
 
     PERFORM pg_catalog.pg_advisory_xact_lock(
@@ -350,8 +369,8 @@ BEGIN
     FOR UPDATE;
 
     IF FOUND THEN
-        IF v_existing.request_fingerprint IS NOT NULL
-           AND v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN
+        IF v_existing.request_fingerprint IS NULL
+           OR v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN
             RAISE EXCEPTION 'SPORTS_BET_IDEMPOTENCY_CONFLICT';
         END IF;
         RETURN private.sports_bet_json(
@@ -359,6 +378,29 @@ BEGIN
             private.game_current_balance(v_ctx.wallet_id),
             true
         );
+    END IF;
+
+    SELECT s.*
+    INTO v_settings
+    FROM private.sports_acceptance_settings AS s
+    WHERE s.id = 1;
+    IF NOT FOUND THEN
+        v_settings.sports_betting_enabled := true;
+        v_settings.max_stake := NULL;
+        v_settings.max_potential_payout := NULL;
+        v_settings.max_express_legs := NULL;
+    END IF;
+    IF v_settings.sports_betting_enabled IS DISTINCT FROM true THEN
+        RAISE EXCEPTION 'SPORTS_BET_DISABLED';
+    END IF;
+    IF v_settings.max_express_legs IS NOT NULL AND v_mode = 'express' AND v_count > v_settings.max_express_legs THEN
+        RAISE EXCEPTION 'SPORTS_EXPRESS_LEG_LIMIT';
+    END IF;
+    IF v_settings.max_stake IS NOT NULL AND v_stake > v_settings.max_stake THEN
+        RAISE EXCEPTION 'SPORTS_STAKE_LIMIT';
+    END IF;
+    IF v_settings.max_potential_payout IS NOT NULL AND v_payout > v_settings.max_potential_payout THEN
+        RAISE EXCEPTION 'SPORTS_PAYOUT_LIMIT';
     END IF;
 
     INSERT INTO private.sports_bets (
@@ -483,8 +525,8 @@ EXCEPTION
           AND b.idempotency_key = v_key
         FOR UPDATE;
         IF FOUND THEN
-            IF v_existing.request_fingerprint IS NOT NULL
-               AND v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN
+            IF v_existing.request_fingerprint IS NULL
+               OR v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN
                 RAISE EXCEPTION 'SPORTS_BET_IDEMPOTENCY_CONFLICT';
             END IF;
             RETURN private.sports_bet_json(
@@ -498,13 +540,133 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.sports_lookup_existing_place_as(
+    p_player_user_id UUID,
+    p_idempotency_key TEXT,
+    p_stake NUMERIC,
+    p_mode TEXT,
+    p_legs JSONB
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_ctx RECORD;
+    v_key TEXT;
+    v_stake NUMERIC(20, 2);
+    v_mode TEXT;
+    v_leg_json JSONB;
+    v_leg_odds NUMERIC(20, 4);
+    v_count INTEGER := 0;
+    v_existing private.sports_bets%ROWTYPE;
+    v_fp TEXT;
+BEGIN
+    SELECT * INTO v_ctx FROM private.sports_require_player_by_id(p_player_user_id);
+    v_key := private.game_require_idempotency_key(p_idempotency_key);
+    v_stake := private.game_money(p_stake);
+    IF v_stake <= 0 THEN
+        RAISE EXCEPTION 'STAKE_NOT_POSITIVE';
+    END IF;
+    v_mode := NULLIF(BTRIM(LOWER(COALESCE(p_mode, 'single'))), '');
+    IF v_mode IS NULL OR v_mode NOT IN ('single', 'express') THEN
+        RAISE EXCEPTION 'SPORTS_MODE_INVALID';
+    END IF;
+    IF p_legs IS NULL OR jsonb_typeof(p_legs) IS DISTINCT FROM 'array' THEN
+        RAISE EXCEPTION 'SPORTS_LEGS_REQUIRED';
+    END IF;
+
+    FOR v_leg_json IN SELECT value FROM jsonb_array_elements(p_legs)
+    LOOP
+        v_count := v_count + 1;
+        IF NULLIF(BTRIM(COALESCE(v_leg_json->>'fixtureId', v_leg_json->>'fixture_id', '')), '') IS NULL THEN
+            RAISE EXCEPTION 'MISSING_FIXTURE';
+        END IF;
+        IF NULLIF(BTRIM(COALESCE(v_leg_json->>'outcomeId', v_leg_json->>'betId', '')), '') IS NULL THEN
+            RAISE EXCEPTION 'MISSING_BET_ID';
+        END IF;
+        IF NULLIF(LOWER(BTRIM(COALESCE(v_leg_json->>'provider', ''))), '') IS NULL THEN
+            RAISE EXCEPTION 'EVENT_UNAVAILABLE';
+        END IF;
+        v_leg_odds := ROUND((v_leg_json->>'acceptedOdds')::NUMERIC, 3);
+        IF v_leg_odds IS NULL OR v_leg_odds <= 1 THEN
+            RAISE EXCEPTION 'INVALID_PRICE';
+        END IF;
+    END LOOP;
+
+    IF v_count < 1 THEN
+        RAISE EXCEPTION 'SPORTS_LEGS_REQUIRED';
+    END IF;
+    IF v_mode = 'single' AND v_count <> 1 THEN
+        RAISE EXCEPTION 'SPORTS_SINGLE_REQUIRES_ONE_LEG';
+    END IF;
+    IF v_mode = 'express' AND v_count < 2 THEN
+        RAISE EXCEPTION 'SPORTS_EXPRESS_REQUIRES_LEGS';
+    END IF;
+
+    v_fp := private.sports_place_request_fingerprint(v_stake, v_mode, p_legs);
+
+    SELECT b.*
+    INTO v_existing
+    FROM private.sports_bets AS b
+    WHERE b.player_user_id = v_ctx.user_id
+      AND b.idempotency_key = v_key;
+
+    IF NOT FOUND THEN
+        RETURN NULL;
+    END IF;
+    IF v_existing.request_fingerprint IS NULL
+       OR v_existing.request_fingerprint IS DISTINCT FROM v_fp THEN
+        RAISE EXCEPTION 'SPORTS_BET_IDEMPOTENCY_CONFLICT';
+    END IF;
+    RETURN private.sports_bet_json(
+        v_existing,
+        private.game_current_balance(v_ctx.wallet_id),
+        true
+    );
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.sports_lookup_existing_place_for_player(
+    p_player_user_id UUID,
+    p_idempotency_key TEXT,
+    p_stake NUMERIC,
+    p_mode TEXT,
+    p_legs JSONB
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    IF p_player_user_id IS NULL THEN
+        RAISE EXCEPTION 'AUTH_REQUIRED';
+    END IF;
+    RETURN private.sports_lookup_existing_place_as(
+        p_player_user_id,
+        p_idempotency_key,
+        p_stake,
+        p_mode,
+        p_legs
+    );
+END;
+$fn$;
+
+
 REVOKE ALL ON FUNCTION private.sports_place_request_fingerprint(NUMERIC, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.sports_record_acceptance_event(TEXT, UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION private.sports_engine_place_as(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION private.sports_engine_place_as(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM anon, authenticated;
+REVOKE ALL ON FUNCTION private.sports_lookup_existing_place_as(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.sports_lookup_existing_place_as(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION private.sports_place_request_fingerprint(NUMERIC, TEXT, JSONB) TO service_role;
 GRANT EXECUTE ON FUNCTION private.sports_record_acceptance_event(TEXT, UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, JSONB) TO service_role;
+GRANT EXECUTE ON FUNCTION private.sports_lookup_existing_place_as(UUID, TEXT, NUMERIC, TEXT, JSONB) TO service_role;
 
 REVOKE ALL ON FUNCTION public.sports_record_acceptance_event(TEXT, UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.sports_record_acceptance_event(TEXT, UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, JSONB) FROM anon;
@@ -515,11 +677,19 @@ REVOKE ALL ON FUNCTION public.sports_place_for_player(UUID, TEXT, NUMERIC, TEXT,
 REVOKE ALL ON FUNCTION public.sports_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.sports_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) TO service_role;
 
+REVOKE ALL ON FUNCTION public.sports_lookup_existing_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.sports_lookup_existing_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM anon;
+REVOKE ALL ON FUNCTION public.sports_lookup_existing_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.sports_lookup_existing_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) TO service_role;
+
 REVOKE ALL ON FUNCTION public.player_sports_place(TEXT, NUMERIC, TEXT, JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.player_sports_place(TEXT, NUMERIC, TEXT, JSONB) FROM anon, authenticated, service_role;
 
 COMMENT ON FUNCTION private.sports_engine_place_as(UUID, TEXT, NUMERIC, TEXT, JSONB) IS
-'Atomic sports place: player + quote payload + guardrails + bet + legs + Wallet Ledger CASINO_BET in one transaction. Exact idempotent replay. Mismatched key raises SPORTS_BET_IDEMPOTENCY_CONFLICT.';
+'Atomic sports place. Exact committed replay returns before current guardrails. New bets apply settings then Wallet Ledger CASINO_BET. NULL/mismatched fingerprint raises SPORTS_BET_IDEMPOTENCY_CONFLICT.';
+
+COMMENT ON FUNCTION public.sports_lookup_existing_place_for_player(UUID, TEXT, NUMERIC, TEXT, JSONB) IS
+'Service-role lookup of an already-committed sports place by verified player UUID + idempotency key + canonical fingerprint. Not a browser RPC. Exact match returns the original duplicate payload; mismatch raises SPORTS_BET_IDEMPOTENCY_CONFLICT; miss returns NULL.';
 
 COMMENT ON FUNCTION public.sports_record_acceptance_event(TEXT, UUID, UUID, TEXT, TEXT, NUMERIC, NUMERIC, TEXT, TEXT, JSONB) IS
 'Service-role sports acceptance audit insert. Used for rejected attempts that cannot persist inside a rolled-back place transaction. Not a browser RPC.';

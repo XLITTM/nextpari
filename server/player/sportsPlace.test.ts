@@ -75,6 +75,7 @@ function createPorts(init?: {
   rpcPayload?: Record<string, unknown>;
   rpcError?: string;
   placeImpl?: SportsPlacePorts['placeAsVerifiedPlayer'];
+  lookupImpl?: SportsPlacePorts['lookupExistingPlace'];
 }): SportsPlacePorts & {
   places: Array<{ playerUserId: string; idempotencyKey: string; stake: number }>;
   quoteFetches: SportsQuoteRequest[];
@@ -142,6 +143,10 @@ function createPorts(init?: {
     async recordAcceptance(event) {
       audits.push({ decision: event.decision, decisionCode: event.decisionCode });
     },
+    async lookupExistingPlace(args) {
+      if (init?.lookupImpl) return init.lookupImpl(args);
+      return null;
+    },
     gameRpc() {
       return {
         async invoke(name: string, args?: Record<string, unknown>) {
@@ -181,7 +186,8 @@ describe('player sports place HTTP', () => {
     assert.equal(result.status, 403);
     assert.equal(result.body.error, 'SPORTS_BET_DISABLED');
     assert.equal(ports.places.length, 0);
-    assert.equal(ports.authUsers.length, 0);
+    assert.equal(ports.quoteFetches.length, 0);
+    assert.equal(ports.authUsers.length, 1);
   });
 
   it('places through the server-only path after canonical quote validation', async () => {
