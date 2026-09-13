@@ -94,8 +94,12 @@ export function validatePlayerEmail(email: string): string | null {
   return null;
 }
 
+export const PLAYER_PASSWORD_MIN_LENGTH = 8;
+export const PLAYER_PASSWORD_POLICY_MESSAGE = 'Пароль должен содержать не менее 8 символов';
+export const PLAYER_PASSWORD_CHANGED_NOTICE = 'Пароль успешно изменён. Войдите с новым паролем.';
+
 export function validatePlayerPassword(password: string): string | null {
-  if (password.length < 8) return 'password too short';
+  if (password.length < PLAYER_PASSWORD_MIN_LENGTH) return 'password too short';
   return null;
 }
 
@@ -448,6 +452,120 @@ export async function signOutPlayer() {
   } finally {
     clearDemoPlayerState();
   }
+}
+
+export class PlayerChangePasswordError extends Error {
+  readonly code: string;
+  readonly sessionExpired: boolean;
+
+  constructor(code: string, message: string, sessionExpired = false) {
+    super(message);
+    this.name = 'PlayerChangePasswordError';
+    this.code = code;
+    this.sessionExpired = sessionExpired;
+  }
+}
+
+export function mapChangePasswordError(code: string): string {
+  switch (code) {
+    case 'CURRENT_PASSWORD_INVALID':
+      return 'Текущий пароль указан неверно';
+    case 'PASSWORD_CONFIRMATION_MISMATCH':
+      return 'Пароли не совпадают';
+    case 'PASSWORD_SAME_AS_CURRENT':
+      return 'Новый пароль должен отличаться от текущего';
+    case 'PASSWORD_POLICY_INVALID':
+    case 'INVALID_PASSWORD':
+      return PLAYER_PASSWORD_POLICY_MESSAGE;
+    default:
+      return 'Не удалось изменить пароль. Попробуйте ещё раз.';
+  }
+}
+
+function isSessionExpiredCode(code: string): boolean {
+  return (
+    code === 'SESSION_REQUIRED'
+    || code === 'SESSION_EXPIRED'
+    || code === 'JWT_REQUIRED'
+    || code === 'JWT_INVALID'
+    || code === 'AUTH_REQUIRED'
+  );
+}
+
+export function validatePlayerPasswordChange(input: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}): { ok: true } | { ok: false; code: string; message: string } {
+  if (!input.currentPassword) {
+    return {
+      ok: false,
+      code: 'CURRENT_PASSWORD_INVALID',
+      message: mapChangePasswordError('CURRENT_PASSWORD_INVALID'),
+    };
+  }
+  if (!input.newPassword) {
+    return {
+      ok: false,
+      code: 'PASSWORD_POLICY_INVALID',
+      message: mapChangePasswordError('PASSWORD_POLICY_INVALID'),
+    };
+  }
+  if (input.newPassword !== input.confirmPassword) {
+    return {
+      ok: false,
+      code: 'PASSWORD_CONFIRMATION_MISMATCH',
+      message: mapChangePasswordError('PASSWORD_CONFIRMATION_MISMATCH'),
+    };
+  }
+  if (input.newPassword === input.currentPassword) {
+    return {
+      ok: false,
+      code: 'PASSWORD_SAME_AS_CURRENT',
+      message: mapChangePasswordError('PASSWORD_SAME_AS_CURRENT'),
+    };
+  }
+  if (validatePlayerPassword(input.newPassword)) {
+    return {
+      ok: false,
+      code: 'PASSWORD_POLICY_INVALID',
+      message: mapChangePasswordError('PASSWORD_POLICY_INVALID'),
+    };
+  }
+  return { ok: true };
+}
+
+export async function changePlayerPassword(input: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<{ ok: true }> {
+  const local = validatePlayerPasswordChange(input);
+  if (!local.ok) {
+    throw new PlayerChangePasswordError(local.code, local.message);
+  }
+
+  const res = await fetch('/api/player/auth/change-password', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      currentPassword: input.currentPassword,
+      newPassword: input.newPassword,
+    }),
+  });
+  const payload = await readJson(res);
+  const code = String(payload.error ?? (!res.ok ? 'PASSWORD_CHANGE_FAILED' : ''));
+  if (!res.ok) {
+    if (isSessionExpiredCode(code)) {
+      throw new PlayerChangePasswordError(code || 'SESSION_EXPIRED', mapChangePasswordError(code), true);
+    }
+    throw new PlayerChangePasswordError(code, mapChangePasswordError(code));
+  }
+  if (payload.ok !== true) {
+    throw new PlayerChangePasswordError('PASSWORD_CHANGE_FAILED', mapChangePasswordError('PASSWORD_CHANGE_FAILED'));
+  }
+  return { ok: true };
 }
 
 export async function getPlayerSession() {

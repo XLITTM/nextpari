@@ -9,6 +9,7 @@ import {
   type StaffJsonResponse,
 } from '../staff/httpHandler.js';
 import {
+  changePlayerPassword,
   livePlayerAuthPorts,
   loginPlayerWithPassword,
   logoutPlayerSession,
@@ -25,6 +26,7 @@ import type { StaffLog } from '../staff/types.js';
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
 export const PLAYER_AUTH_LOGOUT_PATH = '/api/player/auth/logout';
+export const PLAYER_AUTH_CHANGE_PASSWORD_PATH = '/api/player/auth/change-password';
 export const PLAYER_ME_PATH = '/api/player/me';
 export const PLAYER_WALLET_PATH = '/api/player/wallet';
 export const PLAYER_PROFILE_PATH = '/api/player/profile';
@@ -39,7 +41,8 @@ export function isPlayerAuthPath(pathname: string): boolean {
     path === PLAYER_AUTH_REGISTER_PATH
     || path === PLAYER_AUTH_LOGIN_PATH
     || path === PLAYER_AUTH_LOGOUT_PATH
-    ||     path === PLAYER_ME_PATH
+    || path === PLAYER_AUTH_CHANGE_PASSWORD_PATH
+    || path === PLAYER_ME_PATH
     || path === PLAYER_WALLET_PATH
     || path === PLAYER_PROFILE_PATH
   );
@@ -112,6 +115,21 @@ export async function handlePlayerAuthRequest(
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       return logoutPlayerSession(ports, input.cookie, secure);
+    }
+    if (path === PLAYER_AUTH_CHANGE_PASSWORD_PATH) {
+      if (method !== 'POST') {
+        throw staffError('METHOD_NOT_ALLOWED', 405);
+      }
+      const body = asRecord(parseJsonPayload(input.body));
+      return changePlayerPassword(
+        ports,
+        input.cookie,
+        {
+          currentPassword: String(body.currentPassword ?? ''),
+          newPassword: String(body.newPassword ?? ''),
+        },
+        secure,
+      );
     }
     if (path === PLAYER_ME_PATH || path === PLAYER_WALLET_PATH) {
       if (method !== 'GET') {
