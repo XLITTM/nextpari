@@ -9,16 +9,14 @@ import {
   fetchCashierFinance,
   fetchCashierPayout,
   fetchCashierTransfers,
+  isAmbiguousStaffError,
   isCashierFinanceEnabled,
   postCashierDeposit,
   postCashierPayoutConfirm,
+  retainIdempotencyKey,
   type CashierFinanceOverview,
   type CashierTransferList,
 } from '../cashier/services';
-import {
-  isAmbiguousStaffError,
-  retainIdempotencyKey,
-} from '../shared/staff/financeGate';
 
 function formatTmtm(value: number): string {
   return `${value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TMTM`;

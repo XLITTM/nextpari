@@ -147,11 +147,6 @@ function valueOf(solver: Solver, player: number, upIdx: number, counts: Uint8Arr
   return ev;
 }
 
-function shouldHit(solver: Solver, player: number, upIdx: number, counts: Uint8Array): boolean {
-  if (player >= 21) return false;
-  return hitEv(solver, player, upIdx, counts) > standEv(solver, player, upIdx, counts) + 1e-15;
-}
-
 export function evaluateBlackjackExact(winPayout = BLACKJACK_V2_WIN_PAYOUT, pushPayout = BLACKJACK_PUSH_PAYOUT) {
   const solver: Solver = {
     valueMemo: new Map(),

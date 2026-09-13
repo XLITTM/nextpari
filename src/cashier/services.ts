@@ -1,3 +1,10 @@
+import {
+  isAmbiguousStaffError,
+  retainIdempotencyKey,
+} from '../shared/staff/financeGate';
+
+export { isAmbiguousStaffError, retainIdempotencyKey };
+
 export const CASHIER_ME_PATH = '/api/cashier/me';
 export const CASHIER_FINANCE_PATH = '/api/cashier/finance';
 export const CASHIER_TRANSFERS_PATH = '/api/cashier/transfers';
@@ -75,6 +82,13 @@ function numOrNull(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function transferNo(value: unknown): string | number | null {
+  if (value == null || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') return value;
+  return String(value);
+}
+
 async function cashierJson(
   fetchFn: CashierAuthFetch,
   path: string,
@@ -130,7 +144,7 @@ export function parseCashierTransfers(raw: unknown): CashierTransferList {
     const item = asRecord(row);
     return {
       id: str(item.id),
-      transferNo: item.transferNo ?? item.transfer_no ?? null,
+      transferNo: transferNo(item.transferNo ?? item.transfer_no),
       transferType: str(item.transferType ?? item.transfer_type),
       currency: str(item.currency),
       amount: numOrNull(item.amount),

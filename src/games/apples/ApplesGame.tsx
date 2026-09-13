@@ -63,11 +63,11 @@ export function ApplesGame({ onBack }: ApplesGameProps) {
   const { showToast } = useToast();
   const [phase, setPhase] = useState<ApplePhase>('betting');
   const [betInput, setBetInput] = useState(DEFAULT_BET);
-  const [stake, setStake] = useState(0);
+  const [, setStake] = useState(0);
   const [roundId, setRoundId] = useState<string | null>(null);
   const [rows, setRows] = useState<AppleRow[]>(() => hiddenRows());
   const [activeLevel, setActiveLevel] = useState(1);
-  const [lastWonLevel, setLastWonLevel] = useState(0);
+  const [, setLastWonLevel] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pendingCellId, setPendingCellId] = useState<string | null>(null);
   const [cashoutValue, setCashoutValue] = useState(0);

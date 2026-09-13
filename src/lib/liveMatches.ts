@@ -1,11 +1,10 @@
-import { tournamentLine } from './betTicket';
 import { isUnixClock, liveMinuteLabel, mapBetsApiEvent, parseSsScore, tournamentPriority, type LiveEventSnapshot, type NormalizedMatch } from './betsapi';
-import { groupsFromLiveOdds, orderPriorityMarkets } from './marketOrder';
+import { groupsFromLiveOdds } from './marketOrder';
 import { groupsFromParsedMarkets, type ParsedMarket } from './odds-parser';
 import { isFullTime1x2 } from './matchOdds';
 import { isLsportsDisplayEvent, lsportsCardMarkets } from './lsportsFeed';
 import type { EventState } from '../stores/sportsStore';
-import type { MarketCategory, MarketGroup, MatchEvent, SportId } from '../types';
+import type { MatchEvent, SportId } from '../types';
 
 const SPORT_IDS: SportId[] = [
   'all',
@@ -44,48 +43,6 @@ const TEAM_COLORS = [
   '#111827',
 ];
 
-type OddRow = {
-  outcome?: string;
-  name?: string;
-  label?: string;
-  value?: number | string;
-  coefficient?: number | string;
-  odd?: number | string;
-  price?: number | string;
-};
-
-type MarketRow = {
-  id?: string;
-  name?: string;
-  type?: string;
-  odds?: OddRow[] | null;
-};
-
-type TournamentRow = {
-  name?: string;
-  country?: string;
-  sport?: string;
-};
-
-type MatchRow = {
-  id: string;
-  team1?: string;
-  team2?: string;
-  home_team?: string;
-  away_team?: string;
-  team1_color?: string;
-  team2_color?: string;
-  start_time?: string;
-  is_live?: boolean;
-  live_status?: string;
-  score_team1?: number | string;
-  score_team2?: number | string;
-  extra_markets?: number | string;
-  featured?: boolean;
-  tournaments?: TournamentRow | TournamentRow[] | null;
-  markets?: MarketRow[] | null;
-};
-
 function colorFromName(name: string, fallbackIndex: number): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -109,56 +66,6 @@ function sportFromBetsId(sportId?: string): SportId | undefined {
   return undefined;
 }
 
-function oddValue(row: OddRow): number {
-  return Number(row.value ?? row.coefficient ?? row.odd ?? row.price ?? 0);
-}
-
-function oddLabel(row: OddRow): string {
-  return String(row.outcome ?? row.label ?? row.name ?? '').trim();
-}
-
-function mapMainMarkets(odds: OddRow[]): MatchEvent['markets'] {
-  const markets = { '1': 0, x: 0, '2': 0 };
-  for (const row of odds) {
-    const key = oddLabel(row).toUpperCase().replace('Х', 'X');
-    const value = oddValue(row);
-    if (key === '1' || key === 'П1' || key === 'HOME' || key === 'W1') markets['1'] = value;
-    else if (key === 'X' || key === 'DRAW') markets.x = value;
-    else if (key === '2' || key === 'П2' || key === 'AWAY' || key === 'W2') markets['2'] = value;
-  }
-  return markets;
-}
-
-function pickTournament(row: MatchRow): TournamentRow {
-  const raw = row.tournaments;
-  if (Array.isArray(raw)) return raw[0] ?? {};
-  return raw ?? {};
-}
-
-function marketCategory(name: string): MarketCategory {
-  const value = name.toLowerCase();
-  if (/1-й тайм|1st.?half/.test(value)) return '1st-half';
-  if (/2-й тайм|2nd.?half/.test(value)) return '2nd-half';
-  if (/четверт|период|сет/.test(value)) return 'intervals';
-  if (/тотал|total/.test(value)) return 'totals';
-  if (/фора|handicap|spread/.test(value)) return 'handicaps';
-  if (/угл|corner/.test(value)) return 'corners';
-  return 'main';
-}
-
-function toMarketGroups(markets: MarketRow[]): MarketGroup[] {
-  const groups = markets.map((market, index) => ({
-    id: market.id ?? `m-${index}`,
-    name: market.name || market.type || '1X2',
-    category: marketCategory(market.name || market.type || ''),
-    outcomes: (market.odds ?? []).map((odd) => ({
-      label: oddLabel(odd) || '—',
-      odds: oddValue(odd),
-    })),
-  }));
-  return orderPriorityMarkets(groups);
-}
-
 export function sortCatalog(matches: MatchEvent[]): MatchEvent[] {
   return [...matches].sort((a, b) => {
     if (Boolean(a.featured) !== Boolean(b.featured)) return a.featured ? -1 : 1;
@@ -167,10 +74,6 @@ export function sortCatalog(matches: MatchEvent[]): MatchEvent[] {
     if (pa !== pb) return pb - pa;
     return a.startTime - b.startTime;
   });
-}
-
-function extraMarketCount(markets: MarketRow[], allOdds: OddRow[]): number {
-  return Math.max(0, markets.length > 1 ? markets.length - 1 : allOdds.length - 3);
 }
 
 export function matchEventFromNormalized(match: NormalizedMatch): MatchEvent {
@@ -313,123 +216,10 @@ function latestMainOdds(markets: Record<string, ParsedMarket>): MatchEvent['mark
   return odds;
 }
 
-function mapMatch(row: MatchRow): MatchEvent {
-  const tournament = pickTournament(row);
-  const team1 = row.team1 || row.home_team || '';
-  const team2 = row.team2 || row.away_team || '';
-  const marketRows = row.markets ?? [];
-  const allOdds = marketRows.flatMap((market) => market.odds ?? []);
-  const mainMarket =
-    marketRows.find((market) => {
-      const name = (market.name || market.type || '').toLowerCase();
-      return name.includes('1x2') || name.includes('исход') || name.includes('winner') || name.includes('победитель');
-    }) ?? marketRows[0];
-
-  return {
-    id: String(row.id),
-    sport: toSportId(tournament.sport),
-    league: tournament.name || 'Турнир',
-    country: tournament.country || '',
-    team1,
-    team2,
-    team1Color: row.team1_color || colorFromName(team1, 0),
-    team2Color: row.team2_color || colorFromName(team2, 1),
-    startTime: row.start_time ? new Date(row.start_time).getTime() : Date.now(),
-    isLive: Boolean(row.is_live),
-    liveStatus: row.live_status || 'LIVE',
-    liveScore: {
-      team1: Number(row.score_team1 ?? 0),
-      team2: Number(row.score_team2 ?? 0),
-    },
-    markets: mapMainMarkets(mainMarket?.odds ?? allOdds),
-    extraMarkets: Number(row.extra_markets ?? extraMarketCount(marketRows, allOdds)),
-    featured: Boolean(row.featured),
-    marketGroups: toMarketGroups(marketRows),
-  };
-}
-
-function isFinishedMatch(row: MatchRow): boolean {
-  return /заверш|ended|finished|отмен|демо/i.test(row.live_status ?? '');
-}
-
-function upcomingSince(): string {
-  return new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-}
-
 export async function fetchLiveMatches(): Promise<MatchEvent[]> {
   return [];
 }
 
 export async function fetchUpcomingMatches(): Promise<MatchEvent[]> {
   return [];
-}
-
-export interface MatchLiveSnapshot {
-  id: string;
-  homeTeam: string;
-  awayTeam: string;
-  scoreHome: number;
-  scoreAway: number;
-  isLive: boolean;
-  liveStatus: string;
-  sport: SportId;
-  league: string;
-  country: string;
-  tournament: string;
-}
-
-function snapshotFromRow(row: MatchRow & { tournament_id?: string }): MatchLiveSnapshot {
-  const tournament = pickTournament(row);
-  const sport = toSportId(tournament.sport);
-  const league = tournament.name || '';
-  const country = tournament.country || '';
-  const homeTeam = row.team1 || row.home_team || '';
-  const awayTeam = row.team2 || row.away_team || '';
-  return {
-    id: String(row.id),
-    homeTeam,
-    awayTeam,
-    scoreHome: Number(row.score_team1 ?? 0),
-    scoreAway: Number(row.score_team2 ?? 0),
-    isLive: Boolean(row.is_live),
-    liveStatus: row.live_status || (row.is_live ? 'LIVE' : ''),
-    sport,
-    league,
-    country,
-    tournament: tournamentLine({ sport, country, league }),
-  };
-}
-
-export function snapshotFromMatch(match: MatchEvent): MatchLiveSnapshot {
-  return {
-    id: match.id,
-    homeTeam: match.team1,
-    awayTeam: match.team2,
-    scoreHome: match.liveScore?.team1 ?? 0,
-    scoreAway: match.liveScore?.team2 ?? 0,
-    isLive: match.isLive,
-    liveStatus: match.liveStatus || (match.isLive ? 'LIVE' : ''),
-    sport: match.sport,
-    league: match.league,
-    country: match.country,
-    tournament: tournamentLine({
-      sport: match.sport,
-      country: match.country,
-      league: match.league,
-    }),
-  };
-}
-
-export async function fetchMatchSnapshots(ids: string[]): Promise<MatchLiveSnapshot[]> {
-  const unique = [...new Set(ids.filter(Boolean))];
-  if (!unique.length) return [];
-  const { getEndedCatalog, getLiveCatalog } = await import('../services/sportsWorker');
-  const { live, upcoming } = getLiveCatalog();
-  const byId = new Map(
-    [...live, ...upcoming, ...getEndedCatalog()].map((match) => [match.externalId, match]),
-  );
-  return unique.flatMap((id) => {
-    const match = byId.get(id);
-    return match ? [snapshotFromMatch(matchEventFromNormalized(match))] : [];
-  });
 }

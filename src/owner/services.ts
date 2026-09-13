@@ -7,7 +7,7 @@ import type {
   LedgerPeriod,
   RiskBet,
   VerticalKpi,
-} from '../lib/backoffice';
+} from '../shared/staff/deskTypes';
 
 export type {
   BackofficeCashier,

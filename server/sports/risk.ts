@@ -14,6 +14,7 @@ export type SportsRiskDecision = { ok: true } | { ok: false; code: string };
  * Do not hardcode production stake/event limits here.
  * Future: player stake limit, event/market/selection exposure, suspicious behavior, AI risk.
  */
-export function evaluateSportsRisk(_input: SportsRiskInput): SportsRiskDecision {
+export function evaluateSportsRisk(input: SportsRiskInput): SportsRiskDecision {
+  void input;
   return { ok: true };
 }

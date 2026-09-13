@@ -80,7 +80,7 @@ function SelectionMeta({ s }: { s: BetSelection }) {
 }
 
 export function BetSlipScreen({ balance, onClose, onNavigateHome, onNavigate }: BetSlipScreenProps) {
-  const { selections, removeSelection, clearAll, addSelection, applyOddsUpdates } = useBetSlip();
+  const { selections, removeSelection, clearAll, applyOddsUpdates } = useBetSlip();
   const { addBet, refresh: refreshHistory } = useBetHistory();
   const { applyServerBalance, refresh } = useWallet();
   const { toast } = useToast();

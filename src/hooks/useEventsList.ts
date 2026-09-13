@@ -33,7 +33,8 @@ function marketsById(rows: Array<{ event: BetsEvent; markets: ParsedMarket[] }>)
   return next;
 }
 
-export function useEventsList(tab: EventTab, _sportId = '1') {
+export function useEventsList(tab: EventTab, sportId = '1') {
+  void sportId;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const eventsMap = useSportsStore((s) => s.events);

@@ -114,13 +114,6 @@ export function countUnreadForPlayer(playerId: string): number {
   return listMessagesForPlayer(playerId).filter((row) => !row.isRead).length;
 }
 
-function persistLocalMessage(message: SiteMessage) {
-  const current = readSiteMessages();
-  const next = [message, ...current.filter((row) => String(row.id) !== String(message.id))];
-  localStorage.setItem('site_messages', JSON.stringify(next.slice(0, 200)));
-  notifyMessagesUpdated();
-}
-
 export async function fetchSiteMessages(playerId: string): Promise<SiteMessage[]> {
   return filterMessagesForPlayer(readSiteMessages(), playerId);
 }

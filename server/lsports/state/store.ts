@@ -291,7 +291,8 @@ export class LsportsInPlayStore {
     }
   }
 
-  ingestFixtureDelta(payload: unknown, _serverTimestamp: number | null = readHeader(payload).serverTimestamp): void {
+  ingestFixtureDelta(payload: unknown, serverTimestamp: number | null = readHeader(payload).serverTimestamp): void {
+    void serverTimestamp;
     for (const event of readEvents(payload)) {
       const fixtureId = readFixtureId(event);
       if (fixtureId == null) continue;

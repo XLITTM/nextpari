@@ -5,7 +5,7 @@ import { CashierAuthProvider } from './cashier/auth/CashierAuthProvider';
 import { ManagerDashboardScreen } from './owner/ManagerDashboardScreen';
 import { MobcashAgentScreen } from './screens/MobcashAgentScreen';
 import { isAgentTerminalPath } from './cashier/isAgentPath';
-import { isBackofficePath, isManagerPortalPath } from './lib/backoffice';
+import { isBackofficePath, isManagerPortalPath } from './lib/staffPortalPaths';
 
 export type StaffPortal = 'owner' | 'manager' | 'agent';
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -112,6 +112,52 @@ function listTsFiles(dir: string): string[] {
   });
 }
 
+function toPosix(rel: string): string {
+  return rel.replaceAll('\\', '/');
+}
+
+function resolveImportedSource(fromRel: string, specifier: string): string | null {
+  if (!specifier.startsWith('.')) return null;
+  const resolved = join(dirname(join(root, fromRel)), specifier);
+  const noJs = resolved.replace(/\.js$/i, '');
+  const candidates = [`${noJs}.ts`, `${noJs}.tsx`, `${noJs}.js`, join(noJs, 'index.ts')];
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    const rel = toPosix(candidate.slice(root.length + 1));
+    if (rel.endsWith('.test.ts') || rel.endsWith('.test.tsx')) return null;
+    return rel;
+  }
+  return null;
+}
+
+function collectRuntimeGraph(entryRels: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const queue = [...entryRels];
+  while (queue.length) {
+    const rel = toPosix(queue.pop()!);
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    const abs = join(root, rel);
+    if (!existsSync(abs)) continue;
+    const source = readFileSync(abs, 'utf8');
+    const matches = [
+      ...source.matchAll(/from\s+['"](\.\.?\/[^'"]+)['"]/g),
+      ...source.matchAll(/import\s*\(\s*['"](\.\.?\/[^'"]+)['"]\s*\)/g),
+    ];
+    for (const match of matches) {
+      const spec = match[1];
+      const idx = match.index ?? 0;
+      const lineStart = source.lastIndexOf('\n', idx) + 1;
+      const lineEnd = source.indexOf('\n', idx);
+      const line = source.slice(lineStart, lineEnd === -1 ? source.length : lineEnd);
+      if (/\bimport\s+type\b/.test(line) || /\bexport\s+type\s+\{/.test(line)) continue;
+      const next = resolveImportedSource(rel, spec);
+      if (next && !seen.has(next)) queue.push(next);
+    }
+  }
+  return [...seen];
+}
+
 describe('staff onboarding Node ESM import graph', () => {
   it('runtime sources use explicit .js relative specifiers', () => {
     const files = [
@@ -121,6 +167,7 @@ describe('staff onboarding Node ESM import graph', () => {
       ...listTsFiles(join(root, 'server/owner')),
       ...listTsFiles(join(root, 'server/manager')),
       ...listTsFiles(join(root, 'server/cashier')),
+      ...listTsFiles(join(root, 'server/auth')),
       join(root, 'server/supabase/admin.ts'),
     ].filter((path) => !path.endsWith('.test.ts'));
 
@@ -141,7 +188,7 @@ describe('staff onboarding Node ESM import graph', () => {
     mkdirSync(outDir, { recursive: true });
 
     try {
-      for (const rel of RUNTIME_GRAPH) {
+      for (const rel of collectRuntimeGraph(RUNTIME_GRAPH)) {
         const source = readFileSync(join(root, rel), 'utf8');
         const { outputText } = transpileModule(source, {
           compilerOptions: {
