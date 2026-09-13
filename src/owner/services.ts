@@ -402,11 +402,14 @@ export interface OwnerWithdrawalRow {
   id: string;
   walletId: string | null;
   playerPublicId: string;
+  method: string;
+  methodLabel: string;
   amount: number;
   status: string;
   cashierId: string | null;
   paidAt: string | null;
   createdAt: string;
+  rejectionReason: string | null;
 }
 
 function parsePlayerListItem(raw: Record<string, unknown>): OwnerPlayerListItem {
@@ -539,15 +542,45 @@ export async function fetchOwnerWithdrawals(params?: {
         id: str(item.id),
         walletId: item.wallet_id == null && item.walletId == null ? null : str(item.wallet_id ?? item.walletId),
         playerPublicId: str(item.player_public_id ?? item.playerPublicId),
+        method: str(item.method),
+        methodLabel: str(item.method_label ?? item.methodLabel),
         amount: num(item.amount),
         status: str(item.status, 'pending'),
         cashierId: item.cashier_id == null && item.cashierId == null ? null : str(item.cashier_id ?? item.cashierId),
         paidAt: item.paid_at == null && item.paidAt == null ? null : str(item.paid_at ?? item.paidAt),
         createdAt: str(item.created_at ?? item.createdAt),
+        rejectionReason: item.rejection_reason == null && item.rejectionReason == null
+          ? null
+          : str(item.rejection_reason ?? item.rejectionReason),
       };
     }),
     total: num(raw.total) || rowsSource.length,
   };
+}
+
+export async function approveOwnerWithdrawal(withdrawalId: string, idempotencyKey: string): Promise<void> {
+  await ownerData(`/api/owner/withdrawals/${encodeURIComponent(withdrawalId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ idempotencyKey }),
+  });
+}
+
+export async function rejectOwnerWithdrawal(
+  withdrawalId: string,
+  reason: string,
+  idempotencyKey: string,
+): Promise<void> {
+  await ownerData(`/api/owner/withdrawals/${encodeURIComponent(withdrawalId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, idempotencyKey }),
+  });
+}
+
+export async function markOwnerWithdrawalPaid(withdrawalId: string, idempotencyKey: string): Promise<void> {
+  await ownerData(`/api/owner/withdrawals/${encodeURIComponent(withdrawalId)}/paid`, {
+    method: 'POST',
+    body: JSON.stringify({ idempotencyKey }),
+  });
 }
 
 export async function sendOwnerMessage(params: {

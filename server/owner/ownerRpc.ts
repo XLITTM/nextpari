@@ -32,6 +32,12 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     || code === 'PLAYER_ACCOUNT_CANNOT_BECOME_STAFF'
     || (code && code.endsWith('_NOT_ACTIVE'))
     || (code && code.endsWith('_BOUND'))
+    || code === 'INSUFFICIENT_AVAILABLE_BALANCE'
+    || code === 'WITHDRAWAL_ALREADY_PAID'
+    || code === 'WITHDRAWAL_ALREADY_REJECTED'
+    || code === 'WITHDRAWAL_NOT_PENDING'
+    || code === 'WITHDRAWAL_NOT_APPROVED'
+    || code === 'WITHDRAWAL_CASH_REQUIRES_CASHIER'
   ) {
     return staffError(code, 409);
   }

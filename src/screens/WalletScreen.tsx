@@ -9,7 +9,7 @@ import { useProfile } from '../ProfileContext';
 import { useWallet } from '../WalletContext';
 import { RestrictionModal } from '../components/RestrictionModal';
 import { DepositModal } from '../components/games/DepositModal';
-import { playerCreateCashPayout, playerListCashPayouts, type PlayerCashPayout } from '../lib/playerCashPayout';
+import { playerCreateCashPayout, type PlayerCashPayout } from '../lib/playerCashPayout';
 import {
   MOBCASH_CITIES,
   MOBCASH_MIN_WITHDRAWAL,
@@ -25,8 +25,9 @@ interface WalletScreenProps {
 }
 
 type HistoryTab = 'withdrawals' | 'deposits';
+type WalletWithdrawMethod = Exclude<WithdrawalMethod, 'other'>;
 
-const methodConfig: Record<WithdrawalMethod, { icon: typeof CreditCard; label: string; placeholder: string; prefix: string }> = {
+const methodConfig: Record<WalletWithdrawMethod, { icon: typeof CreditCard; label: string; placeholder: string; prefix: string }> = {
   card: { icon: CreditCard, label: 'Банковская карта', placeholder: 'Номер карты', prefix: 'Вывод на карту ' },
   crypto: { icon: Bitcoin, label: 'Crypto / Web3', placeholder: 'Адрес кошелька (USDT-TRC20)', prefix: 'Вывод ' },
   ewallet: { icon: Wallet, label: 'Электронный кошелёк', placeholder: 'Номер кошелька', prefix: 'Вывод на кошелёк ' },
@@ -36,7 +37,7 @@ const methodConfig: Record<WithdrawalMethod, { icon: typeof CreditCard; label: s
 export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps) {
   const { showToast } = useToast();
   const { isProfileComplete } = useProfile();
-  const { publicId, applyBalance, refresh } = useWallet();
+  const { publicId, refresh } = useWallet();
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const [showRestriction, setShowRestriction] = useState(false);
   const [showDeposit, setShowDeposit] = useState(false);
@@ -44,14 +45,14 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
   const [cashPayouts, setCashPayouts] = useState<PlayerCashPayout[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [method, setMethod] = useState<WithdrawalMethod>('card');
+  const [method, setMethod] = useState<WalletWithdrawMethod>('card');
   const [amount, setAmount] = useState('');
   const [detail, setDetail] = useState('');
   const [cashCity, setCashCity] = useState('');
   const [cashPointId, setCashPointId] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const handleMethodChange = (next: WithdrawalMethod) => {
+  const handleMethodChange = (next: WalletWithdrawMethod) => {
     setMethod(next);
     setDetail('');
     setCashCity('');
@@ -60,9 +61,15 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
 
   const fetchWithdrawals = useCallback(async () => {
     setLoading(true);
-    setWithdrawals(await listWithdrawalRequests());
-    setCashPayouts(await playerListCashPayouts());
-    setLoading(false);
+    try {
+      setWithdrawals(await listWithdrawalRequests());
+      setCashPayouts([]);
+    } catch {
+      setWithdrawals([]);
+      setCashPayouts([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -93,22 +100,9 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
 
       setSubmitting(true);
       try {
-        const label = formatMobcashWithdrawalLabel(cashCity, point.label);
-        const pinCode = Math.floor(100000 + Math.random() * 900000).toString();
         const result = await playerCreateCashPayout(numAmount, {
           city: cashCity,
           point: point.label,
-          pinCode,
-        });
-        applyBalance(result.newBalance);
-        await createWithdrawalRequest({
-          method: 'cash',
-          methodLabel: label,
-          amount: result.amount,
-          pinCode: result.code,
-          city: cashCity,
-          point: point.label,
-          playerId: result.playerPublicId || publicId || undefined,
         });
         showToast(`Заявка создана · PIN ${result.code}`);
         setAmount('');
@@ -116,7 +110,7 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         setCashPointId('');
         setShowWithdrawForm(false);
         await refresh();
-        fetchWithdrawals();
+        await fetchWithdrawals();
       } catch (err) {
         showToast(err instanceof Error ? err.message : 'Ошибка при создании заявки');
       } finally {
@@ -152,12 +146,14 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         method,
         methodLabel: label,
         amount: numAmount,
+        destinationRef: detail.trim(),
       });
       showToast('Заявка на вывод создана');
       setAmount('');
       setDetail('');
       setShowWithdrawForm(false);
-      fetchWithdrawals();
+      await refresh();
+      await fetchWithdrawals();
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Ошибка при создании заявки');
     } finally {
@@ -271,8 +267,8 @@ function WithdrawForm({
   cashCity, setCashCity, cashPointId, setCashPointId,
   balance, submitting, onClose, onSubmit,
 }: {
-  method: WithdrawalMethod;
-  setMethod: (m: WithdrawalMethod) => void;
+  method: WalletWithdrawMethod;
+  setMethod: (m: WalletWithdrawMethod) => void;
   amount: string;
   setAmount: (v: string) => void;
   detail: string;
@@ -339,7 +335,7 @@ function WithdrawForm({
       {/* Method selector */}
       <label className="text-xs font-semibold text-gray-500 dark:text-gray-200 mb-1.5 block">Способ вывода</label>
       <div className="grid grid-cols-2 gap-2 mb-3">
-        {(Object.keys(methodConfig) as WithdrawalMethod[]).map((key) => {
+        {(Object.keys(methodConfig) as WalletWithdrawMethod[]).map((key) => {
           const mc = methodConfig[key];
           const McIcon = mc.icon;
           const isActive = method === key;
@@ -628,13 +624,22 @@ function PinBadge({ pinCode }: { pinCode: string }) {
 }
 
 function WithdrawalCard({ withdrawal }: { withdrawal: WithdrawalRequest }) {
-  const statusConfig = {
+  const statusConfig: Record<WithdrawalRequest['status'], {
+    icon: typeof Clock3;
+    label: string;
+    badge: string;
+  }> = {
     pending: {
       icon: Clock3,
       label: 'В обработке',
       badge: 'bg-amber-500/20 text-amber-500',
     },
     approved: {
+      icon: CheckCircle2,
+      label: 'Одобрено',
+      badge: 'bg-blue-500/20 text-blue-500',
+    },
+    paid: {
       icon: CheckCircle2,
       label: 'Выплачено',
       badge: 'bg-green-500/20 text-green-500',
@@ -643,6 +648,16 @@ function WithdrawalCard({ withdrawal }: { withdrawal: WithdrawalRequest }) {
       icon: XCircle,
       label: 'Отклонено',
       badge: 'bg-red-500/20 text-red-500',
+    },
+    cancelled: {
+      icon: XCircle,
+      label: 'Отменено',
+      badge: 'bg-slate-500/20 text-slate-400',
+    },
+    expired: {
+      icon: Clock3,
+      label: 'Истекло',
+      badge: 'bg-slate-500/20 text-slate-400',
     },
   };
   const status = statusConfig[withdrawal.status];
@@ -683,6 +698,8 @@ function CashPayoutCard({ payout }: { payout: PlayerCashPayout }) {
     pending: { icon: Clock3, label: 'В обработке', badge: 'bg-amber-500/20 text-amber-500' },
     paid: { icon: CheckCircle2, label: 'Выплачено', badge: 'bg-green-500/20 text-green-500' },
     cancelled: { icon: XCircle, label: 'Отменено', badge: 'bg-red-500/20 text-red-500' },
+    rejected: { icon: XCircle, label: 'Отклонено', badge: 'bg-red-500/20 text-red-500' },
+    expired: { icon: Clock3, label: 'Истекло', badge: 'bg-slate-500/20 text-slate-400' },
   };
   const status = statusConfig[payout.status];
   const StatusIcon = status.icon;

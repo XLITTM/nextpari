@@ -217,8 +217,8 @@ export interface BetHistoryEntry {
   rawStatus?: string;
 }
 
-export type WithdrawalMethod = 'card' | 'crypto' | 'ewallet' | 'cash';
-export type WithdrawalStatus = 'pending' | 'approved' | 'rejected';
+export type WithdrawalMethod = 'card' | 'crypto' | 'ewallet' | 'cash' | 'other';
+export type WithdrawalStatus = 'pending' | 'approved' | 'paid' | 'rejected' | 'cancelled' | 'expired';
 
 export interface WithdrawalRequest {
   id: string;
