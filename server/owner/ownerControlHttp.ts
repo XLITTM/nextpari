@@ -320,6 +320,8 @@ type ControlAction =
   | { kind: 'playerDebit'; playerId: string }
   | { kind: 'block'; playerId: string }
   | { kind: 'playerSecurity'; playerId: string }
+  | { kind: 'playerSecurityRestrictionGet'; playerId: string }
+  | { kind: 'playerSecurityRestrictionSet'; playerId: string }
   | { kind: 'securityOverview' }
   | { kind: 'securityFlags' }
   | { kind: 'securityFlagResolve'; flagId: string }
@@ -353,6 +355,13 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 
   const playerSecurity = path.match(/^\/api\/owner\/players\/([^/]+)\/security$/);
   if (playerSecurity) return m === 'GET' ? { kind: 'playerSecurity', playerId: playerSecurity[1] } : 'method';
+
+  const restriction = path.match(/^\/api\/owner\/players\/([^/]+)\/security-restriction$/);
+  if (restriction) {
+    if (m === 'GET') return { kind: 'playerSecurityRestrictionGet', playerId: restriction[1] };
+    if (m === 'POST') return { kind: 'playerSecurityRestrictionSet', playerId: restriction[1] };
+    return 'method';
+  }
 
   const block = path.match(/^\/api\/owner\/players\/([^/]+)\/block$/);
   if (block) return m === 'POST' ? { kind: 'block', playerId: block[1] } : 'method';
@@ -453,6 +462,16 @@ async function runControl(
     case 'playerSecurity':
       return rpc.invoke('owner_player_security', {
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
+    case 'playerSecurityRestrictionGet':
+      return rpc.invoke('owner_player_security_restriction', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
+    case 'playerSecurityRestrictionSet':
+      return rpc.invoke('owner_set_player_security_restriction', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_restricted: requireBoolean(rec.restricted, 'RESTRICTED_REQUIRED'),
+        p_reason: requireReason(rec.reason),
       });
     case 'securityOverview':
       return rpc.invoke('owner_security_overview');

@@ -260,6 +260,91 @@ describe('owner control center same-origin BFF', () => {
     }
   });
 
+  it('4d. manager, cashier, and player cannot POST owner player block', async () => {
+    const denied = async (role: string) => {
+      const rpc = createRpc();
+      const result = await handleOwnerControlRequest(
+        {
+          method: 'POST',
+          pathname: `/api/owner/players/${PLAYER_ID}/block`,
+          cookie: cookieHeader(ACCESS, REFRESH),
+          cookieSecure: true,
+          body: { blocked: true, reason: 'nope' },
+        },
+        {
+          sessionPorts: createAuthPorts({
+            context: { role, status: 'active', auth_user_id: `${role}-uid` },
+          }),
+          rpcFactory: rpc.rpcFactory,
+        },
+      );
+      assert.equal(result.status, 403, role);
+      assert.equal(result.body.error, 'OWNER_REQUIRED');
+      assert.equal(rpc.calls.length, 0);
+    };
+    await denied('manager');
+    await denied('cashier');
+    await denied('player');
+  });
+
+  it('4e. owner security restriction GET/POST reuses a dedicated RPC, not hard block', async () => {
+    const read = await ownerGet(`/api/owner/players/${PLAYER_ID}/security-restriction`);
+    assert.equal(read.result.status, 200);
+    assert.equal(read.rpc.calls[0]?.name, 'owner_player_security_restriction');
+    assert.deepEqual(read.rpc.calls[0]?.args, { p_player_id: PLAYER_ID });
+
+    const applied = await ownerPost(`/api/owner/players/${PLAYER_ID}/security-restriction`, {
+      restricted: true,
+      reason: 'shared device review',
+    });
+    assert.equal(applied.result.status, 200);
+    assert.equal(applied.rpc.calls[0]?.name, 'owner_set_player_security_restriction');
+    assert.deepEqual(applied.rpc.calls[0]?.args, {
+      p_player_id: PLAYER_ID,
+      p_restricted: true,
+      p_reason: 'shared device review',
+    });
+    assert.equal(applied.rpc.calls.some((call) => call.name === 'owner_set_player_blocked'), false);
+    assert.equal(applied.rpc.calls.some((call) => call.name === 'owner_resolve_security_flag'), false);
+    assert.equal(applied.rpc.calls.some((call) => call.name === 'apply_wallet_entry'), false);
+
+    const missingReason = await ownerPost(`/api/owner/players/${PLAYER_ID}/security-restriction`, {
+      restricted: false,
+      reason: '   ',
+    });
+    assert.equal(missingReason.result.status, 400);
+    assert.equal(missingReason.result.body.error, 'REASON_REQUIRED');
+    assert.equal(missingReason.rpc.calls.length, 0);
+  });
+
+  it('4f. manager, cashier, and player cannot read or mutate security restriction', async () => {
+    const denied = async (role: string, method: string) => {
+      const rpc = createRpc();
+      const result = await handleOwnerControlRequest(
+        {
+          method,
+          pathname: `/api/owner/players/${PLAYER_ID}/security-restriction`,
+          cookie: cookieHeader(ACCESS, REFRESH),
+          cookieSecure: true,
+          body: method === 'POST' ? { restricted: true, reason: 'nope' } : undefined,
+        },
+        {
+          sessionPorts: createAuthPorts({
+            context: { role, status: 'active', auth_user_id: `${role}-uid` },
+          }),
+          rpcFactory: rpc.rpcFactory,
+        },
+      );
+      assert.equal(result.status, 403, `${role} ${method}`);
+      assert.equal(result.body.error, 'OWNER_REQUIRED');
+      assert.equal(rpc.calls.length, 0);
+    };
+    for (const role of ['manager', 'cashier', 'player']) {
+      await denied(role, 'GET');
+      await denied(role, 'POST');
+    }
+  });
+
   it('5. players list', async () => {
     const { result, rpc } = await ownerGet('/api/owner/players', {
       search: '?search=aziz&limit=20&offset=10',
@@ -305,6 +390,17 @@ describe('owner control center same-origin BFF', () => {
       p_blocked: true,
       p_reason: 'risk',
     });
+    assert.equal(rpc.calls.some((call) => call.name === 'owner_resolve_security_flag'), false);
+    assert.equal(rpc.calls.some((call) => call.name === 'apply_wallet_entry'), false);
+
+    const unblocked = await ownerPost(`/api/owner/players/${PLAYER_ID}/block`, {
+      blocked: false,
+      reason: 'clear',
+    });
+    assert.equal(unblocked.result.status, 200);
+    assert.equal(unblocked.rpc.calls[0]?.name, 'owner_set_player_blocked');
+    assert.equal(unblocked.rpc.calls[0]?.args?.p_blocked, false);
+    assert.equal(unblocked.rpc.calls.some((call) => call.name === 'owner_resolve_security_flag'), false);
   });
 
   it('9. cashier freeze POST', async () => {
@@ -523,11 +619,13 @@ describe('owner control center same-origin BFF', () => {
       flags: readFileSync(join(root, 'api/owner/security/flags.ts'), 'utf8'),
       resolve: readFileSync(join(root, 'api/owner/security/flags/[flagId]/resolve.ts'), 'utf8'),
       player: readFileSync(join(root, 'api/owner/players/[playerId]/security.ts'), 'utf8'),
+      restriction: readFileSync(join(root, 'api/owner/players/[playerId]/security-restriction.ts'), 'utf8'),
     };
     assert.match(files.overview, /vercelOwnerControl\('\/api\/owner\/security\/overview'\)/);
     assert.match(files.flags, /vercelOwnerControl\('\/api\/owner\/security\/flags'\)/);
     assert.match(files.resolve, /vercelOwnerParam\(\s*'flagId',\s*\(id\) => `\/api\/owner\/security\/flags\/\$\{id\}\/resolve`,\s*\)/);
     assert.match(files.player, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/security`,\s*\)/);
+    assert.match(files.restriction, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/security-restriction`,\s*\)/);
     for (const source of Object.values(files)) {
       assert.match(source, /from ['"].*server\/owner\/vercelHandler\.js['"]/);
       assert.equal(source.includes('createServiceRoleClient'), false);
@@ -590,6 +688,18 @@ describe('owner control center same-origin BFF', () => {
       p_action: 'resolve',
       p_reason: 'reviewed by owner',
     });
+
+    const restriction = await invoke('/api/owner/players/000003/security-restriction');
+    assert.equal(restriction.statusCode, 200);
+    assert.equal(restriction.rpc.calls[0]?.name, 'owner_player_security_restriction');
+    const restrictSet = await invoke('/api/owner/players/000003/security-restriction', 'POST', {
+      restricted: true,
+      reason: 'manual review',
+    });
+    assert.equal(restrictSet.statusCode, 200);
+    assert.equal(restrictSet.rpc.calls[0]?.name, 'owner_set_player_security_restriction');
+    assert.equal(restrictSet.rpc.calls[0]?.args?.p_restricted, true);
+    assert.equal(restrictSet.rpc.calls.some((call) => call.name === 'owner_set_player_blocked'), false);
   });
 
   it('lists and opens managers under Owner JWT without impersonation', async () => {
