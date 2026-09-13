@@ -26,7 +26,7 @@ export function staffError(
 }
 
 const SENSITIVE_KEY =
-  /(password|generatedpassword|temporarypassword|token|authorization|secret|service.?role|jwt|pin_hash|encrypted)/i;
+  /(password|generatedpassword|temporarypassword|token|authorization|secret|service.?role|jwt|pin_hash|encrypted|pepper|otp|resend|code_hash)/i;
 
 export function redactForLog(value: unknown): unknown {
   if (value == null) return value;

@@ -22,6 +22,14 @@ import {
 } from './playerAuthService.js';
 import { requestIsSecure } from './playerCookies.js';
 import type { StaffLog } from '../staff/types.js';
+import {
+  livePlayerEmailPorts,
+  startPlayerEmailBinding,
+  verifyPlayerEmailBinding,
+  PLAYER_EMAIL_START_PATH,
+  PLAYER_EMAIL_VERIFY_PATH,
+  type PlayerEmailPorts,
+} from '../email/playerEmailService.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
@@ -30,6 +38,7 @@ export const PLAYER_AUTH_CHANGE_PASSWORD_PATH = '/api/player/auth/change-passwor
 export const PLAYER_ME_PATH = '/api/player/me';
 export const PLAYER_WALLET_PATH = '/api/player/wallet';
 export const PLAYER_PROFILE_PATH = '/api/player/profile';
+export { PLAYER_EMAIL_START_PATH, PLAYER_EMAIL_VERIFY_PATH };
 
 function normalizePath(pathname: string): string {
   return pathname.replace(/\/$/, '') || '/';
@@ -45,6 +54,8 @@ export function isPlayerAuthPath(pathname: string): boolean {
     || path === PLAYER_ME_PATH
     || path === PLAYER_WALLET_PATH
     || path === PLAYER_PROFILE_PATH
+    || path === PLAYER_EMAIL_START_PATH
+    || path === PLAYER_EMAIL_VERIFY_PATH
   );
 }
 
@@ -74,6 +85,7 @@ export async function handlePlayerAuthRequest(
   },
   ports: PlayerAuthGatewayPorts,
   log: StaffLog = staffHttpLog,
+  emailPorts?: PlayerEmailPorts,
 ): Promise<PlayerAuthHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
@@ -145,6 +157,32 @@ export async function handlePlayerAuthRequest(
         return updatePlayerProfileSession(ports, input.cookie, asRecord(parseJsonPayload(input.body)), secure);
       }
       throw staffError('METHOD_NOT_ALLOWED', 405);
+    }
+    if (path === PLAYER_EMAIL_START_PATH) {
+      if (method !== 'POST') {
+        throw staffError('METHOD_NOT_ALLOWED', 405);
+      }
+      const body = asRecord(parseJsonPayload(input.body));
+      const email = emailPorts ?? livePlayerEmailPorts(ports);
+      return startPlayerEmailBinding(
+        email,
+        input.cookie,
+        { email: String(body.email ?? '') },
+        secure,
+      );
+    }
+    if (path === PLAYER_EMAIL_VERIFY_PATH) {
+      if (method !== 'POST') {
+        throw staffError('METHOD_NOT_ALLOWED', 405);
+      }
+      const body = asRecord(parseJsonPayload(input.body));
+      const email = emailPorts ?? livePlayerEmailPorts(ports);
+      return verifyPlayerEmailBinding(
+        email,
+        input.cookie,
+        { code: String(body.code ?? '') },
+        secure,
+      );
     }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {
