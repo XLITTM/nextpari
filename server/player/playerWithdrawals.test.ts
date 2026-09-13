@@ -149,6 +149,8 @@ describe('withdrawal ledger SQL contract (not executed)', () => {
     assert.equal(create.includes('p_cashier_id'), false);
     assert.equal(create.includes('p_balance'), false);
     assert.match(create, /CARD_WITHDRAWAL_PROVIDER_REQUIRED/);
+    assert.match(create, /CASH_WITHDRAWAL_BELOW_MIN/);
+    assert.match(create, /v_method = 'cash' AND v_amount < 40/);
     assert.match(create, /v_existing.destination_ref IS DISTINCT FROM v_dest/);
     assert.match(create, /v_existing.cash_pickup_city IS DISTINCT FROM v_city/);
     assert.match(create, /v_existing.cash_pickup_point IS DISTINCT FROM v_point/);
@@ -216,6 +218,44 @@ describe('withdrawal ledger SQL contract (not executed)', () => {
     assert.match(expireFn, /is_duplicate', true/);
     assert.match(expireFn, /private.release_cashier_player_payout_hold/);
   });
+
+  it('revokes authenticated execute on legacy player cash create/cancel and leaves cashier lookup/confirm', () => {
+    assert.match(
+      migration,
+      /REVOKE ALL ON FUNCTION public\.player_request_cashier_payout\(NUMERIC, TEXT\) FROM PUBLIC/,
+    );
+    assert.match(
+      migration,
+      /REVOKE ALL ON FUNCTION public\.player_request_cashier_payout\(NUMERIC, TEXT\) FROM anon, authenticated/,
+    );
+    assert.match(
+      migration,
+      /REVOKE ALL ON FUNCTION public\.player_cancel_cashier_payout\(UUID, TEXT\) FROM PUBLIC/,
+    );
+    assert.match(
+      migration,
+      /REVOKE ALL ON FUNCTION public\.player_cancel_cashier_payout\(UUID, TEXT\) FROM anon, authenticated/,
+    );
+    assert.match(
+      migration,
+      /GRANT EXECUTE ON FUNCTION public\.player_request_cashier_payout\(NUMERIC, TEXT\) TO service_role/,
+    );
+    assert.match(
+      migration,
+      /GRANT EXECUTE ON FUNCTION public\.player_cancel_cashier_payout\(UUID, TEXT\) TO service_role/,
+    );
+    assert.equal(
+      /GRANT EXECUTE ON FUNCTION public\.player_request_cashier_payout[\s\S]{0,80}TO authenticated/.test(migration),
+      false,
+    );
+    assert.equal(
+      /GRANT EXECUTE ON FUNCTION public\.player_cancel_cashier_payout[\s\S]{0,80}TO authenticated/.test(migration),
+      false,
+    );
+    assert.equal(migration.includes('REVOKE ALL ON FUNCTION public.cashier_lookup_player_payout'), false);
+    assert.equal(migration.includes('REVOKE ALL ON FUNCTION public.cashier_confirm_player_payout'), false);
+    assert.match(migration, /public.player_request_cashier_payout\(v_amount, v_key\)/);
+  });
 });
 
 describe('player withdrawal HTTP gateway', () => {
@@ -243,6 +283,75 @@ describe('player withdrawal HTTP gateway', () => {
     );
     assert.equal(negative.status, 400);
     assert.equal(ports.rpcs.length, 0);
+    const nan = await handlePlayerWithdrawalsRequest(
+      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'ewallet', amount: Number.NaN, methodLabel: 'Wallet', idempotencyKey: 'k1', destinationRef: '12345678' } },
+      ports,
+    );
+    const inf = await handlePlayerWithdrawalsRequest(
+      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'ewallet', amount: Number.POSITIVE_INFINITY, methodLabel: 'Wallet', idempotencyKey: 'k1', destinationRef: '12345678' } },
+      ports,
+    );
+    assert.equal(nan.status, 400);
+    assert.equal(nan.body.error, 'AMOUNT_NOT_POSITIVE');
+    assert.equal(inf.status, 400);
+    assert.equal(inf.body.error, 'AMOUNT_NOT_POSITIVE');
+  });
+
+  it('rejects more than 2 decimal places instead of rounding', async () => {
+    const ports = createPlayerPorts();
+    const result = await handlePlayerWithdrawalsRequest(
+      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'ewallet', amount: 10.123, methodLabel: 'Wallet', idempotencyKey: 'k1', destinationRef: '12345678' } },
+      ports,
+    );
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error, 'AMOUNT_SCALE_INVALID');
+    assert.equal(ports.rpcs.length, 0);
+  });
+
+  it('accepts 10 / 10.1 / 10.12 without rewriting the amount', async () => {
+    const ports = createPlayerPorts();
+    for (const amount of [10, 10.1, 10.12]) {
+      const result = await handlePlayerWithdrawalsRequest(
+        { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'ewallet', amount, methodLabel: 'Wallet', idempotencyKey: `k-${amount}`, destinationRef: '12345678' } },
+        ports,
+      );
+      assert.equal(result.status, 200, String(amount));
+      assert.equal(ports.rpcs.at(-1)?.args?.p_amount, amount);
+    }
+    assert.equal(ports.rpcs.length, 3);
+  });
+
+  it('rejects cash below 40 TMTM and accepts 40', async () => {
+    const below = createPlayerPorts();
+    const low = await handlePlayerWithdrawalsRequest(
+      {
+        method: 'POST',
+        pathname: '/api/player/withdrawals',
+        cookie: playerCookie(),
+        cookieSecure: true,
+        body: { method: 'cash', amount: 39.99, methodLabel: 'Cash', idempotencyKey: 'cash-low', city: 'Ashgabat', point: 'Point 1' },
+      },
+      below,
+    );
+    assert.equal(low.status, 400);
+    assert.equal(low.body.error, 'CASH_WITHDRAWAL_BELOW_MIN');
+    assert.equal(below.rpcs.length, 0);
+
+    const ok = createPlayerPorts();
+    const allowed = await handlePlayerWithdrawalsRequest(
+      {
+        method: 'POST',
+        pathname: '/api/player/withdrawals',
+        cookie: playerCookie(),
+        cookieSecure: true,
+        body: { method: 'cash', amount: 40, methodLabel: 'Cash', idempotencyKey: 'cash-min', city: 'Ashgabat', point: 'Point 1' },
+      },
+      ok,
+    );
+    assert.equal(allowed.status, 200);
+    assert.equal(ok.rpcs.length, 1);
+    assert.equal(ok.rpcs[0]?.args?.p_amount, 40);
+    assert.equal(ok.rpcs[0]?.args?.p_method, 'cash');
   });
 
   it('maps insufficient funds from the wallet ledger', async () => {

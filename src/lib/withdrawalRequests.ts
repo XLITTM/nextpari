@@ -65,6 +65,7 @@ function mapError(code: string): string {
   if (code === 'AMOUNT_NOT_POSITIVE' || code === 'AMOUNT_SCALE_INVALID') {
     return 'Введите корректную сумму';
   }
+  if (code === 'CASH_WITHDRAWAL_BELOW_MIN') return 'Минимальная сумма вывода — 40.00 TMTM';
   if (code === 'INSUFFICIENT_AVAILABLE_BALANCE') return 'Недостаточно средств на балансе';
   if (code === 'CASH_PICKUP_REQUIRED') return 'Выберите город и точку выдачи';
   if (code === 'DESTINATION_REQUIRED') return 'Заполните реквизиты для вывода';

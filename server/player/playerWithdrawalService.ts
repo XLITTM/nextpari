@@ -7,6 +7,8 @@ import {
 import type { PlayerAuthHttpResult } from './playerAuthService.js';
 
 const METHODS = new Set(['cash', 'card', 'crypto', 'ewallet', 'other']);
+const CASH_WITHDRAWAL_MIN = 40;
+const AMOUNT_SCALE_TOLERANCE = 1e-8;
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
@@ -24,7 +26,11 @@ function requireText(value: unknown, code: string): string {
 function requireAmount(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n) || n <= 0) throw staffError('AMOUNT_NOT_POSITIVE', 400);
-  return Number(n.toFixed(2));
+  const cents = n * 100;
+  if (Math.abs(cents - Math.round(cents)) > AMOUNT_SCALE_TOLERANCE) {
+    throw staffError('AMOUNT_SCALE_INVALID', 400);
+  }
+  return Math.round(cents) / 100;
 }
 
 function stripBrowserAuthority(body: Record<string, unknown>): Record<string, unknown> {
@@ -67,9 +73,13 @@ export async function createPlayerWithdrawal(
   const method = requireText(rec.method, 'WITHDRAWAL_METHOD_INVALID').toLowerCase();
   if (!METHODS.has(method)) throw staffError('WITHDRAWAL_METHOD_INVALID', 400);
   if (method === 'card') throw staffError('CARD_WITHDRAWAL_PROVIDER_REQUIRED', 400);
+  const amount = requireAmount(rec.amount);
+  if (method === 'cash' && amount < CASH_WITHDRAWAL_MIN) {
+    throw staffError('CASH_WITHDRAWAL_BELOW_MIN', 400);
+  }
   return wrapOk(await runPlayerGameRpc(ports, cookieHeader, secure, 'player_create_withdrawal', {
     p_method: method,
-    p_amount: requireAmount(rec.amount),
+    p_amount: amount,
     p_idempotency_key: requireText(rec.idempotencyKey ?? rec.idempotency_key, 'IDEMPOTENCY_KEY_REQUIRED'),
     p_method_label: requireText(rec.methodLabel ?? rec.method_label, 'METHOD_LABEL_REQUIRED'),
     p_destination_ref: rec.destinationRef ?? rec.destination_ref ?? rec.detail ?? null,

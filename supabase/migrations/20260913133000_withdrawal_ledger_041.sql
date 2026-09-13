@@ -8,10 +8,12 @@ BEGIN;
 -- NOT APPLIED BY THIS CHANGE. Repository-only.
 --
 -- Cash / Mobcash reuses canonical:
---   public.player_request_cashier_payout
+--   public.player_request_cashier_payout (internal only; EXECUTE revoked from authenticated)
 --   public.cashier_lookup_player_payout
 --   public.cashier_confirm_player_payout
 --   WITHDRAWAL_HOLD / WITHDRAWAL_RELEASE / WITHDRAWAL_COMPLETE
+--
+-- Player cash create goes through public.player_create_withdrawal.
 --
 -- Card / crypto / e-wallet / other:
 --   private.player_withdrawal_requests
@@ -365,6 +367,9 @@ BEGIN
         RAISE EXCEPTION 'AMOUNT_SCALE_INVALID';
     END IF;
     v_amount := ROUND(p_amount, 2);
+    IF v_method = 'cash' AND v_amount < 40 THEN
+        RAISE EXCEPTION 'CASH_WITHDRAWAL_BELOW_MIN';
+    END IF;
 
     v_city := NULLIF(BTRIM(COALESCE(p_cash_pickup_city, '')), '');
     v_point := NULLIF(BTRIM(COALESCE(p_cash_pickup_point, '')), '');
@@ -902,6 +907,14 @@ GRANT EXECUTE ON FUNCTION public.owner_reject_withdrawal(UUID, TEXT, TEXT) TO au
 REVOKE ALL ON FUNCTION public.owner_mark_withdrawal_paid(UUID, TEXT) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.owner_mark_withdrawal_paid(UUID, TEXT) FROM anon;
 GRANT EXECUTE ON FUNCTION public.owner_mark_withdrawal_paid(UUID, TEXT) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.player_request_cashier_payout(NUMERIC, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.player_request_cashier_payout(NUMERIC, TEXT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.player_request_cashier_payout(NUMERIC, TEXT) TO service_role;
+
+REVOKE ALL ON FUNCTION public.player_cancel_cashier_payout(UUID, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.player_cancel_cashier_payout(UUID, TEXT) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.player_cancel_cashier_payout(UUID, TEXT) TO service_role;
 
 
 DO $legacy$

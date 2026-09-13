@@ -66,6 +66,7 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'STAKE_SCALE_INVALID'
     || code === 'AMOUNT_NOT_POSITIVE'
     || code === 'AMOUNT_SCALE_INVALID'
+    || code === 'CASH_WITHDRAWAL_BELOW_MIN'
     || code === 'WITHDRAWAL_METHOD_INVALID'
     || code === 'CASH_PICKUP_REQUIRED'
     || code === 'DESTINATION_REQUIRED'
