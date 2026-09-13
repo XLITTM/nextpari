@@ -91,6 +91,11 @@ export interface PlayerAuthGatewayPorts {
     fields: PlayerProfileFields,
     refreshToken?: string | null,
   ) => Promise<void>;
+  updatePassword?: (
+    accessToken: string,
+    refreshToken: string,
+    newPassword: string,
+  ) => Promise<void>;
   signOut?: (accessToken: string, refreshToken: string | null) => Promise<void>;
 }
 
@@ -515,6 +520,24 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
         throw staffError('PROFILE_UNAVAILABLE', 503);
       }
     },
+    async updatePassword(accessToken, refreshToken, newPassword) {
+      const client = createAnonAuthClient(env.supabaseUrl, env.supabaseAnonKey);
+      const { error: sessionError } = await client.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (sessionError) {
+        throw staffError('SESSION_EXPIRED', 401);
+      }
+      const { error } = await client.auth.updateUser({ password: newPassword });
+      if (error) {
+        const text = String(error.message ?? '').toLowerCase();
+        if (text.includes('password') && (text.includes('short') || text.includes('least') || text.includes('character'))) {
+          throw staffError('PASSWORD_POLICY_INVALID', 400);
+        }
+        throw staffError('PASSWORD_CHANGE_FAILED', 503);
+      }
+    },
     async signOut(accessToken, refreshToken) {
       const client = createAnonAuthClient(env.supabaseUrl, env.supabaseAnonKey);
       if (refreshToken) {
@@ -890,6 +913,122 @@ export async function updatePlayerProfileSession(
         ? clearPlayerCookies(secure)
         : undefined,
     };
+  }
+}
+
+function changePasswordFailed(
+  status: number,
+  error: string,
+  cookies?: string[],
+): PlayerAuthHttpResult {
+  return {
+    status,
+    body: { ok: false, error },
+    cookies,
+  };
+}
+
+export async function changePlayerPassword(
+  ports: PlayerAuthGatewayPorts,
+  cookieHeader: string | undefined,
+  input: {
+    currentPassword?: string;
+    newPassword?: string;
+  },
+  secure: boolean,
+): Promise<PlayerAuthHttpResult> {
+  // Player auth has no shared rate-limit middleware. Safety here is:
+  // authenticated session required, current password re-checked with Supabase Auth,
+  // and the UI disables double-submit. Do not add an in-memory limiter.
+  const currentPassword = String(input.currentPassword ?? '');
+  const newPassword = String(input.newPassword ?? '');
+
+  if (!currentPassword) {
+    return changePasswordFailed(400, 'CURRENT_PASSWORD_INVALID');
+  }
+  if (newPassword === currentPassword) {
+    return changePasswordFailed(400, 'PASSWORD_SAME_AS_CURRENT');
+  }
+  if (validatePlayerPassword(newPassword)) {
+    return changePasswordFailed(400, 'PASSWORD_POLICY_INVALID');
+  }
+
+  const cookies = readPlayerCookies(cookieHeader);
+  if (!cookies.accessToken && !cookies.refreshToken) {
+    return changePasswordFailed(401, 'SESSION_REQUIRED', clearPlayerCookies(secure));
+  }
+
+  try {
+    let accessToken = cookies.accessToken;
+    let refreshToken = cookies.refreshToken;
+    let sessionUser: PlayerAuthUser | null = null;
+    if (accessToken) {
+      try {
+        sessionUser = await ports.getAuthUser(accessToken);
+      } catch {
+        sessionUser = null;
+      }
+    }
+    if (!sessionUser) {
+      if (!refreshToken) {
+        return changePasswordFailed(401, 'SESSION_EXPIRED', clearPlayerCookies(secure));
+      }
+      try {
+        const rotated = await ports.refreshSession(refreshToken);
+        accessToken = rotated.accessToken;
+        refreshToken = rotated.refreshToken;
+        sessionUser = await ports.getAuthUser(accessToken);
+      } catch {
+        return changePasswordFailed(401, 'SESSION_EXPIRED', clearPlayerCookies(secure));
+      }
+    }
+
+    const email = String(sessionUser.email ?? '').trim();
+    if (!sessionUser.id || !email) {
+      return changePasswordFailed(401, 'SESSION_EXPIRED', clearPlayerCookies(secure));
+    }
+
+    let reauth: PlayerAuthTokens;
+    try {
+      reauth = await ports.signInWithPassword(email, currentPassword);
+    } catch {
+      return changePasswordFailed(401, 'CURRENT_PASSWORD_INVALID');
+    }
+
+    const reauthUser = await ports.getAuthUser(reauth.accessToken);
+    if (!reauthUser.id || reauthUser.id !== sessionUser.id) {
+      return changePasswordFailed(401, 'CURRENT_PASSWORD_INVALID');
+    }
+
+    if (!ports.updatePassword) {
+      return changePasswordFailed(503, 'PASSWORD_CHANGE_FAILED');
+    }
+    await ports.updatePassword(reauth.accessToken, reauth.refreshToken, newPassword);
+
+    if (ports.signOut) {
+      try {
+        await ports.signOut(reauth.accessToken, reauth.refreshToken);
+      } catch {
+        /* still clear cookies */
+      }
+    }
+
+    return {
+      status: 200,
+      body: { ok: true },
+      cookies: clearPlayerCookies(secure),
+    };
+  } catch (err) {
+    if (err instanceof StaffOnboardingError) {
+      if (err.code === 'PASSWORD_POLICY_INVALID') {
+        return changePasswordFailed(400, 'PASSWORD_POLICY_INVALID');
+      }
+      if (err.httpStatus === 401) {
+        return changePasswordFailed(401, 'SESSION_EXPIRED', clearPlayerCookies(secure));
+      }
+      return changePasswordFailed(err.httpStatus === 503 ? 503 : 400, 'PASSWORD_CHANGE_FAILED');
+    }
+    return changePasswordFailed(500, 'INTERNAL_ERROR');
   }
 }
 

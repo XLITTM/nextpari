@@ -8,8 +8,11 @@ export function validatePlayerEmail(email: string): string | null {
   return null;
 }
 
+export const PLAYER_PASSWORD_MIN_LENGTH = 8;
+export const PLAYER_PASSWORD_POLICY_MESSAGE = 'Пароль должен содержать не менее 8 символов';
+
 export function validatePlayerPassword(password: string): string | null {
-  if (password.length < 8) return 'password too short';
+  if (password.length < PLAYER_PASSWORD_MIN_LENGTH) return 'password too short';
   return null;
 }
 

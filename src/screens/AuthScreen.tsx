@@ -17,6 +17,7 @@ import { RegistrationMethodCard } from '../components/auth/RegistrationMethodCar
 
 interface AuthScreenProps {
   onAuthSuccess: () => void | Promise<void>;
+  notice?: string | null;
 }
 
 function playerFacingAuthError(raw: string): string {
@@ -140,7 +141,7 @@ function CredentialRow({
   );
 }
 
-export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
+export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenProps) {
   const [view, setView] = useState<AuthView>('login');
   const [loginMode, setLoginMode] = useState<'identifier' | 'phone'>('identifier');
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -152,7 +153,7 @@ export function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const [agreed, setAgreed] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState(initialNotice ?? '');
   const [busy, setBusy] = useState(false);
   const [issuedId, setIssuedId] = useState('');
   const [issuedSecret, setIssuedSecret] = useState('');

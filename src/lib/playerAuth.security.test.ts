@@ -70,6 +70,7 @@ const sameOriginPlayerFiles = [
   'screens/AuthScreen.tsx',
   'screens/MenuScreen.tsx',
   'screens/PersonalDataScreen.tsx',
+  'screens/SettingsScreen.tsx',
   'WalletContext.tsx',
   'ProfileContext.tsx',
   'lib/playerAuth.ts',

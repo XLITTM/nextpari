@@ -47,7 +47,7 @@ import { LeagueScreen } from './screens/LeagueScreen';
 import { BetHistoryProvider } from './BetHistoryContext';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { clearDemoPlayerState, fetchPlayerMe, signOutPlayer } from './lib/playerAuth';
+import { PLAYER_PASSWORD_CHANGED_NOTICE, clearDemoPlayerState, fetchPlayerMe, signOutPlayer } from './lib/playerAuth';
 import { useUserStore } from './stores/userStore';
 import { useFavoritesStore } from './stores/favoritesStore';
 import { subscribeMatchSoundToast } from './services/matchSoundService';
@@ -205,6 +205,7 @@ function navActive(name: Screen['name']): Screen['name'] {
 function AppContent() {
   const [authReady, setAuthReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [screen, setScreenState] = useState<Screen>(screenFromPath);
   const [searchOpen, setSearchOpen] = useState(false);
   const [mainTab, setMainTab] = useState<MainTab>('top');
@@ -355,16 +356,26 @@ function AppContent() {
       return;
     }
     await Promise.all([refreshWallet(), refreshProfile()]);
+    setAuthNotice(null);
     setIsAuthenticated(true);
     replaceScreen(screenFromPath());
   };
 
-  const handleLogout = () => {
+  const finishPlayerLogout = (notice?: string | null) => {
     useUserStore.getState().reset();
     resetProfile();
+    setAuthNotice(notice ?? null);
     void signOutPlayer().finally(() => {
       setIsAuthenticated(false);
     });
+  };
+
+  const handleLogout = () => {
+    finishPlayerLogout(null);
+  };
+
+  const handlePasswordChanged = () => {
+    finishPlayerLogout(PLAYER_PASSWORD_CHANGED_NOTICE);
   };
   const moneyLabel = formatPlayerMoney(balance, available, walletLoading);
 
@@ -456,6 +467,7 @@ function AppContent() {
             onBack={goBack}
             onNavigate={setScreen}
             onLogout={handleLogout}
+            onPasswordChanged={handlePasswordChanged}
           />
         );
       case 'info':
@@ -564,7 +576,7 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
-    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} notice={authNotice} />;
   }
 
   return (
