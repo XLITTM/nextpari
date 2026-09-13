@@ -960,3 +960,165 @@ export function exportCashierLedgerCsv(cashier: BackofficeCashier, rows: Cashier
   link.click();
   URL.revokeObjectURL(url);
 }
+
+export type ProviderSettlementPeriodKind = 'month' | 'custom';
+export type ProviderProductFilter = 'sports' | 'casino';
+export type ProviderSettlementStatus = 'open' | 'reconciled' | 'invoiced' | 'paid' | 'dispute';
+
+export interface ProviderSettlementFilters {
+  period?: ProviderSettlementPeriodKind;
+  month?: string | null;
+  from?: string | null;
+  to?: string | null;
+  provider?: string | null;
+  product?: ProviderProductFilter | '' | null;
+  currency?: string | null;
+  status?: ProviderSettlementStatus | '' | null;
+}
+
+export interface ProviderGgrCurrencyTotal {
+  currency: string;
+  stakeTotal: number;
+  payoutTotal: number;
+  refundTotal: number;
+  voidTotal: number;
+  rollbackTotal: number;
+  internalGgr: number;
+}
+
+export interface ProviderSettlementRow {
+  id: string | null;
+  providerKey: string;
+  product: string;
+  currency: string;
+  periodStart: string;
+  periodEnd: string;
+  stakeTotal: number;
+  payoutTotal: number;
+  refundTotal: number;
+  voidTotal: number;
+  rollbackTotal: number;
+  internalGgr: number;
+  providerReportedGgr: number | null;
+  discrepancy: number | null;
+  commercialTerms: Record<string, unknown> | null;
+  commissionFee: number | null;
+  amountDue: number | null;
+  status: string;
+  statementRef: string | null;
+  invoiceRef: string | null;
+}
+
+export interface ProviderGgrSummary {
+  hasProviderData: boolean;
+  period: {
+    kind: ProviderSettlementPeriodKind;
+    from: string;
+    to: string;
+    startAt: string;
+    endAt: string;
+    timezone: string;
+  };
+  currencies: ProviderGgrCurrencyTotal[];
+  rows: ProviderSettlementRow[];
+}
+
+export interface ProviderSettlementList {
+  hasProviderData: boolean;
+  period: ProviderGgrSummary['period'];
+  rows: ProviderSettlementRow[];
+}
+
+function parseProviderPeriod(raw: Record<string, unknown>): ProviderGgrSummary['period'] {
+  const kindRaw = str(raw.kind, 'month');
+  return {
+    kind: kindRaw === 'custom' ? 'custom' : 'month',
+    from: str(raw.from).slice(0, 10),
+    to: str(raw.to).slice(0, 10),
+    startAt: str(raw.startAt ?? raw.start_at),
+    endAt: str(raw.endAt ?? raw.end_at),
+    timezone: str(raw.timezone, 'UTC'),
+  };
+}
+
+function parseProviderSettlementRow(value: unknown): ProviderSettlementRow {
+  const raw = asRecord(value);
+  const commercial = raw.commercialTerms ?? raw.commercial_terms;
+  return {
+    id: raw.id == null ? null : str(raw.id),
+    providerKey: str(raw.providerKey ?? raw.provider_key),
+    product: str(raw.product),
+    currency: str(raw.currency),
+    periodStart: str(raw.periodStart ?? raw.period_start),
+    periodEnd: str(raw.periodEnd ?? raw.period_end),
+    stakeTotal: num(raw.stakeTotal ?? raw.stake_total),
+    payoutTotal: num(raw.payoutTotal ?? raw.payout_total),
+    refundTotal: num(raw.refundTotal ?? raw.refund_total),
+    voidTotal: num(raw.voidTotal ?? raw.void_total),
+    rollbackTotal: num(raw.rollbackTotal ?? raw.rollback_total),
+    internalGgr: num(raw.internalGgr ?? raw.internal_ggr),
+    providerReportedGgr: nullableNum(raw.providerReportedGgr ?? raw.provider_reported_ggr),
+    discrepancy: nullableNum(raw.discrepancy),
+    commercialTerms: commercial && typeof commercial === 'object' && !Array.isArray(commercial)
+      ? commercial as Record<string, unknown>
+      : null,
+    commissionFee: nullableNum(raw.commissionFee ?? raw.commission_fee),
+    amountDue: nullableNum(raw.amountDue ?? raw.amount_due),
+    status: str(raw.status, 'open'),
+    statementRef: raw.statementRef == null && raw.statement_ref == null
+      ? null
+      : str(raw.statementRef ?? raw.statement_ref) || null,
+    invoiceRef: raw.invoiceRef == null && raw.invoice_ref == null
+      ? null
+      : str(raw.invoiceRef ?? raw.invoice_ref) || null,
+  };
+}
+
+function providerSettlementQuery(params: ProviderSettlementFilters): string {
+  return ownerQuery({
+    period: params.period ?? 'month',
+    month: params.month ?? null,
+    from: params.from ?? null,
+    to: params.to ?? null,
+    provider: params.provider ?? null,
+    product: params.product || null,
+    currency: params.currency ?? null,
+    status: params.status || null,
+  });
+}
+
+export async function fetchOwnerProviderGgrSummary(
+  params: ProviderSettlementFilters = {},
+): Promise<ProviderGgrSummary> {
+  const data = await ownerData('/api/owner/provider-ggr' + providerSettlementQuery(params));
+  const raw = asRecord(data);
+  return {
+    hasProviderData: raw.hasProviderData === true || raw.has_provider_data === true,
+    period: parseProviderPeriod(asRecord(raw.period)),
+    currencies: asRows(raw.currencies).map((item) => {
+      const row = asRecord(item);
+      return {
+        currency: str(row.currency),
+        stakeTotal: num(row.stakeTotal ?? row.stake_total),
+        payoutTotal: num(row.payoutTotal ?? row.payout_total),
+        refundTotal: num(row.refundTotal ?? row.refund_total),
+        voidTotal: num(row.voidTotal ?? row.void_total),
+        rollbackTotal: num(row.rollbackTotal ?? row.rollback_total),
+        internalGgr: num(row.internalGgr ?? row.internal_ggr),
+      };
+    }),
+    rows: asRows(raw.rows).map(parseProviderSettlementRow),
+  };
+}
+
+export async function fetchOwnerProviderSettlements(
+  params: ProviderSettlementFilters = {},
+): Promise<ProviderSettlementList> {
+  const data = await ownerData('/api/owner/provider-settlements' + providerSettlementQuery(params));
+  const raw = asRecord(data);
+  return {
+    hasProviderData: raw.hasProviderData === true || raw.has_provider_data === true,
+    period: parseProviderPeriod(asRecord(raw.period)),
+    rows: asRows(raw.rows).map(parseProviderSettlementRow),
+  };
+}

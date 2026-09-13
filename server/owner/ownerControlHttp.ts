@@ -114,6 +114,56 @@ function optionalNote(value: unknown): string | null {
   return note;
 }
 
+function optionalFilter(value: string | null, code: string, max = 64): string | null {
+  if (value == null || value.trim() === '') return null;
+  const text = value.trim();
+  if (text.length > max) throw staffError(code, 400);
+  return text;
+}
+
+function providerSettlementArgs(query: URLSearchParams, includeStatus: boolean): Record<string, unknown> {
+  const periodRaw = (query.get('period') ?? 'month').trim() || 'month';
+  const period = periodRaw === 'custom' ? 'custom' : 'month';
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const monthRe = /^\d{4}-\d{2}$/;
+  let from = query.get('from')?.trim() || null;
+  let to = query.get('to')?.trim() || null;
+  const month = query.get('month')?.trim() || null;
+  if (month) {
+    if (!monthRe.test(month)) throw staffError('PERIOD_INVALID', 400);
+    from = `${month}-01`;
+    to = null;
+  }
+  if (from && !dateRe.test(from)) throw staffError('PERIOD_INVALID', 400);
+  if (to && !dateRe.test(to)) throw staffError('PERIOD_INVALID', 400);
+  if (period === 'custom' && (!from || !to)) throw staffError('PERIOD_INVALID', 400);
+  const product = optionalFilter(query.get('product'), 'PROVIDER_PRODUCT_INVALID');
+  if (product && product !== 'sports' && product !== 'casino') {
+    throw staffError('PROVIDER_PRODUCT_INVALID', 400);
+  }
+  const status = includeStatus ? optionalFilter(query.get('status'), 'PROVIDER_STATUS_INVALID') : null;
+  if (
+    status
+    && status !== 'open'
+    && status !== 'reconciled'
+    && status !== 'invoiced'
+    && status !== 'paid'
+    && status !== 'dispute'
+  ) {
+    throw staffError('PROVIDER_STATUS_INVALID', 400);
+  }
+  const args: Record<string, unknown> = {
+    p_period: period,
+    p_from: from,
+    p_to: to,
+    p_provider_key: optionalFilter(query.get('provider'), 'PROVIDER_KEY_INVALID'),
+    p_product: product,
+    p_currency: optionalFilter(query.get('currency'), 'PROVIDER_CURRENCY_INVALID', 8),
+  };
+  if (includeStatus) args.p_status = status;
+  return args;
+}
+
 function requireNote(value: unknown): string {
   const note = optionalNote(value);
   if (!note) throw staffError('NOTE_REQUIRED', 400);
@@ -273,7 +323,9 @@ type ControlAction =
   | { kind: 'treasury' }
   | { kind: 'capitalIn' }
   | { kind: 'fund' }
-  | { kind: 'gameReport' };
+  | { kind: 'gameReport' }
+  | { kind: 'providerGgr' }
+  | { kind: 'providerSettlements' };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -328,6 +380,10 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   }
   if (path === '/api/owner/fund') return m === 'POST' ? { kind: 'fund' } : 'method';
   if (path === '/api/owner/games/report') return m === 'GET' ? { kind: 'gameReport' } : 'method';
+  if (path === '/api/owner/provider-ggr') return m === 'GET' ? { kind: 'providerGgr' } : 'method';
+  if (path === '/api/owner/provider-settlements') {
+    return m === 'GET' ? { kind: 'providerSettlements' } : 'method';
+  }
   return null;
 }
 
@@ -486,6 +542,10 @@ async function runControl(
         p_timezone: timezone,
       });
     }
+    case 'providerGgr':
+      return rpc.invoke('owner_provider_ggr_summary', providerSettlementArgs(query, false));
+    case 'providerSettlements':
+      return rpc.invoke('owner_list_provider_settlements', providerSettlementArgs(query, true));
     default:
       throw staffError('NOT_FOUND', 404);
   }
