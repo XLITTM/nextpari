@@ -1,4 +1,5 @@
 BEGIN;
+SET LOCAL statement_timeout = '10min';
 
 -- ============================================================
 -- NEXTPARI PHASE 041
