@@ -35,6 +35,7 @@ import {
   livePlayerSecurityPorts,
   type PlayerSecurityPorts,
 } from './playerSecurityService.js';
+import { trustedClientAddressFromNode, trustedClientAddressFromVercel } from './playerSecurityNetwork.js';
 import { presentedLoginIdentifier, presentedRegisterIdentifier } from './playerSecuritySignals.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
@@ -88,6 +89,7 @@ export async function handlePlayerAuthRequest(
     cookie?: string;
     cookieSecure?: boolean;
     body?: unknown;
+    trustedNetworkAddress?: string | null;
     forwardedFor?: string;
     realIp?: string;
     userAgent?: string;
@@ -101,11 +103,12 @@ export async function handlePlayerAuthRequest(
   const method = input.method.toUpperCase();
   const secure = input.cookieSecure === true;
   const device = ensurePlayerDeviceCookie(input.cookie, secure);
+  void input.forwardedFor;
+  void input.realIp;
   const boundary = {
     cookieHeader: input.cookie,
     cookieSecure: secure,
-    forwardedFor: input.forwardedFor,
-    realIp: input.realIp,
+    trustedNetworkAddress: input.trustedNetworkAddress ?? null,
     userAgent: input.userAgent,
     device,
   };
@@ -275,8 +278,7 @@ export async function attachPlayerAuthHttp(
         cookie: headerValue(req.headers, 'cookie'),
         cookieSecure: requestIsSecure(req.headers),
         body,
-        forwardedFor: headerValue(req.headers, 'x-forwarded-for'),
-        realIp: headerValue(req.headers, 'x-real-ip'),
+        trustedNetworkAddress: trustedClientAddressFromNode(req),
         userAgent: headerValue(req.headers, 'user-agent'),
       },
       livePlayerAuthPorts(),
@@ -308,8 +310,6 @@ export async function handleVercelPlayerAuth(
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
   const cookie = req.headers.cookie;
-  const forwarded = req.headers['x-forwarded-for'];
-  const realIp = req.headers['x-real-ip'];
   const userAgent = req.headers['user-agent'];
   const result = await handlePlayerAuthRequest(
     {
@@ -318,8 +318,7 @@ export async function handleVercelPlayerAuth(
       cookie: Array.isArray(cookie) ? cookie.join('; ') : cookie,
       cookieSecure: requestIsSecure(req.headers),
       body: req.body,
-      forwardedFor: Array.isArray(forwarded) ? forwarded[0] : forwarded,
-      realIp: Array.isArray(realIp) ? realIp[0] : realIp,
+      trustedNetworkAddress: trustedClientAddressFromVercel(req.headers),
       userAgent: Array.isArray(userAgent) ? userAgent[0] : userAgent,
     },
     ports ?? livePlayerAuthPorts(),

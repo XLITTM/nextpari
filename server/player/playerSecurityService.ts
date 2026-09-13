@@ -7,7 +7,7 @@ import {
   isPlayerDeviceToken,
   loadPlayerSecurityPepper,
   sanitizePlayerSecurityMetadata,
-  serverObservedNetworkAddress,
+  trustedNetworkAddressForHash,
   coarseUserAgent,
   warnPlayerSecurityConfig,
   type PlayerSecurityEventType,
@@ -48,8 +48,7 @@ export interface PlayerSecurityObserver extends PlayerSecurityHashes {
 export interface PlayerSecurityBoundary {
   cookieHeader?: string;
   cookieSecure: boolean;
-  forwardedFor?: string;
-  realIp?: string;
+  trustedNetworkAddress?: string | null;
   userAgent?: string;
 }
 
@@ -71,8 +70,7 @@ function riskForEvent(eventType: PlayerSecurityEventType, fallback?: PlayerSecur
 export function buildPlayerSecurityHashes(input: {
   identifier?: string;
   deviceToken?: string | null;
-  forwardedFor?: string;
-  realIp?: string;
+  trustedNetworkAddress?: string | null;
   userAgent?: string;
   log?: StaffLog;
 }): PlayerSecurityHashes {
@@ -87,10 +85,7 @@ export function buildPlayerSecurityHashes(input: {
   }
   const identifier = String(input.identifier ?? '').trim();
   const deviceToken = isPlayerDeviceToken(input.deviceToken) ? input.deviceToken : '';
-  const network = serverObservedNetworkAddress({
-    forwardedFor: input.forwardedFor,
-    realIp: input.realIp,
-  });
+  const network = trustedNetworkAddressForHash(input.trustedNetworkAddress);
   const ua = coarseUserAgent(input.userAgent);
   return {
     identifierHash: identifier ? hashPlayerSecuritySignal('id', identifier, pepper.pepper) : null,
@@ -110,8 +105,7 @@ export function createPlayerSecurityObserver(
   const hashes = buildPlayerSecurityHashes({
     identifier,
     deviceToken: device.token,
-    forwardedFor: boundary.forwardedFor,
-    realIp: boundary.realIp,
+    trustedNetworkAddress: boundary.trustedNetworkAddress,
     userAgent: boundary.userAgent,
     log,
   });

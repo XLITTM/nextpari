@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS private.player_security_login_pressure (
 );
 
 COMMENT ON TABLE private.player_security_login_pressure IS
-'Concurrency-safe login attempt buckets for multi-instance rate limits. Counts are reset on LOGIN_SUCCESS. No account lock and no money mutation.';
+'Concurrency-safe login attempt buckets for multi-instance rate limits. LOGIN_SUCCESS may clear the matching identifier bucket only. Device/network spray buckets recover by window/cooldown, never because another account succeeded. REGISTER_SUCCESS does not reset pre-auth login pressure. No account lock and no money mutation.';
 
 
 CREATE TABLE IF NOT EXISTS private.player_security_events (
@@ -602,16 +602,21 @@ BEGIN
     )
     RETURNING id INTO v_id;
 
-    IF p_event_type IN ('LOGIN_SUCCESS', 'REGISTER_SUCCESS') THEN
+    -- A successful login may clear pressure for that login identifier only.
+    -- Shared device/network buckets exist to detect cross-account spraying and
+    -- must not be zeroed because one account authenticated.
+    IF p_event_type = 'LOGIN_SUCCESS' THEN
         UPDATE private.player_security_login_pressure
         SET
             failure_count = 0,
             last_success_at = pg_catalog.now(),
             window_started_at = pg_catalog.now(),
             last_blocked_at = NULL
-        WHERE (bucket_kind = 'identifier' AND bucket_hash = NULLIF(p_identifier_hash, ''))
-           OR (bucket_kind = 'device' AND bucket_hash = NULLIF(p_device_hash, ''))
-           OR (bucket_kind = 'network' AND bucket_hash = NULLIF(p_network_hash, ''));
+        WHERE bucket_kind = 'identifier'
+          AND bucket_hash = NULLIF(p_identifier_hash, '');
+    END IF;
+
+    IF p_event_type IN ('LOGIN_SUCCESS', 'REGISTER_SUCCESS') THEN
         PERFORM private.player_security_evaluate_sharing(
             p_player_user_id,
             p_event_type,
@@ -671,6 +676,7 @@ CREATE OR REPLACE FUNCTION private.player_security_consume_bucket(
 RETURNS BOOLEAN
 LANGUAGE plpgsql
 VOLATILE
+SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
@@ -692,7 +698,10 @@ BEGIN
       AND bucket_hash = p_hash
     FOR UPDATE;
 
-    IF v_row.last_success_at IS NOT NULL
+    -- last_success_at may reset the identifier bucket after LOGIN_SUCCESS.
+    -- Device/network buckets must not treat another account's success as a reset.
+    IF p_kind = 'identifier'
+        AND v_row.last_success_at IS NOT NULL
         AND v_row.last_success_at >= v_row.window_started_at
     THEN
         v_row.failure_count := 0;
@@ -704,7 +713,11 @@ BEGIN
 
     IF v_row.last_blocked_at IS NOT NULL
         AND v_row.last_blocked_at >= v_now - make_interval(mins => GREATEST(p_cooldown_minutes, 1))
-        AND (v_row.last_success_at IS NULL OR v_row.last_blocked_at > v_row.last_success_at)
+        AND (
+            p_kind <> 'identifier'
+            OR v_row.last_success_at IS NULL
+            OR v_row.last_blocked_at > v_row.last_success_at
+        )
     THEN
         UPDATE private.player_security_login_pressure
         SET
@@ -756,15 +769,15 @@ DECLARE
 BEGIN
     v_since := pg_catalog.now() - make_interval(mins => GREATEST(p_cooldown_minutes, 1));
 
+    -- Only a LOGIN_SUCCESS for the same identifier may end identifier cooldown.
+    -- Shared device/network AUTH_RATE_LIMITED rows age by cooldown, not by
+    -- another account authenticating on the same device or network.
     SELECT MAX(e.created_at)
     INTO v_success
     FROM private.player_security_events AS e
     WHERE e.event_type = 'LOGIN_SUCCESS'
-      AND (
-          (p_identifier_hash IS NOT NULL AND e.identifier_hash = p_identifier_hash)
-          OR (p_device_hash IS NOT NULL AND e.device_hash = p_device_hash)
-          OR (p_network_hash IS NOT NULL AND e.network_hash = p_network_hash)
-      );
+      AND p_identifier_hash IS NOT NULL
+      AND e.identifier_hash = p_identifier_hash;
 
     RETURN EXISTS (
         SELECT 1
@@ -1203,40 +1216,32 @@ GRANT SELECT, UPDATE ON TABLE private.player_security_settings TO service_role;
 REVOKE ALL ON TABLE private.player_security_login_pressure FROM PUBLIC;
 REVOKE ALL ON TABLE private.player_security_login_pressure FROM anon, authenticated;
 REVOKE ALL ON TABLE private.player_security_login_pressure FROM service_role;
-GRANT SELECT, INSERT, UPDATE ON TABLE private.player_security_login_pressure TO service_role;
+GRANT SELECT ON TABLE private.player_security_login_pressure TO service_role;
+REVOKE INSERT, UPDATE, DELETE ON TABLE private.player_security_login_pressure FROM service_role;
 
 REVOKE ALL ON TABLE private.player_security_events FROM PUBLIC;
 REVOKE ALL ON TABLE private.player_security_events FROM anon, authenticated;
 REVOKE ALL ON TABLE private.player_security_events FROM service_role;
-GRANT SELECT, INSERT ON TABLE private.player_security_events TO service_role;
+GRANT SELECT ON TABLE private.player_security_events TO service_role;
+REVOKE INSERT, UPDATE, DELETE ON TABLE private.player_security_events FROM service_role;
 
 REVOKE ALL ON TABLE private.player_risk_flags FROM PUBLIC;
 REVOKE ALL ON TABLE private.player_risk_flags FROM anon, authenticated;
 REVOKE ALL ON TABLE private.player_risk_flags FROM service_role;
-GRANT SELECT, INSERT, UPDATE ON TABLE private.player_risk_flags TO service_role;
+GRANT SELECT ON TABLE private.player_risk_flags TO service_role;
+REVOKE INSERT, UPDATE, DELETE ON TABLE private.player_risk_flags FROM service_role;
 
-REVOKE ALL ON FUNCTION private.player_security_events_append_only() FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_assert_safe_metadata(JSONB) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_mask_hash(TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_public_id(UUID) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_user_id_from_public_id(TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_upsert_flag(UUID, TEXT, TEXT, INTEGER, JSONB) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_evaluate_sharing(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_record_event(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_consume_bucket(TEXT, TEXT, INTEGER, INTEGER, INTEGER) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_in_cooldown(TEXT, TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION private.player_security_check_login(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-
-GRANT EXECUTE ON FUNCTION private.player_security_assert_safe_metadata(JSONB) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_mask_hash(TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_public_id(UUID) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_user_id_from_public_id(TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_upsert_flag(UUID, TEXT, TEXT, INTEGER, JSONB) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_evaluate_sharing(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_record_event(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_consume_bucket(TEXT, TEXT, INTEGER, INTEGER, INTEGER) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_in_cooldown(TEXT, TEXT, TEXT, INTEGER) TO service_role;
-GRANT EXECUTE ON FUNCTION private.player_security_check_login(TEXT, TEXT, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION private.player_security_events_append_only() FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_assert_safe_metadata(JSONB) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_mask_hash(TEXT) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_public_id(UUID) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_user_id_from_public_id(TEXT) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_upsert_flag(UUID, TEXT, TEXT, INTEGER, JSONB) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_evaluate_sharing(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_record_event(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_consume_bucket(TEXT, TEXT, INTEGER, INTEGER, INTEGER) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_in_cooldown(TEXT, TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_check_login(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.player_security_record_event(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.player_security_record_event(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM anon, authenticated;
@@ -1259,10 +1264,10 @@ REVOKE ALL ON FUNCTION public.owner_resolve_security_flag(UUID, TEXT, TEXT) FROM
 GRANT EXECUTE ON FUNCTION public.owner_resolve_security_flag(UUID, TEXT, TEXT) TO authenticated;
 
 COMMENT ON FUNCTION public.player_security_record_event(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) IS
-'Service-role canonical security ingest. EXECUTE granted only to service_role. Browser/authenticated ingest is denied.';
+'Service-role canonical security ingest. Direct table INSERT is denied. EXECUTE granted only to service_role. Browser/authenticated ingest is denied.';
 
 COMMENT ON FUNCTION public.player_security_check_login(TEXT, TEXT, TEXT) IS
-'Service-role DB-backed login rate-limit check with advisory locks. Does not verify passwords and does not lock accounts permanently.';
+'Service-role DB-backed login rate-limit check with advisory locks. Direct pressure INSERT/UPDATE is denied. Does not verify passwords and does not lock accounts permanently.';
 
 COMMENT ON FUNCTION public.owner_security_overview() IS
 'Owner JWT aggregate security counts. Manager/cashier/player denied via get_current_owner_context.';

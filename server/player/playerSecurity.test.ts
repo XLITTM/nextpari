@@ -11,7 +11,16 @@ import {
 } from './playerAuthHttp.js';
 import type { PlayerAuthGatewayPorts } from './playerAuthService.js';
 import { PLAYER_DEVICE_COOKIE } from './playerCookies.js';
-import type { PlayerSecurityPorts, PlayerSecurityRecordInput } from './playerSecurityService.js';
+import {
+  buildPlayerSecurityHashes,
+  type PlayerSecurityPorts,
+  type PlayerSecurityRecordInput,
+} from './playerSecurityService.js';
+import {
+  PLAYER_SECURITY_TRUSTED_PROXY_ENV,
+  trustedClientAddressFromNode,
+  trustedClientAddressFromVercel,
+} from './playerSecurityNetwork.js';
 import {
   hashPlayerSecuritySignal,
   normalizeNetworkAddress,
@@ -79,14 +88,32 @@ type MemoryFlag = {
   relatedPlayerCount: number;
 };
 
-function createMemorySecurityPorts(): {
+type BucketKind = 'identifier' | 'device' | 'network';
+
+const PRESSURE_LIMITS: Record<BucketKind, number> = {
+  identifier: 8,
+  device: 20,
+  network: 40,
+};
+const PRESSURE_WINDOW_MS = 15 * 60 * 1000;
+const PRESSURE_COOLDOWN_MS = 15 * 60 * 1000;
+
+type PressureBucket = {
+  failureCount: number;
+  windowStartedAt: number;
+  lastSuccessAt: number | null;
+  lastBlockedAt: number | null;
+};
+
+function createMemorySecurityPorts(clock?: { now: number }): {
   events: PlayerSecurityRecordInput[];
   flags: MemoryFlag[];
   ports: PlayerSecurityPorts;
 } {
   const events: PlayerSecurityRecordInput[] = [];
   const flags: MemoryFlag[] = [];
-  const pending = { identifier: 0, device: 0, network: 0 };
+  const buckets = new Map<string, PressureBucket>();
+  const now = () => clock?.now ?? Date.now();
   let chain = Promise.resolve();
   const locked = async <T>(fn: () => T | Promise<T>): Promise<T> => {
     const run = chain.then(fn);
@@ -94,16 +121,52 @@ function createMemorySecurityPorts(): {
     return run;
   };
 
-  const failureCount = (key: 'identifierHash' | 'deviceHash' | 'networkHash', value: string | null) => {
-    if (!value) return 0;
-    const lastSuccess = events
-      .filter((row) => row.eventType === 'LOGIN_SUCCESS' && row[key] === value)
-      .at(-1);
-    return events.filter((row) => (
-      row.eventType === 'LOGIN_FAILURE'
-      && row[key] === value
-      && (!lastSuccess || events.indexOf(row) > events.indexOf(lastSuccess))
-    )).length;
+  const consume = (kind: BucketKind, hash: string | null): boolean => {
+    if (!hash) return true;
+    const key = `${kind}:${hash}`;
+    const t = now();
+    const row = buckets.get(key) ?? {
+      failureCount: 0,
+      windowStartedAt: t,
+      lastSuccessAt: null,
+      lastBlockedAt: null,
+    };
+    if (kind === 'identifier' && row.lastSuccessAt != null && row.lastSuccessAt >= row.windowStartedAt) {
+      row.failureCount = 0;
+      row.windowStartedAt = t;
+    } else if (row.windowStartedAt <= t - PRESSURE_WINDOW_MS) {
+      row.failureCount = 0;
+      row.windowStartedAt = t;
+    }
+    if (
+      row.lastBlockedAt != null
+      && row.lastBlockedAt >= t - PRESSURE_COOLDOWN_MS
+      && (kind !== 'identifier' || row.lastSuccessAt == null || row.lastBlockedAt > row.lastSuccessAt)
+    ) {
+      buckets.set(key, row);
+      return false;
+    }
+    if (row.failureCount >= PRESSURE_LIMITS[kind]) {
+      row.lastBlockedAt = t;
+      buckets.set(key, row);
+      return false;
+    }
+    row.failureCount += 1;
+    row.lastBlockedAt = null;
+    buckets.set(key, row);
+    return true;
+  };
+
+  const clearIdentifierPressure = (hash: string | null) => {
+    if (!hash) return;
+    const key = `identifier:${hash}`;
+    const t = now();
+    buckets.set(key, {
+      failureCount: 0,
+      windowStartedAt: t,
+      lastSuccessAt: t,
+      lastBlockedAt: null,
+    });
   };
 
   const upsertFlag = (playerUserId: string, flagType: string, relatedPlayerCount: number) => {
@@ -132,50 +195,17 @@ function createMemorySecurityPorts(): {
     ports: {
       async checkLoginRateLimit(hashes) {
         return locked(async () => {
-          const lastSuccess = (key: 'identifierHash' | 'deviceHash' | 'networkHash', value: string | null) => {
-            if (!value) return -1;
-            for (let i = events.length - 1; i >= 0; i -= 1) {
-              if (events[i]?.eventType === 'LOGIN_SUCCESS' && events[i]?.[key] === value) return i;
-            }
-            return -1;
-          };
-          const lastSuccessIdx = Math.max(
-            lastSuccess('identifierHash', hashes.identifierHash),
-            lastSuccess('deviceHash', hashes.deviceHash),
-            lastSuccess('networkHash', hashes.networkHash),
-          );
-          const blocked = failureCount('identifierHash', hashes.identifierHash) + pending.identifier >= 8
-            || failureCount('deviceHash', hashes.deviceHash) + pending.device >= 20
-            || failureCount('networkHash', hashes.networkHash) + pending.network >= 40
-            || events.some((row, index) => (
-              row.eventType === 'AUTH_RATE_LIMITED'
-              && index > lastSuccessIdx
-              && (
-                (hashes.identifierHash && row.identifierHash === hashes.identifierHash)
-                || (hashes.deviceHash && row.deviceHash === hashes.deviceHash)
-                || (hashes.networkHash && row.networkHash === hashes.networkHash)
-              )
-            ));
-          if (!blocked) {
-            if (hashes.identifierHash) pending.identifier += 1;
-            if (hashes.deviceHash) pending.device += 1;
-            if (hashes.networkHash) pending.network += 1;
-          }
-          return { allowed: !blocked };
+          const identifierOk = consume('identifier', hashes.identifierHash);
+          const deviceOk = consume('device', hashes.deviceHash);
+          const networkOk = consume('network', hashes.networkHash);
+          return { allowed: identifierOk && deviceOk && networkOk };
         });
       },
       async recordEvent(input) {
         return locked(async () => {
           events.push(input);
-          if (input.eventType === 'LOGIN_FAILURE' || input.eventType === 'AUTH_RATE_LIMITED' || input.eventType === 'LOGIN_SUCCESS') {
-            if (input.identifierHash) pending.identifier = Math.max(0, pending.identifier - 1);
-            if (input.deviceHash) pending.device = Math.max(0, pending.device - 1);
-            if (input.networkHash) pending.network = Math.max(0, pending.network - 1);
-          }
           if (input.eventType === 'LOGIN_SUCCESS') {
-            pending.identifier = 0;
-            pending.device = 0;
-            pending.network = 0;
+            clearIdentifierPressure(input.identifierHash);
           }
           if (
             (input.eventType === 'LOGIN_SUCCESS' || input.eventType === 'REGISTER_SUCCESS')
@@ -243,11 +273,24 @@ describe('player fraud/security foundation SQL 048', () => {
     assert.match(sql, /CREATE TABLE IF NOT EXISTS private\.player_security_settings/);
     assert.match(sql, /CREATE TABLE IF NOT EXISTS private\.player_risk_flags/);
     assert.match(sql, /PLAYER_SECURITY_EVENTS_APPEND_ONLY/);
-    assert.match(sql, /GRANT SELECT, INSERT ON TABLE private\.player_security_events TO service_role/);
+    assert.match(sql, /GRANT SELECT ON TABLE private\.player_security_events TO service_role/);
+    assert.match(sql, /REVOKE INSERT, UPDATE, DELETE ON TABLE private\.player_security_events FROM service_role/);
+    assert.match(sql, /GRANT SELECT ON TABLE private\.player_security_login_pressure TO service_role/);
+    assert.match(sql, /REVOKE INSERT, UPDATE, DELETE ON TABLE private\.player_security_login_pressure FROM service_role/);
+    assert.match(sql, /GRANT SELECT ON TABLE private\.player_risk_flags TO service_role/);
+    assert.match(sql, /REVOKE INSERT, UPDATE, DELETE ON TABLE private\.player_risk_flags FROM service_role/);
+    assert.equal(sql.includes('GRANT SELECT, INSERT ON TABLE private.player_security_events TO service_role'), false);
+    assert.equal(sql.includes('GRANT SELECT, INSERT, UPDATE ON TABLE private.player_security_login_pressure TO service_role'), false);
+    assert.equal(sql.includes('GRANT SELECT, INSERT, UPDATE ON TABLE private.player_risk_flags TO service_role'), false);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION private.player_security_record_event'), false);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION private.player_security_consume_bucket'), false);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION private.player_security_upsert_flag'), false);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION private.player_security_check_login'), false);
     assert.match(sql, /REVOKE ALL ON TABLE private\.player_security_events FROM anon, authenticated/);
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_security_record_event/);
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_security_check_login\(TEXT, TEXT, TEXT\) TO service_role/);
     assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_security_record_event\(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB\) FROM anon, authenticated/);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_security_check_login\(TEXT, TEXT, TEXT\) FROM anon, authenticated/);
     assert.match(sql, /pg_advisory_xact_lock/);
     assert.match(sql, /player_security_login_pressure/);
     assert.match(sql, /player_security_consume_bucket/);
@@ -262,6 +305,10 @@ describe('player fraud/security foundation SQL 048', () => {
     assert.equal(sql.includes('CREATE OR REPLACE FUNCTION public.owner_set_player_blocked'), false);
     assert.equal(sql.includes('CREATE OR REPLACE FUNCTION private.ingest_provider_transaction'), false);
     assert.equal(/GRANT EXECUTE ON FUNCTION public\.player_security_record_event[\s\S]{0,200}TO authenticated/.test(sql), false);
+    assert.match(sql, /IF p_event_type = 'LOGIN_SUCCESS' THEN/);
+    assert.match(sql, /bucket_kind = 'identifier'/);
+    assert.equal(/REGISTER_SUCCESS'\) THEN[\s\S]{0,400}UPDATE private\.player_security_login_pressure/.test(sql), false);
+    assert.match(sql, /p_kind = 'identifier'\s+AND v_row\.last_success_at IS NOT NULL/);
   });
 });
 
@@ -326,9 +373,11 @@ describe('player auth security telemetry', () => {
           method: 'POST',
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookieSecure: true,
-          forwardedFor: '203.0.113.10',
+          trustedNetworkAddress: '203.0.113.10',
+          forwardedFor: '198.51.100.1',
+          realIp: '198.51.100.2',
           userAgent: 'Mozilla/5.0 Test',
-          body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ip: '1.2.3.4', deviceId: 'spoofed-device' },
+          body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ip: '1.2.3.4', deviceId: 'spoofed-device', network: '9.9.9.9' },
         },
         createPlayerPorts(),
         SILENT_LOG,
@@ -348,6 +397,10 @@ describe('player auth security telemetry', () => {
       assert.equal(memory.events.some((row) => row.eventType === 'LOGIN_SUCCESS'), true);
       assert.equal(JSON.stringify(memory.events).includes(token), false);
       assert.equal(JSON.stringify(memory.events).includes('1.2.3.4'), false);
+      assert.equal(JSON.stringify(memory.events).includes('198.51.100.1'), false);
+      assert.equal(JSON.stringify(memory.events).includes('198.51.100.2'), false);
+      assert.equal(JSON.stringify(memory.events).includes('9.9.9.9'), false);
+      assert.equal(JSON.stringify(memory.events).includes('203.0.113.10'), false);
       assert.equal(JSON.stringify(memory.events).includes('spoofed-device'), false);
       assert.equal(JSON.stringify(memory.events).includes(PLAYER_PASSWORD), false);
       const expectedNet = hashPlayerSecuritySignal('net', '203.0.113.10', PEPPER);
@@ -434,7 +487,7 @@ describe('player auth security telemetry', () => {
           method: 'POST',
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookieSecure: true,
-          forwardedFor: '198.51.100.10',
+          trustedNetworkAddress: '198.51.100.10',
           body: { email: PLAYER_EMAIL, password: 'password9' },
         },
         ports,
@@ -454,7 +507,7 @@ describe('player auth security telemetry', () => {
           method: 'POST',
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookieSecure: true,
-          forwardedFor: '198.51.100.10',
+          trustedNetworkAddress: '198.51.100.10',
           body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD },
         },
         ports,
@@ -478,7 +531,7 @@ describe('player auth security telemetry', () => {
           method: 'POST',
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookieSecure: true,
-          forwardedFor: '198.51.100.10',
+          trustedNetworkAddress: '198.51.100.10',
           body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD },
         },
         ports,
@@ -492,7 +545,7 @@ describe('player auth security telemetry', () => {
           method: 'POST',
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookieSecure: true,
-          forwardedFor: '198.51.100.10',
+          trustedNetworkAddress: '198.51.100.10',
           body: { email: PLAYER_EMAIL, password: 'password9' },
         },
         createPlayerPorts(),
@@ -520,7 +573,7 @@ describe('player auth security telemetry', () => {
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookie,
           cookieSecure: true,
-          forwardedFor: '192.0.2.8',
+          trustedNetworkAddress: '192.0.2.8',
           body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD },
         },
         portsA,
@@ -534,7 +587,7 @@ describe('player auth security telemetry', () => {
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookie,
           cookieSecure: true,
-          forwardedFor: '192.0.2.8',
+          trustedNetworkAddress: '192.0.2.8',
           body: { email: 'second@nextpari.test', password: PLAYER_PASSWORD },
         },
         portsB,
@@ -548,7 +601,7 @@ describe('player auth security telemetry', () => {
           pathname: PLAYER_AUTH_LOGIN_PATH,
           cookie,
           cookieSecure: true,
-          forwardedFor: '192.0.2.8',
+          trustedNetworkAddress: '192.0.2.8',
           body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD },
         },
         portsA,
@@ -613,14 +666,422 @@ describe('player security privacy source contracts', () => {
     const signals = read('server/player/playerSecuritySignals.ts');
     const service = read('server/player/playerSecurityService.ts');
     const http = read('server/player/playerAuthHttp.ts');
+    const network = read('server/player/playerSecurityNetwork.ts');
     const combined = `${signals}\n${service}\n${http}`;
     assert.equal(combined.includes('canvas'), false);
     assert.equal(combined.includes('audiofingerprint') || combined.includes('audio fingerprint'), false);
     assert.equal(combined.toLowerCase().includes('battery'), false);
     assert.match(service, /createServiceRoleClient/);
-    assert.match(http, /x-forwarded-for/);
+    assert.match(service, /player_security_record_event/);
+    assert.match(service, /player_security_check_login/);
+    assert.equal(service.includes('x-forwarded-for'), false);
+    assert.equal(service.includes('x-real-ip'), false);
+    assert.equal(service.includes('forwardedFor'), false);
+    assert.match(http, /trustedClientAddressFromVercel/);
+    assert.match(http, /trustedClientAddressFromNode/);
+    assert.equal(http.includes("headerValue(req.headers, 'x-forwarded-for')"), false);
     assert.equal(http.includes('body.ip'), false);
     assert.equal(http.includes('body.deviceId'), false);
+    assert.match(network, /ipAddress/);
+    assert.match(network, /PLAYER_SECURITY_TRUSTED_PROXY/);
     assert.match(sql, /PLAYER_SECURITY_METADATA_FORBIDDEN/);
+  });
+});
+
+describe('player security trusted network boundary', () => {
+  it('hashes only a trusted platform address and ignores body/untrusted forwarded values', async () => {
+    await withPepper(async () => {
+      const trusted = '203.0.113.10';
+      const expected = hashPlayerSecuritySignal('net', trusted, PEPPER);
+      const hashes = buildPlayerSecurityHashes({
+        identifier: PLAYER_EMAIL,
+        trustedNetworkAddress: trusted,
+        userAgent: 'Mozilla/5.0 Test',
+      });
+      const again = buildPlayerSecurityHashes({
+        identifier: PLAYER_EMAIL,
+        trustedNetworkAddress: trusted,
+      });
+      const missing = buildPlayerSecurityHashes({
+        identifier: PLAYER_EMAIL,
+        trustedNetworkAddress: null,
+      });
+      assert.equal(hashes.networkHash, expected);
+      assert.equal(again.networkHash, expected);
+      assert.equal(missing.networkHash, null);
+
+      const memory = createMemorySecurityPorts();
+      const result = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookieSecure: true,
+          trustedNetworkAddress: trusted,
+          forwardedFor: '198.51.100.1, 10.0.0.1',
+          realIp: '198.51.100.2',
+          body: {
+            email: PLAYER_EMAIL,
+            password: PLAYER_PASSWORD,
+            ip: '1.2.3.4',
+            network: '9.9.9.9',
+            deviceId: 'spoofed-device',
+          },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(result.status, 200);
+      assert.equal(memory.events[0]?.networkHash, expected);
+      const dumped = `${JSON.stringify(result.body)}\n${JSON.stringify(memory.events)}`;
+      assert.equal(dumped.includes(trusted), false);
+      assert.equal(dumped.includes('1.2.3.4'), false);
+      assert.equal(dumped.includes('198.51.100.1'), false);
+      assert.equal(dumped.includes('9.9.9.9'), false);
+    });
+  });
+
+  it('uses Vercel platform IP and Node peer address; untrusted XFF cannot override', () => {
+    assert.equal(
+      trustedClientAddressFromVercel({
+        'x-real-ip': '203.0.113.10',
+        'x-forwarded-for': '198.51.100.1, 10.0.0.1',
+        'x-vercel-forwarded-for': '198.51.100.1',
+      }),
+      '203.0.113.10',
+    );
+    assert.equal(
+      trustedClientAddressFromVercel({
+        'x-forwarded-for': '198.51.100.1',
+      }),
+      null,
+    );
+    assert.equal(
+      trustedClientAddressFromNode({
+        headers: {
+          'x-forwarded-for': '198.51.100.1',
+          'x-real-ip': '198.51.100.2',
+        },
+        socket: { remoteAddress: '203.0.113.10' } as never,
+      }),
+      '203.0.113.10',
+    );
+    assert.equal(
+      trustedClientAddressFromNode({
+        headers: { 'x-forwarded-for': '198.51.100.1' },
+        socket: { remoteAddress: undefined } as never,
+      }),
+      null,
+    );
+    const previous = process.env[PLAYER_SECURITY_TRUSTED_PROXY_ENV];
+    process.env[PLAYER_SECURITY_TRUSTED_PROXY_ENV] = '1';
+    try {
+      assert.equal(
+        trustedClientAddressFromNode({
+          headers: {
+            'x-forwarded-for': '198.51.100.1, 10.0.0.1',
+            'x-real-ip': '198.51.100.2',
+          },
+          socket: { remoteAddress: '203.0.113.10' } as never,
+        }),
+        '198.51.100.1',
+      );
+    } finally {
+      if (previous == null) delete process.env[PLAYER_SECURITY_TRUSTED_PROXY_ENV];
+      else process.env[PLAYER_SECURITY_TRUSTED_PROXY_ENV] = previous;
+    }
+  });
+});
+
+describe('player security shared-scope login pressure', () => {
+  const deviceCookie = `${PLAYER_DEVICE_COOKIE}=${'d'.repeat(43)}`;
+
+  it('clears identifier pressure on LOGIN_SUCCESS for the same identifier only', async () => {
+    await withPepper(async () => {
+      const memory = createMemorySecurityPorts();
+      for (let i = 0; i < 8; i += 1) {
+        const failed = await handlePlayerAuthRequest(
+          {
+            method: 'POST',
+            pathname: PLAYER_AUTH_LOGIN_PATH,
+            cookieSecure: true,
+            trustedNetworkAddress: '203.0.113.80',
+            body: { email: PLAYER_EMAIL, password: 'password9' },
+          },
+          createPlayerPorts(),
+          SILENT_LOG,
+          undefined,
+          memory.ports,
+        );
+        assert.equal(failed.body.error, 'AUTH_FAILED');
+      }
+      const limited = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookieSecure: true,
+          trustedNetworkAddress: '203.0.113.80',
+          body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(limited.body.error, 'AUTH_RATE_LIMITED');
+      const last = memory.events.at(-1);
+      await memory.ports.recordEvent({
+        identifierHash: last?.identifierHash ?? null,
+        deviceHash: last?.deviceHash ?? null,
+        networkHash: last?.networkHash ?? null,
+        userAgentHash: last?.userAgentHash ?? null,
+        eventType: 'LOGIN_SUCCESS',
+        playerUserId: PLAYER_A,
+      });
+      const unlocked = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookieSecure: true,
+          trustedNetworkAddress: '203.0.113.80',
+          body: { email: PLAYER_EMAIL, password: 'password9' },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(unlocked.body.error, 'AUTH_FAILED');
+    });
+  });
+
+  it('does not reset device pressure when another account logs in on the same device', async () => {
+    await withPepper(async () => {
+      const memory = createMemorySecurityPorts();
+      for (let i = 0; i < 20; i += 1) {
+        const failed = await handlePlayerAuthRequest(
+          {
+            method: 'POST',
+            pathname: PLAYER_AUTH_LOGIN_PATH,
+            cookie: deviceCookie,
+            cookieSecure: true,
+            trustedNetworkAddress: `203.0.113.${i + 1}`,
+            body: { email: `victim${i}@nextpari.test`, password: 'password9' },
+          },
+          createPlayerPorts(),
+          SILENT_LOG,
+          undefined,
+          memory.ports,
+        );
+        assert.equal(failed.body.error, 'AUTH_FAILED');
+      }
+      const attackerSuccess = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookie: deviceCookie,
+          cookieSecure: true,
+          trustedNetworkAddress: '192.0.2.50',
+          body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(attackerSuccess.body.error, 'AUTH_RATE_LIMITED');
+      const last = memory.events.at(-1);
+      await memory.ports.recordEvent({
+        identifierHash: hashPlayerSecuritySignal('id', PLAYER_EMAIL, PEPPER),
+        deviceHash: last?.deviceHash ?? null,
+        networkHash: last?.networkHash ?? null,
+        userAgentHash: last?.userAgentHash ?? null,
+        eventType: 'LOGIN_SUCCESS',
+        playerUserId: PLAYER_A,
+      });
+      const stillLimited = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookie: deviceCookie,
+          cookieSecure: true,
+          trustedNetworkAddress: '192.0.2.51',
+          body: { email: 'another-victim@nextpari.test', password: 'password9' },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(stillLimited.body.error, 'AUTH_RATE_LIMITED');
+    });
+  });
+
+  it('does not reset network pressure when another account logs in on the same network', async () => {
+    await withPepper(async () => {
+      const memory = createMemorySecurityPorts();
+      for (let i = 0; i < 40; i += 1) {
+        const failed = await handlePlayerAuthRequest(
+          {
+            method: 'POST',
+            pathname: PLAYER_AUTH_LOGIN_PATH,
+            cookieSecure: true,
+            trustedNetworkAddress: '198.51.100.40',
+            body: { email: `spray${i}@nextpari.test`, password: 'password9' },
+          },
+          createPlayerPorts(),
+          SILENT_LOG,
+          undefined,
+          memory.ports,
+        );
+        assert.equal(failed.body.error, 'AUTH_FAILED');
+      }
+      const attackerSuccess = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookieSecure: true,
+          trustedNetworkAddress: '198.51.100.40',
+          body: { email: PLAYER_EMAIL, password: PLAYER_PASSWORD },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(attackerSuccess.body.error, 'AUTH_RATE_LIMITED');
+      await memory.ports.recordEvent({
+        identifierHash: hashPlayerSecuritySignal('id', PLAYER_EMAIL, PEPPER),
+        deviceHash: null,
+        networkHash: hashPlayerSecuritySignal('net', '198.51.100.40', PEPPER),
+        userAgentHash: null,
+        eventType: 'LOGIN_SUCCESS',
+        playerUserId: PLAYER_A,
+      });
+      const stillLimited = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookieSecure: true,
+          trustedNetworkAddress: '198.51.100.40',
+          body: { email: 'more-spray@nextpari.test', password: 'password9' },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(stillLimited.body.error, 'AUTH_RATE_LIMITED');
+    });
+  });
+
+  it('does not reset device or network pressure on REGISTER_SUCCESS', async () => {
+    await withPepper(async () => {
+      const memory = createMemorySecurityPorts();
+      for (let i = 0; i < 20; i += 1) {
+        const failed = await handlePlayerAuthRequest(
+          {
+            method: 'POST',
+            pathname: PLAYER_AUTH_LOGIN_PATH,
+            cookie: deviceCookie,
+            cookieSecure: true,
+            trustedNetworkAddress: '203.0.113.90',
+            body: { email: `reg${i}@nextpari.test`, password: 'password9' },
+          },
+          createPlayerPorts(),
+          SILENT_LOG,
+          undefined,
+          memory.ports,
+        );
+        assert.equal(failed.body.error, 'AUTH_FAILED');
+      }
+      const registered = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_REGISTER_PATH,
+          cookie: deviceCookie,
+          cookieSecure: true,
+          trustedNetworkAddress: '203.0.113.90',
+          body: { method: 'email', email: 'after-spray@nextpari.test', password: PLAYER_PASSWORD, ageConfirmed: true },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(registered.status, 200);
+      assert.equal(memory.events.some((row) => row.eventType === 'REGISTER_SUCCESS'), true);
+      const stillLimited = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookie: deviceCookie,
+          cookieSecure: true,
+          trustedNetworkAddress: '203.0.113.90',
+          body: { email: 'after-register@nextpari.test', password: 'password9' },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(stillLimited.body.error, 'AUTH_RATE_LIMITED');
+    });
+  });
+
+  it('lets device and network pressure recover after the configured window and cooldown', async () => {
+    await withPepper(async () => {
+      const clock = { now: Date.now() };
+      const memory = createMemorySecurityPorts(clock);
+      for (let i = 0; i < 20; i += 1) {
+        const failed = await handlePlayerAuthRequest(
+          {
+            method: 'POST',
+            pathname: PLAYER_AUTH_LOGIN_PATH,
+            cookie: deviceCookie,
+            cookieSecure: true,
+            trustedNetworkAddress: '192.0.2.90',
+            body: { email: `window${i}@nextpari.test`, password: 'password9' },
+          },
+          createPlayerPorts(),
+          SILENT_LOG,
+          undefined,
+          memory.ports,
+        );
+        assert.equal(failed.body.error, 'AUTH_FAILED');
+      }
+      const limited = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookie: deviceCookie,
+          cookieSecure: true,
+          trustedNetworkAddress: '192.0.2.90',
+          body: { email: 'window-blocked@nextpari.test', password: 'password9' },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(limited.body.error, 'AUTH_RATE_LIMITED');
+      clock.now += PRESSURE_WINDOW_MS + PRESSURE_COOLDOWN_MS + 1000;
+      const recovered = await handlePlayerAuthRequest(
+        {
+          method: 'POST',
+          pathname: PLAYER_AUTH_LOGIN_PATH,
+          cookie: deviceCookie,
+          cookieSecure: true,
+          trustedNetworkAddress: '192.0.2.90',
+          body: { email: 'window-recovered@nextpari.test', password: 'password9' },
+        },
+        createPlayerPorts(),
+        SILENT_LOG,
+        undefined,
+        memory.ports,
+      );
+      assert.equal(recovered.body.error, 'AUTH_FAILED');
+    });
   });
 });

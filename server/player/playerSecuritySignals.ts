@@ -151,12 +151,8 @@ export function coarseUserAgent(raw: string | undefined): string | null {
   return value || null;
 }
 
-export function serverObservedNetworkAddress(input: {
-  forwardedFor?: string;
-  realIp?: string;
-}): string | null {
-  return normalizeNetworkAddress(firstForwardedAddress(input.forwardedFor))
-    ?? normalizeNetworkAddress(input.realIp);
+export function trustedNetworkAddressForHash(trustedNetworkAddress?: string | null): string | null {
+  return normalizeNetworkAddress(trustedNetworkAddress ?? undefined);
 }
 
 const FORBIDDEN_META_KEYS = new Set([
