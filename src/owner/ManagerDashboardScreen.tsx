@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Ban, BarChart3, Building2, CheckCircle2, Download, Landmark,
-  LayoutDashboard, LogOut, Mail, RefreshCw, Shield, Snowflake,
+  LayoutDashboard, LogOut, Mail, RefreshCw, Scale, Shield, Snowflake,
   TrendingUp, User, UserCog, Users, Wallet, X,
 } from 'lucide-react';
 import { useOwnerAuth } from './auth/OwnerAuthProvider';
@@ -11,6 +11,7 @@ import { OwnerManagersPanel } from './OwnerManagersPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { OwnerMoneyDialog, OwnerTreasuryPanel, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
 import { GameRtpReportPanel } from './GameRtpReport';
+import { ProviderSettlementsPanel } from './ProviderSettlementsPanel';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
 import {
   fetchOwnerCashierLedger,
@@ -37,7 +38,7 @@ import {
   type VerticalKpi,
 } from './services';
 
-type CabinetTab = 'finance' | 'managers' | 'agents' | 'players' | 'messages' | 'risk';
+type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'agents' | 'players' | 'messages' | 'risk';
 
 export function ManagerDashboardScreen() {
   const { loading, staff, deniedMessage, signOut } = useOwnerAuth();
@@ -163,6 +164,7 @@ function BackofficeShell({
         </div>
         <nav className="p-3 flex flex-col gap-1">
           <NavBtn active={tab === 'finance'} onClick={() => setTab('finance')} icon={LayoutDashboard} label="Финансы сети" />
+          <NavBtn active={tab === 'providerSettlements'} onClick={() => setTab('providerSettlements')} icon={Scale} label="Расчёты с провайдерами" />
           <NavBtn active={tab === 'managers'} onClick={() => setTab('managers')} icon={UserCog} label="Менеджеры" />
           <NavBtn active={tab === 'agents'} onClick={() => setTab('agents')} icon={Building2} label="Все кассы" />
           <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="Игроки" />
@@ -183,6 +185,7 @@ function BackofficeShell({
 
       <main className="flex-1 min-w-0 p-6 overflow-x-auto">
         {tab === 'finance' && <FinancePanel />}
+        {tab === 'providerSettlements' && <ProviderSettlementsPanel />}
         {tab === 'managers' && <OwnerManagersPanel />}
         {tab === 'agents' && <AgentsPanel />}
         {tab === 'players' && <PlayersPanel />}

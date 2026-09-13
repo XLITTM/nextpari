@@ -24,6 +24,7 @@
     "player:sequential-id:test": "tsx --tsconfig tsconfig.server.json --test server/player/playerSequentialId.test.ts",
     "player:email-verification:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test server/player/playerEmailVerification.test.ts",
     "player:withdrawals:test": "tsx --tsconfig tsconfig.server.json --test server/player/playerWithdrawals.test.ts",
+    "provider:settlement:test": "tsx --tsconfig tsconfig.server.json --test server/providerAccounting/providerAccounting.test.ts server/providerAccounting/providerAccounting.sql.test.ts src/owner/providerSettlementDisplay.test.ts",
     "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts server/games/dice.cutover.test.ts",
     "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts",
     "start": "tsx --tsconfig tsconfig.server.json scripts/run-lsports-worker.ts",

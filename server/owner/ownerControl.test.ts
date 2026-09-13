@@ -584,6 +584,77 @@ describe('owner treasury and direct funding controls', () => {
     assert.equal(posted.rpc.calls.length, 0);
   });
 
+  it('GET /api/owner/provider-ggr maps to owner_provider_ggr_summary', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/provider-ggr', {
+      search: '?period=month&month=2026-09&provider=lsports&product=sports&currency=TMTM',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_provider_ggr_summary');
+    assert.equal(rpc.calls[0]?.token, ACCESS);
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_period: 'month',
+      p_from: '2026-09-01',
+      p_to: null,
+      p_provider_key: 'lsports',
+      p_product: 'sports',
+      p_currency: 'TMTM',
+    });
+  });
+
+  it('GET /api/owner/provider-settlements maps to owner_list_provider_settlements', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/provider-settlements', {
+      search: '?period=custom&from=2026-09-01&to=2026-09-30&status=open',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_list_provider_settlements');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_period: 'custom',
+      p_from: '2026-09-01',
+      p_to: '2026-09-30',
+      p_provider_key: null,
+      p_product: null,
+      p_currency: null,
+      p_status: 'open',
+    });
+  });
+
+  it('manager, cashier, and player cannot read provider settlement APIs', async () => {
+    const denied = async (role: string, pathname: string) => {
+      const rpc = createRpc();
+      const result = await handleOwnerControlRequest(
+        {
+          method: 'GET',
+          pathname,
+          cookie: cookieHeader(ACCESS, REFRESH),
+          cookieSecure: true,
+        },
+        {
+          sessionPorts: createAuthPorts({
+            context: { role, status: 'active', auth_user_id: `${role}-uid` },
+          }),
+          rpcFactory: rpc.rpcFactory,
+        },
+      );
+      assert.equal(result.status, 403, pathname);
+      assert.equal(result.body.error, 'OWNER_REQUIRED');
+      assert.equal(rpc.calls.length, 0);
+    };
+    for (const path of ['/api/owner/provider-ggr', '/api/owner/provider-settlements']) {
+      await denied('manager', path);
+      await denied('cashier', path);
+      await denied('player', path);
+    }
+  });
+
+  it('provider settlement owner APIs are GET-only and do not ingest', async () => {
+    const posted = await ownerPost('/api/owner/provider-settlements', { providerKey: 'lsports' });
+    assert.equal(posted.result.status, 405);
+    assert.equal(posted.rpc.calls.length, 0);
+    const http = readFileSync(join(here, 'ownerControlHttp.ts'), 'utf8');
+    assert.equal(http.includes('ingest_provider_transaction'), false);
+    assert.equal(http.includes('apply_wallet_entry'), false);
+  });
+
   it('GET /api/owner/treasury maps to owner_treasury_overview', async () => {
     const { result, rpc } = await ownerGet('/api/owner/treasury');
     assert.equal(result.status, 200);
