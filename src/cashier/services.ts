@@ -10,6 +10,10 @@ export const CASHIER_FINANCE_PATH = '/api/cashier/finance';
 export const CASHIER_TRANSFERS_PATH = '/api/cashier/transfers';
 export const CASHIER_DEPOSITS_PATH = '/api/cashier/deposits';
 
+export function cashierDepositReversePath(transferId: string): string {
+  return `/api/cashier/deposits/${encodeURIComponent(transferId)}/reverse`;
+}
+
 export function cashierPayoutPath(code: string): string {
   return `/api/cashier/payouts/${encodeURIComponent(code)}`;
 }
@@ -53,6 +57,9 @@ export interface CashierTransferRow {
   toAccountId: string;
   actorRole: string;
   createdAt: string;
+  playerPublicId: string | null;
+  reversibleUntil: string | null;
+  reversalStatus: string | null;
 }
 
 export interface CashierTransferList {
@@ -152,6 +159,9 @@ export function parseCashierTransfers(raw: unknown): CashierTransferList {
       toAccountId: str(item.toAccountId ?? item.to_account_id),
       actorRole: str(item.actorRole ?? item.actor_role),
       createdAt: str(item.createdAt ?? item.created_at),
+      playerPublicId: str(item.playerPublicId ?? item.player_public_id) || null,
+      reversibleUntil: str(item.reversibleUntil ?? item.reversible_until) || null,
+      reversalStatus: str(item.reversalStatus ?? item.reversal_status) || null,
     };
   });
   return {
@@ -203,6 +213,36 @@ export async function postCashierDeposit(
     throw new Error(str(rec.error, 'DEPOSIT_UNAVAILABLE'));
   }
   return rec;
+}
+
+export async function postCashierDepositReverse(
+  input: { transferId: string; idempotencyKey: string; reason: string },
+  fetchFn: CashierAuthFetch = fetch,
+): Promise<Record<string, unknown>> {
+  const res = await fetchFn(cashierDepositReversePath(input.transferId), {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      idempotencyKey: input.idempotencyKey,
+      reason: input.reason,
+    }),
+  });
+  const raw = await res.json().catch(() => ({}));
+  const rec = asRecord(raw);
+  if (!res.ok || rec.ok === false) {
+    throw new Error(str(rec.error, 'REVERSAL_UNAVAILABLE'));
+  }
+  return rec.data && typeof rec.data === 'object' ? asRecord(rec.data) : rec;
+}
+
+export function cashierReversalErrorMessage(code: string): string {
+  if (code === 'CASHIER_REVERSAL_WINDOW_EXPIRED') return 'Прошло больше 5 минут';
+  if (code === 'CASHIER_REVERSAL_PLAYER_ACTIVITY') {
+    return 'Отмена невозможна: игрок уже использовал средства';
+  }
+  if (code === 'CASHIER_DEPOSIT_ALREADY_REVERSED') return 'Это пополнение уже отменено';
+  return code;
 }
 
 export async function fetchCashierPayout(

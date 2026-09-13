@@ -130,8 +130,8 @@ export function ManagerFinancePage() {
                   <button type="button" disabled={!moneyOk} title={moneyOk ? 'Пополнить' : 'Financial activation pending'} className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed mr-1">
                     Пополнить
                   </button>
-                  <button type="button" disabled={!moneyOk} title={moneyOk ? 'Инкассация' : 'Financial activation pending'} className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed">
-                    Инкассация
+                  <button type="button" disabled={!moneyOk} title={moneyOk ? 'Снять / Инкассация' : 'Financial activation pending'} className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-400 cursor-not-allowed">
+                    Снять / Инкассация
                   </button>
                 </td>
               </tr>

@@ -176,13 +176,13 @@ export function ManagerAgentsPage({
                       <button
                         type="button"
                         disabled={!moneyOk}
-                        title={moneyOk ? 'Инкассация' : 'Financial activation pending'}
+                        title={moneyOk ? 'Снять / Инкассация' : 'Financial activation pending'}
                         onClick={() => setMoney({ cashierId: row.id, kind: 'collect' })}
                         className={`text-xs font-bold px-2.5 py-1.5 rounded-lg ${
                           moneyOk ? 'bg-brand-50 text-brand-700' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                         }`}
                       >
-                        Инкассация
+                        Снять / Инкассация
                       </button>
                       <button
                         type="button"
@@ -450,7 +450,7 @@ function MoneyDialog({
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20 px-4">
       <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
-        <h3 className="font-extrabold text-ink-900 mb-3">{kind === 'fund' ? 'Пополнить кассу' : 'Инкассация'}</h3>
+        <h3 className="font-extrabold text-ink-900 mb-3">{kind === 'fund' ? 'Пополнить кассу' : 'Снять / Инкассация'}</h3>
         <input
           type="number"
           min={0}

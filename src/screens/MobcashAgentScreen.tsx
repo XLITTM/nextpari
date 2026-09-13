@@ -6,16 +6,19 @@ import {
 import { useCashierAuth } from '../cashier/auth/CashierAuthProvider';
 import { cashierAuthErrorMessage, type CashierStaffContext } from '../cashier/auth/cashierAuth';
 import {
+  cashierReversalErrorMessage,
   fetchCashierFinance,
   fetchCashierPayout,
   fetchCashierTransfers,
   isAmbiguousStaffError,
   isCashierFinanceEnabled,
   postCashierDeposit,
+  postCashierDepositReverse,
   postCashierPayoutConfirm,
   retainIdempotencyKey,
   type CashierFinanceOverview,
   type CashierTransferList,
+  type CashierTransferRow,
 } from '../cashier/services';
 
 function formatTmtm(value: number): string {
@@ -299,6 +302,8 @@ function AgentDesk({
             loading={transfersLoading}
             error={transfersError}
             list={transfers}
+            enabled={moneyEnabled}
+            onReversed={reloadCanonical}
           />
         )}
       </div>
@@ -552,19 +557,78 @@ function PayoutTab({
   );
 }
 
+function formatRemaining(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
 function HistoryTab({
   loading,
   error,
   list,
+  enabled,
+  onReversed,
 }: {
   loading: boolean;
   error: string;
   list: CashierTransferList | null;
+  enabled: boolean;
+  onReversed: () => void;
 }) {
+  const [now, setNow] = useState(() => Date.now());
+  const [pending, setPending] = useState<CashierTransferRow | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [idempotency, setIdempotency] = useState<{ fingerprint: string; key: string } | null>(null);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const reverse = async () => {
+    if (!pending) return;
+    const trimmed = reason.trim();
+    if (!trimmed) {
+      setFormError('Укажите причину отмены');
+      return;
+    }
+    const amountLabel = pending.amount == null ? '—' : String(pending.amount);
+    const playerLabel = pending.playerPublicId ? `#${pending.playerPublicId}` : 'игроку';
+    if (!window.confirm(`Отменить пополнение ${amountLabel} TMTM игроку ${playerLabel}?`)) return;
+    const fingerprint = `cashier-reverse:${pending.id}`;
+    const slot = retainIdempotencyKey(idempotency, fingerprint);
+    setIdempotency(slot);
+    setBusy(true);
+    setFormError('');
+    try {
+      await postCashierDepositReverse({
+        transferId: pending.id,
+        idempotencyKey: slot.key,
+        reason: trimmed,
+      });
+      setSuccess('Пополнение отменено');
+      setPending(null);
+      setReason('');
+      onReversed();
+    } catch (err) {
+      if (!isAmbiguousStaffError(err)) setIdempotency(null);
+      const code = err instanceof Error ? err.message : 'REVERSAL_UNAVAILABLE';
+      setFormError(cashierReversalErrorMessage(code));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section>
       <div className="bg-white dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 p-4 mb-3">
         <h2 className="text-base font-bold text-gray-900 dark:text-white mb-3">История операций</h2>
+        {success && <p className="mb-3 text-xs font-bold text-emerald-700">{success}</p>}
         {loading && <p className="text-center text-sm text-gray-500 py-6">Загрузка…</p>}
         {error && (
           <p className="text-center text-sm text-red-600 py-6">История недоступна</p>
@@ -574,20 +638,92 @@ function HistoryTab({
         )}
         {!loading && !error && (list?.rows.length ?? 0) > 0 && (
           <div className="space-y-2">
-            {list?.rows.map((row) => (
-              <div key={row.id} className="flex justify-between gap-3 text-xs border-b border-gray-100 dark:border-gray-700 pb-2">
-                <div>
-                  <p className="font-semibold text-gray-900 dark:text-white">{row.transferType}</p>
-                  <p className="text-gray-500">{row.createdAt}</p>
+            {list?.rows.map((row) => {
+              const remainingMs = row.reversibleUntil ? new Date(row.reversibleUntil).getTime() - now : 0;
+              const canReverse = enabled
+                && row.transferType === 'CASHIER_TO_PLAYER'
+                && row.reversalStatus === 'reversible'
+                && remainingMs > 0;
+              return (
+                <div key={row.id} className="border-b border-gray-100 dark:border-gray-700 pb-2">
+                  <div className="flex justify-between gap-3 text-xs">
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-white">{row.transferType}</p>
+                      {row.playerPublicId && (
+                        <p className="text-gray-500">Игрок #{row.playerPublicId}</p>
+                      )}
+                      <p className="text-gray-500">{row.createdAt}</p>
+                    </div>
+                    <p className="font-black tabular-nums">
+                      {row.amount == null ? '—' : formatTmtm(row.amount)}
+                    </p>
+                  </div>
+                  {row.transferType === 'CASHIER_TO_PLAYER' && row.reversalStatus === 'reversed' && (
+                    <p className="mt-1 text-[11px] font-bold text-gray-500">Это пополнение уже отменено</p>
+                  )}
+                  {canReverse && (
+                    <div className="mt-2">
+                      <p className="text-[11px] font-semibold text-amber-700 mb-1">
+                        Можно отменить ещё {formatRemaining(remainingMs)}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          setPending(row);
+                          setReason('');
+                          setFormError('');
+                          setSuccess('');
+                        }}
+                        className="text-[11px] font-bold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-700"
+                      >
+                        Отменить пополнение
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <p className="font-black tabular-nums">
-                  {row.amount == null ? '—' : formatTmtm(row.amount)}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
+      {pending && (
+        <div className="fixed inset-0 z-20 bg-black/40 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+            <h3 className="font-extrabold text-ink-900 mb-2">Отменить пополнение</h3>
+            <p className="text-xs text-gray-600 mb-3">
+              Отменить пополнение {pending.amount == null ? '—' : pending.amount} TMTM игроку
+              {pending.playerPublicId ? ` #${pending.playerPublicId}` : ''}?
+            </p>
+            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Причина отмены</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full bg-gray-100 rounded-xl px-3 py-2 text-sm font-semibold outline-none mb-2 min-h-[80px]"
+              placeholder="неверная сумма, неверный игрок, ошибка кассира"
+            />
+            <p className="text-[11px] text-gray-400 mb-3">Примеры: неверная сумма · неверный игрок · ошибка кассира</p>
+            {formError && <p className="text-xs font-bold text-red-600 mb-3">{formError}</p>}
+            <div className="flex gap-2 justify-end">
+              <button
+                type="button"
+                onClick={() => setPending(null)}
+                className="text-sm font-semibold px-3 py-2 rounded-xl border"
+              >
+                Закрыть
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void reverse()}
+                className="text-sm font-bold px-3 py-2 rounded-xl bg-red-600 text-white disabled:opacity-50"
+              >
+                {busy ? 'Отмена…' : 'Отменить пополнение'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

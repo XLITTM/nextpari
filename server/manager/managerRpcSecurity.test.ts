@@ -395,6 +395,7 @@ describe('cashier canonical gateway and removed browser money modules', () => {
       'cashier_deposit_player',
       'cashier_lookup_player_payout',
       'cashier_confirm_player_payout',
+      'cashier_reverse_player_deposit',
     ]);
     for (const name of CANONICAL_CASHIER_READ_RPCS) {
       assert.equal(http.includes(`'${name}'`), true, name);

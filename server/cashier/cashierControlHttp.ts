@@ -40,6 +40,7 @@ export const CANONICAL_CASHIER_MONEY_RPCS = [
   'cashier_deposit_player',
   'cashier_lookup_player_payout',
   'cashier_confirm_player_payout',
+  'cashier_reverse_player_deposit',
 ] as const;
 
 export interface CashierControlDeps {
@@ -136,6 +137,9 @@ function mapTransfers(raw: unknown): Record<string, unknown> {
       toAccountId: str(item.to_account_id ?? item.toAccountId),
       actorRole: str(item.actor_role ?? item.actorRole),
       createdAt: str(item.created_at ?? item.createdAt),
+      playerPublicId: str(item.player_public_id ?? item.playerPublicId) || null,
+      reversibleUntil: str(item.reversible_until ?? item.reversibleUntil) || null,
+      reversalStatus: str(item.reversal_status ?? item.reversalStatus) || null,
     };
   });
   return {
@@ -177,6 +181,38 @@ function optionalNote(value: unknown): string | null {
   return note || null;
 }
 
+function requireReason(value: unknown): string {
+  const reason = String(value ?? '').trim();
+  if (!reason) throw staffError('REASON_REQUIRED', 400);
+  if (reason.length > 500) throw staffError('REASON_TOO_LONG', 400);
+  return reason;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireTransferId(value: unknown): string {
+  const id = String(value ?? '').trim();
+  if (!id) throw staffError('TRANSFER_ID_REQUIRED', 400);
+  if (!UUID_RE.test(id)) throw staffError('TRANSFER_ID_INVALID', 400);
+  return id;
+}
+
+function mapDepositReverse(raw: unknown): Record<string, unknown> {
+  const rec = asRecord(raw);
+  return {
+    ok: rec.ok !== false,
+    originalTransferId: str(rec.original_transfer_id ?? rec.originalTransferId),
+    reversalTransferId: str(rec.reversal_transfer_id ?? rec.reversalTransferId),
+    playerPublicId: str(rec.player_public_id ?? rec.playerPublicId),
+    amount: num(rec.amount),
+    currency: str(rec.currency) || 'TMTM',
+    cashierBalanceAfter: num(rec.cashier_balance_after ?? rec.cashierBalanceAfter),
+    playerBalanceAfter: num(rec.player_balance_after ?? rec.playerBalanceAfter),
+    reversedAt: str(rec.reversed_at ?? rec.reversedAt),
+    isDuplicate: rec.is_duplicate === true || rec.isDuplicate === true,
+  };
+}
+
 function stripBrowserAuthority(rec: Record<string, unknown>): void {
   delete rec.cashierId;
   delete rec.cashier_id;
@@ -197,6 +233,7 @@ type ControlAction =
   | { kind: 'finance' }
   | { kind: 'transfers' }
   | { kind: 'deposit' }
+  | { kind: 'depositReverse'; transferId: string }
   | { kind: 'payoutLookup'; code: string }
   | { kind: 'payoutConfirm'; code: string };
 
@@ -206,6 +243,10 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/cashier/me') return m === 'GET' ? { kind: 'me' } : 'method';
   if (path === '/api/cashier/finance') return m === 'GET' ? { kind: 'finance' } : 'method';
   if (path === '/api/cashier/transfers') return m === 'GET' ? { kind: 'transfers' } : 'method';
+  const depositReverse = path.match(/^\/api\/cashier\/deposits\/([^/]+)\/reverse$/);
+  if (depositReverse) {
+    return m === 'POST' ? { kind: 'depositReverse', transferId: depositReverse[1] } : 'method';
+  }
   if (path === '/api/cashier/deposits') return m === 'POST' ? { kind: 'deposit' } : 'method';
   const payoutConfirm = path.match(/^\/api\/cashier\/payouts\/([^/]+)\/confirm$/);
   if (payoutConfirm) {
@@ -219,7 +260,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 }
 
 function allowFor(path: string): string {
-  if (path === '/api/cashier/deposits' || path.endsWith('/confirm')) return 'POST';
+  if (path === '/api/cashier/deposits' || path.endsWith('/confirm') || path.endsWith('/reverse')) {
+    return 'POST';
+  }
   return 'GET';
 }
 
@@ -251,6 +294,22 @@ async function runControl(
         p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
         p_note: optionalNote(rec.note),
       });
+    case 'depositReverse': {
+      if (
+        Object.prototype.hasOwnProperty.call(rec, 'amount')
+        || Object.prototype.hasOwnProperty.call(rec, 'playerPublicId')
+        || Object.prototype.hasOwnProperty.call(rec, 'player_public_id')
+        || Object.prototype.hasOwnProperty.call(rec, 'playerId')
+        || Object.prototype.hasOwnProperty.call(rec, 'player_id')
+      ) {
+        throw staffError('FIELD_FORBIDDEN', 400);
+      }
+      return mapDepositReverse(await rpc.invoke('cashier_reverse_player_deposit', {
+        p_original_transfer_id: requireTransferId(action.transferId),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+        p_reason: requireReason(rec.reason),
+      }));
+    }
     case 'payoutLookup':
       return rpc.invoke('cashier_lookup_player_payout', {
         p_code: requirePayoutCode(action.code),
