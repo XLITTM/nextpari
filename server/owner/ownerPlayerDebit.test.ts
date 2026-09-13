@@ -20,6 +20,10 @@ const sql = readFileSync(
   join(root, 'supabase/migrations/20260913163000_owner_player_debit_cashier_reversal_042.sql'),
   'utf8',
 );
+const sql043 = readFileSync(
+  join(root, 'supabase/migrations/20260913173500_owner_debit_audit_visibility_043.sql'),
+  'utf8',
+);
 const httpSrc = readFileSync(join(here, 'ownerControlHttp.ts'), 'utf8');
 const playersUi = readFileSync(join(root, 'src/owner/PlayersPanel.tsx'), 'utf8');
 const services = readFileSync(join(root, 'src/owner/services.ts'), 'utf8');
@@ -168,19 +172,31 @@ describe('owner player debit HTTP', () => {
     assert.equal(forbidden.result.body.error, 'FIELD_FORBIDDEN');
   });
 
-  it('manager, cashier, and player JWTs cannot owner-debit', async () => {
-    for (const ctx of [
-      { role: 'manager', status: 'active', auth_user_id: 'm' },
-      { role: 'cashier', status: 'active', auth_user_id: 'c' },
-      { role: 'player', status: 'active', auth_user_id: 'p' },
-    ]) {
-      const { result, rpc } = await debit(
-        { amount: 10, idempotencyKey: 'k', reason: 'x' },
-        { session: createAuthPorts(ctx) },
-      );
-      assert.equal(result.status, 403);
-      assert.equal(rpc.calls.length, 0);
-    }
+  it('manager cannot debit player', async () => {
+    const { result, rpc } = await debit(
+      { amount: 10, idempotencyKey: 'k', reason: 'x' },
+      { session: createAuthPorts({ role: 'manager', status: 'active', auth_user_id: 'm' }) },
+    );
+    assert.equal(result.status, 403);
+    assert.equal(rpc.calls.length, 0);
+  });
+
+  it('cashier cannot debit player', async () => {
+    const { result, rpc } = await debit(
+      { amount: 10, idempotencyKey: 'k', reason: 'x' },
+      { session: createAuthPorts({ role: 'cashier', status: 'active', auth_user_id: 'c' }) },
+    );
+    assert.equal(result.status, 403);
+    assert.equal(rpc.calls.length, 0);
+  });
+
+  it('player cannot debit player', async () => {
+    const { result, rpc } = await debit(
+      { amount: 10, idempotencyKey: 'k', reason: 'x' },
+      { session: createAuthPorts({ role: 'player', status: 'active', auth_user_id: 'p' }) },
+    );
+    assert.equal(result.status, 403);
+    assert.equal(rpc.calls.length, 0);
   });
 
   it('does not accept manager or cashier cookies as owner debit authority', async () => {
@@ -285,8 +301,42 @@ describe('owner player debit SQL/UI contract (not executed)', () => {
     }
     assert.equal(existsSync(join(root, 'supabase/migrations/20260913163001_owner_player_debit_cashier_reversal_043.sql')), false);
     assert.equal(
-      readdirSync(join(root, 'supabase/migrations')).some((name) => name.includes('_043.sql')),
+      existsSync(join(root, 'supabase/migrations/20260913173500_owner_debit_audit_visibility_043.sql')),
+      true,
+    );
+    assert.equal(
+      readdirSync(join(root, 'supabase/migrations')).filter((name) => name.includes('_043.sql')).join(','),
+      '20260913173500_owner_debit_audit_visibility_043.sql',
+    );
+  });
+
+  it('043 keeps owner debit money logic and uses owner_only audit visibility', () => {
+    assert.match(sql043, /CREATE OR REPLACE FUNCTION public\.owner_debit_player\(/);
+    assert.match(sql043, /SECURITY DEFINER/);
+    assert.match(sql043, /SET search_path = ''/);
+    assert.match(sql043, /private\.get_current_owner_context\(\)/);
+    assert.match(sql043, /'PLAYER_TO_TREASURY'/);
+    assert.match(sql043, /OWNER_DEBITED_PLAYER/);
+    assert.match(
+      sql043,
+      /PERFORM private\.append_staff_audit\(\s*'OWNER_DEBITED_PLAYER',\s*'player',\s*v_player\.public_id,\s*'owner_only',/s,
+    );
+    assert.equal(
+      /PERFORM private\.append_staff_audit\(\s*'OWNER_DEBITED_PLAYER',\s*'player',\s*v_player\.public_id,\s*'owner',/s.test(
+        sql043,
+      ),
       false,
+    );
+    assert.equal(/CREATE OR REPLACE FUNCTION public\.cashier_reverse_player_deposit\(/.test(sql043), false);
+    assert.equal(/CREATE OR REPLACE FUNCTION public\.manager_collect_cashier\(/.test(sql043), false);
+    assert.equal(/CREATE OR REPLACE FUNCTION public\.cashier_confirm_player_payout\(/.test(sql043), false);
+    assert.equal(/CREATE OR REPLACE FUNCTION private\.apply_wallet_entry\(/.test(sql043), false);
+    assert.equal(/UPDATE\s+public\.wallets/.test(sql043), false);
+    assert.match(sql043, /REVOKE ALL ON FUNCTION public\.owner_debit_player\(TEXT, NUMERIC, TEXT, TEXT\) FROM PUBLIC;/);
+    assert.match(sql043, /REVOKE ALL ON FUNCTION public\.owner_debit_player\(TEXT, NUMERIC, TEXT, TEXT\) FROM anon;/);
+    assert.match(
+      sql043,
+      /GRANT EXECUTE ON FUNCTION public\.owner_debit_player\(TEXT, NUMERIC, TEXT, TEXT\) TO authenticated;/,
     );
   });
 
