@@ -244,6 +244,9 @@ type ControlAction =
   | { kind: 'dossier'; playerId: string }
   | { kind: 'block'; playerId: string }
   | { kind: 'withdrawals' }
+  | { kind: 'withdrawalApprove'; withdrawalId: string }
+  | { kind: 'withdrawalReject'; withdrawalId: string }
+  | { kind: 'withdrawalPaid'; withdrawalId: string }
   | { kind: 'message' }
   | { kind: 'managers' }
   | { kind: 'createManager' }
@@ -282,6 +285,18 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   }
   if (path === '/api/owner/risk-bets') return m === 'GET' ? { kind: 'risk' } : 'method';
   if (path === '/api/owner/players') return m === 'GET' ? { kind: 'players' } : 'method';
+  const withdrawalApprove = path.match(/^\/api\/owner\/withdrawals\/([^/]+)\/approve$/);
+  if (withdrawalApprove) {
+    return m === 'POST' ? { kind: 'withdrawalApprove', withdrawalId: withdrawalApprove[1] } : 'method';
+  }
+  const withdrawalReject = path.match(/^\/api\/owner\/withdrawals\/([^/]+)\/reject$/);
+  if (withdrawalReject) {
+    return m === 'POST' ? { kind: 'withdrawalReject', withdrawalId: withdrawalReject[1] } : 'method';
+  }
+  const withdrawalPaid = path.match(/^\/api\/owner\/withdrawals\/([^/]+)\/paid$/);
+  if (withdrawalPaid) {
+    return m === 'POST' ? { kind: 'withdrawalPaid', withdrawalId: withdrawalPaid[1] } : 'method';
+  }
   if (path === '/api/owner/withdrawals') return m === 'GET' ? { kind: 'withdrawals' } : 'method';
   if (path === '/api/owner/messages') return m === 'POST' ? { kind: 'message' } : 'method';
   if (path === '/api/owner/treasury') {
@@ -350,6 +365,22 @@ async function runControl(
         p_status: query.get('status')?.trim() || null,
         p_limit: parseLimit(query.get('limit'), 100),
         p_offset: parseOffset(query.get('offset')),
+      });
+    case 'withdrawalApprove':
+      return rpc.invoke('owner_approve_withdrawal', {
+        p_withdrawal_id: requireId(decodeURIComponent(action.withdrawalId), 'WITHDRAWAL_ID_REQUIRED'),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+      });
+    case 'withdrawalReject':
+      return rpc.invoke('owner_reject_withdrawal', {
+        p_withdrawal_id: requireId(decodeURIComponent(action.withdrawalId), 'WITHDRAWAL_ID_REQUIRED'),
+        p_reason: rec.reason == null ? '' : String(rec.reason),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+      });
+    case 'withdrawalPaid':
+      return rpc.invoke('owner_mark_withdrawal_paid', {
+        p_withdrawal_id: requireId(decodeURIComponent(action.withdrawalId), 'WITHDRAWAL_ID_REQUIRED'),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
       });
     case 'message': {
       const targetType = rec.targetType === 'all' || rec.targetType === 'player'

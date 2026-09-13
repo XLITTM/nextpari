@@ -6,6 +6,7 @@ import { attachOwnerControlHttp } from '../server/owner/ownerControlHttp';
 import { attachPlayerAuthHttp } from '../server/player/playerAuthHttp';
 import { attachPlayerGamesHttp } from '../server/player/playerGamesHttp';
 import { attachPlayerSportsHttp } from '../server/player/sportsPlaceHttp';
+import { attachPlayerWithdrawalsHttp } from '../server/player/playerWithdrawalHttp';
 import { attachSportsSettleHttp } from '../server/sports/settleHttp';
 import { attachCashierAuthHttp } from '../server/staff/cashierAuthHttp';
 import { attachManagerAuthHttp } from '../server/staff/managerAuthHttp';
@@ -34,6 +35,10 @@ function attachOwnerStaff(server: ViteDevServer) {
       .then((handled) => {
         if (handled) return true;
         return attachPlayerSportsHttp(req, res);
+      })
+      .then((handled) => {
+        if (handled) return true;
+        return attachPlayerWithdrawalsHttp(req, res);
       })
       .then((handled) => {
         if (handled) return true;
