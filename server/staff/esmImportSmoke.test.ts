@@ -53,6 +53,10 @@ const RUNTIME_GRAPH = [
   'api/owner/fund.ts',
   'api/owner/games/report.ts',
   'api/owner/players/[playerId]/debit.ts',
+  'api/owner/security/overview.ts',
+  'api/owner/security/flags.ts',
+  'api/owner/security/flags/[flagId]/resolve.ts',
+  'api/owner/players/[playerId]/security.ts',
   'api/manager/me.ts',
   'api/manager/dashboard.ts',
   'api/manager/cashiers.ts',
@@ -307,7 +311,7 @@ describe('staff onboarding Node ESM import graph', () => {
       const settleCompiled = readFileSync(join(outDir, 'api/internal/sports/settle.js'), 'utf8');
       assert.match(settleCompiled, /from ['"].*server\/sports\/settleHttp\.js['"]/);
 
-      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries, 'api/internal/sports/settle.js', 'api/owner/withdrawals/[withdrawalId]/approve.js', 'api/owner/withdrawals/[withdrawalId]/reject.js', 'api/owner/withdrawals/[withdrawalId]/paid.js', 'api/owner/players/[playerId]/debit.js', 'api/cashier/deposits/[transferId]/reverse.js']) {
+      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries, 'api/internal/sports/settle.js', 'api/owner/withdrawals/[withdrawalId]/approve.js', 'api/owner/withdrawals/[withdrawalId]/reject.js', 'api/owner/withdrawals/[withdrawalId]/paid.js', 'api/owner/players/[playerId]/debit.js', 'api/owner/security/overview.js', 'api/owner/security/flags.js', 'api/owner/security/flags/[flagId]/resolve.js', 'api/owner/players/[playerId]/security.js', 'api/cashier/deposits/[transferId]/reverse.js']) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,
