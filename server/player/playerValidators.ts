@@ -1,9 +1,16 @@
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^\+?[0-9]{8,15}$/;
 
+export const PLAYER_EMAIL_MAX_LENGTH = 254;
+
+export function normalizePlayerEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
 export function validatePlayerEmail(email: string): string | null {
-  const value = email.trim();
+  const value = normalizePlayerEmail(email);
   if (!value) return 'invalid email';
+  if (value.length > PLAYER_EMAIL_MAX_LENGTH) return 'invalid email';
   if (!EMAIL_RE.test(value)) return 'invalid email';
   return null;
 }

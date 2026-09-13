@@ -88,8 +88,9 @@ export interface PlayerAuthUser {
 }
 
 export function validatePlayerEmail(email: string): string | null {
-  const value = email.trim();
+  const value = email.trim().toLowerCase();
   if (!value) return 'invalid email';
+  if (value.length > 254) return 'invalid email';
   if (!EMAIL_RE.test(value)) return 'invalid email';
   return null;
 }
@@ -209,7 +210,7 @@ function profileFromBody(profile: Record<string, unknown>, fallbackEmail = ''): 
     birthDate: String(profile.birthDate ?? profile.birth_date ?? ''),
     passport: String(profile.passport ?? ''),
     phone: String(profile.phone ?? ''),
-    email: String(profile.email ?? fallbackEmail),
+    email: sanitizePublicEmail(String(profile.email ?? fallbackEmail)),
     phoneVerified: profile.phoneVerified === true || profile.phone_verified === true,
     emailVerified: profile.emailVerified === true || profile.email_verified === true,
   };
@@ -566,6 +567,100 @@ export async function changePlayerPassword(input: {
     throw new PlayerChangePasswordError('PASSWORD_CHANGE_FAILED', mapChangePasswordError('PASSWORD_CHANGE_FAILED'));
   }
   return { ok: true };
+}
+
+export class PlayerEmailBindError extends Error {
+  readonly code: string;
+  readonly sessionExpired: boolean;
+
+  constructor(code: string, message: string, sessionExpired = false) {
+    super(message);
+    this.name = 'PlayerEmailBindError';
+    this.code = code;
+    this.sessionExpired = sessionExpired;
+  }
+}
+
+export function mapPlayerEmailBindError(code: string): string {
+  switch (code) {
+    case 'INVALID_EMAIL':
+      return 'Неверный email';
+    case 'EMAIL_UNAVAILABLE':
+      return 'Не удалось привязать этот адрес. Попробуйте другой.';
+    case 'EMAIL_RESEND_COOLDOWN':
+      return 'Подождите минуту перед повторной отправкой кода';
+    case 'EMAIL_SEND_RATE_LIMITED':
+      return 'Слишком много попыток. Попробуйте позже.';
+    case 'EMAIL_PROVIDER_NOT_CONFIGURED':
+    case 'EMAIL_DELIVERY_FAILED':
+      return 'Не удалось отправить код. Попробуйте ещё раз.';
+    case 'INVALID_CODE':
+    case 'EMAIL_CODE_INVALID':
+      return 'Неверный код подтверждения';
+    case 'EMAIL_CODE_EXPIRED':
+      return 'Срок действия кода истёк';
+    case 'EMAIL_CODE_LOCKED':
+      return 'Слишком много неверных попыток. Запросите новый код.';
+    case 'EMAIL_CODE_CONSUMED':
+    case 'EMAIL_CHALLENGE_NOT_FOUND':
+      return 'Запросите новый код подтверждения';
+    default:
+      return 'Не удалось подтвердить почту. Попробуйте ещё раз.';
+  }
+}
+
+export async function startPlayerEmailBinding(email: string): Promise<{
+  ok: true;
+  maskedEmail: string;
+  expiresInSeconds: number;
+  resendAfterSeconds: number;
+}> {
+  const emailError = validatePlayerEmail(email);
+  if (emailError) {
+    throw new PlayerEmailBindError('INVALID_EMAIL', mapPlayerEmailBindError('INVALID_EMAIL'));
+  }
+  const res = await fetch('/api/player/email/start', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email.trim().toLowerCase() }),
+  });
+  const payload = await readJson(res);
+  const code = String(payload.error ?? (!res.ok ? 'EMAIL_DELIVERY_FAILED' : ''));
+  if (!res.ok) {
+    if (code === 'SESSION_REQUIRED' || code === 'SESSION_EXPIRED' || code === 'JWT_REQUIRED' || code === 'JWT_INVALID') {
+      throw new PlayerEmailBindError(code, mapPlayerEmailBindError(code), true);
+    }
+    throw new PlayerEmailBindError(code, mapPlayerEmailBindError(code));
+  }
+  return {
+    ok: true,
+    maskedEmail: String(payload.maskedEmail ?? ''),
+    expiresInSeconds: Number(payload.expiresInSeconds ?? 600),
+    resendAfterSeconds: Number(payload.resendAfterSeconds ?? 60),
+  };
+}
+
+export async function verifyPlayerEmailBinding(code: string): Promise<{ ok: true; email: string }> {
+  const trimmed = String(code ?? '');
+  if (!/^[0-9]{6}$/.test(trimmed)) {
+    throw new PlayerEmailBindError('INVALID_CODE', mapPlayerEmailBindError('INVALID_CODE'));
+  }
+  const res = await fetch('/api/player/email/verify', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: trimmed }),
+  });
+  const payload = await readJson(res);
+  const err = String(payload.error ?? (!res.ok ? 'EMAIL_UPDATE_FAILED' : ''));
+  if (!res.ok) {
+    if (err === 'SESSION_REQUIRED' || err === 'SESSION_EXPIRED' || err === 'JWT_REQUIRED' || err === 'JWT_INVALID') {
+      throw new PlayerEmailBindError(err, mapPlayerEmailBindError(err), true);
+    }
+    throw new PlayerEmailBindError(err, mapPlayerEmailBindError(err));
+  }
+  return { ok: true, email: String(payload.email ?? '') };
 }
 
 export async function getPlayerSession() {

@@ -15,6 +15,7 @@ import {
   Eye,
   EyeOff,
   KeyRound,
+  Mail,
 } from 'lucide-react';
 import type { Screen } from '../types';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -22,6 +23,8 @@ import {
   PlayerChangePasswordError,
   changePlayerPassword,
 } from '../lib/playerAuth';
+import { EmailBindModal } from '../components/player/EmailBindModal';
+import { useProfile } from '../ProfileContext';
 
 interface SettingsScreenProps {
   onBack: () => void;
@@ -42,6 +45,8 @@ const ODDS_POLICIES: { id: OddsPolicy; label: string; hint: string }[] = [
 export function SettingsScreen({ onBack, onNavigate, onLogout, onPasswordChanged }: SettingsScreenProps) {
   const [view, setView] = useState<SettingsView>('root');
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const { personalData, refresh } = useProfile();
   const oddsPolicy = useSettingsStore((s) => s.oddsChangePolicy);
   const setOddsPolicy = useSettingsStore((s) => s.setOddsChangePolicy);
 
@@ -95,6 +100,28 @@ export function SettingsScreen({ onBack, onNavigate, onLogout, onPasswordChanged
         </SettingsGroup>
 
         <SettingsGroup title="Безопасность">
+          <div className="w-full flex items-center gap-3 px-3 py-3">
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-gray-100 text-gray-700 dark:bg-[#1e293b] dark:text-gray-200">
+              <Mail className="w-4 h-4" strokeWidth={2.2} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 dark:text-white">Электронная почта</p>
+              {personalData.email && personalData.email_verified ? (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 break-all">
+                  {personalData.email}
+                  <span className="ml-1 text-brand-600 dark:text-brand-400 font-bold">Подтверждена ✓</span>
+                </p>
+              ) : (
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Почта не привязана</p>
+              )}
+            </div>
+          </div>
+          <SettingsRow
+            icon={Mail}
+            iconClass="bg-gray-100 text-gray-700 dark:bg-[#1e293b] dark:text-gray-200"
+            label={personalData.email && personalData.email_verified ? 'Изменить почту' : 'Привязать почту'}
+            onClick={() => setEmailOpen(true)}
+          />
           <SettingsRow
             icon={KeyRound}
             iconClass="bg-gray-100 text-gray-700 dark:bg-[#1e293b] dark:text-gray-200"
@@ -162,6 +189,15 @@ export function SettingsScreen({ onBack, onNavigate, onLogout, onPasswordChanged
           onSessionExpired={onLogout}
         />
       ) : null}
+      <EmailBindModal
+        open={emailOpen}
+        verifiedEmail={personalData.email_verified ? personalData.email : ''}
+        onClose={() => setEmailOpen(false)}
+        onVerified={() => {
+          setEmailOpen(false);
+          void refresh();
+        }}
+      />
     </div>
   );
 }

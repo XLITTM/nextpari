@@ -21,6 +21,8 @@
     "manager:control:test": "tsx --tsconfig tsconfig.server.json --test server/manager/managerControl.test.ts server/manager/managerFinance.test.ts server/manager/managerRpcSecurity.test.ts server/staff/staffHierarchy.test.ts",
     "player:auth:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test src/lib/playerAuth.security.test.ts src/lib/authUiFlow.test.ts server/player/playerAuth.test.ts server/player/playerAuth.multi.test.ts server/player/playerChangePassword.test.ts server/auth/oneClickPassword.test.ts",
     "player:change-password:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test server/player/playerChangePassword.test.ts src/lib/playerChangePassword.test.ts",
+    "player:sequential-id:test": "tsx --tsconfig tsconfig.server.json --test server/player/playerSequentialId.test.ts",
+    "player:email-verification:test": "tsx --tsconfig tsconfig.server.json --env-file ./src/lib/playerAuth.test.env --test server/player/playerEmailVerification.test.ts",
     "player:withdrawals:test": "tsx --tsconfig tsconfig.server.json --test server/player/playerWithdrawals.test.ts",
     "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts server/games/dice.cutover.test.ts",
     "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts",

@@ -269,7 +269,14 @@ describe('player change password contract', () => {
     assert.equal(changeBlock.includes('body.phone'), false);
     assert.equal(changeBlock.includes('body.playerId'), false);
     const migrations = readdirSync(join(root, 'supabase/migrations'));
-    assert.equal(migrations.some((name) => name.includes('change_password') || name.includes('_044.sql')), false);
+    assert.equal(migrations.some((name) => name.includes('change_password')), false);
+    const identitySql = migrations
+      .filter((name) => name.includes('_044.sql'))
+      .map((name) => readFileSync(join(root, 'supabase/migrations', name), 'utf8'))
+      .join('\n');
+    assert.equal(identitySql.includes('encrypted_password'), false);
+    assert.equal(identitySql.includes('change_password'), false);
+    assert.equal(identitySql.includes('updateUser({ password'), false);
   });
 
   it('preserves existing login modes and does not touch staff or money routes', () => {

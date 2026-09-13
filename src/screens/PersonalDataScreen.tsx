@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../ToastContext';
 import { useProfile } from '../ProfileContext';
+import { EmailBindModal } from '../components/player/EmailBindModal';
 
 interface PersonalDataScreenProps {
   onBack: () => void;
@@ -19,6 +20,7 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
   const [birthDate, setBirthDate] = useState('');
   const [passport, setPassport] = useState('');
   const [saving, setSaving] = useState(false);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   useEffect(() => {
     void refresh();
@@ -104,21 +106,32 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-gray-900 dark:text-white">Электронная почта</h2>
-            {personalData.email_verified && <VerifiedBadge />}
+            {personalData.email_verified && personalData.email ? <VerifiedBadge /> : null}
           </div>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="email"
-              value={personalData.email}
+              value={personalData.email_verified ? personalData.email : ''}
               readOnly
-              placeholder="Указан при регистрации"
+              placeholder="Почта не привязана"
               className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm font-semibold rounded-xl pl-9 pr-4 py-3 outline-none border border-gray-200 dark:border-gray-600"
             />
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-300">
-            Email из аккаунта. Подтверждение только по фактическому состоянию Auth.
-          </p>
+          {personalData.email && personalData.email_verified ? (
+            <p className="text-xs text-gray-500 dark:text-gray-300">
+              {personalData.email} · Подтверждена ✓
+            </p>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-gray-300">Почта не привязана</p>
+          )}
+          <button
+            type="button"
+            onClick={() => setEmailOpen(true)}
+            className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl"
+          >
+            {personalData.email && personalData.email_verified ? 'Изменить почту' : 'Привязать почту'}
+          </button>
         </div>
 
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
@@ -144,6 +157,15 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
           )}
         </button>
       </div>
+      <EmailBindModal
+        open={emailOpen}
+        verifiedEmail={personalData.email_verified ? personalData.email : ''}
+        onClose={() => setEmailOpen(false)}
+        onVerified={() => {
+          setEmailOpen(false);
+          void refresh();
+        }}
+      />
     </div>
   );
 }

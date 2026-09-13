@@ -44,3 +44,22 @@ export function loadStaffOnboardingEnv(): StaffOnboardingEnv {
     supabaseServiceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
   };
 }
+
+export interface PlayerEmailProviderEnv {
+  resendApiKey: string;
+  fromAddress: string;
+  otpPepper: string;
+}
+
+export function loadPlayerEmailProviderEnv(): PlayerEmailProviderEnv | null {
+  if (readEnv('VITE_RESEND_API_KEY') || readEnv('VITE_PLAYER_EMAIL_OTP_PEPPER') || readEnv('VITE_PLAYER_EMAIL_FROM')) {
+    throw new Error('VITE_PLAYER_EMAIL_SECRETS_FORBIDDEN');
+  }
+  const resendApiKey = readEnv('RESEND_API_KEY');
+  const fromAddress = readEnv('PLAYER_EMAIL_FROM');
+  const otpPepper = readEnv('PLAYER_EMAIL_OTP_PEPPER');
+  if (!resendApiKey || !fromAddress || !otpPepper) {
+    return null;
+  }
+  return { resendApiKey, fromAddress, otpPepper };
+}

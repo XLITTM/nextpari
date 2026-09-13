@@ -24,6 +24,8 @@ const RUNTIME_GRAPH = [
   'api/player/auth/register.ts',
   'api/player/auth/logout.ts',
   'api/player/auth/change-password.ts',
+  'api/player/email/start.ts',
+  'api/player/email/verify.ts',
   'api/player/me.ts',
   'api/player/wallet.ts',
   'api/player/profile.ts',
@@ -175,6 +177,7 @@ describe('staff onboarding Node ESM import graph', () => {
       ...listTsFiles(join(root, 'server/manager')),
       ...listTsFiles(join(root, 'server/cashier')),
       ...listTsFiles(join(root, 'server/auth')),
+      ...(existsSync(join(root, 'server/email')) ? listTsFiles(join(root, 'server/email')) : []),
       join(root, 'server/supabase/admin.ts'),
     ].filter((path) => !path.endsWith('.test.ts'));
 
@@ -228,6 +231,8 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/player/auth/register.js',
         'api/player/auth/logout.js',
         'api/player/auth/change-password.js',
+        'api/player/email/start.js',
+        'api/player/email/verify.js',
         'api/player/me.js',
         'api/player/wallet.js',
         'api/player/profile.js',
