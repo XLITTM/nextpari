@@ -1,58 +1,64 @@
-import { isLsportsDisplayEvent } from './lsportsFeed';
-import { outcomeLabel, type ParsedMarket } from './odds-parser';
+import { extraMarketRows, buildCardSelection, type ExtraCardOutcome } from './cardOdds';
+import { createLsportsSelectionProvider } from './lsportsSelectionProvider';
+import type { ParsedMarket } from './odds-parser';
 import { useSportsStore } from '../stores/sportsStore';
 import type { BetSelection, MatchEvent } from '../types';
-import { selectionFromLsportsOutcome } from './sportsPlaceIdentity';
-import type { ExtraCardOutcome } from './cardOdds';
 import {
-  clickableCardSelectionFromMarkets,
-  lsportsCardSelectionFromMarkets,
-  selectionFromProviderBetIdInMarkets,
-} from './sportsCardIdentity';
+  createSportsSelectionProviderRegistry,
+  resolveSportsEventProvider,
+  type SportsSelectionContext,
+  type SportsSelectionOutcomeInput,
+  type SportsSelectionProviderAdapter,
+} from './sportsSelectionProviderRegistry';
 
-export { hasCompleteLsportsIdentity, selectionFromLsportsOutcome } from './sportsPlaceIdentity';
 export {
-  clickableCardSelectionFromMarkets,
-  lsportsCardSelectionFromMarkets,
-} from './sportsCardIdentity';
+  createSportsSelectionProviderRegistry,
+  normalizeSportsEventProviderId,
+  resolveSportsEventProvider,
+  SportsSelectionProviderRegistrationError,
+} from './sportsSelectionProviderRegistry';
+export type {
+  SportsSelectionContext,
+  SportsSelectionOutcomeInput,
+  SportsSelectionProviderAdapter,
+  SportsSelectionProviderRegistry,
+} from './sportsSelectionProviderRegistry';
 
-export function lsportsStoreMarkets(matchId: string): ParsedMarket[] {
-  const state = useSportsStore.getState().getEvent(matchId);
-  if (!state || !isLsportsDisplayEvent(state.event)) return [];
-  return Object.values(state.markets);
+const liveRegistry = createSportsSelectionProviderRegistry([
+  {
+    id: 'lsports',
+    create: createLsportsSelectionProvider,
+  },
+]);
+
+function storeEvent(matchId: string) {
+  return useSportsStore.getState().getEvent(matchId)?.event;
 }
 
-export function selectionFromProviderBetId(
+type EventProviderFields = { provider?: unknown; our_events?: unknown } | null | undefined;
+
+export function sportsSelectionContext(
   match: MatchEvent,
-  providerBetId: string,
-  markets = lsportsStoreMarkets(match.id),
-): BetSelection | null {
-  return selectionFromProviderBetIdInMarkets(match, providerBetId, markets);
+  event: EventProviderFields = storeEvent(match.id),
+  markets?: ParsedMarket[],
+): SportsSelectionContext {
+  return { match, event: event ?? undefined, markets };
 }
 
-export function lsportsIdentity(
+export function resolveSportsSelectionAdapter(
   match: MatchEvent,
-  outcomeLabelText: string,
-  marketName: string,
-): Partial<BetSelection> {
-  return lsportsCardSelectionFromMarkets(match, lsportsStoreMarkets(match.id), outcomeLabelText, marketName) ?? {};
+  event: EventProviderFields = storeEvent(match.id),
+): SportsSelectionProviderAdapter | null {
+  return liveRegistry.resolve(resolveSportsEventProvider(match, event));
 }
 
-export function isLsportsMatch(match: Pick<MatchEvent, 'id' | 'feedTag'>): boolean {
-  return match.feedTag === 'lsports' || lsportsStoreMarkets(match.id).length > 0;
+export function resolveLiveSportsSelectionProvider(providerId?: string): SportsSelectionProviderAdapter | null {
+  return liveRegistry.resolve(providerId);
 }
 
-export function lsportsCardSelection(
-  match: MatchEvent,
-  outcomeLabelText: string,
-  marketName: string,
-): BetSelection | null {
-  return lsportsCardSelectionFromMarkets(
-    match,
-    lsportsStoreMarkets(match.id),
-    outcomeLabelText,
-    marketName,
-  );
+export function isSportsSelectionValid(selection: BetSelection): boolean {
+  const adapter = liveRegistry.resolve(selection.provider);
+  return adapter?.isSelectionValid(selection) === true;
 }
 
 export function clickableCardSelection(
@@ -61,70 +67,71 @@ export function clickableCardSelection(
   marketName: string,
   odds: number,
 ): { selection: BetSelection; locked: boolean } {
-  return clickableCardSelectionFromMarkets(
-    match,
-    lsportsStoreMarkets(match.id),
-    outcomeLabelText,
-    marketName,
-    odds,
-  );
-}
-
-export function withLsportsIdentity(
-  base: BetSelection,
-  match: MatchEvent,
-  outcomeLabelText: string,
-  marketName: string,
-): BetSelection {
-  return lsportsCardSelection(match, outcomeLabelText, marketName) ?? {
-    ...base,
-    provider: isLsportsMatch(match) || match.feedTag === 'lsports' ? 'lsports' : base.provider,
-    fixtureId: match.id,
+  const ctx = sportsSelectionContext(match);
+  const adapter = resolveSportsSelectionAdapter(match, ctx.event);
+  if (adapter?.cardSelection) {
+    return adapter.cardSelection(ctx, outcomeLabelText, marketName, odds);
+  }
+  return {
+    selection: buildCardSelection(match, outcomeLabelText, odds, marketName),
+    locked: true,
   };
 }
 
-export function isSelectableLsportsOutcome(match: MatchEvent, outcomeLabelText: string, marketName: string): boolean {
-  if (isLsportsMatch(match)) {
-    return lsportsCardSelection(match, outcomeLabelText, marketName) != null;
-  }
+export function extraSportsMarketRows(
+  match: MatchEvent,
+): Array<{ name: string; outcomes: ExtraCardOutcome[] }> {
+  const ctx = sportsSelectionContext(match);
+  const adapter = resolveSportsSelectionAdapter(match, ctx.event);
+  if (adapter?.extraMarketRows) return adapter.extraMarketRows(ctx);
+  return extraMarketRows(match);
+}
+
+export function extraSportsMarketCount(
+  match: MatchEvent,
+  rows: Array<{ name: string; outcomes: ExtraCardOutcome[] }>,
+): number {
+  const adapter = resolveSportsSelectionAdapter(match);
+  if (adapter?.extraMarketCount) return adapter.extraMarketCount(match, rows);
+  return Math.max(Number(match.extraMarkets) || 0, rows.length, 3);
+}
+
+export function isSportsMarketVisible(
+  match: MatchEvent,
+  market: ParsedMarket,
+  minute: number | null,
+  sport: string,
+  event = storeEvent(match.id),
+): boolean {
+  const adapter = resolveSportsSelectionAdapter(match, event);
+  if (adapter?.isMarketVisible) return adapter.isMarketVisible(market, minute, sport);
+  if (sport !== 'football' && sport !== 'all') return true;
+  if (minute == null) return true;
+  if (minute > 45 && market.category === 'half' && !/2nd|2-й/i.test(market.name)) return false;
+  if (minute > 90 && market.category === 'main') return false;
   return true;
 }
 
-export function extraLsportsMarketRows(
+export function buildSportsGridSelection(
   match: MatchEvent,
-): Array<{ name: string; outcomes: ExtraCardOutcome[] }> {
-  const extras = lsportsStoreMarkets(match.id).filter((market) => market.marketId !== '1' && market.key !== '1_1');
-  if (!extras.length) return [];
-  const pickStore = (
-    test: (market: (typeof extras)[number]) => boolean,
-    limit = 2,
-  ) => {
-    const market = extras.find(test);
-    if (!market) return null;
-    const entry = market.entries.find((row) => row.outcomes.some((outcome) => outcome.odds > 1))
-      ?? market.entries[0];
-    if (!entry) return null;
-    const outcomes = entry.outcomes.flatMap((outcome) => {
-      const selection = selectionFromLsportsOutcome(match, market, entry, outcome);
-      if (!selection) return [];
-      return [{
-        label: outcomeLabel(outcome.key, entry.line),
-        odds: outcome.odds,
-        selection,
-      }];
-    }).slice(0, limit);
-    if (!outcomes.length) return null;
-    return { name: [market.name, entry.line].filter(Boolean).join(' '), outcomes };
+  input: SportsSelectionOutcomeInput,
+  event = storeEvent(match.id),
+  markets?: ParsedMarket[],
+): { selection: BetSelection; locked: boolean } {
+  const ctx = sportsSelectionContext(match, event, markets);
+  const adapter = resolveSportsSelectionAdapter(match, event);
+  if (adapter?.gridSelection) return adapter.gridSelection(ctx, input);
+  if (adapter) {
+    const fromId = input.providerOutcomeId
+      ? adapter.selectionFromProviderOutcomeId?.(ctx, input.providerOutcomeId)
+      : null;
+    const selection = fromId ?? adapter.selectionFromOutcome(ctx, input);
+    if (selection && adapter.isSelectionValid(selection)) {
+      return { selection, locked: selection.odds <= 1 };
+    }
+  }
+  return {
+    selection: buildCardSelection(match, input.outcomeLabel, input.odds, input.marketName),
+    locked: true,
   };
-  const totals = extras
-    .filter((market) => market.marketId === '2' || /тотал|under\/over|total/i.test(market.name))
-    .slice(0, 3)
-    .flatMap((market) => {
-      const row = pickStore((candidate) => candidate === market);
-      return row ? [row] : [];
-    });
-  const handicap = pickStore((market) => market.marketId === '1439' || /фора|handicap/i.test(market.name));
-  const dc = pickStore((market) => /двойной шанс|double chance/i.test(market.name), 3);
-  const btts = pickStore((market) => market.marketId === '17' || /обе забьют|btts|both teams to score/i.test(market.name));
-  return [...totals, handicap, dc, btts].filter((row): row is NonNullable<typeof row> => Boolean(row));
 }

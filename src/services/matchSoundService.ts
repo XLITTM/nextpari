@@ -1,5 +1,5 @@
-import { isEventFavorite, type FavoriteableEvent } from '@/stores/favoritesStore';
-import type { BetsEvent } from '@/lib/betsapi';
+import { isEventFavorite, type FavoriteableEvent } from '../stores/favoritesStore';
+import type { BetsEvent } from '../lib/betsapi';
 
 export type MatchSoundKind = 'GOAL' | 'RED_CARD' | 'PENALTY' | 'WHISTLE';
 

@@ -5,11 +5,12 @@ import { useOddInteraction } from '@/hooks/useOddInteraction';
 import { useOddsFlash } from '@/hooks/useOddsFlash';
 import { formatOdds } from '@/lib/matchOdds';
 import { outcomeLabel, type ParsedMarket, type ParsedMarketEntry } from '@/lib/odds-parser';
-import { isLsportsDisplayEvent } from '@/lib/lsportsFeed';
-import { hasCompleteLsportsIdentity } from '@/lib/sportsPlaceIdentity';
-import { selectionFromProviderBetId } from '@/lib/sportsSelection';
+import {
+  buildSportsGridSelection,
+  isSportsMarketVisible,
+} from '@/lib/sportsSelection';
 import { useSportsStore } from '@/stores/sportsStore';
-import type { BetSelection, MatchEvent, SportId } from '@/types';
+import type { MatchEvent, SportId } from '@/types';
 
 type MarketTab = 'all' | 'main' | 'totals' | 'handicaps' | 'goals' | 'corners' | '1st-half' | '2nd-half' | 'sets' | 'games' | 'quarters' | 'halves';
 
@@ -150,21 +151,6 @@ function parseMatchMinute(...raw: Array<string | undefined>): number | null {
   return null;
 }
 
-function isMarketVisible(
-  market: ParsedMarket,
-  minute: number | null,
-  sport: SportId | string,
-  lsports = false,
-): boolean {
-  if (!isAllowedForSport(market, sport)) return false;
-  if (lsports) return true;
-  if (sport !== 'football' && sport !== 'all') return true;
-  if (minute == null) return true;
-  if (minute > 45 && market.category === 'half' && !/2nd|2-й/i.test(market.name)) return false;
-  if (minute > 90 && market.category === 'main') return false;
-  return true;
-}
-
 function sortDisplayOutcomes(outcomes: DisplayOutcome[]): DisplayOutcome[] {
   return [...outcomes].sort((a, b) => outcomeRank(a.label) - outcomeRank(b.label));
 }
@@ -259,9 +245,9 @@ export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchE
   const markets = useMemo(() => {
     const raw = state ? Object.values(state.markets) : [];
     const minute = parseMatchMinute(state?.event.time_str, state?.matchTime, match.liveStatus);
-    const lsports = isLsportsDisplayEvent(state?.event);
     const filtered = raw
-      .filter((market) => isMarketVisible(market, minute, match.sport, lsports))
+      .filter((market) => isAllowedForSport(market, match.sport)
+        && isSportsMarketVisible(match, market, minute, match.sport, state?.event))
       .filter((market) => matchesTab(market, tab));
     const display = filtered
       .map(toDisplayMarket)
@@ -454,38 +440,17 @@ function OutcomeButton({
   const flash = useOddsFlash(odds);
   const { isSelectionActive } = useBetSlip();
   const state = useSportsStore.getState().getEvent(eventId);
-  const lsports = isLsportsDisplayEvent(state?.event);
-  const marketKey = String(outcome.marketKey ?? '').trim();
-  const marketId = String(outcome.marketId ?? market.marketId ?? '').trim();
-  const providerBetId = String(outcome.providerBetId ?? '').trim();
-  const fromStore = selectionFromProviderBetId(match, providerBetId);
-  const fallback: BetSelection = {
-    id: providerBetId && marketKey
-      ? `lsports:${eventId}:${marketKey}:${providerBetId}`
-      : `${eventId}-${marketName}-${label}`,
-    matchId: eventId,
-    matchLabel: `${match.team1} — ${match.team2}`,
-    market: marketName,
-    outcome: label,
+  const built = buildSportsGridSelection(match, {
+    marketName,
+    outcomeLabel: label,
     odds,
-    homeTeam: match.team1,
-    awayTeam: match.team2,
-    sport: match.sport,
-    country: match.country,
-    league: match.league,
-    isLive: match.isLive,
-    startTime: match.startTime,
-    liveStatus: match.liveStatus,
-    provider: lsports ? 'lsports' : undefined,
-    feedType: lsports ? 'inplay' : undefined,
-    fixtureId: eventId,
-    marketId,
-    marketKey,
+    providerOutcomeId: String(outcome.providerBetId ?? '').trim(),
+    marketId: String(outcome.marketId ?? market.marketId ?? '').trim(),
+    marketKey: String(outcome.marketKey ?? '').trim(),
     line: outcome.line ?? '',
-    outcomeId: providerBetId || undefined,
-  };
-  const selection = fromStore ?? fallback;
-  const locked = odds <= 1 || ((lsports || selection.provider === 'lsports') && !hasCompleteLsportsIdentity(selection));
+  }, state?.event, state ? Object.values(state.markets) : undefined);
+  const selection = built.selection;
+  const locked = odds <= 1 || built.locked;
   const handlers = useOddInteraction(selection);
   const active = isSelectionActive(eventId, label, marketName);
   const oddsColor = active

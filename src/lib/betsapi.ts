@@ -149,6 +149,7 @@ export interface BetsEvent {
   time_status: string;
   clock_running?: boolean;
   period?: '1' | '2' | 'HT' | '';
+  provider?: string;
   our_events?: string;
   start_time: string;
   bet365_id?: string;

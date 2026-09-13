@@ -7,12 +7,12 @@ import { OddsFlashValue } from './OddButton';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks/useOddsFlash';
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
-import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
+import { mainOutcomeButtons } from '../lib/cardOdds';
 import {
   clickableCardSelection,
-  extraLsportsMarketRows,
-  hasCompleteLsportsIdentity,
-  isLsportsMatch,
+  extraSportsMarketCount,
+  extraSportsMarketRows,
+  isSportsSelectionValid,
 } from '../lib/sportsSelection';
 
 interface MatchCardProps {
@@ -72,12 +72,8 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
   const outcomeButtons = mainOutcomeButtons(match);
   const liveMinute = formatCardMinute(match.liveStatus);
-  const lsports = isLsportsMatch(match);
-  const lsportsExtras = extraLsportsMarketRows(match);
-  const extraRows = lsports ? lsportsExtras : extraMarketRows(match);
-  const extraCount = match.feedTag === 'lsports'
-    ? Math.max(Number(match.extraMarkets) || 0, extraRows.length)
-    : Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
+  const extraRows = extraSportsMarketRows(match);
+  const extraCount = extraSportsMarketCount(match, extraRows);
 
   return (
     <div
@@ -187,7 +183,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             <div className="mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">{row.name}</div>
             <div className="grid grid-cols-2 gap-1.5">
               {row.outcomes.map((item) => {
-                const clickable = item.selection && hasCompleteLsportsIdentity(item.selection)
+                const clickable = item.selection && isSportsSelectionValid(item.selection)
                   ? { selection: item.selection, locked: false }
                   : clickableCardSelection(match, item.label, row.name, item.odds);
                 return (
