@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS private.player_security_login_pressure (
 );
 
 COMMENT ON TABLE private.player_security_login_pressure IS
-'Concurrency-safe login attempt buckets for multi-instance rate limits. LOGIN_SUCCESS may clear the matching identifier bucket only. Device/network spray buckets recover by window/cooldown, never because another account succeeded. REGISTER_SUCCESS does not reset pre-auth login pressure. No account lock and no money mutation.';
+'Concurrency-safe login attempt buckets. check_login reserves one slot per allowed pre-auth attempt. LOGIN_FAILURE keeps that reservation. LOGIN_SUCCESS clears the identifier bucket and releases exactly one device/network reservation without wiping prior failures, window, or cooldown. REGISTER_SUCCESS does not modify login pressure. No account lock and no money mutation.';
 
 
 CREATE TABLE IF NOT EXISTS private.player_security_events (
@@ -554,6 +554,89 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.player_security_lock_login_buckets(
+    p_identifier_hash TEXT,
+    p_device_hash TEXT,
+    p_network_hash TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    -- Lock order matches check_login and LOGIN_SUCCESS finalization.
+    IF NULLIF(p_identifier_hash, '') IS NOT NULL THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            88104848,
+            pg_catalog.hashtext('id:' || p_identifier_hash)
+        );
+    END IF;
+    IF NULLIF(p_device_hash, '') IS NOT NULL THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            88104849,
+            pg_catalog.hashtext('dev:' || p_device_hash)
+        );
+    END IF;
+    IF NULLIF(p_network_hash, '') IS NOT NULL THEN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+            88104850,
+            pg_catalog.hashtext('net:' || p_network_hash)
+        );
+    END IF;
+END;
+$fn$;
+
+
+CREATE OR REPLACE FUNCTION private.player_security_finalize_login_success(
+    p_identifier_hash TEXT,
+    p_device_hash TEXT,
+    p_network_hash TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_device TEXT := NULLIF(p_device_hash, '');
+    v_network TEXT := NULLIF(p_network_hash, '');
+    v_identifier TEXT := NULLIF(p_identifier_hash, '');
+BEGIN
+    PERFORM private.player_security_lock_login_buckets(v_identifier, v_device, v_network);
+
+    IF v_identifier IS NOT NULL THEN
+        UPDATE private.player_security_login_pressure
+        SET
+            failure_count = 0,
+            last_success_at = pg_catalog.now(),
+            window_started_at = pg_catalog.now(),
+            last_blocked_at = NULL
+        WHERE bucket_kind = 'identifier'
+          AND bucket_hash = v_identifier;
+    END IF;
+
+    -- Release this login's pre-auth reservation only. Prior failures, window,
+    -- and last_blocked_at stay so another account succeeding cannot spray-reset.
+    IF v_device IS NOT NULL THEN
+        UPDATE private.player_security_login_pressure
+        SET failure_count = GREATEST(failure_count - 1, 0)
+        WHERE bucket_kind = 'device'
+          AND bucket_hash = v_device;
+    END IF;
+
+    IF v_network IS NOT NULL THEN
+        UPDATE private.player_security_login_pressure
+        SET failure_count = GREATEST(failure_count - 1, 0)
+        WHERE bucket_kind = 'network'
+          AND bucket_hash = v_network;
+    END IF;
+END;
+$fn$;
+
+
 CREATE OR REPLACE FUNCTION private.player_security_record_event(
     p_player_user_id UUID,
     p_event_type TEXT,
@@ -602,18 +685,15 @@ BEGIN
     )
     RETURNING id INTO v_id;
 
-    -- A successful login may clear pressure for that login identifier only.
-    -- Shared device/network buckets exist to detect cross-account spraying and
-    -- must not be zeroed because one account authenticated.
+    -- LOGIN_SUCCESS finalizes the pre-auth reservation: identifier may clear,
+    -- device/network release exactly one reserved slot. REGISTER_SUCCESS does
+    -- not touch login pressure because registration did not reserve a login.
     IF p_event_type = 'LOGIN_SUCCESS' THEN
-        UPDATE private.player_security_login_pressure
-        SET
-            failure_count = 0,
-            last_success_at = pg_catalog.now(),
-            window_started_at = pg_catalog.now(),
-            last_blocked_at = NULL
-        WHERE bucket_kind = 'identifier'
-          AND bucket_hash = NULLIF(p_identifier_hash, '');
+        PERFORM private.player_security_finalize_login_success(
+            NULLIF(p_identifier_hash, ''),
+            NULLIF(p_device_hash, ''),
+            NULLIF(p_network_hash, '')
+        );
     END IF;
 
     IF p_event_type IN ('LOGIN_SUCCESS', 'REGISTER_SUCCESS') THEN
@@ -811,24 +891,11 @@ DECLARE
     v_ok BOOLEAN;
 BEGIN
     -- Serialize concurrent attempts for the same identifier/device/network buckets.
-    IF NULLIF(p_identifier_hash, '') IS NOT NULL THEN
-        PERFORM pg_catalog.pg_advisory_xact_lock(
-            88104848,
-            pg_catalog.hashtext('id:' || p_identifier_hash)
-        );
-    END IF;
-    IF NULLIF(p_device_hash, '') IS NOT NULL THEN
-        PERFORM pg_catalog.pg_advisory_xact_lock(
-            88104849,
-            pg_catalog.hashtext('dev:' || p_device_hash)
-        );
-    END IF;
-    IF NULLIF(p_network_hash, '') IS NOT NULL THEN
-        PERFORM pg_catalog.pg_advisory_xact_lock(
-            88104850,
-            pg_catalog.hashtext('net:' || p_network_hash)
-        );
-    END IF;
+    PERFORM private.player_security_lock_login_buckets(
+        NULLIF(p_identifier_hash, ''),
+        NULLIF(p_device_hash, ''),
+        NULLIF(p_network_hash, '')
+    );
 
     SELECT *
     INTO v_settings
@@ -1238,6 +1305,8 @@ REVOKE ALL ON FUNCTION private.player_security_public_id(UUID) FROM PUBLIC, anon
 REVOKE ALL ON FUNCTION private.player_security_user_id_from_public_id(TEXT) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_security_upsert_flag(UUID, TEXT, TEXT, INTEGER, JSONB) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_security_evaluate_sharing(UUID, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_lock_login_buckets(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_security_finalize_login_success(TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_security_record_event(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_security_consume_bucket(TEXT, TEXT, INTEGER, INTEGER, INTEGER) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_security_in_cooldown(TEXT, TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated, service_role;
