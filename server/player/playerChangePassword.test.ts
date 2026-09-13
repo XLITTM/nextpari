@@ -130,7 +130,12 @@ describe('player change password HTTP', () => {
     assert.equal(JSON.stringify(result.body).includes(PLAYER_EMAIL), false);
     assert.equal('currentPassword' in result.body, false);
     assert.equal('newPassword' in result.body, false);
-    assert.equal((result.cookies ?? []).every((row) => /Max-Age=0/.test(row)), true);
+    assert.equal(
+      (result.cookies ?? [])
+        .filter((row) => row.startsWith(`${PLAYER_ACCESS_COOKIE}=`) || row.startsWith(`${PLAYER_REFRESH_COOKIE}=`))
+        .every((row) => /Max-Age=0/.test(row)),
+      true,
+    );
   });
 
   it('requires current password and rejects the wrong one before update', async () => {

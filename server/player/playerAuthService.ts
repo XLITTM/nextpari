@@ -23,6 +23,7 @@ import {
   deleteManagedAuthUser,
   resolvePlayerLoginEmail,
 } from '../auth/playerIdentityAdmin.js';
+import type { PlayerSecurityObserver } from './playerSecurityService.js';
 
 export interface PlayerAuthTokens {
   accessToken: string;
@@ -551,6 +552,31 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
   };
 }
 
+async function rememberAuthEvent(
+  security: PlayerSecurityObserver | undefined,
+  eventType: Parameters<NonNullable<PlayerSecurityObserver>['record']>[0],
+  result: PlayerAuthHttpResult,
+  ports: PlayerAuthGatewayPorts,
+  extra?: Record<string, unknown>,
+): Promise<void> {
+  if (!security) return;
+  let playerUserId: string | null = null;
+  const cookies = result.cookies ?? [];
+  const accessLine = cookies.find((row) => row.startsWith('nextpari_player_access='));
+  if (result.status === 200 && result.body.ok === true && accessLine) {
+    try {
+      const raw = decodeURIComponent(accessLine.split(';')[0]?.split('=')[1] ?? '');
+      if (raw) {
+        const user = await ports.getAuthUser(raw);
+        playerUserId = user.id || null;
+      }
+    } catch {
+      playerUserId = null;
+    }
+  }
+  await security.record(eventType, playerUserId, extra);
+}
+
 export async function registerPlayerWithPassword(
   ports: PlayerAuthGatewayPorts,
   input: {
@@ -561,6 +587,7 @@ export async function registerPlayerWithPassword(
     ageConfirmed?: unknown;
   },
   secure: boolean,
+  security?: PlayerSecurityObserver,
 ): Promise<PlayerAuthHttpResult> {
   if (!requireAgeConfirmed(input.ageConfirmed)) {
     return {
@@ -573,20 +600,27 @@ export async function registerPlayerWithPassword(
   const method = String(input.method ?? '').trim().toLowerCase().replace(/-/g, '_')
     || (String(input.email ?? '').trim() ? 'email' : '');
 
+  let result: PlayerAuthHttpResult;
   if (method === 'one_click') {
-    return registerOneClick(ports, secure);
+    result = await registerOneClick(ports, secure);
+  } else if (method === 'phone') {
+    result = await registerWithPhone(ports, input, secure);
+  } else if (method === 'email') {
+    result = await registerWithEmail(ports, input, secure);
+  } else {
+    result = {
+      status: 400,
+      body: { ok: false, authenticated: false, error: 'INVALID_REQUEST' },
+      cookies: clearPlayerCookies(secure),
+    };
   }
-  if (method === 'phone') {
-    return registerWithPhone(ports, input, secure);
+
+  if (result.status === 200 && result.body.ok === true) {
+    await rememberAuthEvent(security, 'REGISTER_SUCCESS', result, ports, { method });
+  } else if (result.status >= 409 || result.body.error === 'REGISTRATION_FAILED') {
+    await security?.record('REGISTER_FAILURE', null, { method });
   }
-  if (method === 'email') {
-    return registerWithEmail(ports, input, secure);
-  }
-  return {
-    status: 400,
-    body: { ok: false, authenticated: false, error: 'INVALID_REQUEST' },
-    cookies: clearPlayerCookies(secure),
-  };
+  return result;
 }
 
 async function registerWithEmail(
@@ -727,6 +761,14 @@ function loginFailed(secure: boolean): PlayerAuthHttpResult {
   };
 }
 
+function rateLimited(secure: boolean): PlayerAuthHttpResult {
+  return {
+    status: 429,
+    body: { ok: false, authenticated: false, error: 'AUTH_RATE_LIMITED' },
+    cookies: clearPlayerCookies(secure),
+  };
+}
+
 export async function loginPlayerWithPassword(
   ports: PlayerAuthGatewayPorts,
   input: {
@@ -737,6 +779,7 @@ export async function loginPlayerWithPassword(
     password?: string;
   },
   secure: boolean,
+  security?: PlayerSecurityObserver,
 ): Promise<PlayerAuthHttpResult> {
   const password = String(input.password ?? '');
   if (validatePlayerPassword(password)) {
@@ -747,15 +790,26 @@ export async function loginPlayerWithPassword(
     };
   }
 
+  if (security && !(await security.checkLoginRateLimit())) {
+    await security.record('AUTH_RATE_LIMITED', null, { source: 'pre_auth' });
+    return rateLimited(secure);
+  }
+
   const mode = String(input.mode ?? '').trim().toLowerCase();
   let email = String(input.email ?? '').trim();
 
   try {
     if (mode === 'phone' || (!mode && String(input.phone ?? '').trim() && !email)) {
       const phone = normalizePlayerPhone(String(input.phone ?? ''));
-      if (validatePlayerPhone(phone) || !ports.resolveLoginEmail) return loginFailed(secure);
+      if (validatePlayerPhone(phone) || !ports.resolveLoginEmail) {
+        await security?.record('LOGIN_FAILURE', null, { mode: 'phone' });
+        return loginFailed(secure);
+      }
       const resolved = await ports.resolveLoginEmail('phone', phone);
-      if (!resolved.ok) return loginFailed(secure);
+      if (!resolved.ok) {
+        await security?.record('LOGIN_FAILURE', null, { mode: 'phone' });
+        return loginFailed(secure);
+      }
       email = resolved.email;
     } else if (mode === 'identifier') {
       const identifier = String(input.identifier ?? '').trim();
@@ -763,15 +817,23 @@ export async function loginPlayerWithPassword(
         email = identifier;
       } else {
         const playerId = parseLoginPlayerId(identifier);
-        if (!playerId || !ports.resolveLoginEmail) return loginFailed(secure);
+        if (!playerId || !ports.resolveLoginEmail) {
+          await security?.record('LOGIN_FAILURE', null, { mode: 'identifier' });
+          return loginFailed(secure);
+        }
         const resolved = await ports.resolveLoginEmail('public_id', playerId);
-        if (!resolved.ok) return loginFailed(secure);
+        if (!resolved.ok) {
+          await security?.record('LOGIN_FAILURE', null, { mode: 'identifier' });
+          return loginFailed(secure);
+        }
         email = resolved.email;
       }
     } else if (validatePlayerEmail(email)) {
+      await security?.record('LOGIN_FAILURE', null, { mode: 'email' });
       return loginFailed(secure);
     }
   } catch {
+    await security?.record('LOGIN_FAILURE', null, { mode: mode || 'email' });
     return loginFailed(secure);
   }
 
@@ -779,9 +841,22 @@ export async function loginPlayerWithPassword(
   try {
     tokens = await ports.signInWithPassword(email, password);
   } catch {
+    await security?.record('LOGIN_FAILURE', null, { mode: mode || 'email' });
     return loginFailed(secure);
   }
-  return issuedSession(ports, tokens, secure);
+  const session = await issuedSession(ports, tokens, secure);
+  if (session.status === 200 && session.body.ok === true) {
+    let playerUserId: string | null = null;
+    try {
+      playerUserId = (await ports.getAuthUser(tokens.accessToken)).id || null;
+    } catch {
+      playerUserId = null;
+    }
+    await security?.record('LOGIN_SUCCESS', playerUserId, { mode: mode || 'email' });
+  } else {
+    await security?.record('LOGIN_FAILURE', null, { mode: mode || 'email' });
+  }
+  return session;
 }
 
 export async function resolvePlayerSession(
@@ -936,6 +1011,7 @@ export async function changePlayerPassword(
     newPassword?: string;
   },
   secure: boolean,
+  security?: PlayerSecurityObserver,
 ): Promise<PlayerAuthHttpResult> {
   // Player auth has no shared rate-limit middleware. Safety here is:
   // authenticated session required, current password re-checked with Supabase Auth,
@@ -1013,6 +1089,7 @@ export async function changePlayerPassword(
       }
     }
 
+    await security?.record('PASSWORD_CHANGED', sessionUser.id, { source: 'change_password' });
     return {
       status: 200,
       body: { ok: true },

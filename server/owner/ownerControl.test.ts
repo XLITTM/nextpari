@@ -188,6 +188,78 @@ describe('owner control center same-origin BFF', () => {
     assert.equal(rpc.calls[0]?.name, 'owner_list_risk_bets');
   });
 
+  it('4b. owner security overview, flags, dossier, and resolve', async () => {
+    const FLAG_ID = '11111111-2222-4111-8111-222222222222';
+    const overview = await ownerGet('/api/owner/security/overview');
+    assert.equal(overview.result.status, 200);
+    assert.equal(overview.rpc.calls[0]?.name, 'owner_security_overview');
+
+    const flags = await ownerGet('/api/owner/security/flags', {
+      search: '?status=open&severity=high&flagType=SHARED_DEVICE&playerId=110790',
+    });
+    assert.equal(flags.result.status, 200);
+    assert.equal(flags.rpc.calls[0]?.name, 'owner_list_security_flags');
+    assert.equal(flags.rpc.calls[0]?.args?.p_status, 'open');
+    assert.equal(flags.rpc.calls[0]?.args?.p_severity, 'high');
+    assert.equal(flags.rpc.calls[0]?.args?.p_flag_type, 'SHARED_DEVICE');
+    assert.equal(flags.rpc.calls[0]?.args?.p_player_id, '110790');
+
+    const dossier = await ownerGet('/api/owner/players/110790/security');
+    assert.equal(dossier.result.status, 200);
+    assert.equal(dossier.rpc.calls[0]?.name, 'owner_player_security');
+    assert.deepEqual(dossier.rpc.calls[0]?.args, { p_player_id: '110790' });
+
+    const resolved = await ownerPost(`/api/owner/security/flags/${FLAG_ID}/resolve`, {
+      action: 'resolve',
+      reason: 'reviewed by owner',
+    });
+    assert.equal(resolved.result.status, 200);
+    assert.equal(resolved.rpc.calls[0]?.name, 'owner_resolve_security_flag');
+    assert.deepEqual(resolved.rpc.calls[0]?.args, {
+      p_flag_id: FLAG_ID,
+      p_action: 'resolve',
+      p_reason: 'reviewed by owner',
+    });
+
+    const missingReason = await ownerPost(`/api/owner/security/flags/${FLAG_ID}/resolve`, {
+      action: 'dismiss',
+      reason: '',
+    });
+    assert.equal(missingReason.result.status, 400);
+    assert.equal(missingReason.result.body.error, 'REASON_REQUIRED');
+    assert.equal(missingReason.rpc.calls.length, 0);
+  });
+
+  it('4c. manager, cashier, and player cannot read owner security APIs', async () => {
+    const denied = async (role: string, pathname: string, method = 'GET') => {
+      const rpc = createRpc();
+      const result = await handleOwnerControlRequest(
+        {
+          method,
+          pathname,
+          cookie: cookieHeader(ACCESS, REFRESH),
+          cookieSecure: true,
+          body: method === 'POST' ? { action: 'resolve', reason: 'nope' } : undefined,
+        },
+        {
+          sessionPorts: createAuthPorts({
+            context: { role, status: 'active', auth_user_id: `${role}-uid` },
+          }),
+          rpcFactory: rpc.rpcFactory,
+        },
+      );
+      assert.equal(result.status, 403, `${role} ${pathname}`);
+      assert.equal(result.body.error, 'OWNER_REQUIRED');
+      assert.equal(rpc.calls.length, 0);
+    };
+    for (const role of ['manager', 'cashier', 'player']) {
+      await denied(role, '/api/owner/security/overview');
+      await denied(role, '/api/owner/security/flags');
+      await denied(role, '/api/owner/players/110790/security');
+      await denied(role, '/api/owner/security/flags/11111111-2222-4111-8111-222222222222/resolve', 'POST');
+    }
+  });
+
   it('5. players list', async () => {
     const { result, rpc } = await ownerGet('/api/owner/players', {
       search: '?search=aziz&limit=20&offset=10',
@@ -377,6 +449,8 @@ describe('owner control center same-origin BFF', () => {
     assert.match(services, /\/api\/owner\/dashboard/);
     assert.match(services, /\/api\/owner\/cashiers/);
     assert.match(services, /\/api\/owner\/risk-bets/);
+    assert.match(services, /\/api\/owner\/security\/overview/);
+    assert.match(services, /\/api\/owner\/security\/flags/);
     assert.match(services, /\/api\/owner\/players/);
     assert.match(services, /\/api\/owner\/withdrawals/);
     assert.match(services, /\/api\/owner\/messages/);

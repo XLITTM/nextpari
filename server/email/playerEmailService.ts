@@ -10,6 +10,7 @@ import {
   validatePlayerEmail,
 } from '../player/playerValidators.js';
 import type { PlayerAuthGatewayPorts, PlayerAuthHttpResult } from '../player/playerAuthService.js';
+import type { PlayerSecurityObserver } from '../player/playerSecurityService.js';
 
 export const PLAYER_EMAIL_START_PATH = '/api/player/email/start';
 export const PLAYER_EMAIL_VERIFY_PATH = '/api/player/email/verify';
@@ -238,6 +239,7 @@ export async function verifyPlayerEmailBinding(
   cookieHeader: string | undefined,
   input: { code?: string },
   secure: boolean,
+  security?: PlayerSecurityObserver,
 ): Promise<PlayerAuthHttpResult> {
   const session = await sessionUser(ports, cookieHeader, secure);
   if (isSessionFailure(session)) return session;
@@ -306,6 +308,7 @@ export async function verifyPlayerEmailBinding(
     return failed(503, 'EMAIL_UPDATE_FAILED');
   }
 
+  await security?.record('EMAIL_VERIFIED', user.id, { source: 'email_verify' });
   return {
     status: 200,
     body: {

@@ -357,6 +357,148 @@ export async function fetchOwnerRiskBets(): Promise<RiskBet[]> {
   return asRows(data).map((row) => parseRiskBet(asRecord(row)));
 }
 
+export type OwnerSecurityFlagStatus = 'open' | 'reviewed' | 'resolved' | 'dismissed';
+export type OwnerSecurityFlagSeverity = 'low' | 'medium' | 'high';
+export type OwnerSecurityFlagType =
+  | 'SHARED_DEVICE'
+  | 'SHARED_NETWORK'
+  | 'LOGIN_FAILURE_BURST'
+  | 'AUTH_RATE_LIMITED';
+
+export interface OwnerSecurityOverview {
+  openFlags: number;
+  highSeverityFlags: number;
+  loginFailures: number;
+  rateLimitedAttempts: number;
+  sharedDeviceFlags: number;
+  sharedNetworkFlags: number;
+}
+
+export interface OwnerSecurityFlag {
+  id: string;
+  playerPublicId: string;
+  flagType: string;
+  severity: string;
+  status: string;
+  signalCount: number;
+  relatedPlayerCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  details: Record<string, unknown>;
+  resolutionReason: string;
+}
+
+export interface OwnerSecurityEvent {
+  id: string;
+  eventType: string;
+  riskLevel: string;
+  identifierRef: string;
+  deviceRef: string;
+  networkRef: string;
+  userAgentRef: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface OwnerPlayerSecurityDossier {
+  playerPublicId: string;
+  flags: OwnerSecurityFlag[];
+  events: OwnerSecurityEvent[];
+}
+
+function parseSecurityOverview(raw: unknown): OwnerSecurityOverview {
+  const item = asRecord(raw);
+  return {
+    openFlags: num(item.open_flags ?? item.openFlags),
+    highSeverityFlags: num(item.high_severity_flags ?? item.highSeverityFlags),
+    loginFailures: num(item.login_failures ?? item.loginFailures),
+    rateLimitedAttempts: num(item.rate_limited_attempts ?? item.rateLimitedAttempts),
+    sharedDeviceFlags: num(item.shared_device_flags ?? item.sharedDeviceFlags),
+    sharedNetworkFlags: num(item.shared_network_flags ?? item.sharedNetworkFlags),
+  };
+}
+
+function parseSecurityFlag(raw: unknown): OwnerSecurityFlag {
+  const item = asRecord(raw);
+  return {
+    id: str(item.id),
+    playerPublicId: str(item.player_public_id ?? item.playerPublicId),
+    flagType: str(item.flag_type ?? item.flagType),
+    severity: str(item.severity),
+    status: str(item.status),
+    signalCount: num(item.signal_count ?? item.signalCount),
+    relatedPlayerCount: num(item.related_player_count ?? item.relatedPlayerCount),
+    firstSeenAt: str(item.first_seen_at ?? item.firstSeenAt),
+    lastSeenAt: str(item.last_seen_at ?? item.lastSeenAt),
+    details: asRecord(item.details),
+    resolutionReason: str(item.resolution_reason ?? item.resolutionReason),
+  };
+}
+
+function parseSecurityEvent(raw: unknown): OwnerSecurityEvent {
+  const item = asRecord(raw);
+  return {
+    id: str(item.id),
+    eventType: str(item.event_type ?? item.eventType),
+    riskLevel: str(item.risk_level ?? item.riskLevel),
+    identifierRef: str(item.identifier_ref ?? item.identifierRef),
+    deviceRef: str(item.device_ref ?? item.deviceRef),
+    networkRef: str(item.network_ref ?? item.networkRef),
+    userAgentRef: str(item.user_agent_ref ?? item.userAgentRef),
+    metadata: asRecord(item.metadata),
+    createdAt: str(item.created_at ?? item.createdAt),
+  };
+}
+
+export async function fetchOwnerSecurityOverview(): Promise<OwnerSecurityOverview> {
+  const data = await ownerData('/api/owner/security/overview');
+  return parseSecurityOverview(data);
+}
+
+export async function fetchOwnerSecurityFlags(params: {
+  status?: string | null;
+  severity?: string | null;
+  flagType?: string | null;
+  playerId?: string | null;
+  from?: string | null;
+  to?: string | null;
+} = {}): Promise<OwnerSecurityFlag[]> {
+  const data = await ownerData('/api/owner/security/flags' + ownerQuery({
+    status: params.status ?? null,
+    severity: params.severity ?? null,
+    flagType: params.flagType ?? null,
+    playerId: params.playerId ?? null,
+    from: params.from ?? null,
+    to: params.to ?? null,
+  }));
+  const rec = asRecord(data);
+  return asRows(rec.rows ?? data).map(parseSecurityFlag);
+}
+
+export async function fetchOwnerPlayerSecurity(playerId: string): Promise<OwnerPlayerSecurityDossier> {
+  const data = await ownerData(`/api/owner/players/${encodeURIComponent(playerId)}/security`);
+  const rec = asRecord(data);
+  return {
+    playerPublicId: str(rec.player_public_id ?? rec.playerPublicId, playerId),
+    flags: asRows(rec.flags).map(parseSecurityFlag),
+    events: asRows(rec.events).map(parseSecurityEvent),
+  };
+}
+
+export async function resolveOwnerSecurityFlag(input: {
+  flagId: string;
+  action: 'review' | 'resolve' | 'dismiss';
+  reason?: string;
+}): Promise<void> {
+  await ownerJson(`/api/owner/security/flags/${encodeURIComponent(input.flagId)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({
+      action: input.action,
+      reason: input.reason ?? '',
+    }),
+  });
+}
+
 export interface OwnerPlayerListItem {
   id: string;
   profileId: string | null;

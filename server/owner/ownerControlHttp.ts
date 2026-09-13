@@ -114,6 +114,13 @@ function optionalNote(value: unknown): string | null {
   return note;
 }
 
+function optionalTimestamp(raw: string | null): string | null {
+  if (raw == null || raw.trim() === '') return null;
+  const value = raw.trim();
+  if (!Number.isFinite(Date.parse(value))) throw staffError('PERIOD_INVALID', 400);
+  return new Date(value).toISOString();
+}
+
 function optionalFilter(value: string | null, code: string, max = 64): string | null {
   if (value == null || value.trim() === '') return null;
   const text = value.trim();
@@ -312,6 +319,10 @@ type ControlAction =
   | { kind: 'dossier'; playerId: string }
   | { kind: 'playerDebit'; playerId: string }
   | { kind: 'block'; playerId: string }
+  | { kind: 'playerSecurity'; playerId: string }
+  | { kind: 'securityOverview' }
+  | { kind: 'securityFlags' }
+  | { kind: 'securityFlagResolve'; flagId: string }
   | { kind: 'withdrawals' }
   | { kind: 'withdrawalApprove'; withdrawalId: string }
   | { kind: 'withdrawalReject'; withdrawalId: string }
@@ -340,6 +351,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   const debit = path.match(/^\/api\/owner\/players\/([^/]+)\/debit$/);
   if (debit) return m === 'POST' ? { kind: 'playerDebit', playerId: debit[1] } : 'method';
 
+  const playerSecurity = path.match(/^\/api\/owner\/players\/([^/]+)\/security$/);
+  if (playerSecurity) return m === 'GET' ? { kind: 'playerSecurity', playerId: playerSecurity[1] } : 'method';
+
   const block = path.match(/^\/api\/owner\/players\/([^/]+)\/block$/);
   if (block) return m === 'POST' ? { kind: 'block', playerId: block[1] } : 'method';
 
@@ -358,6 +372,12 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
     return 'method';
   }
   if (path === '/api/owner/risk-bets') return m === 'GET' ? { kind: 'risk' } : 'method';
+  if (path === '/api/owner/security/overview') return m === 'GET' ? { kind: 'securityOverview' } : 'method';
+  if (path === '/api/owner/security/flags') return m === 'GET' ? { kind: 'securityFlags' } : 'method';
+  const flagResolve = path.match(/^\/api\/owner\/security\/flags\/([^/]+)\/resolve$/);
+  if (flagResolve) {
+    return m === 'POST' ? { kind: 'securityFlagResolve', flagId: flagResolve[1] } : 'method';
+  }
   if (path === '/api/owner/players') return m === 'GET' ? { kind: 'players' } : 'method';
   const withdrawalApprove = path.match(/^\/api\/owner\/withdrawals\/([^/]+)\/approve$/);
   if (withdrawalApprove) {
@@ -430,6 +450,34 @@ async function runControl(
         p_blocked: requireBoolean(rec.blocked, 'BLOCKED_REQUIRED'),
         p_reason: rec.reason == null ? null : String(rec.reason).trim() || null,
       });
+    case 'playerSecurity':
+      return rpc.invoke('owner_player_security', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
+    case 'securityOverview':
+      return rpc.invoke('owner_security_overview');
+    case 'securityFlags':
+      return rpc.invoke('owner_list_security_flags', {
+        p_status: optionalFilter(query.get('status'), 'FLAG_STATUS_INVALID'),
+        p_severity: optionalFilter(query.get('severity'), 'FLAG_SEVERITY_INVALID'),
+        p_flag_type: optionalFilter(query.get('flagType') ?? query.get('flag_type'), 'FLAG_TYPE_INVALID'),
+        p_player_id: (query.get('playerId') ?? query.get('player_id'))?.trim()
+          ? requirePlayerPublicId(query.get('playerId') ?? query.get('player_id'))
+          : null,
+        p_from: optionalTimestamp(query.get('from')),
+        p_to: optionalTimestamp(query.get('to')),
+        p_limit: parseLimit(query.get('limit'), 50),
+        p_offset: parseOffset(query.get('offset')),
+      });
+    case 'securityFlagResolve': {
+      const actionName = String(rec.action ?? rec.status ?? '').trim();
+      const needsReason = /^(resolve|resolved|dismiss|dismissed)$/i.test(actionName);
+      return rpc.invoke('owner_resolve_security_flag', {
+        p_flag_id: requireUuid(decodeURIComponent(action.flagId), 'FLAG_ID_REQUIRED', 'FLAG_ID_INVALID'),
+        p_action: actionName || 'review',
+        p_reason: needsReason ? requireReason(rec.reason) : (rec.reason == null ? '' : String(rec.reason)),
+      });
+    }
     case 'playerDebit': {
       rejectForbiddenFinanceFields(rec);
       return sanitizeMoneyResult(await rpc.invoke('owner_debit_player', {
