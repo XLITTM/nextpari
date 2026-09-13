@@ -28,6 +28,10 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
   if (
     code === 'INSUFFICIENT_AVAILABLE_BALANCE'
     || code === 'IDEMPOTENCY_KEY_CONFLICT'
+    || code === 'SPORTS_BET_IDEMPOTENCY_CONFLICT'
+    || code === 'SPORTS_STAKE_LIMIT'
+    || code === 'SPORTS_PAYOUT_LIMIT'
+    || code === 'SPORTS_EXPRESS_LEG_LIMIT'
     || code === 'GAME_DISABLED'
     || code === 'GAME_MAINTENANCE'
     || code === 'GAME_ROUND_NOT_OPEN'

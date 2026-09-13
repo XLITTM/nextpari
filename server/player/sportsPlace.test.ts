@@ -75,21 +75,25 @@ function createPorts(init?: {
   rpcPayload?: Record<string, unknown>;
   rpcError?: string;
   placeImpl?: SportsPlacePorts['placeAsVerifiedPlayer'];
+  lookupImpl?: SportsPlacePorts['lookupExistingPlace'];
 }): SportsPlacePorts & {
   places: Array<{ playerUserId: string; idempotencyKey: string; stake: number }>;
   quoteFetches: SportsQuoteRequest[];
   rpcs: Array<{ name: string; args?: Record<string, unknown> }>;
   authUsers: string[];
+  audits: Array<{ decision: string; decisionCode: string }>;
 } {
   const places: Array<{ playerUserId: string; idempotencyKey: string; stake: number }> = [];
   const quoteFetches: SportsQuoteRequest[] = [];
   const rpcs: Array<{ name: string; args?: Record<string, unknown> }> = [];
   const authUsers: string[] = [];
+  const audits: Array<{ decision: string; decisionCode: string }> = [];
   return {
     places,
     quoteFetches,
     rpcs,
     authUsers,
+    audits,
     async signInWithPassword() {
       throw staffError('AUTH_FAILED', 401);
     },
@@ -136,6 +140,13 @@ function createPorts(init?: {
         balanceAfter: 40,
       };
     }),
+    async recordAcceptance(event) {
+      audits.push({ decision: event.decision, decisionCode: event.decisionCode });
+    },
+    async lookupExistingPlace(args) {
+      if (init?.lookupImpl) return init.lookupImpl(args);
+      return null;
+    },
     gameRpc() {
       return {
         async invoke(name: string, args?: Record<string, unknown>) {
@@ -175,7 +186,8 @@ describe('player sports place HTTP', () => {
     assert.equal(result.status, 403);
     assert.equal(result.body.error, 'SPORTS_BET_DISABLED');
     assert.equal(ports.places.length, 0);
-    assert.equal(ports.authUsers.length, 0);
+    assert.equal(ports.quoteFetches.length, 0);
+    assert.equal(ports.authUsers.length, 1);
   });
 
   it('places through the server-only path after canonical quote validation', async () => {
@@ -650,6 +662,10 @@ describe('player sports place mode and RPC mapping', () => {
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_SINGLE_REQUIRES_ONE_LEG' }).code, 'SPORTS_SINGLE_REQUIRES_ONE_LEG');
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_EXPRESS_REQUIRES_LEGS' }).code, 'SPORTS_EXPRESS_REQUIRES_LEGS');
     assert.equal(mapPlayerGameRpcError({ message: 'MISSING_BET_ID' }).code, 'MISSING_BET_ID');
+    assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_BET_IDEMPOTENCY_CONFLICT' }).code, 'SPORTS_BET_IDEMPOTENCY_CONFLICT');
+    assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_STAKE_LIMIT' }).code, 'SPORTS_STAKE_LIMIT');
+    assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_PAYOUT_LIMIT' }).code, 'SPORTS_PAYOUT_LIMIT');
+    assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_EXPRESS_LEG_LIMIT' }).code, 'SPORTS_EXPRESS_LEG_LIMIT');
     const ambiguous = mapPlayerGameRpcError({ message: 'column reference "v_leg" is ambiguous' });
     assert.equal(ambiguous.code, 'GAME_RPC_FAILED');
     assert.equal(ambiguous.message.includes('v_leg'), false);
