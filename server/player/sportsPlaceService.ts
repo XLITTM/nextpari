@@ -8,6 +8,10 @@ import { evaluateSportsRisk } from '../sports/risk.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 import { staffError, StaffOnboardingError } from '../staff/errors.js';
 import {
+  recordSportsAcceptanceEvent,
+  type SportsAcceptanceAuditInput,
+} from '../sports/acceptanceAudit.js';
+import {
   livePlayerGamePorts,
   runPlayerGameRpc,
   type PlayerGameGatewayPorts,
@@ -46,12 +50,19 @@ function isUuid(value: string): boolean {
 function quoteHttpStatus(reason: string): number {
   if (reason === 'SPORTS_BET_DISABLED') return 403;
   if (reason === 'INVALID_PRICE' || reason === 'MISSING_BET_ID' || reason === 'MISSING_FIXTURE') return 400;
+  if (
+    reason === 'SPORTS_STAKE_LIMIT'
+    || reason === 'SPORTS_PAYOUT_LIMIT'
+    || reason === 'SPORTS_EXPRESS_LEG_LIMIT'
+    || reason === 'SPORTS_BET_IDEMPOTENCY_CONFLICT'
+  ) return 409;
   return 409;
 }
 
 export interface SportsPlacePorts extends PlayerGameGatewayPorts {
   fetchQuote?: (request: SportsQuoteRequest) => Promise<SportsQuote>;
   placeAsVerifiedPlayer?: SportsPlaceAsPlayer;
+  recordAcceptance?: (event: SportsAcceptanceAuditInput) => Promise<void>;
 }
 
 async function defaultFetchQuote(request: SportsQuoteRequest): Promise<SportsQuote> {
@@ -169,6 +180,21 @@ export async function placeSportsBet(
     try {
       quote = await fetchQuote(request);
     } catch (error) {
+      const reason = error instanceof StaffOnboardingError
+        ? error.code
+        : error instanceof SportsProviderUnsupportedError
+          ? 'EVENT_UNAVAILABLE'
+          : 'FEED_STALE';
+      await recordPlaceDecision(ports, {
+        idempotencyKey,
+        playerUserId: session.userId,
+        providers: String(request.provider ?? ''),
+        mode,
+        stake,
+        decision: 'rejected',
+        decisionCode: reason,
+        oddsSnapshot: { fixtureId: request.fixtureId, outcomeId: request.outcomeId },
+      });
       if (error instanceof StaffOnboardingError) throw error;
       if (error instanceof SportsProviderUnsupportedError) {
         throw staffError('EVENT_UNAVAILABLE', 409);
@@ -180,6 +206,16 @@ export async function placeSportsBet(
     });
     if (!decision.ok) {
       const currentPrice = decision.currentPrice ?? decision.quote?.price ?? quote.price ?? null;
+      await recordPlaceDecision(ports, {
+        idempotencyKey,
+        playerUserId: session.userId,
+        providers: String(request.provider ?? ''),
+        mode,
+        stake,
+        decision: 'rejected',
+        decisionCode: decision.reason,
+        oddsSnapshot: { reason: decision.reason, fixtureId: request.fixtureId, outcomeId: request.outcomeId },
+      });
       throw new StaffOnboardingError(decision.reason, quoteHttpStatus(decision.reason), decision.reason, {
         currentPrice,
         quote: decision.quote ?? quote,
@@ -210,35 +246,82 @@ export async function placeSportsBet(
   }
 
   const risk = evaluateSportsRisk({ stake, mode, quotes });
-  if (!risk.ok) throw staffError(risk.code, 409);
+  if (!risk.ok) {
+    await recordPlaceDecision(ports, {
+      idempotencyKey,
+      playerUserId: session.userId,
+      providers: accepted.map((leg) => String(leg.provider ?? '')).filter(Boolean).join(','),
+      mode,
+      stake,
+      decision: 'rejected',
+      decisionCode: risk.code,
+    });
+    throw staffError(risk.code, 409);
+  }
 
   if (!isCanonicalSportsBetEnabled(env)) {
+    await recordPlaceDecision(ports, {
+      idempotencyKey,
+      playerUserId: session.userId,
+      providers: accepted.map((leg) => String(leg.provider ?? '')).filter(Boolean).join(','),
+      mode,
+      stake,
+      decision: 'rejected',
+      decisionCode: 'SPORTS_BET_DISABLED',
+    });
     throw staffError('SPORTS_BET_DISABLED', 403);
   }
 
   const place = ports.placeAsVerifiedPlayer ?? createSportsPlaceAsPlayerRpc();
   const rpcStart = Date.now();
-  const payload = await place({
-    playerUserId: session.userId,
-    idempotencyKey,
-    stake,
-    mode,
-    legs: accepted,
-  });
-  return {
-    status: 200,
-    body: payload,
-    cookies: session.cookies,
-    headers: {
-      ...GAME_NO_STORE_HEADERS,
-      'Server-Timing': serverTimingHeader({
-        authMs: session.authMs,
-        rpcMs: Date.now() - rpcStart,
-        totalMs: Date.now() - totalStart,
-        refreshed: session.refreshed,
-      }),
-    },
-  };
+  try {
+    const payload = await place({
+      playerUserId: session.userId,
+      idempotencyKey,
+      stake,
+      mode,
+      legs: accepted,
+    });
+    return {
+      status: 200,
+      body: payload,
+      cookies: session.cookies,
+      headers: {
+        ...GAME_NO_STORE_HEADERS,
+        'Server-Timing': serverTimingHeader({
+          authMs: session.authMs,
+          rpcMs: Date.now() - rpcStart,
+          totalMs: Date.now() - totalStart,
+          refreshed: session.refreshed,
+        }),
+      },
+    };
+  } catch (error) {
+    const code = error instanceof StaffOnboardingError ? error.code : 'GAME_RPC_FAILED';
+    await recordPlaceDecision(ports, {
+      idempotencyKey,
+      playerUserId: session.userId,
+      providers: accepted.map((leg) => String(leg.provider ?? '')).filter(Boolean).join(','),
+      mode,
+      stake,
+      decision: 'rejected',
+      decisionCode: code,
+      oddsSnapshot: { acceptedOdds: accepted.map((leg) => leg.acceptedOdds) },
+    });
+    throw error;
+  }
+}
+
+async function recordPlaceDecision(
+  ports: SportsPlacePorts,
+  input: SportsAcceptanceAuditInput,
+): Promise<void> {
+  const record = ports.recordAcceptance ?? recordSportsAcceptanceEvent;
+  try {
+    await record(input);
+  } catch {
+    /* audit must not mask the original placement decision */
+  }
 }
 
 export async function listSportsBets(
