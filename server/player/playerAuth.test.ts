@@ -56,7 +56,9 @@ function cookieAttrs(setCookie: string[]) {
     sameSiteLax: setCookie.every((row) => /SameSite=Lax/i.test(row)),
     path: setCookie.every((row) => /Path=\//.test(row)),
     secure: setCookie.every((row) => /(?:^|; )Secure(?:;|$)/i.test(row)),
-    cleared: setCookie.every((row) => /Max-Age=0/.test(row)),
+    cleared: setCookie
+      .filter((row) => row.startsWith(`${PLAYER_ACCESS_COOKIE}=`) || row.startsWith(`${PLAYER_REFRESH_COOKIE}=`))
+      .every((row) => /Max-Age=0/.test(row)),
     hasAccess: setCookie.some((row) => row.startsWith(`${PLAYER_ACCESS_COOKIE}=`)),
     hasRefresh: setCookie.some((row) => row.startsWith(`${PLAYER_REFRESH_COOKIE}=`)),
   };
@@ -334,13 +336,18 @@ describe('player same-origin auth gateway', () => {
   it('player BFF never uses service_role as business authority', () => {
     const files = listFiles(join(root, 'server/player'))
       .filter((path) => path.endsWith('.ts') && !path.endsWith('.test.ts'))
-      .map((path) => readFileSync(path, 'utf8'))
-      .join('\n');
-    assert.equal(files.includes('createServiceRoleClient'), false);
-    assert.equal(files.includes('service_role'), false);
-    assert.equal(files.includes('SERVICE_ROLE'), false);
-    assert.match(files, /createAnonAuthClient/);
-    assert.match(files, /createUserJwtClient/);
+      .filter((path) => !path.endsWith('playerSecurityService.ts') && !path.endsWith('playerSecuritySignals.ts'));
+    const joined = files.map((path) => readFileSync(path, 'utf8')).join('\n');
+    assert.equal(joined.includes('createServiceRoleClient'), false);
+    assert.equal(joined.includes('service_role'), false);
+    assert.equal(joined.includes('SERVICE_ROLE'), false);
+    assert.match(joined, /createAnonAuthClient/);
+    assert.match(joined, /createUserJwtClient/);
+    const security = readFileSync(join(root, 'server/player/playerSecurityService.ts'), 'utf8');
+    assert.match(security, /createServiceRoleClient/);
+    assert.match(security, /player_security_record_event/);
+    assert.equal(security.includes('apply_wallet_entry'), false);
+    assert.equal(security.includes('owner_set_player_blocked'), false);
   });
 
   it('browser player auth/wallet sources never talk to *.supabase.co', () => {

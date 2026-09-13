@@ -126,6 +126,7 @@ describe('player auth validation', () => {
     assert.equal(mapPlayerAuthError({ message: 'Email not confirmed' }), 'email confirmation required');
     assert.equal(mapPlayerAuthError({ code: 'EMAIL_CONFIRMATION_REQUIRED' }), 'email confirmation required');
     assert.equal(mapPlayerAuthError({ message: 'Password should be at least 8 characters' }), 'password too short');
+    assert.equal(mapPlayerAuthError({ code: 'AUTH_RATE_LIMITED' }), 'too many attempts');
     assert.equal(mapPlayerAuthError({ message: 'Unable to validate email address' }), 'invalid email');
   });
 });

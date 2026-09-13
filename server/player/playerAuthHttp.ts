@@ -1,3 +1,4 @@
+import type { StaffLog } from '../staff/types.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StaffOnboardingError, redactForLog, staffError } from '../staff/errors.js';
 import {
@@ -20,16 +21,22 @@ import {
   type PlayerAuthGatewayPorts,
   type PlayerAuthHttpResult,
 } from './playerAuthService.js';
-import { requestIsSecure } from './playerCookies.js';
-import type { StaffLog } from '../staff/types.js';
+import type { PlayerEmailPorts } from '../email/playerEmailService.js';
 import {
   livePlayerEmailPorts,
   startPlayerEmailBinding,
   verifyPlayerEmailBinding,
   PLAYER_EMAIL_START_PATH,
   PLAYER_EMAIL_VERIFY_PATH,
-  type PlayerEmailPorts,
 } from '../email/playerEmailService.js';
+import { ensurePlayerDeviceCookie, requestIsSecure } from './playerCookies.js';
+import {
+  createPlayerSecurityObserver,
+  livePlayerSecurityPorts,
+  type PlayerSecurityPorts,
+} from './playerSecurityService.js';
+import { trustedClientAddressFromNode, trustedClientAddressFromVercel } from './playerSecurityNetwork.js';
+import { presentedLoginIdentifier, presentedRegisterIdentifier } from './playerSecuritySignals.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
@@ -82,14 +89,34 @@ export async function handlePlayerAuthRequest(
     cookie?: string;
     cookieSecure?: boolean;
     body?: unknown;
+    trustedNetworkAddress?: string | null;
+    forwardedFor?: string;
+    realIp?: string;
+    userAgent?: string;
   },
   ports: PlayerAuthGatewayPorts,
   log: StaffLog = staffHttpLog,
   emailPorts?: PlayerEmailPorts,
+  securityPorts?: PlayerSecurityPorts,
 ): Promise<PlayerAuthHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
   const secure = input.cookieSecure === true;
+  const device = ensurePlayerDeviceCookie(input.cookie, secure);
+  void input.forwardedFor;
+  void input.realIp;
+  const boundary = {
+    cookieHeader: input.cookie,
+    cookieSecure: secure,
+    trustedNetworkAddress: input.trustedNetworkAddress ?? null,
+    userAgent: input.userAgent,
+    device,
+  };
+
+  const finish = (result: PlayerAuthHttpResult): PlayerAuthHttpResult => ({
+    ...result,
+    cookies: [...(result.cookies ?? []), device.setCookie],
+  });
 
   try {
     if (path === PLAYER_AUTH_REGISTER_PATH) {
@@ -97,20 +124,32 @@ export async function handlePlayerAuthRequest(
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       const body = asRecord(parseJsonPayload(input.body));
-      return registerPlayerWithPassword(ports, {
+      const security = createPlayerSecurityObserver(
+        boundary,
+        presentedRegisterIdentifier(body),
+        securityPorts,
+        log,
+      );
+      return finish(await registerPlayerWithPassword(ports, {
         method: String(body.method ?? ''),
         email: String(body.email ?? ''),
         password: String(body.password ?? ''),
         phone: String(body.phone ?? ''),
         ageConfirmed: body.ageConfirmed,
-      }, secure);
+      }, secure, security));
     }
     if (path === PLAYER_AUTH_LOGIN_PATH) {
       if (method !== 'POST') {
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       const body = asRecord(parseJsonPayload(input.body));
-      return loginPlayerWithPassword(
+      const security = createPlayerSecurityObserver(
+        boundary,
+        presentedLoginIdentifier(body),
+        securityPorts,
+        log,
+      );
+      return finish(await loginPlayerWithPassword(
         ports,
         {
           mode: String(body.mode ?? ''),
@@ -120,20 +159,22 @@ export async function handlePlayerAuthRequest(
           password: String(body.password ?? ''),
         },
         secure,
-      );
+        security,
+      ));
     }
     if (path === PLAYER_AUTH_LOGOUT_PATH) {
       if (method !== 'POST') {
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
-      return logoutPlayerSession(ports, input.cookie, secure);
+      return finish(await logoutPlayerSession(ports, input.cookie, secure));
     }
     if (path === PLAYER_AUTH_CHANGE_PASSWORD_PATH) {
       if (method !== 'POST') {
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       const body = asRecord(parseJsonPayload(input.body));
-      return changePlayerPassword(
+      const security = createPlayerSecurityObserver(boundary, '', securityPorts, log);
+      return finish(await changePlayerPassword(
         ports,
         input.cookie,
         {
@@ -141,20 +182,21 @@ export async function handlePlayerAuthRequest(
           newPassword: String(body.newPassword ?? ''),
         },
         secure,
-      );
+        security,
+      ));
     }
     if (path === PLAYER_ME_PATH || path === PLAYER_WALLET_PATH) {
       if (method !== 'GET') {
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
-      return readPlayerSession(ports, input.cookie, secure);
+      return finish(await readPlayerSession(ports, input.cookie, secure));
     }
     if (path === PLAYER_PROFILE_PATH) {
       if (method === 'GET') {
-        return readPlayerProfileSession(ports, input.cookie, secure);
+        return finish(await readPlayerProfileSession(ports, input.cookie, secure));
       }
       if (method === 'PUT') {
-        return updatePlayerProfileSession(ports, input.cookie, asRecord(parseJsonPayload(input.body)), secure);
+        return finish(await updatePlayerProfileSession(ports, input.cookie, asRecord(parseJsonPayload(input.body)), secure));
       }
       throw staffError('METHOD_NOT_ALLOWED', 405);
     }
@@ -164,12 +206,12 @@ export async function handlePlayerAuthRequest(
       }
       const body = asRecord(parseJsonPayload(input.body));
       const email = emailPorts ?? livePlayerEmailPorts(ports);
-      return startPlayerEmailBinding(
+      return finish(await startPlayerEmailBinding(
         email,
         input.cookie,
         { email: String(body.email ?? '') },
         secure,
-      );
+      ));
     }
     if (path === PLAYER_EMAIL_VERIFY_PATH) {
       if (method !== 'POST') {
@@ -177,17 +219,19 @@ export async function handlePlayerAuthRequest(
       }
       const body = asRecord(parseJsonPayload(input.body));
       const email = emailPorts ?? livePlayerEmailPorts(ports);
-      return verifyPlayerEmailBinding(
+      const security = createPlayerSecurityObserver(boundary, '', securityPorts, log);
+      return finish(await verifyPlayerEmailBinding(
         email,
         input.cookie,
         { code: String(body.code ?? '') },
         secure,
-      );
+        security,
+      ));
     }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {
     if (error instanceof StaffOnboardingError) {
-      return {
+      return finish({
         status: error.httpStatus,
         body: { ok: false, authenticated: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405
@@ -199,12 +243,12 @@ export async function handlePlayerAuthRequest(
                 : 'POST',
           }
           : undefined,
-      };
+      });
     }
     log.error('player_auth_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
-    return { status: 500, body: { ok: false, authenticated: false, error: 'INTERNAL_ERROR' } };
+    return finish({ status: 500, body: { ok: false, authenticated: false, error: 'INTERNAL_ERROR' } });
   }
 }
 
@@ -234,9 +278,13 @@ export async function attachPlayerAuthHttp(
         cookie: headerValue(req.headers, 'cookie'),
         cookieSecure: requestIsSecure(req.headers),
         body,
+        trustedNetworkAddress: trustedClientAddressFromNode(req),
+        userAgent: headerValue(req.headers, 'user-agent'),
       },
       livePlayerAuthPorts(),
       log,
+      undefined,
+      livePlayerSecurityPorts(log),
     );
     writeStaffJson(res, toStaffResult(result));
   } catch (error) {
@@ -262,6 +310,7 @@ export async function handleVercelPlayerAuth(
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
   const cookie = req.headers.cookie;
+  const userAgent = req.headers['user-agent'];
   const result = await handlePlayerAuthRequest(
     {
       method: req.method ?? 'GET',
@@ -269,9 +318,13 @@ export async function handleVercelPlayerAuth(
       cookie: Array.isArray(cookie) ? cookie.join('; ') : cookie,
       cookieSecure: requestIsSecure(req.headers),
       body: req.body,
+      trustedNetworkAddress: trustedClientAddressFromVercel(req.headers),
+      userAgent: Array.isArray(userAgent) ? userAgent[0] : userAgent,
     },
     ports ?? livePlayerAuthPorts(),
     log,
+    undefined,
+    livePlayerSecurityPorts(log),
   );
   writeStaffJson(res, toStaffResult(result));
 }

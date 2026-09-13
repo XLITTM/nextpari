@@ -120,6 +120,7 @@ export function mapPlayerAuthError(error: { message?: string; code?: string } | 
   }
   if (/age required|age_required/.test(text)) return 'age required';
   if (/registration_failed/.test(text)) return 'registration failed';
+  if (/auth_rate_limited/.test(text)) return 'too many attempts';
   if (/invalid login credentials|invalid_credentials|invalid email or password|auth_failed/.test(text)) {
     return 'invalid credentials';
   }

@@ -19,7 +19,11 @@ import {
   fetchOwnerCashiers,
   fetchOwnerDashboard,
   fetchOwnerRiskBets,
+  fetchOwnerSecurityFlags,
+  fetchOwnerSecurityOverview,
+  fetchOwnerPlayerSecurity,
   fetchOwnerTreasury,
+  resolveOwnerSecurityFlag,
   ledgerPeriodFrom,
   cashierOpLabel,
   cashierOpRef,
@@ -35,6 +39,9 @@ import {
   type OwnerManagerCashierRow,
   type OwnerStaffContext,
   type RiskBet,
+  type OwnerSecurityFlag,
+  type OwnerSecurityOverview,
+  type OwnerPlayerSecurityDossier,
   type VerticalKpi,
 } from './services';
 
@@ -918,6 +925,343 @@ function InfoCell({ label, value }: { label: string; value: string }) {
 }
 
 function RiskPanel() {
+  return (
+    <div className="space-y-8">
+      <SecurityPanel />
+      <RiskBetsPanel />
+    </div>
+  );
+}
+
+function securityFlagLabel(type: string): string {
+  if (type === 'SHARED_DEVICE') return 'Общее устройство';
+  if (type === 'SHARED_NETWORK') return 'Общая сеть';
+  if (type === 'LOGIN_FAILURE_BURST') return 'Всплеск неудачных входов';
+  if (type === 'AUTH_RATE_LIMITED') return 'Лимит попыток входа';
+  return type;
+}
+
+function securitySeverityLabel(value: string): string {
+  if (value === 'high') return 'Высокий';
+  if (value === 'medium') return 'Средний';
+  if (value === 'low') return 'Низкий';
+  return value;
+}
+
+function securityStatusLabel(value: string): string {
+  if (value === 'open') return 'Открыт';
+  if (value === 'reviewed') return 'Просмотрен';
+  if (value === 'resolved') return 'Закрыт';
+  if (value === 'dismissed') return 'Отклонён';
+  return value;
+}
+
+function SecurityPanel() {
+  const [overview, setOverview] = useState<OwnerSecurityOverview | null>(null);
+  const [rows, setRows] = useState<OwnerSecurityFlag[]>([]);
+  const [status, setStatus] = useState('open');
+  const [severity, setSeverity] = useState('');
+  const [flagType, setFlagType] = useState('');
+  const [playerId, setPlayerId] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState('');
+  const [reasonFor, setReasonFor] = useState<{ flag: OwnerSecurityFlag; action: 'resolve' | 'dismiss' } | null>(null);
+  const [reason, setReason] = useState('');
+  const [dossierId, setDossierId] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [nextOverview, nextRows] = await Promise.all([
+        fetchOwnerSecurityOverview(),
+        fetchOwnerSecurityFlags({
+          status: status || null,
+          severity: severity || null,
+          flagType: flagType || null,
+          playerId: playerId.trim() || null,
+        }),
+      ]);
+      setOverview(nextOverview);
+      setRows(nextRows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить сигналы безопасности');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [status, severity, flagType, playerId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const runReview = async (flag: OwnerSecurityFlag) => {
+    setBusyId(flag.id);
+    setError('');
+    try {
+      await resolveOwnerSecurityFlag({ flagId: flag.id, action: 'review' });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось обновить флаг');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const submitReason = async () => {
+    if (!reasonFor) return;
+    const text = reason.trim();
+    if (!text) {
+      setError('Укажите причину');
+      return;
+    }
+    setBusyId(reasonFor.flag.id);
+    setError('');
+    try {
+      await resolveOwnerSecurityFlag({
+        flagId: reasonFor.flag.id,
+        action: reasonFor.action,
+        reason: text,
+      });
+      setReasonFor(null);
+      setReason('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось обновить флаг');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const cards = [
+    { label: 'Открытые сигналы', value: overview?.openFlags ?? 0 },
+    { label: 'Высокий приоритет', value: overview?.highSeverityFlags ?? 0 },
+    { label: 'Неудачные входы', value: overview?.loginFailures ?? 0 },
+    { label: 'Лимит попыток', value: overview?.rateLimitedAttempts ?? 0 },
+    { label: 'Общее устройство', value: overview?.sharedDeviceFlags ?? 0 },
+    { label: 'Общая сеть', value: overview?.sharedNetworkFlags ?? 0 },
+  ];
+
+  return (
+    <section>
+      <HeaderRow
+        title="Мошенничество и безопасность"
+        subtitle="Сигналы для ручного разбора. Деньги и блокировка игрока не меняются автоматически"
+        onRefresh={() => void load()}
+        loading={loading}
+      />
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
+        {cards.map((card) => (
+          <div key={card.label} className="bg-white border border-slate-200 rounded-2xl px-3 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{card.label}</p>
+            <p className="text-2xl font-extrabold text-ink-900 tabular-nums mt-1">{card.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2 mb-4">
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
+          <option value="">Все статусы</option>
+          <option value="open">Открыт</option>
+          <option value="reviewed">Просмотрен</option>
+          <option value="resolved">Закрыт</option>
+          <option value="dismissed">Отклонён</option>
+        </select>
+        <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
+          <option value="">Все приоритеты</option>
+          <option value="high">Высокий</option>
+          <option value="medium">Средний</option>
+          <option value="low">Низкий</option>
+        </select>
+        <select value={flagType} onChange={(e) => setFlagType(e.target.value)} className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
+          <option value="">Все типы</option>
+          <option value="SHARED_DEVICE">Общее устройство</option>
+          <option value="SHARED_NETWORK">Общая сеть</option>
+          <option value="LOGIN_FAILURE_BURST">Всплеск неудачных входов</option>
+          <option value="AUTH_RATE_LIMITED">Лимит попыток</option>
+        </select>
+        <input
+          value={playerId}
+          onChange={(e) => setPlayerId(e.target.value)}
+          placeholder="ID игрока"
+          className="text-sm border border-slate-200 rounded-xl px-3 py-2 w-32"
+        />
+      </div>
+      {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="px-4 py-3">ID игрока</th>
+              <th className="px-4 py-3">Флаг</th>
+              <th className="px-4 py-3">Приоритет</th>
+              <th className="px-4 py-3 text-right">Сигналы</th>
+              <th className="px-4 py-3 text-right">Связанные</th>
+              <th className="px-4 py-3">Первый</th>
+              <th className="px-4 py-3">Последний</th>
+              <th className="px-4 py-3">Статус</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.id} className="border-t border-slate-100">
+                <td className="px-4 py-3">
+                  <button
+                    type="button"
+                    className="font-bold text-brand-700 hover:underline"
+                    onClick={() => setDossierId(row.playerPublicId)}
+                  >
+                    {row.playerPublicId || '—'}
+                  </button>
+                </td>
+                <td className="px-4 py-3 font-semibold">{securityFlagLabel(row.flagType)}</td>
+                <td className="px-4 py-3">
+                  <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${
+                    row.severity === 'high'
+                      ? 'bg-red-100 text-red-700'
+                      : row.severity === 'medium'
+                        ? 'bg-amber-100 text-amber-800'
+                        : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {securitySeverityLabel(row.severity)}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">{row.signalCount}</td>
+                <td className="px-4 py-3 text-right tabular-nums">{row.relatedPlayerCount}</td>
+                <td className="px-4 py-3 text-xs text-gray-500">{formatBackofficeDateTime(row.firstSeenAt)}</td>
+                <td className="px-4 py-3 text-xs text-gray-500">{formatBackofficeDateTime(row.lastSeenAt)}</td>
+                <td className="px-4 py-3">{securityStatusLabel(row.status)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={busyId === row.id || row.status !== 'open'}
+                      onClick={() => void runReview(row)}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 disabled:opacity-40"
+                    >
+                      Просмотр
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === row.id || row.status === 'resolved' || row.status === 'dismissed'}
+                      onClick={() => { setReasonFor({ flag: row, action: 'resolve' }); setReason(''); }}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 disabled:opacity-40"
+                    >
+                      Закрыть
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyId === row.id || row.status === 'resolved' || row.status === 'dismissed'}
+                      onClick={() => { setReasonFor({ flag: row, action: 'dismiss' }); setReason(''); }}
+                      className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-amber-50 text-amber-800 disabled:opacity-40"
+                    >
+                      Отклонить
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && !loading && (
+              <tr>
+                <td colSpan={9} className="px-4 py-10 text-center text-gray-500">Открытых сигналов нет</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {reasonFor && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-5">
+            <h3 className="text-lg font-extrabold text-ink-900 mb-1">
+              {reasonFor.action === 'resolve' ? 'Закрыть сигнал' : 'Отклонить сигнал'}
+            </h3>
+            <p className="text-sm text-gray-500 mb-3">Причина обязательна. Баланс игрока не изменяется.</p>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={4}
+              className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 mb-4"
+              placeholder="Причина решения"
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setReasonFor(null)} className="text-sm font-bold px-3 py-2 rounded-xl bg-slate-100">
+                Отмена
+              </button>
+              <button type="button" onClick={() => void submitReason()} className="text-sm font-bold px-3 py-2 rounded-xl bg-brand-600 text-white">
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {dossierId && (
+        <PlayerSecurityModal playerId={dossierId} onClose={() => setDossierId('')} />
+      )}
+    </section>
+  );
+}
+
+function PlayerSecurityModal({ playerId, onClose }: { playerId: string; onClose: () => void }) {
+  const [dossier, setDossier] = useState<OwnerPlayerSecurityDossier | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchOwnerPlayerSecurity(playerId).then((next) => {
+      if (!cancelled) setDossier(next);
+    }).catch((err) => {
+      if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить историю');
+    });
+    return () => { cancelled = true; };
+  }, [playerId]);
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[80vh] overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-extrabold text-ink-900">Безопасность игрока {playerId}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Только история сигналов. Хеши скрыты. Деньги не меняются.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-slate-500">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto max-h-[calc(80vh-72px)] space-y-5">
+          {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
+          <div>
+            <h4 className="text-sm font-extrabold mb-2">Флаги</h4>
+            {(dossier?.flags ?? []).length === 0 && <p className="text-sm text-gray-500">Нет флагов</p>}
+            {(dossier?.flags ?? []).map((flag) => (
+              <p key={flag.id} className="text-sm py-1">
+                <span className="font-semibold">{securityFlagLabel(flag.flagType)}</span>
+                {' · '}
+                {securityStatusLabel(flag.status)}
+                {' · '}
+                сигналов {flag.signalCount}, связанных {flag.relatedPlayerCount}
+              </p>
+            ))}
+          </div>
+          <div>
+            <h4 className="text-sm font-extrabold mb-2">История</h4>
+            {(dossier?.events ?? []).length === 0 && <p className="text-sm text-gray-500">Нет событий</p>}
+            {(dossier?.events ?? []).map((event) => (
+              <p key={event.id} className="text-xs text-gray-600 py-1">
+                {formatBackofficeDateTime(event.createdAt)} · {event.eventType}
+                {event.deviceRef ? ` · устройство ${event.deviceRef}` : ''}
+                {event.networkRef ? ` · сеть ${event.networkRef}` : ''}
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RiskBetsPanel() {
   const [rows, setRows] = useState<RiskBet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

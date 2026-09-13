@@ -63,3 +63,27 @@ export function loadPlayerEmailProviderEnv(): PlayerEmailProviderEnv | null {
   }
   return { resendApiKey, fromAddress, otpPepper };
 }
+
+export const PLAYER_SECURITY_SIGNAL_PEPPER_MIN_LENGTH = 32;
+
+export type PlayerSecuritySignalPepperState =
+  | { ok: true; pepper: string }
+  | { ok: false; reason: string };
+
+export function loadPlayerSecuritySignalPepper(): PlayerSecuritySignalPepperState {
+  if (readEnv('VITE_PLAYER_SECURITY_SIGNAL_PEPPER')) {
+    return { ok: false, reason: 'PLAYER_SECURITY_SIGNAL_PEPPER_VITE_FORBIDDEN' };
+  }
+  const pepper = readEnv('PLAYER_SECURITY_SIGNAL_PEPPER');
+  if (!pepper) {
+    return { ok: false, reason: 'PLAYER_SECURITY_SIGNAL_PEPPER_MISSING' };
+  }
+  if (pepper.length < PLAYER_SECURITY_SIGNAL_PEPPER_MIN_LENGTH) {
+    return { ok: false, reason: 'PLAYER_SECURITY_SIGNAL_PEPPER_WEAK' };
+  }
+  const otpPepper = readEnv('PLAYER_EMAIL_OTP_PEPPER');
+  if (otpPepper && otpPepper === pepper) {
+    return { ok: false, reason: 'PLAYER_SECURITY_SIGNAL_PEPPER_REUSES_OTP' };
+  }
+  return { ok: true, pepper };
+}
