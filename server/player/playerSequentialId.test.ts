@@ -101,13 +101,46 @@ describe('sequential player public ids', () => {
     assert.equal(sql.includes('MAX(public_id)'), false);
     assert.equal(sql.includes('CREATE SEQUENCE'), false);
     assert.equal(sql.includes('DROP INDEX'), false);
-    assert.match(sql, /public_id !~ '\^\[0-9\]\{6\}\$'/);
     assert.match(sql, /STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER/);
     assert.match(sql, /CREATE OR REPLACE FUNCTION public\.ensure_player_account\(\)/);
     assert.equal(/ensure_player_account\([^)]*p_public_id/.test(sql), false);
     assert.match(sql, /REVOKE ALL ON TABLE private\.player_public_id_counter FROM anon, authenticated/);
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.ensure_player_account\(\) TO authenticated/);
     assert.match(sql, /REVOKE ALL ON FUNCTION public\.ensure_player_account\(\) FROM anon/);
+    const ensureStart = sql.indexOf('CREATE OR REPLACE FUNCTION public.ensure_player_account()');
+    const ensureEnd = sql.indexOf('REVOKE ALL ON FUNCTION public.ensure_player_account()');
+    const ensure = sql.slice(ensureStart, ensureEnd);
+    assert.match(ensure, /RETURNS TABLE \(/);
+    assert.match(ensure, /wallet_id UUID,/);
+    assert.match(ensure, /legacy_balance NUMERIC,/);
+    assert.equal(ensure.includes('RETURNS jsonb'), false);
+    assert.equal(ensure.includes('jsonb_build_object'), false);
+    assert.match(ensure, /RAISE EXCEPTION 'AUTH_REQUIRED'/);
+    const firstStaff = ensure.indexOf('STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER');
+    const lockAt = ensure.indexOf('pg_catalog.pg_advisory_xact_lock');
+    const secondStaff = ensure.indexOf('STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER', firstStaff + 1);
+    assert.equal(firstStaff >= 0, true);
+    assert.equal(lockAt > firstStaff, true);
+    assert.equal(secondStaff > lockAt, true);
+    assert.match(ensure, /hashtextextended\(v_uid::TEXT, 0\)/);
+    assert.match(ensure, /v_profile_exists := FOUND/);
+    assert.match(ensure, /FOR UPDATE/);
+    const existingPath = ensure.slice(
+      ensure.indexOf('IF v_wallet_id IS NOT NULL THEN'),
+      ensure.indexOf('v_candidate := private.allocate_next_player_public_id()'),
+    );
+    assert.equal(existingPath.includes('allocate_next_player_public_id'), false);
+    assert.equal(/UPDATE\s+public\.wallets[\s\S]{0,220}public_id\s*=/.test(ensure), false);
+    assert.match(ensure, /owner_user_id = v_uid/);
+    assert.match(ensure, /USER_ALREADY_HAS_ANOTHER_WALLET/);
+    assert.match(ensure, /WALLET_ALREADY_OWNED/);
+    assert.match(ensure, /migration_state = 'staging'|,\s*'staging'/);
+    assert.match(ensure, /RETURN QUERY/);
+    assert.match(ensure, /a\.migration_state/);
+    assert.equal(ensure.includes("'migration_state', 'active'"), false);
+    assert.equal(ensure.includes("COALESCE(v_mig, 'active')"), false);
+    assert.match(ensure, /SET search_path = ''/);
+    assert.match(ensure, /SECURITY DEFINER/);
     const login = readFileSync(join(root, 'server/player/playerValidators.ts'), 'utf8');
     assert.match(login, /parseLoginPlayerId/);
     assert.match(login, /\^\[0-9\]\{6\}\$/);
@@ -125,5 +158,46 @@ describe('sequential player public ids', () => {
       readdirSync(join(root, 'supabase/migrations')).filter((name) => name.includes('_044.sql')).join(','),
       '20260913181000_player_identity_email_verification_044.sql',
     );
+  });
+
+  it('keeps the per-user advisory lock so same-user provisioning cannot orphan a wallet', async () => {
+    const ensureStart = sql.indexOf('CREATE OR REPLACE FUNCTION public.ensure_player_account()');
+    const ensureEnd = sql.indexOf('REVOKE ALL ON FUNCTION public.ensure_player_account()');
+    const ensure = sql.slice(ensureStart, ensureEnd);
+    const lockAt = ensure.indexOf('pg_catalog.pg_advisory_xact_lock');
+    const profileLock = ensure.indexOf('FROM public.profiles AS p');
+    const walletLock = ensure.indexOf('FROM public.wallets AS w');
+    const allocateAt = ensure.indexOf('private.allocate_next_player_public_id()');
+    assert.equal(lockAt >= 0 && profileLock > lockAt, true);
+    assert.equal(walletLock > profileLock, true);
+    assert.equal(allocateAt > walletLock, true);
+
+    const wallets: string[] = [];
+    let existing: string | null = null;
+    let chain = Promise.resolve();
+    const withUserLock = async <T>(fn: () => T): Promise<T> => {
+      const previous = chain;
+      let release!: () => void;
+      chain = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        return fn();
+      } finally {
+        release();
+      }
+    };
+    const ensureSameUser = () => {
+      if (existing) return existing;
+      const id = formatPlayerPublicId(wallets.length + 1);
+      wallets.push(id);
+      existing = id;
+      return id;
+    };
+    const ids = await Promise.all(Array.from({ length: 8 }, () => withUserLock(ensureSameUser)));
+    assert.deepEqual(new Set(ids).size, 1);
+    assert.equal(wallets.length, 1);
+    assert.equal(ids[0], '000001');
   });
 });

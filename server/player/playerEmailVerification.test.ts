@@ -428,6 +428,22 @@ describe('player email verification contract', () => {
     assert.match(sql, /EMAIL_SEND_RATE_LIMITED/);
     assert.match(sql, /INTERVAL '1 hour'/);
     assert.match(sql, /consumed_at IS NULL/);
+    const createStart = sql.indexOf('CREATE OR REPLACE FUNCTION private.player_email_challenge_create(');
+    const createEnd = sql.indexOf('REVOKE ALL ON FUNCTION private.player_email_challenge_create(');
+    const create = sql.slice(createStart, createEnd);
+    const emailLock = create.indexOf('nextpari:player-email:');
+    const hourly = create.indexOf("INTERVAL '1 hour'");
+    const cooldown = create.indexOf('EMAIL_RESEND_COOLDOWN');
+    const invalidate = create.indexOf('SET consumed_at = now()');
+    const insertAt = create.indexOf('INSERT INTO private.player_email_verification_challenges');
+    assert.match(create, /pg_catalog\.pg_advisory_xact_lock/);
+    assert.equal(emailLock >= 0, true);
+    assert.equal(hourly > emailLock, true);
+    assert.equal(cooldown > emailLock, true);
+    assert.equal(invalidate > emailLock, true);
+    assert.equal(insertAt > invalidate, true);
+    assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS player_email_challenges_active_uidx/);
+    assert.equal(sql.includes('CREATE INDEX IF NOT EXISTS player_email_challenges_active_idx'), false);
     const dist = join(root, 'dist');
     const clientFiles = [
       'src/lib/playerAuth.ts',
@@ -454,6 +470,48 @@ describe('player email verification contract', () => {
         assert.equal(source.includes('SUPABASE_SERVICE_ROLE_KEY'), false, file);
       }
     }
+  });
+
+  it('serializes concurrent starts so one active challenge and limits stay intact', async () => {
+    type Challenge = { active: boolean; createdAt: number; resendAt: number };
+    const rows: Challenge[] = [];
+    const now = 1_000_000;
+    let chain = Promise.resolve();
+    const withLock = async <T>(fn: () => T): Promise<T> => {
+      const previous = chain;
+      let release!: () => void;
+      chain = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await previous;
+      try {
+        return fn();
+      } finally {
+        release();
+      }
+    };
+    const start = () => {
+      const hourly = rows.filter((row) => row.createdAt > now - 60 * 60 * 1000).length;
+      if (hourly >= 5) throw new Error('EMAIL_SEND_RATE_LIMITED');
+      const latest = rows.reduce((max, row) => Math.max(max, row.resendAt), 0);
+      if (latest > now) throw new Error('EMAIL_RESEND_COOLDOWN');
+      for (const row of rows) row.active = false;
+      rows.push({ active: true, createdAt: now, resendAt: now + 60_000 });
+      return rows.filter((row) => row.active).length;
+    };
+    const concurrent = await Promise.allSettled(Array.from({ length: 3 }, () => withLock(start)));
+    assert.equal(concurrent.filter((row) => row.status === 'fulfilled').length, 1);
+    assert.equal(
+      concurrent.filter((row) => row.status === 'rejected' && String(row.reason).includes('EMAIL_RESEND_COOLDOWN')).length,
+      2,
+    );
+    assert.equal(rows.filter((row) => row.active).length, 1);
+    while (rows.length < 5) {
+      rows.push({ active: false, createdAt: now, resendAt: now - 1 });
+    }
+    for (const row of rows) row.resendAt = now - 1;
+    await assert.rejects(() => withLock(start), /EMAIL_SEND_RATE_LIMITED/);
+    assert.equal(rows.filter((row) => row.active).length, 1);
   });
 
   it('preserves login modes, password change, and does not touch staff or money', () => {
