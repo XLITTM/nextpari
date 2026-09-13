@@ -120,6 +120,22 @@ describe('withdrawal ledger SQL contract (not executed)', () => {
     assert.equal(migration.includes('GRANT INSERT ON TABLE private.wallet_ledger'), false);
   });
 
+  it('legacy public.withdrawal_requests cleanup is skipped when the table is absent', () => {
+    const guardAt = migration.indexOf("to_regclass('public.withdrawal_requests')");
+    const dropAt = migration.indexOf('DROP POLICY IF EXISTS "anon_select_withdrawals"');
+    const revokeAt = migration.lastIndexOf('REVOKE ALL ON TABLE public.withdrawal_requests');
+    assert.ok(guardAt > 0, 'to_regclass guard');
+    assert.match(migration, /IF to_regclass\('public\.withdrawal_requests'\) IS NOT NULL THEN/);
+    assert.match(migration, /EXECUTE 'DROP POLICY IF EXISTS "anon_select_withdrawals" ON public\.withdrawal_requests'/);
+    assert.match(migration, /EXECUTE 'REVOKE ALL ON TABLE public\.withdrawal_requests FROM anon, authenticated'/);
+    assert.ok(dropAt > guardAt);
+    assert.ok(revokeAt > guardAt);
+    assert.equal(migration.includes('CREATE TABLE public.withdrawal_requests'), false);
+    assert.equal(migration.includes('CREATE TABLE IF NOT EXISTS public.withdrawal_requests'), false);
+    const tail = migration.slice(migration.indexOf('GRANT EXECUTE ON FUNCTION public.owner_mark_withdrawal_paid'));
+    assert.equal(/^[\s\S]*DROP POLICY IF EXISTS "anon_select_withdrawals" ON public\.withdrawal_requests;/m.test(tail.replace(/EXECUTE '[^']*'/g, '')), false);
+  });
+
   it('binds player create to auth.uid and ignores browser authority columns as inputs', () => {
     const createAt = migration.indexOf('CREATE OR REPLACE FUNCTION public.player_create_withdrawal');
     const create = migration.slice(createAt, migration.indexOf('CREATE OR REPLACE FUNCTION public.player_list_withdrawals'));
@@ -132,6 +148,10 @@ describe('withdrawal ledger SQL contract (not executed)', () => {
     assert.equal(create.includes('p_auth_user_id'), false);
     assert.equal(create.includes('p_cashier_id'), false);
     assert.equal(create.includes('p_balance'), false);
+    assert.match(create, /CARD_WITHDRAWAL_PROVIDER_REQUIRED/);
+    assert.match(create, /v_existing.destination_ref IS DISTINCT FROM v_dest/);
+    assert.match(create, /v_existing.cash_pickup_city IS DISTINCT FROM v_city/);
+    assert.match(create, /v_existing.cash_pickup_point IS DISTINCT FROM v_point/);
   });
 
   it('rejects once with a single WITHDRAWAL_RELEASE and does not pay cash from owner', () => {
@@ -148,9 +168,53 @@ describe('withdrawal ledger SQL contract (not executed)', () => {
     const paidAt = migration.indexOf('CREATE OR REPLACE FUNCTION public.owner_mark_withdrawal_paid');
     const paid = migration.slice(paidAt);
     assert.match(paid, /WITHDRAWAL_CASH_REQUIRES_CASHIER/);
+    assert.match(paid, /CARD_WITHDRAWAL_PROVIDER_REQUIRED/);
     assert.match(paid, /WITHDRAWAL_COMPLETE/);
     assert.match(paid, /wd-complete:' \|\| v_row\.id::TEXT/);
     assert.match(paid, /status IS DISTINCT FROM 'approved'/);
+  });
+
+  it('keeps card destination as last 4 digits and never stores a full PAN', () => {
+    const sanitizeAt = migration.indexOf('CREATE OR REPLACE FUNCTION private.withdrawal_sanitize_destination');
+    const sanitize = migration.slice(sanitizeAt, migration.indexOf('CREATE OR REPLACE FUNCTION private.withdrawal_effective_status'));
+    assert.match(sanitize, /RETURN right\(v_digits, 4\)/);
+    assert.equal(sanitize.includes('pgp_sym_encrypt'), false);
+    const createAt = migration.indexOf('CREATE OR REPLACE FUNCTION public.player_create_withdrawal');
+    const create = migration.slice(createAt, migration.indexOf('CREATE OR REPLACE FUNCTION public.player_list_withdrawals'));
+    const cardRaiseAt = create.indexOf("IF v_method = 'card' THEN");
+    const destAt = create.indexOf('private.withdrawal_sanitize_destination');
+    assert.ok(cardRaiseAt > 0 && destAt > cardRaiseAt);
+    assert.match(create, /RAISE EXCEPTION 'CARD_WITHDRAWAL_PROVIDER_REQUIRED'/);
+    const approveAt = migration.indexOf('CREATE OR REPLACE FUNCTION public.owner_approve_withdrawal');
+    const approve = migration.slice(approveAt, migration.indexOf('CREATE OR REPLACE FUNCTION public.owner_reject_withdrawal'));
+    assert.match(approve, /CARD_WITHDRAWAL_PROVIDER_REQUIRED/);
+  });
+
+  it('expired cash payouts release the hold exactly once through canonical expire helpers', () => {
+    assert.match(migration, /CREATE OR REPLACE FUNCTION private.withdrawal_reconcile_expired_cash/);
+    assert.equal(migration.includes('CREATE OR REPLACE FUNCTION private.expire_cashier_player_payout'), false);
+    assert.equal(migration.includes('CREATE OR REPLACE FUNCTION private.expire_due_cashier_player_payouts'), false);
+    const helperAt = migration.indexOf('CREATE OR REPLACE FUNCTION private.withdrawal_reconcile_expired_cash');
+    const helper = migration.slice(helperAt, migration.indexOf('CREATE OR REPLACE FUNCTION public.player_create_withdrawal'));
+    assert.match(helper, /private.expire_due_cashier_player_payouts\(100\)/);
+    assert.match(helper, /private.expire_cashier_player_payout\(v_id\)/);
+    assert.match(helper, /SET status = 'expired'/);
+    assert.equal(/UPDATE\s+public\.wallets/.test(helper), false);
+    const listAt = migration.indexOf('CREATE OR REPLACE FUNCTION public.player_list_withdrawals');
+    const list = migration.slice(listAt, migration.indexOf('CREATE OR REPLACE FUNCTION public.owner_list_withdrawals'));
+    assert.match(list, /private.withdrawal_reconcile_expired_cash\(v_uid\)/);
+    const ownerListAt = migration.indexOf('CREATE OR REPLACE FUNCTION public.owner_list_withdrawals');
+    const ownerList = migration.slice(ownerListAt, migration.indexOf('CREATE OR REPLACE FUNCTION public.owner_approve_withdrawal'));
+    assert.match(ownerList, /private.withdrawal_reconcile_expired_cash\(NULL\)/);
+    const expireSql = readFileSync(
+      join(root, 'supabase/migrations/20260831_024_cashier_player_finance_api.sql'),
+      'utf8',
+    );
+    const expireAt = expireSql.indexOf('CREATE OR REPLACE FUNCTION private.expire_cashier_player_payout');
+    const expireFn = expireSql.slice(expireAt, expireSql.indexOf('CREATE OR REPLACE FUNCTION private.expire_due_cashier_player_payouts'));
+    assert.match(expireFn, /IF v_req.status = 'expired' THEN/);
+    assert.match(expireFn, /is_duplicate', true/);
+    assert.match(expireFn, /private.release_cashier_player_payout_hold/);
   });
 });
 
@@ -158,7 +222,7 @@ describe('player withdrawal HTTP gateway', () => {
   it('requires a player session', async () => {
     const ports = createPlayerPorts();
     const result = await handlePlayerWithdrawalsRequest(
-      { method: 'POST', pathname: '/api/player/withdrawals', cookieSecure: true, body: { method: 'card', amount: 10, methodLabel: 'Card', idempotencyKey: 'k1', destinationRef: '4111111111111111' } },
+      { method: 'POST', pathname: '/api/player/withdrawals', cookieSecure: true, body: { method: 'ewallet', amount: 10, methodLabel: 'Wallet', idempotencyKey: 'k1', destinationRef: '12345678' } },
       ports,
     );
     assert.equal(result.status, 401);
@@ -168,13 +232,13 @@ describe('player withdrawal HTTP gateway', () => {
   it('rejects zero/negative amount before RPC', async () => {
     const ports = createPlayerPorts();
     const zero = await handlePlayerWithdrawalsRequest(
-      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'card', amount: 0, methodLabel: 'Card', idempotencyKey: 'k1', destinationRef: '1111' } },
+      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'ewallet', amount: 0, methodLabel: 'Wallet', idempotencyKey: 'k1', destinationRef: '12345678' } },
       ports,
     );
     assert.equal(zero.status, 400);
     assert.equal(zero.body.error, 'AMOUNT_NOT_POSITIVE');
     const negative = await handlePlayerWithdrawalsRequest(
-      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'card', amount: -5, methodLabel: 'Card', idempotencyKey: 'k1', destinationRef: '1111' } },
+      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'ewallet', amount: -5, methodLabel: 'Wallet', idempotencyKey: 'k1', destinationRef: '12345678' } },
       ports,
     );
     assert.equal(negative.status, 400);
@@ -184,7 +248,7 @@ describe('player withdrawal HTTP gateway', () => {
   it('maps insufficient funds from the wallet ledger', async () => {
     const ports = createPlayerPorts({ rpcError: 'INSUFFICIENT_AVAILABLE_BALANCE' });
     const result = await handlePlayerWithdrawalsRequest(
-      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'card', amount: 10, methodLabel: 'Card', idempotencyKey: 'k1', destinationRef: '1111' } },
+      { method: 'POST', pathname: '/api/player/withdrawals', cookie: playerCookie(), cookieSecure: true, body: { method: 'ewallet', amount: 10, methodLabel: 'Wallet', idempotencyKey: 'k1', destinationRef: '12345678' } },
       ports,
     );
     assert.equal(result.status, 409);
@@ -200,11 +264,11 @@ describe('player withdrawal HTTP gateway', () => {
         cookie: playerCookie(),
         cookieSecure: true,
         body: {
-          method: 'card',
+          method: 'crypto',
           amount: 25,
-          methodLabel: 'Карта',
+          methodLabel: 'USDT',
           idempotencyKey: 'same-key',
-          destinationRef: '4111111111111111',
+          destinationRef: 'TXYZCRYPTOADDR1111111111111111111',
           walletId: 'forged-wallet',
           playerId: 'forged-player',
           cashierId: 'forged-cashier',
@@ -240,6 +304,45 @@ describe('player withdrawal HTTP gateway', () => {
     assert.equal(ports.rpcs.length, 2);
     assert.equal(ports.rpcs[0]?.args?.p_idempotency_key, 'dup');
     assert.equal(ports.rpcs[1]?.args?.p_idempotency_key, 'dup');
+  });
+
+  it('rejects card create without forwarding a PAN to RPC', async () => {
+    const ports = createPlayerPorts();
+    const result = await handlePlayerWithdrawalsRequest(
+      {
+        method: 'POST',
+        pathname: '/api/player/withdrawals',
+        cookie: playerCookie(),
+        cookieSecure: true,
+        body: {
+          method: 'card',
+          amount: 25,
+          methodLabel: 'Card',
+          idempotencyKey: 'card-key',
+          destinationRef: '4111111111111111',
+        },
+      },
+      ports,
+    );
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error, 'CARD_WITHDRAWAL_PROVIDER_REQUIRED');
+    assert.equal(ports.rpcs.length, 0);
+  });
+
+  it('maps same idempotency key with a different destination as a conflict', async () => {
+    const ports = createPlayerPorts({ rpcError: 'IDEMPOTENCY_KEY_CONFLICT' });
+    const result = await handlePlayerWithdrawalsRequest(
+      {
+        method: 'POST',
+        pathname: '/api/player/withdrawals',
+        cookie: playerCookie(),
+        cookieSecure: true,
+        body: { method: 'crypto', amount: 25, methodLabel: 'USDT', idempotencyKey: 'dup', destinationRef: 'OTHERADDR' },
+      },
+      ports,
+    );
+    assert.equal(result.status, 409);
+    assert.equal(result.body.error, 'IDEMPOTENCY_KEY_CONFLICT');
   });
 });
 
@@ -316,5 +419,25 @@ describe('browser financial authority removed; cashier cash path unchanged', () 
     const http = readFileSync(join(root, 'server/cashier/cashierControlHttp.ts'), 'utf8');
     assert.match(http, /cashier_confirm_player_payout/);
     assert.equal(http.includes("invoke('cashier_payout_by_code'"), false);
+  });
+
+  it('owner parser and UI keep destination fields and never show a cash PIN', () => {
+    const services = readFileSync(join(root, 'src/owner/services.ts'), 'utf8');
+    const panel = readFileSync(join(root, 'src/owner/WithdrawalsPanel.tsx'), 'utf8');
+    const wallet = readFileSync(join(root, 'src/screens/WalletScreen.tsx'), 'utf8');
+    assert.match(services, /destinationRef: item.destination_ref == null && item.destinationRef == null/);
+    assert.match(services, /cashPickupCity: item.cash_pickup_city == null && item.cashPickupCity == null/);
+    assert.match(services, /cashPickupPoint: item.cash_pickup_point == null && item.cashPickupPoint == null/);
+    assert.match(panel, /destinationText\(row\)/);
+    assert.match(panel, /row.destinationRef/);
+    assert.match(panel, /row.cashPickupCity/);
+    assert.match(panel, /row.cashPickupPoint/);
+    assert.equal(panel.includes('pin_code'), false);
+    assert.equal(panel.includes('secret_code'), false);
+    assert.equal(panel.includes('secretCode'), false);
+    assert.match(panel, /!cash && !card && approved/);
+    assert.match(wallet, /Exclude<WithdrawalMethod, 'other' \| 'card'>/);
+    assert.equal(wallet.includes("method: 'card'"), false);
+    assert.equal(wallet.includes('4111111111111111'), false);
   });
 });

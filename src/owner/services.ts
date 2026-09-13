@@ -410,6 +410,37 @@ export interface OwnerWithdrawalRow {
   paidAt: string | null;
   createdAt: string;
   rejectionReason: string | null;
+  destinationRef: string | null;
+  cashPickupCity: string | null;
+  cashPickupPoint: string | null;
+}
+
+export function parseOwnerWithdrawalRow(raw: unknown): OwnerWithdrawalRow {
+  const item = asRecord(raw);
+  return {
+    id: str(item.id),
+    walletId: item.wallet_id == null && item.walletId == null ? null : str(item.wallet_id ?? item.walletId),
+    playerPublicId: str(item.player_public_id ?? item.playerPublicId),
+    method: str(item.method),
+    methodLabel: str(item.method_label ?? item.methodLabel),
+    amount: num(item.amount),
+    status: str(item.status, 'pending'),
+    cashierId: item.cashier_id == null && item.cashierId == null ? null : str(item.cashier_id ?? item.cashierId),
+    paidAt: item.paid_at == null && item.paidAt == null ? null : str(item.paid_at ?? item.paidAt),
+    createdAt: str(item.created_at ?? item.createdAt),
+    rejectionReason: item.rejection_reason == null && item.rejectionReason == null
+      ? null
+      : str(item.rejection_reason ?? item.rejectionReason),
+    destinationRef: item.destination_ref == null && item.destinationRef == null
+      ? null
+      : str(item.destination_ref ?? item.destinationRef),
+    cashPickupCity: item.cash_pickup_city == null && item.cashPickupCity == null
+      ? null
+      : str(item.cash_pickup_city ?? item.cashPickupCity),
+    cashPickupPoint: item.cash_pickup_point == null && item.cashPickupPoint == null
+      ? null
+      : str(item.cash_pickup_point ?? item.cashPickupPoint),
+  };
 }
 
 function parsePlayerListItem(raw: Record<string, unknown>): OwnerPlayerListItem {
@@ -536,24 +567,7 @@ export async function fetchOwnerWithdrawals(params?: {
   const raw = asRecord(data);
   const rowsSource = Array.isArray(raw.rows) ? raw.rows : asRows(data);
   return {
-    rows: rowsSource.map((row) => {
-      const item = asRecord(row);
-      return {
-        id: str(item.id),
-        walletId: item.wallet_id == null && item.walletId == null ? null : str(item.wallet_id ?? item.walletId),
-        playerPublicId: str(item.player_public_id ?? item.playerPublicId),
-        method: str(item.method),
-        methodLabel: str(item.method_label ?? item.methodLabel),
-        amount: num(item.amount),
-        status: str(item.status, 'pending'),
-        cashierId: item.cashier_id == null && item.cashierId == null ? null : str(item.cashier_id ?? item.cashierId),
-        paidAt: item.paid_at == null && item.paidAt == null ? null : str(item.paid_at ?? item.paidAt),
-        createdAt: str(item.created_at ?? item.createdAt),
-        rejectionReason: item.rejection_reason == null && item.rejectionReason == null
-          ? null
-          : str(item.rejection_reason ?? item.rejectionReason),
-      };
-    }),
+    rows: rowsSource.map((row) => parseOwnerWithdrawalRow(row)),
     total: num(raw.total) || rowsSource.length,
   };
 }

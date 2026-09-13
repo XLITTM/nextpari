@@ -66,6 +66,17 @@ export function WithdrawalsPanel() {
     return { label: 'Ожидает', className: 'bg-amber-100 text-amber-700', icon: Clock3 };
   };
 
+  const destinationText = (row: OwnerWithdrawalRow): string => {
+    if (row.method === 'cash') {
+      const parts = [row.cashPickupCity, row.cashPickupPoint].filter((part) => Boolean(part && part.trim()));
+      return parts.length ? parts.join(' · ') : '—';
+    }
+    if (row.method === 'card') {
+      return row.destinationRef ? `**** ${row.destinationRef}` : '—';
+    }
+    return row.destinationRef?.trim() || '—';
+  };
+
   return (
     <div className="mt-5 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -120,6 +131,7 @@ export function WithdrawalsPanel() {
                 <th className="px-2 py-2 font-bold">Дата</th>
                 <th className="px-2 py-2 font-bold">Игрок</th>
                 <th className="px-2 py-2 font-bold">Метод</th>
+                <th className="px-2 py-2 font-bold">Реквизиты</th>
                 <th className="px-2 py-2 font-bold">Сумма</th>
                 <th className="px-2 py-2 font-bold">Статус</th>
                 <th className="px-2 py-2 font-bold">Действия</th>
@@ -130,6 +142,7 @@ export function WithdrawalsPanel() {
                 const item = badge(row.status);
                 const StatusIcon = item.icon;
                 const cash = row.method === 'cash';
+                const card = row.method === 'card';
                 const pending = row.status === 'pending';
                 const approved = row.status === 'approved';
                 return (
@@ -143,6 +156,9 @@ export function WithdrawalsPanel() {
                     <td className="px-2 py-3 text-xs font-medium text-gray-700">
                       {row.methodLabel || row.method || '—'}
                     </td>
+                    <td className="px-2 py-3 text-xs font-medium text-gray-700 max-w-[220px] truncate" title={destinationText(row)}>
+                      {destinationText(row)}
+                    </td>
                     <td className="px-2 py-3 whitespace-nowrap font-extrabold tabular-nums text-red-600">
                       − {formatTmtmCompact(row.amount)}
                     </td>
@@ -154,7 +170,7 @@ export function WithdrawalsPanel() {
                     </td>
                     <td className="px-2 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {!cash && pending && (
+                        {!cash && !card && pending && (
                           <button
                             type="button"
                             disabled={busyId === row.id}
@@ -192,7 +208,7 @@ export function WithdrawalsPanel() {
                             Reject
                           </button>
                         )}
-                        {!cash && approved && (
+                        {!cash && !card && approved && (
                           <button
                             type="button"
                             disabled={busyId === row.id}

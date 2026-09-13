@@ -259,6 +259,54 @@ REVOKE ALL ON FUNCTION private.withdrawal_lock_player_wallet(UUID) FROM anon, au
 GRANT EXECUTE ON FUNCTION private.withdrawal_lock_player_wallet(UUID) TO service_role;
 
 
+CREATE OR REPLACE FUNCTION private.withdrawal_reconcile_expired_cash(p_uid UUID)
+RETURNS INTEGER
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_id UUID;
+    v_n INTEGER := 0;
+BEGIN
+    IF p_uid IS NULL THEN
+        v_n := private.expire_due_cashier_player_payouts(100);
+    ELSE
+        FOR v_id IN
+            SELECT p.id
+            FROM private.player_withdrawal_requests AS w
+            INNER JOIN private.cashier_player_payout_requests AS p
+                ON p.id = w.cash_payout_id
+            WHERE w.player_auth_user_id = p_uid
+              AND w.method = 'cash'
+              AND p.status = 'pending'
+              AND p.expires_at <= pg_catalog.now()
+            ORDER BY p.expires_at ASC
+            LIMIT 100
+        LOOP
+            PERFORM private.expire_cashier_player_payout(v_id);
+            v_n := v_n + 1;
+        END LOOP;
+    END IF;
+
+    UPDATE private.player_withdrawal_requests AS w
+    SET status = 'expired'
+    FROM private.cashier_player_payout_requests AS p
+    WHERE w.cash_payout_id = p.id
+      AND p.status = 'expired'
+      AND w.status IN ('pending', 'approved')
+      AND (p_uid IS NULL OR w.player_auth_user_id = p_uid);
+
+    RETURN v_n;
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.withdrawal_reconcile_expired_cash(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.withdrawal_reconcile_expired_cash(UUID) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.withdrawal_reconcile_expired_cash(UUID) TO service_role;
+
+
 CREATE OR REPLACE FUNCTION public.player_create_withdrawal(
     p_method TEXT,
     p_amount NUMERIC,
@@ -296,6 +344,9 @@ BEGIN
     v_method := lower(NULLIF(BTRIM(COALESCE(p_method, '')), ''));
     IF v_method IS NULL OR v_method NOT IN ('cash', 'card', 'crypto', 'ewallet', 'other') THEN
         RAISE EXCEPTION 'WITHDRAWAL_METHOD_INVALID';
+    END IF;
+    IF v_method = 'card' THEN
+        RAISE EXCEPTION 'CARD_WITHDRAWAL_PROVIDER_REQUIRED';
     END IF;
 
     v_key := private.owner_require_idempotency_key(p_idempotency_key);
@@ -337,7 +388,10 @@ BEGIN
 
     IF FOUND THEN
         IF v_existing.amount IS DISTINCT FROM v_amount
-           OR v_existing.method IS DISTINCT FROM v_method THEN
+           OR v_existing.method IS DISTINCT FROM v_method
+           OR v_existing.destination_ref IS DISTINCT FROM v_dest
+           OR v_existing.cash_pickup_city IS DISTINCT FROM v_city
+           OR v_existing.cash_pickup_point IS DISTINCT FROM v_point THEN
             RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT';
         END IF;
         IF v_existing.cash_payout_id IS NOT NULL THEN
@@ -432,6 +486,13 @@ EXCEPTION
         IF NOT FOUND THEN
             RAISE;
         END IF;
+        IF v_existing.amount IS DISTINCT FROM v_amount
+           OR v_existing.method IS DISTINCT FROM v_method
+           OR v_existing.destination_ref IS DISTINCT FROM v_dest
+           OR v_existing.cash_pickup_city IS DISTINCT FROM v_city
+           OR v_existing.cash_pickup_point IS DISTINCT FROM v_point THEN
+            RAISE EXCEPTION 'IDEMPOTENCY_KEY_CONFLICT';
+        END IF;
         IF v_existing.cash_payout_id IS NOT NULL THEN
             SELECT p.* INTO v_payout
             FROM private.cashier_player_payout_requests AS p
@@ -457,6 +518,8 @@ BEGIN
     IF v_uid IS NULL THEN
         RAISE EXCEPTION 'AUTH_REQUIRED';
     END IF;
+
+    PERFORM private.withdrawal_reconcile_expired_cash(v_uid);
 
     SELECT COALESCE(jsonb_agg(item ORDER BY (item ->> 'created_at') DESC), '[]'::jsonb)
     INTO v_rows
@@ -495,6 +558,7 @@ DECLARE
     v_total INTEGER;
 BEGIN
     PERFORM private.get_current_owner_context();
+    PERFORM private.withdrawal_reconcile_expired_cash(NULL);
 
     v_status := NULLIF(BTRIM(COALESCE(p_status, '')), '');
     IF v_status IS NOT NULL AND v_status NOT IN ('pending', 'approved', 'paid', 'rejected', 'cancelled', 'expired') THEN
@@ -567,6 +631,9 @@ BEGIN
 
     IF v_row.method = 'cash' THEN
         RAISE EXCEPTION 'WITHDRAWAL_CASH_REQUIRES_CASHIER';
+    END IF;
+    IF v_row.method = 'card' THEN
+        RAISE EXCEPTION 'CARD_WITHDRAWAL_PROVIDER_REQUIRED';
     END IF;
 
     IF v_row.status = 'approved'
@@ -756,6 +823,9 @@ BEGIN
     IF v_row.method = 'cash' THEN
         RAISE EXCEPTION 'WITHDRAWAL_CASH_REQUIRES_CASHIER';
     END IF;
+    IF v_row.method = 'card' THEN
+        RAISE EXCEPTION 'CARD_WITHDRAWAL_PROVIDER_REQUIRED';
+    END IF;
 
     IF v_row.status = 'paid'
        AND v_row.paid_idempotency_key IS NOT DISTINCT FROM v_key THEN
@@ -834,12 +904,17 @@ REVOKE ALL ON FUNCTION public.owner_mark_withdrawal_paid(UUID, TEXT) FROM anon;
 GRANT EXECUTE ON FUNCTION public.owner_mark_withdrawal_paid(UUID, TEXT) TO authenticated;
 
 
-DROP POLICY IF EXISTS "anon_select_withdrawals" ON public.withdrawal_requests;
-DROP POLICY IF EXISTS "anon_insert_withdrawals" ON public.withdrawal_requests;
-DROP POLICY IF EXISTS "anon_update_withdrawals" ON public.withdrawal_requests;
-DROP POLICY IF EXISTS "anon_delete_withdrawals" ON public.withdrawal_requests;
-
-REVOKE ALL ON TABLE public.withdrawal_requests FROM PUBLIC;
-REVOKE ALL ON TABLE public.withdrawal_requests FROM anon, authenticated;
+DO $legacy$
+BEGIN
+    IF to_regclass('public.withdrawal_requests') IS NOT NULL THEN
+        EXECUTE 'DROP POLICY IF EXISTS "anon_select_withdrawals" ON public.withdrawal_requests';
+        EXECUTE 'DROP POLICY IF EXISTS "anon_insert_withdrawals" ON public.withdrawal_requests';
+        EXECUTE 'DROP POLICY IF EXISTS "anon_update_withdrawals" ON public.withdrawal_requests';
+        EXECUTE 'DROP POLICY IF EXISTS "anon_delete_withdrawals" ON public.withdrawal_requests';
+        EXECUTE 'REVOKE ALL ON TABLE public.withdrawal_requests FROM PUBLIC';
+        EXECUTE 'REVOKE ALL ON TABLE public.withdrawal_requests FROM anon, authenticated';
+    END IF;
+END;
+$legacy$;
 
 COMMIT;

@@ -66,6 +66,7 @@ export async function createPlayerWithdrawal(
   const rec = stripBrowserAuthority(asRecord(body));
   const method = requireText(rec.method, 'WITHDRAWAL_METHOD_INVALID').toLowerCase();
   if (!METHODS.has(method)) throw staffError('WITHDRAWAL_METHOD_INVALID', 400);
+  if (method === 'card') throw staffError('CARD_WITHDRAWAL_PROVIDER_REQUIRED', 400);
   return wrapOk(await runPlayerGameRpc(ports, cookieHeader, secure, 'player_create_withdrawal', {
     p_method: method,
     p_amount: requireAmount(rec.amount),

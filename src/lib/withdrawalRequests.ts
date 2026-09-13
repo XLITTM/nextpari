@@ -70,6 +70,7 @@ function mapError(code: string): string {
   if (code === 'DESTINATION_REQUIRED') return 'Заполните реквизиты для вывода';
   if (code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE') return 'Вывод через кассу временно недоступен.';
   if (code === 'IDEMPOTENCY_KEY_CONFLICT') return 'Повтор запроса с другими данными отклонён';
+  if (code === 'CARD_WITHDRAWAL_PROVIDER_REQUIRED') return 'Вывод на карту временно недоступен';
   return code || 'Ошибка при создании заявки';
 }
 

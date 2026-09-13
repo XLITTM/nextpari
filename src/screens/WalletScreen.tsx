@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ArrowDownToLine, ArrowUpFromLine, CheckCircle2, Clock3, XCircle,
-  CreditCard, Bitcoin, Wallet, ChevronLeft, ChevronDown, X, Banknote, Search, MapPin, Copy,
+  Bitcoin, Wallet, ChevronLeft, ChevronDown, X, Banknote, Search, MapPin, Copy,
 } from 'lucide-react';
 import type { WithdrawalMethod, WithdrawalRequest } from '../types';
 import { useToast } from '../ToastContext';
@@ -25,10 +25,9 @@ interface WalletScreenProps {
 }
 
 type HistoryTab = 'withdrawals' | 'deposits';
-type WalletWithdrawMethod = Exclude<WithdrawalMethod, 'other'>;
+type WalletWithdrawMethod = Exclude<WithdrawalMethod, 'other' | 'card'>;
 
-const methodConfig: Record<WalletWithdrawMethod, { icon: typeof CreditCard; label: string; placeholder: string; prefix: string }> = {
-  card: { icon: CreditCard, label: 'Банковская карта', placeholder: 'Номер карты', prefix: 'Вывод на карту ' },
+const methodConfig: Record<WalletWithdrawMethod, { icon: typeof Bitcoin; label: string; placeholder: string; prefix: string }> = {
   crypto: { icon: Bitcoin, label: 'Crypto / Web3', placeholder: 'Адрес кошелька (USDT-TRC20)', prefix: 'Вывод ' },
   ewallet: { icon: Wallet, label: 'Электронный кошелёк', placeholder: 'Номер кошелька', prefix: 'Вывод на кошелёк ' },
   cash: { icon: Banknote, label: 'Наличные (Mobcash)', placeholder: 'Точка выдачи', prefix: 'Наличные (Mobcash) · ' },
@@ -45,7 +44,7 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
   const [cashPayouts, setCashPayouts] = useState<PlayerCashPayout[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [method, setMethod] = useState<WalletWithdrawMethod>('card');
+  const [method, setMethod] = useState<WalletWithdrawMethod>('crypto');
   const [amount, setAmount] = useState('');
   const [detail, setDetail] = useState('');
   const [cashCity, setCashCity] = useState('');
@@ -132,15 +131,9 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
     setSubmitting(true);
     try {
       const cfg = methodConfig[method];
-      let label: string;
-      if (method === 'card') {
-        const digits = detail.replace(/\s/g, '').slice(-4);
-        label = `${cfg.prefix}**** ${digits}`;
-      } else if (method === 'crypto') {
-        label = `Вывод USDT-TRC20`;
-      } else {
-        label = `${cfg.prefix}${detail.slice(0, 8)}`;
-      }
+      const label = method === 'crypto'
+        ? 'Вывод USDT-TRC20'
+        : `${cfg.prefix}${detail.slice(0, 8)}`;
 
       await createWithdrawalRequest({
         method,
