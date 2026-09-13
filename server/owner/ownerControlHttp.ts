@@ -322,6 +322,9 @@ type ControlAction =
   | { kind: 'playerSecurity'; playerId: string }
   | { kind: 'playerSecurityRestrictionGet'; playerId: string }
   | { kind: 'playerSecurityRestrictionSet'; playerId: string }
+  | { kind: 'playerSportsBets'; playerId: string }
+  | { kind: 'playerSportsSummary'; playerId: string }
+  | { kind: 'playerSportsBet'; playerId: string; betId: string }
   | { kind: 'securityOverview' }
   | { kind: 'securityFlags' }
   | { kind: 'securityFlagResolve'; flagId: string }
@@ -352,6 +355,17 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 
   const debit = path.match(/^\/api\/owner\/players\/([^/]+)\/debit$/);
   if (debit) return m === 'POST' ? { kind: 'playerDebit', playerId: debit[1] } : 'method';
+
+  const playerSportsBet = path.match(/^\/api\/owner\/players\/([^/]+)\/sports\/([^/]+)$/);
+  if (playerSportsBet) {
+    if (playerSportsBet[2] === 'summary') {
+      return m === 'GET' ? { kind: 'playerSportsSummary', playerId: playerSportsBet[1] } : 'method';
+    }
+    return m === 'GET' ? { kind: 'playerSportsBet', playerId: playerSportsBet[1], betId: playerSportsBet[2] } : 'method';
+  }
+
+  const playerSports = path.match(/^\/api\/owner\/players\/([^/]+)\/sports$/);
+  if (playerSports) return m === 'GET' ? { kind: 'playerSportsBets', playerId: playerSports[1] } : 'method';
 
   const playerSecurity = path.match(/^\/api\/owner\/players\/([^/]+)\/security$/);
   if (playerSecurity) return m === 'GET' ? { kind: 'playerSecurity', playerId: playerSecurity[1] } : 'method';
@@ -472,6 +486,37 @@ async function runControl(
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
         p_restricted: requireBoolean(rec.restricted, 'RESTRICTED_REQUIRED'),
         p_reason: requireReason(rec.reason),
+      });
+    case 'playerSportsBets':
+      return rpc.invoke('owner_player_sports_bets', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_from: optionalTimestamp(query.get('from')),
+        p_to: optionalTimestamp(query.get('to')),
+        p_feed_type: optionalFilter(query.get('feedType') ?? query.get('feed_type'), 'FEED_TYPE_INVALID'),
+        p_mode: optionalFilter(query.get('mode'), 'SPORTS_MODE_INVALID'),
+        p_status: optionalFilter(query.get('status'), 'SPORTS_STATUS_INVALID'),
+        p_league: optionalFilter(query.get('league'), 'LEAGUE_INVALID', 120),
+        p_fixture: optionalFilter(query.get('fixture'), 'FIXTURE_INVALID', 120),
+        p_market: optionalFilter(query.get('market'), 'MARKET_INVALID', 120),
+        p_min_stake: query.get('minStake') || query.get('min_stake')
+          ? requireAmount(query.get('minStake') ?? query.get('min_stake'))
+          : null,
+        p_min_odds: query.get('minOdds') || query.get('min_odds')
+          ? requireAmount(query.get('minOdds') ?? query.get('min_odds'))
+          : null,
+        p_limit: parseLimit(query.get('limit'), 50),
+        p_offset: parseOffset(query.get('offset')),
+      });
+    case 'playerSportsSummary':
+      return rpc.invoke('owner_player_sports_summary', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_from: optionalTimestamp(query.get('from')),
+        p_to: optionalTimestamp(query.get('to')),
+      });
+    case 'playerSportsBet':
+      return rpc.invoke('owner_player_sports_bet', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_bet_id: requireUuid(decodeURIComponent(action.betId), 'BET_ID_REQUIRED', 'BET_ID_INVALID'),
       });
     case 'securityOverview':
       return rpc.invoke('owner_security_overview');
