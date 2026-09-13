@@ -367,7 +367,6 @@ describe('cashier same-origin auth gateway', () => {
     const files = [
       ...listFiles(join(root, 'src/cashier')),
       join(root, 'src/screens/MobcashAgentScreen.tsx'),
-      join(root, 'src/pages/portals/PortalLogin.tsx'),
       join(root, 'src/routes.tsx'),
     ].filter((path) => !path.endsWith('.test.ts'));
     for (const file of files) {

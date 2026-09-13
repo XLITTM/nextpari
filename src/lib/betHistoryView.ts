@@ -202,7 +202,7 @@ export function formatLegMarketLine(market: string, selection: string, line?: st
     lineText && !marketText.includes(lineText) && !selectionText.includes(lineText)
       ? `${marketText}. (${lineText}) ${selectionText}`
       : `${marketText}. ${selectionText}`;
-  return withLine.replace(/\s+/g, ' ').replace(/^[\.\s]+|[\.\s]+$/g, '').trim();
+  return withLine.replace(/\s+/g, ' ').replace(/^[.\s]+|[.\s]+$/g, '').trim();
 }
 
 export function legStatus(event: BetEvent): BetDisplayStatus | null {

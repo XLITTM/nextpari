@@ -54,7 +54,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     void refresh();
   }, [refresh]);
 
-  const applyBalance = useCallback((_next: number) => {
+  const applyBalance = useCallback((next: number) => {
+    void next;
     /* Browser cannot mint or change canonical balance. */
   }, []);
 

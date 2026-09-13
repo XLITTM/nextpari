@@ -258,7 +258,7 @@ export function resolveEventClock(raw: BetsApiEvent): {
   }
 
   let minutes = Math.max(0, Math.floor(Number(timer?.tm) || 0));
-  let seconds = Math.max(0, Math.floor(Number(timer?.ts) || 0));
+  const seconds = Math.max(0, Math.floor(Number(timer?.ts) || 0));
   if (period === '2' && minutes < 45) minutes += 45;
   let total = minutes * 60 + seconds;
 
@@ -937,7 +937,8 @@ export async function fetchUpcomingEvents(sportId: number, page = 1): Promise<Be
   return filterLineEvents(json.results ?? []);
 }
 
-export async function fetchInplay(sportId = '1', _page = 1, signal?: AbortSignal): Promise<BetsEvent[]> {
+export async function fetchInplay(sportId = '1', page = 1, signal?: AbortSignal): Promise<BetsEvent[]> {
+  void page;
   const json = await betsapiGet<{ results?: BetsApiEvent[] }>(
     '/v1/events/inplay',
     { sport_id: sportId },
@@ -946,7 +947,8 @@ export async function fetchInplay(sportId = '1', _page = 1, signal?: AbortSignal
   return filterLiveEvents((json.results ?? []).map(toBetsEvent));
 }
 
-export async function fetchUpcoming(sportId = '1', page = 1, _hours = 48, signal?: AbortSignal): Promise<BetsEvent[]> {
+export async function fetchUpcoming(sportId = '1', page = 1, hours = 48, signal?: AbortSignal): Promise<BetsEvent[]> {
+  void hours;
   const json = await betsapiGet<{ results?: BetsApiEvent[] }>(
     '/v3/events/upcoming',
     { sport_id: sportId, page },

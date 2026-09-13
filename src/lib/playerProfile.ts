@@ -28,18 +28,22 @@ export async function syncPlayerWallet(): Promise<{
   };
 }
 
-export function persistLocalBalance(_balance: number) {
+export function persistLocalBalance(balance: number) {
+  void balance;
   /* Local balances are not financial authority. */
 }
 
-export function creditPlayerBalanceLocal(_amount: number): number {
+export function creditPlayerBalanceLocal(amount: number): number {
+  void amount;
   return 0;
 }
 
-export function readPlayerBalance(_fallback = 0): number {
+export function readPlayerBalance(fallback = 0): number {
+  void fallback;
   return 0;
 }
 
-export function writePlayerBalance(_balance: number) {
+export function writePlayerBalance(balance: number) {
+  void balance;
   return 0;
 }

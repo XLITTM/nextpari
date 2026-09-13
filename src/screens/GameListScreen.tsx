@@ -59,7 +59,6 @@ function MatchRowCard({
   onToggleFavorite: () => void;
 }) {
   const outcomeButtons = getOutcomeButtons(match);
-  const columnsCount = outcomeButtons.length === 3 ? 'grid-cols-3' : 'grid-cols-2';
 
   const marketName = outcomeButtons.length === 3 ? '1X2' : 'Победитель';
 

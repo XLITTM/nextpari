@@ -139,7 +139,7 @@ export function PharaohTreasure({ onBack }: PharaohTreasureProps) {
   const [betSheetOpen, setBetSheetOpen] = useState(false);
   const [autoSpinsLeft, setAutoSpinsLeft] = useState(0);
   const [showAutoModal, setShowAutoModal] = useState(false);
-  const [winAmount, setWinAmount] = useState(0);
+  const [, setWinAmount] = useState(0);
   const busyRef = useRef(false);
   const timersRef = useRef<number[]>([]);
   const balanceRef = useRef(balance);

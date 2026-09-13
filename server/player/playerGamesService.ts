@@ -210,7 +210,8 @@ export function livePlayerGamePorts(): PlayerGameGatewayPorts {
   };
 }
 
-export function playerGameHttpError(error: unknown, _secure: boolean): PlayerAuthHttpResult {
+export function playerGameHttpError(error: unknown, secure: boolean): PlayerAuthHttpResult {
+  void secure;
   if (error instanceof StaffOnboardingError) {
     return {
       status: error.httpStatus,

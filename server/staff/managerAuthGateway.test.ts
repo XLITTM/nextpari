@@ -339,7 +339,6 @@ describe('manager same-origin auth gateway', () => {
     const files = [
       ...listFiles(join(root, 'src/manager')),
       join(root, 'src/pages/manager/ManagerOfficeLayout.tsx'),
-      join(root, 'src/pages/portals/PortalLogin.tsx'),
     ].filter((path) => !path.endsWith('.test.ts'));
     for (const file of files) {
       const source = readFileSync(file, 'utf8');

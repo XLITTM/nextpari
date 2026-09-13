@@ -4,7 +4,7 @@ import type {
   CashierOpType,
   DashboardKpis,
   VerticalKpi,
-} from '../lib/backoffice';
+} from '../shared/staff/deskTypes';
 
 export type {
   BackofficeCashier,

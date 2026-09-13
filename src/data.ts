@@ -71,7 +71,8 @@ export const sports: Sport[] = [
 export const liveMatches: MatchEvent[] = [];
 export const upcomingMatches: MatchEvent[] = [];
 export const allMatches: MatchEvent[] = [];
-export function getMatchById(_id: string): MatchEvent | undefined {
+export function getMatchById(id: string): MatchEvent | undefined {
+  void id;
   return undefined;
 }
 

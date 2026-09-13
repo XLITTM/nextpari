@@ -1,6 +1,6 @@
 import { sports } from '../data';
 import type { BetEvent, BetStatus, SportId } from '../types';
-import { settleSelection } from './settlement';
+import { settleSelection } from './selectionOutcome';
 
 export function sportLabel(sport?: SportId | string | null): string {
   if (!sport) return '';

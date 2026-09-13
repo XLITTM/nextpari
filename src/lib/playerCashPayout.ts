@@ -11,8 +11,8 @@ export interface PlayerCashPayout {
 }
 
 export async function playerCreateCashPayout(
-  _amount: number,
-  _pickup?: { city: string; point: string; pinCode?: string },
+  amount: number,
+  pickup?: { city: string; point: string; pinCode?: string },
 ): Promise<{
   code: string;
   amount: number;
@@ -21,6 +21,8 @@ export async function playerCreateCashPayout(
   city?: string;
   point?: string;
 }> {
+  void amount;
+  void pickup;
   throw new Error('Вывод через кассу временно недоступен.');
 }
 

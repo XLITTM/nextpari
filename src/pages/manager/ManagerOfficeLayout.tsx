@@ -1,6 +1,6 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { ClipboardList, LogOut, Shield, ShieldAlert, Store, User, UserCheck } from 'lucide-react';
-import { isManagerLoginPath } from '../../lib/backoffice';
+import { isManagerLoginPath } from '../../lib/staffPortalPaths';
 import { useManagerAuth } from '../../manager/auth/ManagerAuthProvider';
 import { fetchManagerFinance, formatTmtmCompact } from '../../manager/services';
 import { ManagerAgentsPage } from './ManagerAgentsPage';

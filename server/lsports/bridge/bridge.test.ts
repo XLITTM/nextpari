@@ -177,7 +177,7 @@ describe('lsports shadow bridge', () => {
   });
 
   it('locks LSports odds when distribution is disabled without fabricating prices', () => {
-    let now = 1_000;
+    const now = 1_000;
     const store = new LsportsInPlayStore(() => now);
     seedTwo(store);
     store.ingestHeartbeat({ Header: { Type: 32, ServerTimestamp: 111 } }, now);
