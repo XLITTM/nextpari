@@ -516,6 +516,82 @@ describe('owner control center same-origin BFF', () => {
     assert.equal(rpc.calls[0]?.token, ACCESS);
   });
 
+  it('Vercel security entry files are thin adapters that reach canonical owner RPCs', async () => {
+    const FLAG_ID = '11111111-2222-4111-8111-222222222222';
+    const files = {
+      overview: readFileSync(join(root, 'api/owner/security/overview.ts'), 'utf8'),
+      flags: readFileSync(join(root, 'api/owner/security/flags.ts'), 'utf8'),
+      resolve: readFileSync(join(root, 'api/owner/security/flags/[flagId]/resolve.ts'), 'utf8'),
+      player: readFileSync(join(root, 'api/owner/players/[playerId]/security.ts'), 'utf8'),
+    };
+    assert.match(files.overview, /vercelOwnerControl\('\/api\/owner\/security\/overview'\)/);
+    assert.match(files.flags, /vercelOwnerControl\('\/api\/owner\/security\/flags'\)/);
+    assert.match(files.resolve, /vercelOwnerParam\(\s*'flagId',\s*\(id\) => `\/api\/owner\/security\/flags\/\$\{id\}\/resolve`,\s*\)/);
+    assert.match(files.player, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/security`,\s*\)/);
+    for (const source of Object.values(files)) {
+      assert.match(source, /from ['"].*server\/owner\/vercelHandler\.js['"]/);
+      assert.equal(source.includes('createServiceRoleClient'), false);
+      assert.equal(source.includes('owner_security_overview'), false);
+      assert.equal(source.includes('owner_list_security_flags'), false);
+      assert.equal(source.includes('owner_player_security'), false);
+      assert.equal(source.includes('owner_resolve_security_flag'), false);
+      assert.equal(source.includes('apply_wallet_entry'), false);
+      assert.equal(source.includes('owner_set_player_blocked'), false);
+    }
+
+    const invoke = async (pathname: string, method = 'GET', body?: unknown) => {
+      const rpc = createRpc();
+      let statusCode = 0;
+      let payload: Record<string, unknown> = {};
+      await handleVercelOwnerControl(
+        {
+          method,
+          url: pathname,
+          headers: { cookie: cookieHeader(ACCESS, REFRESH) },
+          body,
+        },
+        {
+          status(code) {
+            statusCode = code;
+            return this;
+          },
+          setHeader() {},
+          json(value) {
+            payload = value as Record<string, unknown>;
+          },
+        },
+        pathname,
+        { sessionPorts: createAuthPorts(), rpcFactory: rpc.rpcFactory },
+      );
+      return { statusCode, payload, rpc };
+    };
+
+    const overview = await invoke('/api/owner/security/overview');
+    assert.equal(overview.statusCode, 200);
+    assert.equal(overview.rpc.calls[0]?.name, 'owner_security_overview');
+
+    const flags = await invoke('/api/owner/security/flags');
+    assert.equal(flags.statusCode, 200);
+    assert.equal(flags.rpc.calls[0]?.name, 'owner_list_security_flags');
+
+    const dossier = await invoke('/api/owner/players/000003/security');
+    assert.equal(dossier.statusCode, 200);
+    assert.equal(dossier.rpc.calls[0]?.name, 'owner_player_security');
+    assert.deepEqual(dossier.rpc.calls[0]?.args, { p_player_id: '000003' });
+
+    const resolved = await invoke(`/api/owner/security/flags/${FLAG_ID}/resolve`, 'POST', {
+      action: 'resolve',
+      reason: 'reviewed by owner',
+    });
+    assert.equal(resolved.statusCode, 200);
+    assert.equal(resolved.rpc.calls[0]?.name, 'owner_resolve_security_flag');
+    assert.deepEqual(resolved.rpc.calls[0]?.args, {
+      p_flag_id: FLAG_ID,
+      p_action: 'resolve',
+      p_reason: 'reviewed by owner',
+    });
+  });
+
   it('lists and opens managers under Owner JWT without impersonation', async () => {
     const { result, rpc } = await ownerGet('/api/owner/managers');
     assert.equal(result.status, 200);
