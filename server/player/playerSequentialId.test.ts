@@ -12,6 +12,10 @@ const sql = readFileSync(
   join(root, 'supabase/migrations/20260913181000_player_identity_email_verification_044.sql'),
   'utf8',
 );
+const hotfix = readFileSync(
+  join(root, 'supabase/migrations/20260913211500_one_click_sequential_id_hotfix_045.sql'),
+  'utf8',
+);
 
 describe('sequential player public ids', () => {
   it('formats leading zeros and allocates 000001, 000002, 000010', () => {
@@ -199,5 +203,68 @@ describe('sequential player public ids', () => {
     assert.deepEqual(new Set(ids).size, 1);
     assert.equal(wallets.length, 1);
     assert.equal(ids[0], '000001');
+  });
+
+  it('045 qualifies INSERT RETURNING so new sequential wallets are not ambiguous', () => {
+    assert.match(hotfix, /BEGIN;/);
+    assert.match(hotfix, /SET LOCAL statement_timeout = '10min'/);
+    const ensureStart = hotfix.indexOf('CREATE OR REPLACE FUNCTION public.ensure_player_account()');
+    const ensureEnd = hotfix.indexOf('REVOKE ALL ON FUNCTION public.ensure_player_account()');
+    const ensure = hotfix.slice(ensureStart, ensureEnd);
+    assert.match(ensure, /RETURNS TABLE \(/);
+    assert.match(ensure, /wallet_id UUID,/);
+    assert.match(ensure, /public_id TEXT,/);
+    assert.match(ensure, /legacy_balance NUMERIC,/);
+    assert.equal(ensure.includes('RETURNS jsonb'), false);
+    assert.match(ensure, /INSERT INTO public\.wallets AS w \(/);
+    assert.match(ensure, /RETURNING\s+w\.id,/);
+    assert.match(ensure, /w\.public_id,/);
+    assert.equal(/RETURNING\s+id,\s*public_id/.test(ensure), false);
+    assert.match(ensure, /private\.allocate_next_player_public_id\(\)/);
+    assert.match(ensure, /RAISE EXCEPTION 'AUTH_REQUIRED'/);
+    const firstStaff = ensure.indexOf('STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER');
+    const lockAt = ensure.indexOf('pg_catalog.pg_advisory_xact_lock');
+    const secondStaff = ensure.indexOf('STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER', firstStaff + 1);
+    assert.equal(lockAt > firstStaff, true);
+    assert.equal(secondStaff > lockAt, true);
+    assert.match(ensure, /hashtextextended\(v_uid::TEXT, 0\)/);
+    const existingPath = ensure.slice(
+      ensure.indexOf('IF v_wallet_id IS NOT NULL THEN'),
+      ensure.indexOf('v_candidate := private.allocate_next_player_public_id()'),
+    );
+    assert.equal(existingPath.includes('allocate_next_player_public_id'), false);
+    assert.equal(/UPDATE\s+public\.wallets[\s\S]{0,220}public_id\s*=/.test(ensure), false);
+    assert.match(ensure, /owner_user_id = v_uid/);
+    assert.match(ensure, /USER_ALREADY_HAS_ANOTHER_WALLET/);
+    assert.match(ensure, /WALLET_ALREADY_OWNED/);
+    assert.match(ensure, /'staging'/);
+    assert.match(ensure, /RETURN QUERY/);
+    assert.match(ensure, /a\.migration_state/);
+    assert.equal(ensure.includes("'migration_state', 'active'"), false);
+    assert.match(hotfix, /REVOKE ALL ON FUNCTION public\.ensure_player_account\(\) FROM PUBLIC/);
+    assert.match(hotfix, /REVOKE ALL ON FUNCTION public\.ensure_player_account\(\) FROM anon/);
+    assert.match(hotfix, /GRANT EXECUTE ON FUNCTION public\.ensure_player_account\(\) TO authenticated/);
+    assert.equal(hotfix.includes('CREATE SEQUENCE'), false);
+    assert.equal(hotfix.includes('MAX(public_id)'), false);
+    assert.equal(hotfix.includes('player_email_verification'), false);
+    assert.equal(hotfix.includes('allocate_next_player_public_id()'), true);
+    assert.equal(sql.includes('CREATE OR REPLACE FUNCTION private.allocate_next_player_public_id'), true);
+    assert.equal(hotfix.includes('CREATE OR REPLACE FUNCTION private.allocate_next_player_public_id'), false);
+    assert.equal(formatPlayerPublicId(1), '000001');
+    assert.equal(parseLoginPlayerId('000001'), '000001');
+    const service = readFileSync(join(root, 'server/player/playerAuthService.ts'), 'utf8');
+    assert.match(service, /async function registerOneClick/);
+    assert.match(service, /ensurePlayerAccount/);
+    assert.match(service, /bootstrapPlayerSession/);
+    const oneClick = service.slice(
+      service.indexOf('async function registerOneClick'),
+      service.indexOf('function loginFailed'),
+    );
+    assert.match(oneClick, /createManagedPasswordUser/);
+    assert.match(oneClick, /finishManagedRegistration/);
+    assert.equal(
+      readdirSync(join(root, 'supabase/migrations')).filter((name) => name.includes('_045.sql')).join(','),
+      '20260913211500_one_click_sequential_id_hotfix_045.sql',
+    );
   });
 });
