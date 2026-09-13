@@ -18,6 +18,7 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     || code === 'STAFF_ACCOUNT_BLOCKED'
     || code === 'STAFF_ACCOUNT_DISABLED'
     || code === 'SECURITY_RESTRICTION_ACTOR_DENIED'
+    || code === 'SECURITY_REQUIRED'
   ) {
     return staffError(code, 403);
   }
