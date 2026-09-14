@@ -23,6 +23,8 @@ import {
   fetchOwnerSecurityOverview,
   fetchOwnerPlayerSecurity,
   fetchOwnerPlayerSecurityRestriction,
+  fetchOwnerPlayerSportsBets,
+  fetchOwnerPlayerSportsSummary,
   fetchOwnerTreasury,
   resolveOwnerSecurityFlag,
   setOwnerPlayerSecurityRestriction,
@@ -44,6 +46,9 @@ import {
   type OwnerSecurityFlag,
   type OwnerSecurityOverview,
   type OwnerPlayerSecurityDossier,
+  type OwnerSecuritySportsBet,
+  type OwnerSecuritySportsPage,
+  type OwnerSecuritySportsSummary,
   type VerticalKpi,
 } from './services';
 import {
@@ -1391,17 +1396,17 @@ function PlayerSecurityModal({ playerId, onClose }: { playerId: string; onClose:
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[80vh] overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-200 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-extrabold text-ink-900">Безопасность игрока {playerId}</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Только история сигналов. Хеши скрыты. Деньги не меняются.</p>
+            <p className="text-xs text-gray-500 mt-0.5">Только история сигналов и спортивных ставок. Хеши скрыты. Деньги не меняются.</p>
           </div>
           <button type="button" onClick={onClose} className="text-slate-500">
             <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="p-5 overflow-y-auto max-h-[calc(80vh-72px)] space-y-5">
+        <div className="p-5 overflow-y-auto max-h-[calc(90vh-72px)] space-y-5">
           {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
           <div>
             <h4 className="text-sm font-extrabold mb-2">Флаги</h4>
@@ -1427,8 +1432,312 @@ function PlayerSecurityModal({ playerId, onClose }: { playerId: string; onClose:
               </p>
             ))}
           </div>
+          <PlayerSportsInvestigation playerId={playerId} />
         </div>
       </div>
+    </div>
+  );
+}
+
+const SPORTS_PAGE_SIZE = 50;
+
+function sportsFeedLabel(feed: string): string {
+  if (feed === 'inplay' || feed === 'live') return 'Live';
+  if (feed === 'prematch' || feed === 'pre-match' || feed === 'line') return 'PreMatch';
+  return feed || '—';
+}
+
+function sportsModeLabel(mode: string): string {
+  if (mode === 'express') return 'Экспресс';
+  if (mode === 'single') return 'Одинар';
+  return mode || '—';
+}
+
+function sportsStatusLabel(status: string, settlement: string, bucket: string): string {
+  const parts = [status, settlement, bucket].filter(Boolean);
+  return parts.length ? parts.join(' / ') : '—';
+}
+
+function sportsMoney(value: number | null | undefined, currency = 'TMTM'): string {
+  if (value == null || !Number.isFinite(value)) return '—';
+  return `${formatTmtmCompact(value)} ${currency}`;
+}
+
+function PlayerSportsInvestigation({ playerId }: { playerId: string }) {
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [feedType, setFeedType] = useState('');
+  const [mode, setMode] = useState('');
+  const [status, setStatus] = useState('');
+  const [league, setLeague] = useState('');
+  const [fixture, setFixture] = useState('');
+  const [market, setMarket] = useState('');
+  const [minStake, setMinStake] = useState('');
+  const [minOdds, setMinOdds] = useState('');
+  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState<OwnerSecuritySportsPage | null>(null);
+  const [summary, setSummary] = useState<OwnerSecuritySportsSummary | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [openBetId, setOpenBetId] = useState('');
+
+  const load = useCallback(async (nextOffset = 0) => {
+    setLoading(true);
+    setError('');
+    try {
+      const range = {
+        from: from.trim() ? new Date(from).toISOString() : null,
+        to: to.trim() ? new Date(to).toISOString() : null,
+      };
+      const [nextPage, nextSummary] = await Promise.all([
+        fetchOwnerPlayerSportsBets({
+          playerId,
+          ...range,
+          feedType: feedType || null,
+          mode: mode || null,
+          status: status || null,
+          league: league.trim() || null,
+          fixture: fixture.trim() || null,
+          market: market.trim() || null,
+          minStake: minStake.trim() ? Number(minStake) : null,
+          minOdds: minOdds.trim() ? Number(minOdds) : null,
+          limit: SPORTS_PAGE_SIZE,
+          offset: nextOffset,
+        }),
+        fetchOwnerPlayerSportsSummary({ playerId, ...range }),
+      ]);
+      setPage(nextPage);
+      setSummary(nextSummary);
+      setOffset(nextOffset);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось загрузить спортивные ставки');
+    } finally {
+      setLoading(false);
+    }
+  }, [playerId, from, to, feedType, mode, status, league, fixture, market, minStake, minOdds]);
+
+  useEffect(() => {
+    void load(0);
+    // Filters apply via the form, not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerId]);
+
+  const indicators = summary?.indicators;
+  const rows = page?.rows ?? [];
+
+  return (
+    <div className="space-y-3 border-t border-slate-200 pt-5">
+      <div>
+        <h4 className="text-sm font-extrabold">Спортивные ставки</h4>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Только просмотр канонической истории. Ставки, коэффициенты и расчёты не изменяются.
+        </p>
+      </div>
+      <form
+        className="grid grid-cols-2 md:grid-cols-4 gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void load(0);
+        }}
+      >
+        <label className="text-[11px] font-semibold text-gray-500">
+          С
+          <input type="datetime-local" value={from} onChange={(e) => setFrom(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200" />
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          По
+          <input type="datetime-local" value={to} onChange={(e) => setTo(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200" />
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Live / PreMatch
+          <select value={feedType} onChange={(e) => setFeedType(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200">
+            <option value="">Все</option>
+            <option value="inplay">Live</option>
+            <option value="prematch">PreMatch</option>
+          </select>
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Тип
+          <select value={mode} onChange={(e) => setMode(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200">
+            <option value="">Все</option>
+            <option value="single">Одинар</option>
+            <option value="express">Экспресс</option>
+          </select>
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Статус
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200">
+            <option value="">Все</option>
+            <option value="open">Открыта</option>
+            <option value="settled">Рассчитана</option>
+            <option value="void">Возврат</option>
+            <option value="cancelled">Отменена</option>
+          </select>
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Лига
+          <input value={league} onChange={(e) => setLeague(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200" />
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Матч
+          <input value={fixture} onChange={(e) => setFixture(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200" />
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Маркет
+          <input value={market} onChange={(e) => setMarket(e.target.value)} className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200" />
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Мин. ставка
+          <input value={minStake} onChange={(e) => setMinStake(e.target.value)} inputMode="decimal" className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200" />
+        </label>
+        <label className="text-[11px] font-semibold text-gray-500">
+          Мин. кф
+          <input value={minOdds} onChange={(e) => setMinOdds(e.target.value)} inputMode="decimal" className="mt-1 w-full text-sm px-2 py-1.5 rounded-lg border border-slate-200" />
+        </label>
+        <div className="col-span-2 md:col-span-4 flex justify-end">
+          <button type="submit" className="text-sm font-semibold px-3 py-2 rounded-xl bg-ink-900 text-white">
+            {loading ? 'Загрузка…' : 'Применить фильтры'}
+          </button>
+        </div>
+      </form>
+      {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
+      {summary && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 space-y-2">
+          <p className="text-xs font-extrabold uppercase tracking-wide text-gray-500">Сводка</p>
+          <p className="text-sm text-ink-900">
+            Ставок {summary.betsCount}
+            {' · '}ставка {sportsMoney(summary.totalStake)}
+            {' · '}выплаты {summary.settledPayout == null ? 'нет расчётов' : sportsMoney(summary.settledPayout)}
+            {' · '}GGR {summary.sportsGgr == null ? 'нет расчётов' : sportsMoney(summary.sportsGgr)}
+          </p>
+          <p className="text-xs text-gray-600">
+            Средняя ставка {summary.averageStake == null ? '—' : sportsMoney(summary.averageStake)}
+            {' · '}средний кф {summary.averageAcceptedOdds == null ? '—' : summary.averageAcceptedOdds.toFixed(2)}
+            {' · '}одинары {summary.singleCount} / экспрессы {summary.expressCount}
+            {' · '}Live {summary.liveCount} / PreMatch {summary.prematchCount}
+          </p>
+          {summary.mostUsedLeagues.length > 0 && (
+            <p className="text-xs text-gray-600">
+              Лиги: {summary.mostUsedLeagues.map((row) => `${row.label} (${row.count})`).join(', ')}
+            </p>
+          )}
+          {summary.mostUsedMarkets.length > 0 && (
+            <p className="text-xs text-gray-600">
+              Маркеты: {summary.mostUsedMarkets.map((row) => `${row.label} (${row.count})`).join(', ')}
+            </p>
+          )}
+          {indicators && (
+            <div className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-2 space-y-1">
+              <p className="font-bold">Индикаторы для расследования — автоматическое ограничение не применяется</p>
+              {indicators.repeatedFixtures.length > 0 && (
+                <p>Повтор матчей: {indicators.repeatedFixtures.map((row) => `${row.fixtureLabel} ×${row.count}`).join(', ')}</p>
+              )}
+              <p>Быстрые серии: {indicators.rapidSequenceCount}</p>
+              {indicators.linkedAccountPublicIds.length > 0 && (
+                <p>
+                  Связанные ID: {indicators.linkedAccountPublicIds.join(', ')}
+                  {indicators.linkedSharedFixtures > 0 ? ` · общие матчи ${indicators.linkedSharedFixtures}` : ''}
+                </p>
+              )}
+              <p>Закрывающие коэффициенты недоступны до интеграции BetB2B</p>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="space-y-2">
+        {rows.length === 0 && !loading && <p className="text-sm text-gray-500">Спортивных ставок нет</p>}
+        {rows.map((bet) => (
+          <SportsBetCard
+            key={bet.betId || bet.displayRef}
+            bet={bet}
+            open={openBetId === bet.betId}
+            onToggle={() => setOpenBetId((current) => (current === bet.betId ? '' : bet.betId))}
+          />
+        ))}
+      </div>
+      {(page?.total ?? 0) > SPORTS_PAGE_SIZE && (
+        <div className="flex items-center justify-between text-xs font-semibold text-gray-600">
+          <span>
+            {offset + 1}–{Math.min(offset + rows.length, page?.total ?? 0)} из {page?.total ?? 0}
+          </span>
+          <div className="flex gap-2">
+            <button type="button" disabled={offset === 0 || loading} onClick={() => void load(Math.max(0, offset - SPORTS_PAGE_SIZE))} className="px-2 py-1 rounded-lg border border-slate-200 disabled:opacity-40">
+              Назад
+            </button>
+            <button type="button" disabled={offset + rows.length >= (page?.total ?? 0) || loading} onClick={() => void load(offset + SPORTS_PAGE_SIZE)} className="px-2 py-1 rounded-lg border border-slate-200 disabled:opacity-40">
+              Дальше
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SportsBetCard({
+  bet,
+  open,
+  onToggle,
+}: {
+  bet: OwnerSecuritySportsBet;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 px-3 py-2">
+      <button type="button" onClick={onToggle} className="w-full text-left">
+        <p className="text-sm font-extrabold text-ink-900">
+          {bet.displayRef || bet.betId}
+          {' · '}
+          {sportsModeLabel(bet.mode)}
+          {' · '}
+          {sportsFeedLabel(bet.feedType)}
+        </p>
+        <p className="text-xs text-gray-600 mt-0.5">
+          Принята {bet.acceptedAt ? formatBackofficeDateTime(bet.acceptedAt) : '—'}
+          {' · '}ставка {sportsMoney(bet.stake, bet.currency)}
+          {' · '}кф {bet.acceptedOdds ? bet.acceptedOdds.toFixed(2) : '—'}
+          {' · '}выплата {sportsMoney(bet.potentialPayout, bet.currency)}
+        </p>
+        <p className="text-xs text-gray-500">
+          {sportsStatusLabel(bet.status, bet.settlementState, bet.statusBucket)}
+          {bet.settledAt ? ` · расчёт ${formatBackofficeDateTime(bet.settledAt)}` : ''}
+          {bet.provider ? ` · ${bet.provider}` : ''}
+        </p>
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2 border-t border-slate-100 pt-2">
+          {bet.legs.length === 0 && <p className="text-xs text-gray-500">Исходы недоступны</p>}
+          {bet.legs.map((leg, index) => (
+            <div key={`${bet.betId}-${leg.outcomeId}-${index}`} className="text-xs text-gray-700 bg-slate-50 rounded-lg px-2 py-2">
+              <p className="font-bold text-ink-900">
+                {bet.mode === 'express' ? `Исход ${index + 1}: ` : ''}
+                {leg.fixtureLabel || (leg.fixtureId ? `Матч ${leg.fixtureId}` : '—')}
+              </p>
+              <p>
+                Лига {leg.league || '—'}
+                {leg.fixtureId ? ` · fixture ${leg.fixtureId}` : ''}
+              </p>
+              <p>
+                Маркет {leg.marketKey || '—'}
+                {leg.marketId ? ` · ${leg.marketId}` : ''}
+                {leg.line ? ` · линия ${leg.line}` : ''}
+              </p>
+              <p>
+                Исход {leg.outcomeName || '—'}
+                {leg.outcomeId ? ` · ${leg.outcomeId}` : ''}
+                {' · '}кф {leg.acceptedOdds ? leg.acceptedOdds.toFixed(2) : '—'}
+              </p>
+              <p>
+                Статус маркета {leg.marketStatus || '—'}
+                {' · '}ноги {leg.legStatus || '—'}
+                {' · '}результат {leg.settlementResult || '—'}
+              </p>
+              {leg.providerLastUpdate && <p>Обновление провайдера {leg.providerLastUpdate}</p>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

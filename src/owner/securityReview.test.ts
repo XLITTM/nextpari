@@ -90,5 +90,9 @@ describe('owner security review vs security restriction', () => {
     assert.equal(ui.includes('device_token'), false);
     assert.match(http, /get_current_owner_context|OWNER_REQUIRED|resolveOwnerSession/);
     assert.equal(migrations.includes('20260914020000_player_security_restrictions_049.sql'), true);
+    assert.equal(migrations.includes('20260914023000_security_sports_investigation_050.sql'), true);
+    assert.match(ui, /Спортивные ставки/);
+    assert.match(services, /fetchOwnerPlayerSportsBets/);
+    assert.match(http, /owner_player_sports_bets/);
   });
 });

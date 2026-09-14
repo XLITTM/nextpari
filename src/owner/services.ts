@@ -537,6 +537,228 @@ export async function setOwnerPlayerSecurityRestriction(params: {
   });
 }
 
+export interface OwnerSecuritySportsLeg {
+  fixtureLabel: string;
+  league: string;
+  fixtureId: string;
+  marketKey: string;
+  marketId: string;
+  line: string;
+  outcomeName: string;
+  outcomeId: string;
+  acceptedOdds: number;
+  marketStatus: string;
+  legStatus: string;
+  providerLastUpdate: string;
+  feedType: string;
+  provider: string;
+  settlementResult: string;
+}
+
+export interface OwnerSecuritySportsBet {
+  betId: string;
+  displayRef: string;
+  acceptedAt: string;
+  feedType: string;
+  mode: string;
+  stake: number;
+  acceptedOdds: number;
+  potentialPayout: number;
+  currency: string;
+  status: string;
+  statusBucket: string;
+  settlementState: string;
+  settledAt: string;
+  provider: string;
+  legs: OwnerSecuritySportsLeg[];
+}
+
+export interface OwnerSecuritySportsPage {
+  playerPublicId: string;
+  total: number;
+  limit: number;
+  offset: number;
+  rows: OwnerSecuritySportsBet[];
+}
+
+export interface OwnerSecuritySportsSummary {
+  playerPublicId: string;
+  betsCount: number;
+  totalStake: number;
+  settledPayout: number | null;
+  sportsGgr: number | null;
+  averageStake: number | null;
+  averageAcceptedOdds: number | null;
+  singleCount: number;
+  expressCount: number;
+  liveCount: number;
+  prematchCount: number;
+  mostUsedLeagues: Array<{ label: string; count: number }>;
+  mostUsedMarkets: Array<{ label: string; count: number }>;
+  recentBets: OwnerSecuritySportsBet[];
+  indicators: {
+    repeatedFixtures: Array<{ fixtureId: string; fixtureLabel: string; count: number }>;
+    rapidSequenceCount: number;
+    linkedAccountPublicIds: string[];
+    linkedSharedFixtures: number;
+    automaticRestriction: boolean;
+    closingPriceAvailable: boolean;
+  };
+  securityActivity: Array<Record<string, unknown>>;
+}
+
+function parseSportsLeg(raw: unknown): OwnerSecuritySportsLeg {
+  const item = asRecord(raw);
+  return {
+    fixtureLabel: str(item.fixture_label ?? item.fixtureLabel),
+    league: str(item.league),
+    fixtureId: str(item.fixture_id ?? item.fixtureId),
+    marketKey: str(item.market_key ?? item.marketKey),
+    marketId: str(item.market_id ?? item.marketId),
+    line: str(item.line),
+    outcomeName: str(item.outcome_name ?? item.outcomeName),
+    outcomeId: str(item.outcome_id ?? item.outcomeId),
+    acceptedOdds: num(item.accepted_odds ?? item.acceptedOdds),
+    marketStatus: str(item.market_status ?? item.marketStatus),
+    legStatus: str(item.leg_status ?? item.legStatus),
+    providerLastUpdate: str(item.provider_last_update ?? item.providerLastUpdate),
+    feedType: str(item.feed_type ?? item.feedType),
+    provider: str(item.provider),
+    settlementResult: str(item.settlement_result ?? item.settlementResult),
+  };
+}
+
+function parseSportsBet(raw: unknown): OwnerSecuritySportsBet {
+  const item = asRecord(raw);
+  return {
+    betId: str(item.bet_id ?? item.betId),
+    displayRef: str(item.display_ref ?? item.displayRef),
+    acceptedAt: str(item.accepted_at ?? item.acceptedAt),
+    feedType: str(item.feed_type ?? item.feedType),
+    mode: str(item.mode),
+    stake: num(item.stake),
+    acceptedOdds: num(item.accepted_odds ?? item.acceptedOdds),
+    potentialPayout: num(item.potential_payout ?? item.potentialPayout),
+    currency: str(item.currency, 'TMTM'),
+    status: str(item.status),
+    statusBucket: str(item.status_bucket ?? item.statusBucket),
+    settlementState: str(item.settlement_state ?? item.settlementState),
+    settledAt: str(item.settled_at ?? item.settledAt),
+    provider: str(item.provider),
+    legs: asRows(item.legs).map(parseSportsLeg),
+  };
+}
+
+export async function fetchOwnerPlayerSportsBets(params: {
+  playerId: string;
+  from?: string | null;
+  to?: string | null;
+  feedType?: string | null;
+  mode?: string | null;
+  status?: string | null;
+  league?: string | null;
+  fixture?: string | null;
+  market?: string | null;
+  minStake?: number | null;
+  minOdds?: number | null;
+  limit?: number;
+  offset?: number;
+}): Promise<OwnerSecuritySportsPage> {
+  const data = await ownerData(`/api/owner/players/${encodeURIComponent(params.playerId)}/sports` + ownerQuery({
+    from: params.from ?? null,
+    to: params.to ?? null,
+    feedType: params.feedType ?? null,
+    mode: params.mode ?? null,
+    status: params.status ?? null,
+    league: params.league ?? null,
+    fixture: params.fixture ?? null,
+    market: params.market ?? null,
+    minStake: params.minStake ?? null,
+    minOdds: params.minOdds ?? null,
+    limit: params.limit ?? 50,
+    offset: params.offset ?? 0,
+  }));
+  const rec = asRecord(data);
+  return {
+    playerPublicId: str(rec.player_public_id ?? rec.playerPublicId, params.playerId),
+    total: num(rec.total),
+    limit: num(rec.limit) || 50,
+    offset: num(rec.offset),
+    rows: asRows(rec.rows).map(parseSportsBet),
+  };
+}
+
+export async function fetchOwnerPlayerSportsSummary(params: {
+  playerId: string;
+  from?: string | null;
+  to?: string | null;
+}): Promise<OwnerSecuritySportsSummary> {
+  const data = await ownerData(
+    `/api/owner/players/${encodeURIComponent(params.playerId)}/sports/summary` + ownerQuery({
+      from: params.from ?? null,
+      to: params.to ?? null,
+    }),
+  );
+  const rec = asRecord(data);
+  const indicators = asRecord(rec.indicators);
+  return {
+    playerPublicId: str(rec.player_public_id ?? rec.playerPublicId, params.playerId),
+    betsCount: num(rec.bets_count ?? rec.betsCount),
+    totalStake: num(rec.total_stake ?? rec.totalStake),
+    settledPayout: rec.settled_payout == null && rec.settledPayout == null
+      ? null
+      : num(rec.settled_payout ?? rec.settledPayout),
+    sportsGgr: rec.sports_ggr == null && rec.sportsGgr == null ? null : num(rec.sports_ggr ?? rec.sportsGgr),
+    averageStake: rec.average_stake == null && rec.averageStake == null
+      ? null
+      : num(rec.average_stake ?? rec.averageStake),
+    averageAcceptedOdds: rec.average_accepted_odds == null && rec.averageAcceptedOdds == null
+      ? null
+      : num(rec.average_accepted_odds ?? rec.averageAcceptedOdds),
+    singleCount: num(rec.single_count ?? rec.singleCount),
+    expressCount: num(rec.express_count ?? rec.expressCount),
+    liveCount: num(rec.live_count ?? rec.liveCount),
+    prematchCount: num(rec.prematch_count ?? rec.prematchCount),
+    mostUsedLeagues: asRows(rec.most_used_leagues ?? rec.mostUsedLeagues).map((row) => {
+      const item = asRecord(row);
+      return { label: str(item.label), count: num(item.count) };
+    }),
+    mostUsedMarkets: asRows(rec.most_used_markets ?? rec.mostUsedMarkets).map((row) => {
+      const item = asRecord(row);
+      return { label: str(item.label), count: num(item.count) };
+    }),
+    recentBets: asRows(rec.recent_bets ?? rec.recentBets).map(parseSportsBet),
+    indicators: {
+      repeatedFixtures: asRows(indicators.repeated_fixtures ?? indicators.repeatedFixtures).map((row) => {
+        const item = asRecord(row);
+        return {
+          fixtureId: str(item.fixture_id ?? item.fixtureId),
+          fixtureLabel: str(item.fixture_label ?? item.fixtureLabel),
+          count: num(item.count),
+        };
+      }),
+      rapidSequenceCount: num(indicators.rapid_sequence_count ?? indicators.rapidSequenceCount),
+      linkedAccountPublicIds: asRows(
+        indicators.linked_account_public_ids ?? indicators.linkedAccountPublicIds,
+      ).map((value) => str(value)),
+      linkedSharedFixtures: num(indicators.linked_shared_fixtures ?? indicators.linkedSharedFixtures),
+      automaticRestriction: indicators.automatic_restriction === true,
+      closingPriceAvailable: indicators.closing_price_available === true,
+    },
+    securityActivity: asRows(rec.security_activity ?? rec.securityActivity).map((row) => asRecord(row)),
+  };
+}
+
+export async function fetchOwnerPlayerSportsBet(
+  playerId: string,
+  betId: string,
+): Promise<OwnerSecuritySportsBet> {
+  const data = await ownerData(
+    `/api/owner/players/${encodeURIComponent(playerId)}/sports/${encodeURIComponent(betId)}`,
+  );
+  return parseSportsBet(data);
+}
+
 export interface OwnerPlayerListItem {
   id: string;
   profileId: string | null;

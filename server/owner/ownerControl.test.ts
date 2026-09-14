@@ -256,6 +256,9 @@ describe('owner control center same-origin BFF', () => {
       await denied(role, '/api/owner/security/overview');
       await denied(role, '/api/owner/security/flags');
       await denied(role, '/api/owner/players/110790/security');
+      await denied(role, '/api/owner/players/110790/sports');
+      await denied(role, '/api/owner/players/110790/sports/summary');
+      await denied(role, '/api/owner/players/110790/sports/11111111-2222-4111-8111-222222222222');
       await denied(role, '/api/owner/security/flags/11111111-2222-4111-8111-222222222222/resolve', 'POST');
     }
   });
@@ -343,6 +346,63 @@ describe('owner control center same-origin BFF', () => {
       await denied(role, 'GET');
       await denied(role, 'POST');
     }
+  });
+
+  it('4g. owner sports investigation is read-only and maps canonical RPCs', async () => {
+    const BET_ID = '11111111-2222-4111-8111-222222222222';
+    const list = await ownerGet(`/api/owner/players/${PLAYER_ID}/sports`, {
+      search: '?feedType=live&mode=express&status=open&league=EPL&fixture=City&market=1x2&minStake=10&minOdds=1.85&limit=20&offset=10',
+    });
+    assert.equal(list.result.status, 200);
+    assert.equal(list.rpc.calls[0]?.name, 'owner_player_sports_bets');
+    assert.deepEqual(list.rpc.calls[0]?.args, {
+      p_player_id: PLAYER_ID,
+      p_from: null,
+      p_to: null,
+      p_feed_type: 'live',
+      p_mode: 'express',
+      p_status: 'open',
+      p_league: 'EPL',
+      p_fixture: 'City',
+      p_market: '1x2',
+      p_min_stake: 10,
+      p_min_odds: 1.85,
+      p_limit: 20,
+      p_offset: 10,
+    });
+
+    const summary = await ownerGet(`/api/owner/players/${PLAYER_ID}/sports/summary`);
+    assert.equal(summary.result.status, 200);
+    assert.equal(summary.rpc.calls[0]?.name, 'owner_player_sports_summary');
+    assert.deepEqual(summary.rpc.calls[0]?.args, {
+      p_player_id: PLAYER_ID,
+      p_from: null,
+      p_to: null,
+    });
+
+    const detail = await ownerGet(`/api/owner/players/${PLAYER_ID}/sports/${BET_ID}`);
+    assert.equal(detail.result.status, 200);
+    assert.equal(detail.rpc.calls[0]?.name, 'owner_player_sports_bet');
+    assert.deepEqual(detail.rpc.calls[0]?.args, {
+      p_player_id: PLAYER_ID,
+      p_bet_id: BET_ID,
+    });
+
+    const mutate = await ownerPost(`/api/owner/players/${PLAYER_ID}/sports`, { stake: 50 });
+    assert.equal(mutate.result.status, 405);
+    assert.equal(mutate.result.body.error, 'METHOD_NOT_ALLOWED');
+    assert.equal(mutate.rpc.calls.length, 0);
+
+    const settle = await ownerPost(`/api/owner/players/${PLAYER_ID}/sports/${BET_ID}`, {
+      settlement: 'winner',
+    });
+    assert.equal(settle.result.status, 405);
+    assert.equal(settle.rpc.calls.length, 0);
+
+    const badId = await ownerGet(`/api/owner/players/${PLAYER_ID}/sports/not-a-uuid`);
+    assert.equal(badId.result.status, 400);
+    assert.equal(badId.result.body.error, 'BET_ID_INVALID');
+    assert.equal(badId.rpc.calls.length, 0);
   });
 
   it('5. players list', async () => {
@@ -620,12 +680,18 @@ describe('owner control center same-origin BFF', () => {
       resolve: readFileSync(join(root, 'api/owner/security/flags/[flagId]/resolve.ts'), 'utf8'),
       player: readFileSync(join(root, 'api/owner/players/[playerId]/security.ts'), 'utf8'),
       restriction: readFileSync(join(root, 'api/owner/players/[playerId]/security-restriction.ts'), 'utf8'),
+      sports: readFileSync(join(root, 'api/owner/players/[playerId]/sports.ts'), 'utf8'),
+      sportsSummary: readFileSync(join(root, 'api/owner/players/[playerId]/sports/summary.ts'), 'utf8'),
+      sportsBet: readFileSync(join(root, 'api/owner/players/[playerId]/sports/[betId].ts'), 'utf8'),
     };
     assert.match(files.overview, /vercelOwnerControl\('\/api\/owner\/security\/overview'\)/);
     assert.match(files.flags, /vercelOwnerControl\('\/api\/owner\/security\/flags'\)/);
     assert.match(files.resolve, /vercelOwnerParam\(\s*'flagId',\s*\(id\) => `\/api\/owner\/security\/flags\/\$\{id\}\/resolve`,\s*\)/);
     assert.match(files.player, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/security`,\s*\)/);
     assert.match(files.restriction, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/security-restriction`,\s*\)/);
+    assert.match(files.sports, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/sports`,\s*\)/);
+    assert.match(files.sportsSummary, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/sports\/summary`,\s*\)/);
+    assert.match(files.sportsBet, /\/api\/owner\/players\/\$\{playerId\}\/sports\/\$\{betId\}/);
     for (const source of Object.values(files)) {
       assert.match(source, /from ['"].*server\/owner\/vercelHandler\.js['"]/);
       assert.equal(source.includes('createServiceRoleClient'), false);
@@ -700,6 +766,16 @@ describe('owner control center same-origin BFF', () => {
     assert.equal(restrictSet.rpc.calls[0]?.name, 'owner_set_player_security_restriction');
     assert.equal(restrictSet.rpc.calls[0]?.args?.p_restricted, true);
     assert.equal(restrictSet.rpc.calls.some((call) => call.name === 'owner_set_player_blocked'), false);
+
+    const sports = await invoke('/api/owner/players/000003/sports');
+    assert.equal(sports.statusCode, 200);
+    assert.equal(sports.rpc.calls[0]?.name, 'owner_player_sports_bets');
+    const sportsSummary = await invoke('/api/owner/players/000003/sports/summary');
+    assert.equal(sportsSummary.statusCode, 200);
+    assert.equal(sportsSummary.rpc.calls[0]?.name, 'owner_player_sports_summary');
+    const sportsBet = await invoke(`/api/owner/players/000003/sports/${FLAG_ID}`);
+    assert.equal(sportsBet.statusCode, 200);
+    assert.equal(sportsBet.rpc.calls[0]?.name, 'owner_player_sports_bet');
   });
 
   it('lists and opens managers under Owner JWT without impersonation', async () => {
