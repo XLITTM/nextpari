@@ -24,6 +24,7 @@ import {
   resolvePlayerLoginEmail,
 } from '../auth/playerIdentityAdmin.js';
 import type { PlayerSecurityObserver } from './playerSecurityService.js';
+import { liveAssertPlayerAuthSession, sessionIdFromVerifiedAccessToken } from './playerAuthSession.js';
 
 export interface PlayerAuthTokens {
   accessToken: string;
@@ -98,6 +99,7 @@ export interface PlayerAuthGatewayPorts {
     newPassword: string,
   ) => Promise<void>;
   signOut?: (accessToken: string, refreshToken: string | null) => Promise<void>;
+  assertLiveAuthSession?: (userId: string, sessionId: string) => Promise<boolean>;
 }
 
 export interface PlayerAuthHttpResult {
@@ -132,7 +134,7 @@ function playerAuthError(err: unknown): StaffOnboardingError {
   if (code === 'AGE_REQUIRED' || code === 'INVALID_PHONE') {
     return staffError(code, 400);
   }
-  if (code === 'JWT_INVALID' || code === 'JWT_REQUIRED' || code === 'AUTH_REQUIRED') {
+  if (code === 'JWT_INVALID' || code === 'JWT_REQUIRED' || code === 'AUTH_REQUIRED' || code === 'SESSION_EXPIRED') {
     return staffError(code, 401);
   }
   const lower = raw.toLowerCase();
@@ -228,6 +230,16 @@ async function bootstrapPlayerSession(
     const user = await ports.getAuthUser(tokens.accessToken);
     if (!user.id) {
       throw staffError('AUTH_REQUIRED', 401);
+    }
+    if (ports.assertLiveAuthSession) {
+      const sessionId = sessionIdFromVerifiedAccessToken(tokens.accessToken);
+      if (!sessionId) {
+        throw staffError('SESSION_EXPIRED', 401);
+      }
+      const live = await ports.assertLiveAuthSession(user.id, sessionId);
+      if (!live) {
+        throw staffError('SESSION_EXPIRED', 401);
+      }
     }
     const provision = await ports.ensurePlayerAccount(tokens.accessToken);
     publicId = parseLoginPlayerId(provision.publicId) ?? '';
@@ -432,6 +444,14 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
       if (error || !data.user?.id) {
         throw staffError('AUTH_REQUIRED', 401);
       }
+      const sessionId = sessionIdFromVerifiedAccessToken(accessToken);
+      if (!sessionId) {
+        throw staffError('SESSION_EXPIRED', 401);
+      }
+      const live = await liveAssertPlayerAuthSession(data.user.id, sessionId);
+      if (!live) {
+        throw staffError('SESSION_EXPIRED', 401);
+      }
       return {
         id: data.user.id,
         email: String(data.user.email ?? ''),
@@ -549,6 +569,7 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
       }
       await client.auth.signOut();
     },
+    assertLiveAuthSession: liveAssertPlayerAuthSession,
   };
 }
 

@@ -5,6 +5,7 @@ import { loadPlayerEmailProviderEnv, loadStaffOnboardingEnv } from '../staff/env
 import { extractErrorCode, rpcMessage, staffError } from '../staff/errors.js';
 import { clearPlayerCookies } from '../player/playerCookies.js';
 import { validatePlayerPassword } from '../player/playerValidators.js';
+import { liveRevokePlayerAuthSessions } from '../player/playerAuthSession.js';
 import { playerEmailVerifyCode } from './playerEmailService.js';
 import type { PlayerAuthHttpResult } from '../player/playerAuthService.js';
 import type { PlayerSecurityObserver } from '../player/playerSecurityService.js';
@@ -23,6 +24,9 @@ export const PLAYER_PASSWORD_RECOVERY_START_MESSAGE =
   'Если аккаунт с подтверждённой почтой существует, код отправлен.';
 export const PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE = 'Пароль изменён. Войдите с новым паролем.';
 export const PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE = 'Неверный или истёкший код.';
+export const PLAYER_PASSWORD_RESET_SESSION_REVOCATION_FAILED_MESSAGE =
+  'Пароль обновлён, но не удалось завершить выход на других устройствах. Войдите с новым паролем.';
+export const PLAYER_PASSWORD_RECOVERY_START_MIN_MS = 800;
 
 const CODE_DOMAIN = 'password-recovery-code:';
 const TICKET_DOMAIN = 'password-recovery-ticket:';
@@ -62,6 +66,8 @@ export interface PlayerPasswordRecoveryPorts {
   updateAuthPassword: (userId: string, password: string) => Promise<void>;
   revokeAllSessions: (userId: string) => Promise<void>;
   now?: () => Date;
+  nowMs?: () => number;
+  delay?: (ms: number) => Promise<void>;
   generateCode?: () => string;
   generateTicket?: () => string;
   generateChallengeId?: () => string;
@@ -122,6 +128,36 @@ function failed(status: number, error: string, extra?: Record<string, unknown>):
   return { status, body: { ok: false, error, ...extra } };
 }
 
+function startedAtMs(ports: PlayerPasswordRecoveryPorts): number {
+  return ports.nowMs ? ports.nowMs() : Date.now();
+}
+
+async function padStartResponse(startedAt: number, ports: PlayerPasswordRecoveryPorts): Promise<void> {
+  const now = startedAtMs(ports);
+  const remaining = PLAYER_PASSWORD_RECOVERY_START_MIN_MS - Math.max(0, now - startedAt);
+  if (remaining <= 0) return;
+  const wait = ports.delay ?? ((ms: number) => new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  }));
+  await wait(remaining);
+}
+
+async function genericStart(ports: PlayerPasswordRecoveryPorts, startedAt: number, challengeId: string): Promise<PlayerAuthHttpResult> {
+  await padStartResponse(startedAt, ports);
+  return startOk(challengeId);
+}
+
+async function revokePlayerSessionsGuaranteed(
+  ports: PlayerPasswordRecoveryPorts,
+  userId: string,
+): Promise<void> {
+  try {
+    await ports.revokeAllSessions(userId);
+  } catch {
+    await ports.revokeAllSessions(userId);
+  }
+}
+
 function hashOrUnavailable(
   ports: PlayerPasswordRecoveryPorts,
   kind: 'code' | 'ticket',
@@ -141,6 +177,7 @@ export async function startPlayerPasswordRecovery(
   input: { identifier?: string },
   security?: PlayerSecurityObserver,
 ): Promise<PlayerAuthHttpResult> {
+  const startedAt = startedAtMs(ports);
   const identifier = String(input.identifier ?? '').trim();
   const fakeId = ports.generateChallengeId ? ports.generateChallengeId() : randomUUID();
   const now = ports.now ? ports.now() : new Date();
@@ -157,11 +194,11 @@ export async function startPlayerPasswordRecovery(
       expiresAt,
     });
   } catch {
-    return startOk(fakeId);
+    return genericStart(ports, startedAt, fakeId);
   }
 
   if (!prepared.eligible || !prepared.challengeId || !prepared.email || !prepared.playerUserId) {
-    return startOk(fakeId);
+    return genericStart(ports, startedAt, fakeId);
   }
 
   try {
@@ -184,7 +221,7 @@ export async function startPlayerPasswordRecovery(
     } catch {
       /* still generic */
     }
-    return startOk(fakeId);
+    return genericStart(ports, startedAt, fakeId);
   }
 
   try {
@@ -193,7 +230,7 @@ export async function startPlayerPasswordRecovery(
     /* telemetry must not change the generic start response */
   }
 
-  return startOk(prepared.challengeId);
+  return genericStart(ports, startedAt, prepared.challengeId);
 }
 
 export async function verifyPlayerPasswordRecovery(
@@ -292,9 +329,17 @@ export async function resetPlayerPasswordWithTicket(
   }
 
   try {
-    await ports.revokeAllSessions(consumed.playerUserId);
+    await revokePlayerSessionsGuaranteed(ports, consumed.playerUserId);
   } catch {
-    /* password already changed; sessions are best-effort after Auth Admin update */
+    return {
+      status: 503,
+      body: {
+        ok: false,
+        error: 'PASSWORD_RESET_SESSION_REVOCATION_FAILED',
+        message: PLAYER_PASSWORD_RESET_SESSION_REVOCATION_FAILED_MESSAGE,
+      },
+      cookies: clearPlayerCookies(secure),
+    };
   }
 
   try {
@@ -396,15 +441,7 @@ export function livePlayerPasswordRecoveryPorts(): PlayerPasswordRecoveryPorts {
       }
     },
     async revokeAllSessions(userId) {
-      const loaded = loadStaffOnboardingEnv();
-      const url = `${loaded.supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${userId}/logout`;
-      await fetch(url, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${loaded.supabaseServiceRoleKey}`,
-          apikey: loaded.supabaseServiceRoleKey,
-        },
-      });
+      await liveRevokePlayerAuthSessions(userId);
     },
   };
 }

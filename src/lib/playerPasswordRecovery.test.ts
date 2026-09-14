@@ -94,5 +94,9 @@ describe('player password recovery client', () => {
     });
     assert.equal(reset.message, PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE);
     assert.equal(mapPlayerPasswordRecoveryError('RECOVERY_CODE_INVALID'), 'Неверный или истёкший код.');
+    assert.equal(
+      mapPlayerPasswordRecoveryError('PASSWORD_RESET_SESSION_REVOCATION_FAILED'),
+      'Пароль обновлён, но не удалось завершить выход на других устройствах. Войдите с новым паролем.',
+    );
   });
 });

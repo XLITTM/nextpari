@@ -336,7 +336,7 @@ describe('player same-origin auth gateway', () => {
   it('player BFF never uses service_role as business authority', () => {
     const files = listFiles(join(root, 'server/player'))
       .filter((path) => path.endsWith('.ts') && !path.endsWith('.test.ts'))
-      .filter((path) => !path.endsWith('playerSecurityService.ts') && !path.endsWith('playerSecuritySignals.ts'));
+      .filter((path) => !path.endsWith('playerSecurityService.ts') && !path.endsWith('playerSecuritySignals.ts') && !path.endsWith('playerAuthSession.ts'));
     const joined = files.map((path) => readFileSync(path, 'utf8')).join('\n');
     assert.equal(joined.includes('createServiceRoleClient'), false);
     assert.equal(joined.includes('service_role'), false);

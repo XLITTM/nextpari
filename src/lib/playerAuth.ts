@@ -102,6 +102,8 @@ export const PLAYER_PASSWORD_RECOVERY_START_MESSAGE =
   'Если аккаунт с подтверждённой почтой существует, код отправлен.';
 export const PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE = 'Пароль изменён. Войдите с новым паролем.';
 export const PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE = 'Неверный или истёкший код.';
+export const PLAYER_PASSWORD_RESET_SESSION_REVOCATION_FAILED_MESSAGE =
+  'Пароль обновлён, но не удалось завершить выход на других устройствах. Войдите с новым паролем.';
 
 export function validatePlayerPassword(password: string): string | null {
   if (password.length < PLAYER_PASSWORD_MIN_LENGTH) return 'password too short';
@@ -690,6 +692,8 @@ export function mapPlayerPasswordRecoveryError(code: string): string {
       return PLAYER_PASSWORD_POLICY_MESSAGE;
     case 'RESET_TICKET_INVALID':
       return 'Срок действия кода истёк. Запросите восстановление заново.';
+    case 'PASSWORD_RESET_SESSION_REVOCATION_FAILED':
+      return PLAYER_PASSWORD_RESET_SESSION_REVOCATION_FAILED_MESSAGE;
     default:
       return 'Не удалось изменить пароль. Попробуйте ещё раз.';
   }

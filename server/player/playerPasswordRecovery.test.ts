@@ -6,12 +6,14 @@ import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { staffError } from '../staff/errors.js';
 import {
+  PLAYER_ME_PATH,
   PLAYER_PASSWORD_RECOVERY_RESET_PATH,
   PLAYER_PASSWORD_RECOVERY_START_PATH,
   PLAYER_PASSWORD_RECOVERY_VERIFY_PATH,
   handlePlayerAuthRequest,
 } from './playerAuthHttp.js';
 import type { PlayerAuthGatewayPorts } from './playerAuthService.js';
+import { sessionIdFromVerifiedAccessToken } from './playerAuthSession.js';
 import {
   generatePlayerPasswordRecoveryOtp,
   generatePlayerPasswordResetTicket,
@@ -20,6 +22,8 @@ import {
   PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE,
   PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE,
   PLAYER_PASSWORD_RECOVERY_START_MESSAGE,
+  PLAYER_PASSWORD_RECOVERY_START_MIN_MS,
+  PLAYER_PASSWORD_RESET_SESSION_REVOCATION_FAILED_MESSAGE,
   type PlayerPasswordRecoveryPorts,
   type PlayerPasswordRecoveryPrepareResult,
 } from '../email/playerPasswordRecoveryService.js';
@@ -28,6 +32,8 @@ import { PLAYER_ACCESS_COOKIE, PLAYER_REFRESH_COOKIE } from './playerCookies.js'
 import type { PlayerSecurityObserver } from './playerSecurityService.js';
 
 const USER = '11111111-2222-3333-4444-555555555555';
+const ACTIVE_SESSION = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const DELETED_SESSION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const PEPPER = 'test-pepper-not-for-production';
 const CODE = '123456';
 const TICKET = 'opaque-reset-ticket-value';
@@ -38,7 +44,10 @@ const sql = readFileSync(
   'utf8',
 );
 
-function createAuthPorts(): PlayerAuthGatewayPorts {
+function createAuthPorts(init?: {
+  liveSessions?: Set<string>;
+  sessionChecks?: Array<{ userId: string; sessionId: string }>;
+}): PlayerAuthGatewayPorts {
   return {
     async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
     async signUp() { throw new Error('signUp should not run'); },
@@ -51,7 +60,31 @@ function createAuthPorts(): PlayerAuthGatewayPorts {
       return { balance: 42, currency: 'TMTM', status: 'active', publicId: '110790' };
     },
     async savePlayerProfile() { throw new Error('savePlayerProfile should not run'); },
+    ...(init?.liveSessions || init?.sessionChecks
+      ? {
+        async assertLiveAuthSession(userId: string, sessionId: string) {
+          init?.sessionChecks?.push({ userId, sessionId });
+          if (!init?.liveSessions) return true;
+          return userId === USER && init.liveSessions.has(sessionId);
+        },
+      }
+      : {}),
   };
+}
+
+function accessJwt(sessionId: string, extra: Record<string, unknown> = {}): string {
+  const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+  const payload = Buffer.from(JSON.stringify({
+    sub: USER,
+    session_id: sessionId,
+    exp: 4_000_000_000,
+    ...extra,
+  })).toString('base64url');
+  return `${header}.${payload}.sig`;
+}
+
+function playerCookieHeader(access: string): string {
+  return `${PLAYER_ACCESS_COOKIE}=${encodeURIComponent(access)}`;
 }
 
 function createRecoveryPorts(init?: {
@@ -60,6 +93,7 @@ function createRecoveryPorts(init?: {
   verifyOk?: boolean;
   consumeOk?: boolean;
   updateError?: 'policy' | 'fail';
+  revokeFailures?: number;
   playerUserId?: string;
 }): PlayerPasswordRecoveryPorts & {
   sent: Array<{ to: string; text: string }>;
@@ -68,6 +102,8 @@ function createRecoveryPorts(init?: {
   consumed: string[];
   passwordUpdates: Array<{ userId: string; password: string }>;
   revoked: string[];
+  delays: number[];
+  workOrder: string[];
   createdUsers: number;
   wallets: number;
 } {
@@ -77,6 +113,8 @@ function createRecoveryPorts(init?: {
   const consumed: string[] = [];
   const passwordUpdates: Array<{ userId: string; password: string }> = [];
   const revoked: string[] = [];
+  const delays: number[] = [];
+  const workOrder: string[] = [];
   const playerUserId = init?.playerUserId ?? USER;
   let active: PlayerPasswordRecoveryPrepareResult = {
     eligible: init?.eligible !== false,
@@ -86,6 +124,7 @@ function createRecoveryPorts(init?: {
   };
   let attempts = 0;
   let ticketConsumed = false;
+  let remainingRevokeFailures = init?.revokeFailures ?? 0;
   return {
     sent,
     prepared,
@@ -93,17 +132,26 @@ function createRecoveryPorts(init?: {
     consumed,
     passwordUpdates,
     revoked,
+    delays,
+    workOrder,
     createdUsers: 0,
     wallets: 1,
     generateCode: () => CODE,
     generateTicket: () => TICKET,
     generateChallengeId: () => '00000000-0000-4000-8000-000000000099',
     hashSecret: (kind, value) => hashPlayerPasswordRecoverySecret(kind, value, PEPPER),
+    nowMs: () => 0,
+    async delay(ms) {
+      workOrder.push('delay');
+      delays.push(ms);
+    },
     async sendEmail(message) {
+      workOrder.push('email');
       if (init?.sendError) throw new Error('EMAIL_DELIVERY_FAILED');
       sent.push({ to: message.to, text: message.text });
     },
     async prepareChallenge(input) {
+      workOrder.push('prepare');
       prepared.push(input.identifier);
       if (init?.eligible === false) return { eligible: false };
       active = {
@@ -141,6 +189,10 @@ function createRecoveryPorts(init?: {
     },
     async revokeAllSessions(userId) {
       revoked.push(userId);
+      if (remainingRevokeFailures > 0) {
+        remainingRevokeFailures -= 1;
+        throw staffError('PASSWORD_RESET_SESSION_REVOCATION_FAILED', 503);
+      }
     },
   };
 }
@@ -400,6 +452,158 @@ describe('player password recovery HTTP', () => {
     assert.equal(recovery.passwordUpdates.length, 1);
     assert.equal(recovery.revoked.length, 1);
   });
+
+  it('does not swallow session revocation failure or return reset success', async () => {
+    const recovery = createRecoveryPorts({ revokeFailures: 2 });
+    const events: string[] = [];
+    const security: PlayerSecurityObserver = {
+      identifierHash: null,
+      deviceHash: null,
+      networkHash: null,
+      userAgentHash: null,
+      device: { token: 't', setCookie: 'x=1', created: false },
+      async checkLoginRateLimit() { return true; },
+      async record(type) { events.push(type); },
+    };
+    const { resetPlayerPasswordWithTicket } = await import('../email/playerPasswordRecoveryService.js');
+    const result = await resetPlayerPasswordWithTicket(
+      recovery,
+      { resetTicket: TICKET, newPassword: 'password2', confirmPassword: 'password2' },
+      true,
+      security,
+    );
+    assert.equal(result.status, 503);
+    assert.equal(result.body.ok, false);
+    assert.equal(result.body.error, 'PASSWORD_RESET_SESSION_REVOCATION_FAILED');
+    assert.equal(result.body.message, PLAYER_PASSWORD_RESET_SESSION_REVOCATION_FAILED_MESSAGE);
+    assert.equal(JSON.stringify(result.body).includes('supabase'), false);
+    assert.equal(JSON.stringify(result.body).includes('auth.sessions'), false);
+    assert.equal(recovery.passwordUpdates.length, 1);
+    assert.deepEqual(recovery.passwordUpdates[0], { userId: USER, password: 'password2' });
+    assert.equal(recovery.revoked.length, 2);
+    assert.equal(events.includes('PASSWORD_RECOVERY_COMPLETED'), false);
+    assert.equal(
+      (result.cookies ?? []).some((row) => row.startsWith(`${PLAYER_ACCESS_COOKIE}=`) && /Max-Age=0/.test(row)),
+      true,
+    );
+    assert.equal(
+      (result.cookies ?? []).some((row) => row.startsWith(`${PLAYER_REFRESH_COOKIE}=`) && /Max-Age=0/.test(row)),
+      true,
+    );
+
+    const reuse = await handlePlayerAuthRequest(
+      {
+        method: 'POST',
+        pathname: PLAYER_PASSWORD_RECOVERY_RESET_PATH,
+        body: { resetTicket: TICKET, newPassword: 'password3', confirmPassword: 'password3' },
+      },
+      createAuthPorts(),
+      undefined,
+      undefined,
+      undefined,
+      recovery,
+    );
+    assert.equal(reuse.status, 400);
+    assert.equal(reuse.body.error, 'RESET_TICKET_INVALID');
+    assert.equal(recovery.passwordUpdates.length, 1);
+  });
+
+  it('retries session revocation once and succeeds without rolling back the password', async () => {
+    const recovery = createRecoveryPorts({ revokeFailures: 1 });
+    const events: string[] = [];
+    const security: PlayerSecurityObserver = {
+      identifierHash: null,
+      deviceHash: null,
+      networkHash: null,
+      userAgentHash: null,
+      device: { token: 't', setCookie: 'x=1', created: false },
+      async checkLoginRateLimit() { return true; },
+      async record(type) { events.push(type); },
+    };
+    const { resetPlayerPasswordWithTicket } = await import('../email/playerPasswordRecoveryService.js');
+    const result = await resetPlayerPasswordWithTicket(
+      recovery,
+      { resetTicket: TICKET, newPassword: 'password2', confirmPassword: 'password2' },
+      true,
+      security,
+    );
+    assert.equal(result.status, 200);
+    assert.equal(result.body.ok, true);
+    assert.equal(recovery.revoked.length, 2);
+    assert.equal(recovery.passwordUpdates.length, 1);
+    assert.deepEqual(events, ['PASSWORD_RECOVERY_COMPLETED']);
+  });
+
+  it('equalizes start response time and shape for eligible, ineligible, rate-limit, and email failure', async () => {
+    const eligible = await start('player@nextpari.test');
+    const unknown = await start('unknown@nextpari.test', createRecoveryPorts({ eligible: false }));
+    const unknownId = await start('999999', createRecoveryPorts({ eligible: false }));
+    const rateLimited = await start('player@nextpari.test', createRecoveryPorts({ eligible: false }));
+    const emailFail = await start('player@nextpari.test', createRecoveryPorts({ sendError: true }));
+    const shapes = [eligible, unknown, unknownId, rateLimited, emailFail].map((row) => ({
+      status: row.result.status,
+      shape: shapeOf(row.result.body),
+    }));
+    for (const row of shapes) {
+      assert.equal(row.status, 200);
+      assert.deepEqual(row.shape, shapes[0]?.shape);
+      assert.equal(row.shape.ok, true);
+      assert.equal(row.shape.message, PLAYER_PASSWORD_RECOVERY_START_MESSAGE);
+      assert.equal(row.shape.resendAfterSeconds, 60);
+      assert.equal(row.shape.hasChallengeId, true);
+    }
+    assert.deepEqual(eligible.recovery.delays, [PLAYER_PASSWORD_RECOVERY_START_MIN_MS]);
+    assert.deepEqual(unknown.recovery.delays, [PLAYER_PASSWORD_RECOVERY_START_MIN_MS]);
+    assert.deepEqual(rateLimited.recovery.delays, [PLAYER_PASSWORD_RECOVERY_START_MIN_MS]);
+    assert.deepEqual(emailFail.recovery.delays, [PLAYER_PASSWORD_RECOVERY_START_MIN_MS]);
+    assert.deepEqual(eligible.recovery.workOrder.slice(0, 2), ['prepare', 'email']);
+    assert.equal(eligible.recovery.workOrder.at(-1), 'delay');
+    assert.deepEqual(unknown.recovery.workOrder, ['prepare', 'delay']);
+    assert.deepEqual(emailFail.recovery.workOrder, ['prepare', 'email', 'delay']);
+    assert.equal(JSON.stringify(eligible.result.body).toLowerCase().includes('resend.com'), false);
+  });
+
+  it('rejects a deleted-session access JWT on the canonical player session path', async () => {
+    const sessionChecks: Array<{ userId: string; sessionId: string }> = [];
+    const ports = createAuthPorts({
+      liveSessions: new Set([ACTIVE_SESSION]),
+      sessionChecks,
+    });
+    const deletedToken = accessJwt(DELETED_SESSION);
+    const activeToken = accessJwt(ACTIVE_SESSION);
+    assert.equal(sessionIdFromVerifiedAccessToken(deletedToken), DELETED_SESSION);
+    assert.equal(sessionIdFromVerifiedAccessToken(activeToken), ACTIVE_SESSION);
+
+    const deleted = await handlePlayerAuthRequest(
+      {
+        method: 'GET',
+        pathname: PLAYER_ME_PATH,
+        cookie: playerCookieHeader(deletedToken),
+        cookieSecure: true,
+        body: { sessionId: ACTIVE_SESSION, userId: USER },
+      },
+      ports,
+    );
+    assert.equal(deleted.status, 401);
+    assert.equal(deleted.body.ok, false);
+    assert.equal(deleted.body.authenticated, false);
+    assert.equal(['SESSION_EXPIRED', 'JWT_INVALID'].includes(String(deleted.body.error)), true);
+    assert.deepEqual(sessionChecks, [{ userId: USER, sessionId: DELETED_SESSION }]);
+
+    const active = await handlePlayerAuthRequest(
+      {
+        method: 'GET',
+        pathname: PLAYER_ME_PATH,
+        cookie: playerCookieHeader(activeToken),
+        cookieSecure: true,
+        body: { sessionId: DELETED_SESSION, userId: 'spoof' },
+      },
+      ports,
+    );
+    assert.equal(active.status, 200);
+    assert.equal(active.body.authenticated, true);
+    assert.deepEqual(sessionChecks[1], { userId: USER, sessionId: ACTIVE_SESSION });
+  });
 });
 
 describe('player password recovery contract', () => {
@@ -428,6 +632,15 @@ describe('player password recovery contract', () => {
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_password_recovery_prepare\(TEXT, TEXT, TIMESTAMPTZ\) TO service_role/);
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_password_recovery_verify\(UUID, TEXT, TEXT, TIMESTAMPTZ\) TO service_role/);
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_password_recovery_consume_ticket\(TEXT\) TO service_role/);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_password_recovery_revoke_sessions\(UUID\) FROM PUBLIC/);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_password_recovery_revoke_sessions\(UUID\) FROM anon, authenticated/);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_password_recovery_revoke_sessions\(UUID\) TO service_role/);
+    assert.match(sql, /REVOKE ALL ON FUNCTION private\.player_password_recovery_revoke_sessions\(UUID\) FROM anon, authenticated, service_role/);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_auth_session_is_active\(UUID, UUID\) FROM PUBLIC/);
+    assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_auth_session_is_active\(UUID, UUID\) FROM anon, authenticated/);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_auth_session_is_active\(UUID, UUID\) TO service_role/);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION public.player_password_recovery_revoke_sessions(UUID) TO authenticated'), false);
+    assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION public.player_password_recovery_revoke_sessions(UUID) TO anon'), false);
     assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION public.player_password_recovery_prepare(TEXT, TEXT, TIMESTAMPTZ) TO authenticated'), false);
     assert.equal(sql.includes('GRANT EXECUTE ON FUNCTION public.player_password_recovery_prepare(TEXT, TEXT, TIMESTAMPTZ) TO anon'), false);
   });
@@ -478,6 +691,24 @@ describe('player password recovery contract', () => {
     assert.match(sql, /PASSWORD_RECOVERY_REQUESTED/);
     assert.match(sql, /PASSWORD_RECOVERY_VERIFIED/);
     assert.match(sql, /PASSWORD_RECOVERY_COMPLETED/);
+    const revokeStart = sql.indexOf('CREATE OR REPLACE FUNCTION private.player_password_recovery_revoke_sessions(');
+    const revokeEnd = sql.indexOf('CREATE OR REPLACE FUNCTION public.player_password_recovery_revoke_sessions(');
+    const revoke = sql.slice(revokeStart, revokeEnd);
+    assert.match(revoke, /RAISE EXCEPTION 'STAFF_ACCOUNT'/);
+    assert.match(revoke, /RAISE EXCEPTION 'PLAYER_ACCOUNT_REQUIRED'/);
+    assert.match(revoke, /DELETE FROM auth\.sessions AS s/);
+    assert.match(revoke, /WHERE s\.user_id = p_player_user_id/);
+    assert.match(revoke, /GET DIAGNOSTICS v_deleted = ROW_COUNT/);
+    assert.equal(revoke.includes('DELETE FROM auth.users'), false);
+    assert.equal(revoke.includes('apply_wallet_entry'), false);
+    const liveStart = sql.indexOf('CREATE OR REPLACE FUNCTION private.player_auth_session_is_active(');
+    const liveEnd = sql.indexOf('CREATE OR REPLACE FUNCTION public.player_auth_session_is_active(');
+    const live = sql.slice(liveStart, liveEnd);
+    assert.match(live, /FROM auth\.sessions AS s/);
+    assert.match(live, /s\.id = p_session_id/);
+    assert.match(live, /s\.user_id = p_player_user_id/);
+    assert.equal(/GRANT\s+(SELECT|ALL|DELETE|INSERT|UPDATE).*ON TABLE auth\.sessions/i.test(sql), false);
+    assert.equal(sql.includes('GRANT ALL ON TABLE auth.sessions'), false);
     const service = readFileSync(join(root, 'server/email/playerPasswordRecoveryService.ts'), 'utf8');
     assert.match(service, /randomInt/);
     assert.match(service, /randomBytes/);
@@ -485,11 +716,19 @@ describe('player password recovery contract', () => {
     assert.match(service, /password-recovery-code:/);
     assert.match(service, /password-recovery-ticket:/);
     assert.match(service, /auth\.admin\.updateUserById/);
-    assert.match(service, /\/auth\/v1\/admin\/users\/\$\{userId\}\/logout/);
+    assert.match(service, /liveRevokePlayerAuthSessions/);
+    assert.equal(service.includes('/auth/v1/admin/users/${userId}/logout'), false);
+    assert.equal(/sessions are best-effort/.test(service), false);
+    assert.match(service, /PASSWORD_RESET_SESSION_REVOCATION_FAILED/);
+    assert.match(service, /PLAYER_PASSWORD_RECOVERY_START_MIN_MS/);
     assert.equal(service.includes('resetPasswordForEmail'), false);
     assert.equal(service.includes('console.log'), false);
     assert.equal(service.includes('generateLink'), false);
     assert.match(service, /PLAYER_EMAIL_OTP_PEPPER|otpPepper/);
+    const sessionHelper = readFileSync(join(root, 'server/player/playerAuthSession.ts'), 'utf8');
+    assert.match(sessionHelper, /player_password_recovery_revoke_sessions/);
+    assert.match(sessionHelper, /player_auth_session_is_active/);
+    assert.equal(sessionHelper.includes('/auth/v1/admin/users'), false);
     assert.equal(typeof randomInt, 'function');
     assert.equal(typeof randomBytes, 'function');
   });

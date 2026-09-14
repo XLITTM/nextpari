@@ -553,4 +553,113 @@ REVOKE ALL ON FUNCTION public.player_password_recovery_consume_ticket(TEXT) FROM
 REVOKE ALL ON FUNCTION public.player_password_recovery_consume_ticket(TEXT) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.player_password_recovery_consume_ticket(TEXT) TO service_role;
 
+
+-- ============================================================
+-- G. DB-BACKED AUTH SESSION REVOCATION + LIVENESS
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION private.player_password_recovery_revoke_sessions(p_player_user_id UUID)
+RETURNS INTEGER
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_deleted INTEGER := 0;
+BEGIN
+    IF p_player_user_id IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_ACCOUNT_REQUIRED';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM private.staff_accounts AS s
+        WHERE s.auth_user_id = p_player_user_id
+    ) THEN
+        RAISE EXCEPTION 'STAFF_ACCOUNT';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM auth.users AS u WHERE u.id = p_player_user_id
+    ) OR NOT EXISTS (
+        SELECT 1 FROM public.profiles AS p WHERE p.id = p_player_user_id
+    ) THEN
+        RAISE EXCEPTION 'PLAYER_ACCOUNT_REQUIRED';
+    END IF;
+
+    DELETE FROM auth.sessions AS s
+    WHERE s.user_id = p_player_user_id;
+
+    GET DIAGNOSTICS v_deleted = ROW_COUNT;
+    RETURN v_deleted;
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.player_password_recovery_revoke_sessions(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.player_password_recovery_revoke_sessions(UUID) FROM anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.player_password_recovery_revoke_sessions(p_player_user_id UUID)
+RETURNS INTEGER
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    RETURN private.player_password_recovery_revoke_sessions(p_player_user_id);
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION public.player_password_recovery_revoke_sessions(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.player_password_recovery_revoke_sessions(UUID) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.player_password_recovery_revoke_sessions(UUID) TO service_role;
+
+
+CREATE OR REPLACE FUNCTION private.player_auth_session_is_active(
+    p_player_user_id UUID,
+    p_session_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    IF p_player_user_id IS NULL OR p_session_id IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    RETURN EXISTS (
+        SELECT 1
+        FROM auth.sessions AS s
+        WHERE s.id = p_session_id
+          AND s.user_id = p_player_user_id
+    );
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.player_auth_session_is_active(UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.player_auth_session_is_active(UUID, UUID) FROM anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.player_auth_session_is_active(
+    p_player_user_id UUID,
+    p_session_id UUID
+)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    RETURN private.player_auth_session_is_active(p_player_user_id, p_session_id);
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION public.player_auth_session_is_active(UUID, UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.player_auth_session_is_active(UUID, UUID) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.player_auth_session_is_active(UUID, UUID) TO service_role;
+
 COMMIT;
