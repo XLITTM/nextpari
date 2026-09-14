@@ -102,6 +102,12 @@ export async function handleSportsSettleRequest(
     });
     const data = await invoke(items);
     console.log(`[sports] settlement-applied items=${items.length}`);
+    try {
+      const { safeEvaluateWinPatternAfterSportsFixtures } = await import('../security/winPatternEvaluate.js');
+      await safeEvaluateWinPatternAfterSportsFixtures(notices.map((row) => row.fixtureId), log);
+    } catch {
+      /* investigation analytics must not fail a completed settlement */
+    }
     return {
       status: 200,
       body: asRecord(data).ok === false ? asRecord(data) : { ok: true, ...asRecord(data) },

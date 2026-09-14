@@ -123,7 +123,9 @@ type ControlAction =
   | { kind: 'sportsBets'; playerId: string }
   | { kind: 'sportsSummary'; playerId: string }
   | { kind: 'sportsBet'; playerId: string; betId: string }
-  | { kind: 'activity' };
+  | { kind: 'activity' }
+  | { kind: 'winPatternSettings' }
+  | { kind: 'evaluateWinPattern'; playerId: string };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -133,6 +135,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/security/overview') return m === 'GET' ? { kind: 'overview' } : 'method';
   if (path === '/api/security/flags') return m === 'GET' ? { kind: 'flags' } : 'method';
   if (path === '/api/security/activity') return m === 'GET' ? { kind: 'activity' } : 'method';
+  if (path === '/api/security/win-pattern-settings') {
+    return m === 'GET' ? { kind: 'winPatternSettings' } : 'method';
+  }
 
   const flagReview = path.match(/^\/api\/security\/flags\/([^/]+)\/review$/);
   if (flagReview) return m === 'POST' ? { kind: 'flagReview', flagId: flagReview[1] } : 'method';
@@ -157,6 +162,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
     if (m === 'POST') return { kind: 'restrictionSet', playerId: restriction[1] };
     return 'method';
   }
+
+  const evaluate = path.match(/^\/api\/security\/players\/([^/]+)\/win-pattern-evaluate$/);
+  if (evaluate) return m === 'POST' ? { kind: 'evaluateWinPattern', playerId: evaluate[1] } : 'method';
 
   const dossier = path.match(/^\/api\/security\/players\/([^/]+)$/);
   if (dossier) return m === 'GET' ? { kind: 'dossier', playerId: dossier[1] } : 'method';
@@ -260,6 +268,13 @@ async function runControl(
       return rpc.invoke('security_activity_feed', {
         p_limit: parseLimit(query.get('limit'), 50),
         p_offset: parseOffset(query.get('offset')),
+      });
+    case 'winPatternSettings':
+      return rpc.invoke('security_win_pattern_settings');
+    case 'evaluateWinPattern':
+      return rpc.invoke('security_evaluate_player_win_pattern', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_source: optionalFilter(rec.source == null ? null : String(rec.source), 'WIN_PATTERN_SOURCE_INVALID'),
       });
     default:
       throw staffError('NOT_FOUND', 404);

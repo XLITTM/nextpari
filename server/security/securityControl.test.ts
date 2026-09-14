@@ -183,6 +183,20 @@ describe('security control same-origin BFF', () => {
     assert.equal(rpc.calls[0]?.args?.p_restricted, false);
   });
 
+  it('SECURITY WIN PATTERN SETTINGS: READ ALLOWED, WRITE DENIED', async () => {
+    const { result, rpc } = await securityGet('/api/security/win-pattern-settings');
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'security_win_pattern_settings');
+
+    const posted = await securityPost('/api/security/win-pattern-settings', {
+      source: 'SPORTS',
+      enabled: false,
+    });
+    assert.equal(posted.result.status, 405);
+    assert.equal(posted.rpc.calls.length, 0);
+    assert.equal(SECURITY_DENIED_RPCS.includes('owner_set_win_pattern_settings'), true);
+  });
+
   it('SECURITY HARD BLOCK: DENIED', async () => {
     const { result, rpc } = await securityPost(`/api/security/players/${PLAYER_ID}/block`, {
       blocked: true,

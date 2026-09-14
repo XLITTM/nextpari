@@ -16,6 +16,7 @@ import {
   fetchSecurityOverview,
   fetchSecuritySportsBets,
   fetchSecuritySportsSummary,
+  fetchSecurityWinPatternSettings,
   formatSecurityDateTime,
   formatSecurityMoney,
   postSecurityFlagAction,
@@ -168,7 +169,7 @@ function SecurityShell({
       </aside>
       <main className="flex-1 min-w-0 p-6 overflow-x-auto">
         {tab === 'flags' && <FlagsPanel onOpenPlayer={(id) => { setPlayerId(id); setTab('players'); }} />}
-        {tab === 'players' && <PlayersPanel playerId={playerId} onPlayerId={setPlayerId} />}
+        {tab === 'players' && <PlayersPanel playerId={playerId} onPlayerId={setPlayerId} onOpenSports={() => setTab('sports')} />}
         {tab === 'sports' && <SportsPanel playerId={playerId} onPlayerId={setPlayerId} />}
         {tab === 'activity' && <ActivityPanel />}
       </main>
@@ -203,7 +204,37 @@ function flagLabel(type: string): string {
   if (type === 'SHARED_NETWORK') return 'Общая сеть';
   if (type === 'LOGIN_FAILURE_BURST') return 'Неудачные входы';
   if (type === 'AUTH_RATE_LIMITED') return 'Лимит попыток';
+  if (type === 'HIGH_WIN_FREQUENCY') return 'Частые выигрыши';
+  if (type === 'HIGH_NET_PROFIT') return 'Высокая прибыль';
+  if (type === 'HIGH_ROI') return 'Высокий ROI';
   return type;
+}
+
+function isWinPatternFlag(type: string): boolean {
+  return type === 'HIGH_WIN_FREQUENCY' || type === 'HIGH_NET_PROFIT' || type === 'HIGH_ROI';
+}
+
+function winPatternSourceLabel(source: string): string {
+  if (source === 'SPORTS') return 'Спорт';
+  if (source === 'OWNED_GAMES') return 'Свои игры';
+  return source || '—';
+}
+
+function detailNum(details: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = details[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    if (value != null && value !== '') return String(value);
+  }
+  return '—';
+}
+
+function detailRate(details: Record<string, unknown>, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = details[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return `${(value * 100).toFixed(1)}%`;
+  }
+  return '—';
 }
 
 function statusLabel(status: string): string {
@@ -212,6 +243,29 @@ function statusLabel(status: string): string {
   if (status === 'resolved') return 'Закрыт';
   if (status === 'dismissed') return 'Отклонён';
   return status;
+}
+
+function WinPatternThresholdsReadOnly() {
+  const [rows, setRows] = useState<Array<{ source: string; enabled: boolean; lookbackHours: number; minimumSettledCount: number; minimumTotalStake: number; winRateThreshold: number; netProfitThreshold: number; roiThreshold: number }>>([]);
+  useEffect(() => {
+    void fetchSecurityWinPatternSettings().then(setRows).catch(() => setRows([]));
+  }, []);
+  if (!rows.length) return null;
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-4 mb-4">
+      <h3 className="font-extrabold mb-2">Пороги анализа выигрышей</h3>
+      <p className="text-xs text-gray-500 mb-3">Только просмотр. Изменяет Owner.</p>
+      <div className="grid md:grid-cols-2 gap-3">
+        {rows.map((row) => (
+          <div key={row.source} className="text-xs bg-slate-50 rounded-xl px-3 py-2 space-y-0.5">
+            <p className="font-bold">{winPatternSourceLabel(row.source)} · {row.enabled ? 'вкл' : 'выкл'}</p>
+            <p>Период {row.lookbackHours}ч · мин. выборка {row.minimumSettledCount} · мин. ставка {row.minimumTotalStake}</p>
+            <p>win-rate {(row.winRateThreshold * 100).toFixed(1)}% · прибыль {row.netProfitThreshold} · ROI {(row.roiThreshold * 100).toFixed(1)}%</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function FlagsPanel({ onOpenPlayer }: { onOpenPlayer: (id: string) => void }) {
@@ -325,6 +379,9 @@ function FlagsPanel({ onOpenPlayer }: { onOpenPlayer: (id: string) => void }) {
           <option value="SHARED_NETWORK">Общая сеть</option>
           <option value="LOGIN_FAILURE_BURST">Неудачные входы</option>
           <option value="AUTH_RATE_LIMITED">Лимит попыток</option>
+          <option value="HIGH_WIN_FREQUENCY">Частые выигрыши</option>
+          <option value="HIGH_NET_PROFIT">Высокая прибыль</option>
+          <option value="HIGH_ROI">Высокий ROI</option>
         </select>
         <select value={priority} onChange={(e) => setPriority(e.target.value)} className="text-sm border border-slate-200 rounded-xl px-3 py-2 bg-white">
           <option value="">Все приоритеты</option>
@@ -341,6 +398,26 @@ function FlagsPanel({ onOpenPlayer }: { onOpenPlayer: (id: string) => void }) {
         </select>
       </div>
       {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+        {rows.filter((flag) => isWinPatternFlag(flag.flagType)).map((flag) => (
+          <div key={flag.id} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-1">
+            <p className="font-extrabold text-ink-900">{flagLabel(flag.flagType)}</p>
+            <p className="text-sm">Игрок #{flag.playerPublicId}</p>
+            <p className="text-xs text-gray-600">Источник: {winPatternSourceLabel(flag.source || String(flag.details.source ?? ''))}</p>
+            <p className="text-xs text-gray-600">Период: {detailNum(flag.details, 'lookback_hours', 'lookbackHours')} ч</p>
+            <p className="text-xs text-gray-600">Количество ставок/раундов: {detailNum(flag.details, 'settled_count', 'settledCount')}</p>
+            <p className="text-xs text-gray-600">Выигрыши: {detailNum(flag.details, 'win_count', 'winCount')}</p>
+            <p className="text-xs text-gray-600">Процент выигрышей: {detailRate(flag.details, 'win_rate', 'winRate')}</p>
+            <p className="text-xs text-gray-600">Сумма ставок: {detailNum(flag.details, 'total_stake', 'totalStake')}</p>
+            <p className="text-xs text-gray-600">Выплаты: {detailNum(flag.details, 'total_payout', 'totalPayout')}</p>
+            <p className="text-xs text-gray-600">Чистая прибыль: {detailNum(flag.details, 'net_profit', 'netProfit')}</p>
+            <p className="text-xs text-gray-600">ROI: {detailRate(flag.details, 'roi')}</p>
+            <p className="text-xs text-gray-600">Приоритет: {flag.severity}</p>
+            <button type="button" className="text-xs font-bold text-brand-700 pt-1" onClick={() => onOpenPlayer(flag.playerPublicId)}>Досье</button>
+          </div>
+        ))}
+      </div>
+      <WinPatternThresholdsReadOnly />
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-gray-500">
@@ -393,9 +470,11 @@ function FlagsPanel({ onOpenPlayer }: { onOpenPlayer: (id: string) => void }) {
 function PlayersPanel({
   playerId,
   onPlayerId,
+  onOpenSports,
 }: {
   playerId: string;
   onPlayerId: (id: string) => void;
+  onOpenSports: () => void;
 }) {
   const [query, setQuery] = useState(playerId);
   const [dossier, setDossier] = useState<SecurityDossier | null>(null);
@@ -407,7 +486,6 @@ function PlayersPanel({
   useEffect(() => {
     setQuery(playerId);
     if (playerId) void load(playerId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerId]);
 
   const load = async (id: string) => {
@@ -489,7 +567,38 @@ function PlayersPanel({
             <h3 className="font-extrabold mb-2">Флаги риска</h3>
             {dossier.flags.length === 0 && <p className="text-sm text-gray-500">Нет флагов</p>}
             {dossier.flags.map((flag) => (
-              <p key={flag.id} className="text-sm py-1">{flagLabel(flag.flagType)} · {statusLabel(flag.status)} · {flag.severity}</p>
+              <p key={flag.id} className="text-sm py-1">{flagLabel(flag.flagType)} · {statusLabel(flag.status)} · {flag.severity}{flag.source ? ` · ${winPatternSourceLabel(flag.source)}` : ''}</p>
+            ))}
+          </div>
+          {(dossier.winPattern.linkedSharingFlags.length > 0 || dossier.winPattern.linkedWinPatternOverlap.length > 0) && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+              <h3 className="font-extrabold mb-2">Связанные аккаунты и выигрыши</h3>
+              {dossier.winPattern.linkedSharingFlags.map((row, index) => (
+                <p key={`share-${index}`} className="text-sm py-1">
+                  {flagLabel(String(row.flag_type ?? row.flagType ?? ''))} · связанных {String(row.related_player_count ?? row.relatedPlayerCount ?? '—')}
+                </p>
+              ))}
+              {dossier.winPattern.linkedWinPatternOverlap.map((row, index) => (
+                <p key={`overlap-${index}`} className="text-sm py-1">
+                  #{String(row.player_public_id ?? row.playerPublicId ?? '')} · {flagLabel(String(row.flag_type ?? row.flagType ?? ''))} · {winPatternSourceLabel(String(row.source ?? ''))}
+                </p>
+              ))}
+            </div>
+          )}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-extrabold">Спортивные ставки</h3>
+              <button type="button" className="text-xs font-bold text-brand-700" onClick={onOpenSports}>Открыть историю</button>
+            </div>
+            <p className="text-xs text-gray-500">Только расследование. Арбитраж и CLV не вычисляются.</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-200 p-4">
+            <h3 className="font-extrabold mb-2">Свои игры</h3>
+            {dossier.winPattern.ownedGamesRecent.length === 0 && <p className="text-sm text-gray-500">Нет недавних раундов</p>}
+            {dossier.winPattern.ownedGamesRecent.map((row, index) => (
+              <p key={index} className="text-xs text-gray-600 py-1">
+                {String(row.game_code ?? row.gameCode ?? '')} · ставка {String(row.total_stake ?? row.totalStake ?? '')} · выплата {String(row.payout ?? '')} · {String(row.settled_at ?? row.settledAt ?? '')}
+              </p>
             ))}
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 p-4">

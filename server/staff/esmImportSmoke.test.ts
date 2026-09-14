@@ -56,7 +56,9 @@ const RUNTIME_GRAPH = [
   'api/owner/security/overview.ts',
   'api/owner/security/flags.ts',
   'api/owner/security/flags/[flagId]/resolve.ts',
+  'api/owner/security/win-pattern-settings.ts',
   'api/owner/players/[playerId]/security.ts',
+  'api/owner/players/[playerId]/win-pattern-evaluate.ts',
   'api/owner/security-staff.ts',
   'api/owner/security-staff/activity.ts',
   'api/owner/security-staff/[authUserId]/status.ts',
@@ -66,12 +68,14 @@ const RUNTIME_GRAPH = [
   'api/security/auth/logout.ts',
   'api/security/overview.ts',
   'api/security/flags.ts',
+  'api/security/win-pattern-settings.ts',
   'api/security/activity.ts',
   'api/security/flags/[flagId]/review.ts',
   'api/security/flags/[flagId]/resolve.ts',
   'api/security/flags/[flagId]/dismiss.ts',
   'api/security/players/[playerId].ts',
   'api/security/players/[playerId]/security-restriction.ts',
+  'api/security/players/[playerId]/win-pattern-evaluate.ts',
   'api/security/players/[playerId]/sports.ts',
   'api/security/players/[playerId]/sports/summary.ts',
   'api/security/players/[playerId]/sports/[betId].ts',
@@ -310,6 +314,7 @@ describe('staff onboarding Node ESM import graph', () => {
       const securityControlEntries = [
         'api/security/overview.js',
         'api/security/flags.js',
+        'api/security/win-pattern-settings.js',
         'api/security/activity.js',
       ];
 
@@ -351,7 +356,7 @@ describe('staff onboarding Node ESM import graph', () => {
       const settleCompiled = readFileSync(join(outDir, 'api/internal/sports/settle.js'), 'utf8');
       assert.match(settleCompiled, /from ['"].*server\/sports\/settleHttp\.js['"]/);
 
-      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries, ...securityControlEntries, 'api/internal/sports/settle.js', 'api/owner/withdrawals/[withdrawalId]/approve.js', 'api/owner/withdrawals/[withdrawalId]/reject.js', 'api/owner/withdrawals/[withdrawalId]/paid.js', 'api/owner/players/[playerId]/debit.js', 'api/owner/security/overview.js', 'api/owner/security/flags.js', 'api/owner/security/flags/[flagId]/resolve.js', 'api/owner/players/[playerId]/security.js', 'api/cashier/deposits/[transferId]/reverse.js']) {
+      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries, ...securityControlEntries, 'api/internal/sports/settle.js', 'api/owner/withdrawals/[withdrawalId]/approve.js', 'api/owner/withdrawals/[withdrawalId]/reject.js', 'api/owner/withdrawals/[withdrawalId]/paid.js', 'api/owner/players/[playerId]/debit.js', 'api/owner/security/overview.js', 'api/owner/security/flags.js', 'api/owner/security/flags/[flagId]/resolve.js', 'api/owner/security/win-pattern-settings.js', 'api/owner/players/[playerId]/security.js', 'api/cashier/deposits/[transferId]/reverse.js']) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,
