@@ -102,11 +102,35 @@ describe('player win-pattern risk signals 052 (not executed)', () => {
   it('HIGH_WIN_FREQUENCY / HIGH_NET_PROFIT / HIGH_ROI flags upsert without duplicates', () => {
     const upsert = extractFn(sql, 'private.player_win_pattern_upsert_flag(');
     assert.match(upsert, /ON CONFLICT \(player_user_id, flag_type, source\) WHERE status IN \('open', 'reviewed'\)/);
-    assert.match(upsert, /signal_count = private\.player_risk_flags\.signal_count \+ 1/);
+    assert.match(upsert, /'open',\s*1,/);
+    assert.equal(upsert.includes('signal_count + 1'), false);
+    assert.equal(/signal_count\s*=\s*private\.player_risk_flags\.signal_count\s*\+\s*1/.test(upsert), false);
+    assert.match(upsert, /last_seen_at = pg_catalog\.now\(\)/);
+    assert.match(upsert, /details = EXCLUDED\.details/);
+    assert.match(upsert, /severity = EXCLUDED\.severity/);
     const evaluate = extractFn(sql, 'private.evaluate_player_win_pattern(');
     assert.match(evaluate, /HIGH_WIN_FREQUENCY/);
     assert.match(evaluate, /HIGH_NET_PROFIT/);
     assert.match(evaluate, /HIGH_ROI/);
+  });
+
+  it('reevaluation is idempotent: signal_count stays 1 while active flag is reused', () => {
+    const upsert = extractFn(sql, 'private.player_win_pattern_upsert_flag(');
+    const body = upsert.slice(0, upsert.indexOf('$fn$;') + 5);
+    const conflict = body.slice(body.indexOf('DO UPDATE SET'));
+    assert.match(sql, /CREATE UNIQUE INDEX player_risk_flags_active_uidx\s+ON private\.player_risk_flags \(player_user_id, flag_type, source\)\s+WHERE status IN \('open', 'reviewed'\)/);
+    assert.equal(conflict.includes('signal_count'), false);
+    assert.match(conflict, /last_seen_at = pg_catalog\.now\(\)/);
+    assert.match(conflict, /details = EXCLUDED\.details/);
+    assert.match(conflict, /severity = EXCLUDED\.severity/);
+    assert.match(body, /VALUES \([\s\S]*'open',\s*1,/);
+    assert.match(sql, /player_win_pattern_evaluate_after_sports_fixtures/);
+    assert.match(sql, /public\.security_evaluate_player_win_pattern\(/);
+    assert.match(sql, /public\.owner_evaluate_player_win_pattern\(/);
+    const sharing = extractFn(sql, 'private.player_security_upsert_flag(');
+    assert.match(sharing, /signal_count = private\.player_risk_flags\.signal_count \+ 1/);
+    assert.equal(/DO UPDATE SET[\s\S]*\bstatus\s*=/.test(body), false);
+    assert.equal(/UPDATE[\s\S]*SET[\s\S]*status\s*=\s*'open'/.test(sql), false);
   });
 
   it('AUTO ENFORCEMENT is absent', () => {

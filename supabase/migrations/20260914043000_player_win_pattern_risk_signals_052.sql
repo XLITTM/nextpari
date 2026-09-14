@@ -390,7 +390,6 @@ BEGIN
     )
     ON CONFLICT (player_user_id, flag_type, source) WHERE status IN ('open', 'reviewed')
     DO UPDATE SET
-        signal_count = private.player_risk_flags.signal_count + 1,
         last_seen_at = pg_catalog.now(),
         details = EXCLUDED.details,
         severity = EXCLUDED.severity
@@ -399,6 +398,9 @@ BEGIN
     RETURN v_id;
 END;
 $fn$;
+
+COMMENT ON FUNCTION private.player_win_pattern_upsert_flag(UUID, TEXT, TEXT, TEXT, JSONB) IS
+'One active investigation flag per player/type/source. Reevaluation refreshes last_seen_at, details, and severity without incrementing signal_count. Resolved/dismissed rows are outside the partial unique index and may recur later.';
 
 
 CREATE OR REPLACE FUNCTION private.evaluate_player_win_pattern(
