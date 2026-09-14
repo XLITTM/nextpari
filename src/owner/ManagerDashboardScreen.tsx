@@ -9,6 +9,7 @@ import { isOperationalAccountActive } from '../shared/staff/financeGate';
 import { MessagesPanel } from './MessagesPanel';
 import { OwnerManagersPanel } from './OwnerManagersPanel';
 import { OwnerSecurityTeamPanel } from './OwnerSecurityTeamPanel';
+import { OwnerWinPatternPanel } from './OwnerWinPatternPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { OwnerMoneyDialog, OwnerTreasuryPanel, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
 import { GameRtpReportPanel } from './GameRtpReport';
@@ -62,7 +63,7 @@ import {
   requireOwnerSecurityAccountReason,
 } from './securityAccountActions';
 
-type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk';
+type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk' | 'winPattern';
 
 export function ManagerDashboardScreen() {
   const { loading, staff, deniedMessage, signOut } = useOwnerAuth();
@@ -195,6 +196,7 @@ function BackofficeShell({
           <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="Игроки" />
           <NavBtn active={tab === 'messages'} onClick={() => setTab('messages')} icon={Mail} label="Сообщения" />
           <NavBtn active={tab === 'risk'} onClick={() => setTab('risk')} icon={AlertTriangle} label="Риски" />
+          <NavBtn active={tab === 'winPattern'} onClick={() => setTab('winPattern')} icon={TrendingUp} label="Анализ выигрышей" />
         </nav>
         <div className="mt-auto p-3">
           <button
@@ -217,6 +219,7 @@ function BackofficeShell({
         {tab === 'players' && <PlayersPanel />}
         {tab === 'messages' && <MessagesPanel />}
         {tab === 'risk' && <RiskPanel />}
+        {tab === 'winPattern' && <OwnerWinPatternPanel />}
       </main>
     </div>
   );
@@ -957,6 +960,9 @@ function securityFlagLabel(type: string): string {
   if (type === 'SHARED_NETWORK') return 'Общая сеть';
   if (type === 'LOGIN_FAILURE_BURST') return 'Всплеск неудачных входов';
   if (type === 'AUTH_RATE_LIMITED') return 'Лимит попыток входа';
+  if (type === 'HIGH_WIN_FREQUENCY') return 'Частые выигрыши';
+  if (type === 'HIGH_NET_PROFIT') return 'Высокая прибыль';
+  if (type === 'HIGH_ROI') return 'Высокий ROI';
   return type;
 }
 
@@ -973,6 +979,33 @@ function securityStatusLabel(value: string): string {
   if (value === 'resolved') return 'Закрыт';
   if (value === 'dismissed') return 'Отклонён';
   return value;
+}
+
+function isWinPatternFlag(type: string): boolean {
+  return type === 'HIGH_WIN_FREQUENCY' || type === 'HIGH_NET_PROFIT' || type === 'HIGH_ROI';
+}
+
+function winPatternSourceLabel(source: string): string {
+  if (source === 'SPORTS') return 'Спорт';
+  if (source === 'OWNED_GAMES') return 'Свои игры';
+  return source || '—';
+}
+
+function winPatternWhy(row: { flagType: string; source?: string; details: Record<string, unknown> }): string {
+  if (!isWinPatternFlag(row.flagType)) return '';
+  const d = row.details;
+  const source = winPatternSourceLabel(String(row.source || d.source || ''));
+  const settled = d.settled_count ?? d.settledCount;
+  const wins = d.win_count ?? d.winCount;
+  const rate = d.win_rate ?? d.winRate;
+  const stake = d.total_stake ?? d.totalStake;
+  const payout = d.total_payout ?? d.totalPayout;
+  const profit = d.net_profit ?? d.netProfit;
+  const roi = d.roi;
+  const lookback = d.lookback_hours ?? d.lookbackHours;
+  const rateText = typeof rate === 'number' ? `${(rate * 100).toFixed(1)}%` : String(rate ?? '—');
+  const roiText = typeof roi === 'number' ? `${(roi * 100).toFixed(1)}%` : String(roi ?? '—');
+  return `${source} · ${lookback ?? '—'}ч · ${settled ?? '—'} / ${wins ?? '—'} · ${rateText} · ставка ${stake ?? '—'} · выплаты ${payout ?? '—'} · прибыль ${profit ?? '—'} · ROI ${roiText}`;
 }
 
 function SecurityPanel() {
@@ -1156,6 +1189,9 @@ function SecurityPanel() {
           <option value="SHARED_NETWORK">Общая сеть</option>
           <option value="LOGIN_FAILURE_BURST">Всплеск неудачных входов</option>
           <option value="AUTH_RATE_LIMITED">Лимит попыток</option>
+          <option value="HIGH_WIN_FREQUENCY">Частые выигрыши</option>
+          <option value="HIGH_NET_PROFIT">Высокая прибыль</option>
+          <option value="HIGH_ROI">Высокий ROI</option>
         </select>
         <input
           value={playerId}
@@ -1193,7 +1229,12 @@ function SecurityPanel() {
                     {row.playerPublicId || '—'}
                   </button>
                 </td>
-                <td className="px-4 py-3 font-semibold">{securityFlagLabel(row.flagType)}</td>
+                <td className="px-4 py-3 font-semibold">
+                  {securityFlagLabel(row.flagType)}
+                  {isWinPatternFlag(row.flagType) && (
+                    <p className="text-[11px] font-medium text-gray-500 mt-1">{winPatternWhy(row)}</p>
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <span className={`text-[11px] font-bold px-2 py-1 rounded-full ${
                     row.severity === 'high'
@@ -1417,10 +1458,38 @@ function PlayerSecurityModal({ playerId, onClose }: { playerId: string; onClose:
             {(dossier?.flags ?? []).map((flag) => (
               <p key={flag.id} className="text-sm py-1">
                 <span className="font-semibold">{securityFlagLabel(flag.flagType)}</span>
+                {flag.source ? ` · ${winPatternSourceLabel(flag.source)}` : ''}
                 {' · '}
                 {securityStatusLabel(flag.status)}
                 {' · '}
                 сигналов {flag.signalCount}, связанных {flag.relatedPlayerCount}
+                {isWinPatternFlag(flag.flagType) && (
+                  <span className="block text-[11px] text-gray-500">{winPatternWhy(flag)}</span>
+                )}
+              </p>
+            ))}
+          </div>
+          {(dossier && (dossier.winPattern.linkedSharingFlags.length > 0 || dossier.winPattern.linkedWinPatternOverlap.length > 0)) ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
+              <h4 className="text-sm font-extrabold mb-2">Связанные аккаунты и выигрыши</h4>
+              {(dossier?.winPattern.linkedSharingFlags ?? []).map((row, index) => (
+                <p key={`share-${index}`} className="text-sm py-1">
+                  {securityFlagLabel(String(row.flag_type ?? row.flagType ?? ''))} · связанных {String(row.related_player_count ?? row.relatedPlayerCount ?? '—')}
+                </p>
+              ))}
+              {(dossier?.winPattern.linkedWinPatternOverlap ?? []).map((row, index) => (
+                <p key={`overlap-${index}`} className="text-sm py-1">
+                  #{String(row.player_public_id ?? row.playerPublicId ?? '')} · {securityFlagLabel(String(row.flag_type ?? row.flagType ?? ''))} · {winPatternSourceLabel(String(row.source ?? ''))}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          <div>
+            <h4 className="text-sm font-extrabold mb-2">Свои игры</h4>
+            {(dossier?.winPattern.ownedGamesRecent ?? []).length === 0 && <p className="text-sm text-gray-500">Нет недавних раундов</p>}
+            {(dossier?.winPattern.ownedGamesRecent ?? []).map((row, index) => (
+              <p key={index} className="text-xs text-gray-600 py-1">
+                {String(row.game_code ?? row.gameCode ?? '')} · ставка {String(row.total_stake ?? row.totalStake ?? '')} · выплата {String(row.payout ?? '')}
               </p>
             ))}
           </div>

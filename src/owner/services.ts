@@ -363,7 +363,10 @@ export type OwnerSecurityFlagType =
   | 'SHARED_DEVICE'
   | 'SHARED_NETWORK'
   | 'LOGIN_FAILURE_BURST'
-  | 'AUTH_RATE_LIMITED';
+  | 'AUTH_RATE_LIMITED'
+  | 'HIGH_WIN_FREQUENCY'
+  | 'HIGH_NET_PROFIT'
+  | 'HIGH_ROI';
 
 export interface OwnerSecurityOverview {
   openFlags: number;
@@ -378,6 +381,7 @@ export interface OwnerSecurityFlag {
   id: string;
   playerPublicId: string;
   flagType: string;
+  source: string;
   severity: string;
   status: string;
   signalCount: number;
@@ -404,6 +408,7 @@ export interface OwnerPlayerSecurityDossier {
   playerPublicId: string;
   flags: OwnerSecurityFlag[];
   events: OwnerSecurityEvent[];
+  winPattern: OwnerWinPatternExtras;
 }
 
 function parseSecurityOverview(raw: unknown): OwnerSecurityOverview {
@@ -420,17 +425,19 @@ function parseSecurityOverview(raw: unknown): OwnerSecurityOverview {
 
 function parseSecurityFlag(raw: unknown): OwnerSecurityFlag {
   const item = asRecord(raw);
+  const details = asRecord(item.details);
   return {
     id: str(item.id),
     playerPublicId: str(item.player_public_id ?? item.playerPublicId),
     flagType: str(item.flag_type ?? item.flagType),
+    source: str(item.source ?? details.source),
     severity: str(item.severity),
     status: str(item.status),
     signalCount: num(item.signal_count ?? item.signalCount),
     relatedPlayerCount: num(item.related_player_count ?? item.relatedPlayerCount),
     firstSeenAt: str(item.first_seen_at ?? item.firstSeenAt),
     lastSeenAt: str(item.last_seen_at ?? item.lastSeenAt),
-    details: asRecord(item.details),
+    details,
     resolutionReason: str(item.resolution_reason ?? item.resolutionReason),
   };
 }
@@ -482,7 +489,74 @@ export async function fetchOwnerPlayerSecurity(playerId: string): Promise<OwnerP
     playerPublicId: str(rec.player_public_id ?? rec.playerPublicId, playerId),
     flags: asRows(rec.flags).map(parseSecurityFlag),
     events: asRows(rec.events).map(parseSecurityEvent),
+    winPattern: parseWinPatternExtras(rec.win_pattern ?? rec.winPattern),
   };
+}
+
+export interface OwnerWinPatternSettings {
+  source: string;
+  enabled: boolean;
+  lookbackHours: number;
+  minimumSettledCount: number;
+  minimumTotalStake: number;
+  winRateThreshold: number;
+  netProfitThreshold: number;
+  roiThreshold: number;
+  updatedAt: string;
+}
+
+export interface OwnerWinPatternExtras {
+  linkedSharingFlags: Array<Record<string, unknown>>;
+  linkedWinPatternOverlap: Array<Record<string, unknown>>;
+  ownedGamesRecent: Array<Record<string, unknown>>;
+  metrics: Record<string, Record<string, unknown>>;
+}
+
+function parseWinPatternExtras(raw: unknown): OwnerWinPatternExtras {
+  const rec = asRecord(raw);
+  return {
+    linkedSharingFlags: asRows(rec.linked_sharing_flags ?? rec.linkedSharingFlags).map(asRecord),
+    linkedWinPatternOverlap: asRows(rec.linked_win_pattern_overlap ?? rec.linkedWinPatternOverlap).map(asRecord),
+    ownedGamesRecent: asRows(rec.owned_games_recent ?? rec.ownedGamesRecent).map(asRecord),
+    metrics: asRecord(rec.metrics) as Record<string, Record<string, unknown>>,
+  };
+}
+
+function parseWinPatternSettings(raw: unknown): OwnerWinPatternSettings {
+  const item = asRecord(raw);
+  return {
+    source: str(item.source),
+    enabled: Boolean(item.enabled),
+    lookbackHours: num(item.lookback_hours ?? item.lookbackHours),
+    minimumSettledCount: num(item.minimum_settled_count ?? item.minimumSettledCount),
+    minimumTotalStake: num(item.minimum_total_stake ?? item.minimumTotalStake),
+    winRateThreshold: num(item.win_rate_threshold ?? item.winRateThreshold),
+    netProfitThreshold: num(item.net_profit_threshold ?? item.netProfitThreshold),
+    roiThreshold: num(item.roi_threshold ?? item.roiThreshold),
+    updatedAt: str(item.updated_at ?? item.updatedAt),
+  };
+}
+
+export async function fetchOwnerWinPatternSettings(): Promise<OwnerWinPatternSettings[]> {
+  const data = await ownerData('/api/owner/security/win-pattern-settings');
+  const rec = asRecord(data);
+  return asRows(rec.rows ?? data).map(parseWinPatternSettings);
+}
+
+export async function saveOwnerWinPatternSettings(input: {
+  source: string;
+  enabled: boolean;
+  lookbackHours: number;
+  minimumSettledCount: number;
+  minimumTotalStake: number;
+  winRateThreshold: number;
+  netProfitThreshold: number;
+  roiThreshold: number;
+}): Promise<void> {
+  await ownerJson('/api/owner/security/win-pattern-settings', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function resolveOwnerSecurityFlag(input: {

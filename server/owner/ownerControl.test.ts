@@ -209,6 +209,24 @@ describe('owner control center same-origin BFF', () => {
     assert.equal(dossier.rpc.calls[0]?.name, 'owner_player_security');
     assert.deepEqual(dossier.rpc.calls[0]?.args, { p_player_id: '110790' });
 
+    const settings = await ownerGet('/api/owner/security/win-pattern-settings');
+    assert.equal(settings.result.status, 200);
+    assert.equal(settings.rpc.calls[0]?.name, 'owner_win_pattern_settings');
+
+    const saved = await ownerPost('/api/owner/security/win-pattern-settings', {
+      source: 'SPORTS',
+      enabled: true,
+      lookbackHours: 168,
+      minimumSettledCount: 25,
+      minimumTotalStake: 1000,
+      winRateThreshold: 0.7,
+      netProfitThreshold: 3000,
+      roiThreshold: 0.4,
+    });
+    assert.equal(saved.result.status, 200);
+    assert.equal(saved.rpc.calls[0]?.name, 'owner_set_win_pattern_settings');
+    assert.equal(saved.rpc.calls[0]?.args?.p_source, 'SPORTS');
+
     const resolved = await ownerPost(`/api/owner/security/flags/${FLAG_ID}/resolve`, {
       action: 'resolve',
       reason: 'reviewed by owner',
@@ -255,6 +273,8 @@ describe('owner control center same-origin BFF', () => {
     for (const role of ['manager', 'cashier', 'player']) {
       await denied(role, '/api/owner/security/overview');
       await denied(role, '/api/owner/security/flags');
+      await denied(role, '/api/owner/security/win-pattern-settings');
+      await denied(role, '/api/owner/security/win-pattern-settings', 'POST');
       await denied(role, '/api/owner/players/110790/security');
       await denied(role, '/api/owner/players/110790/sports');
       await denied(role, '/api/owner/players/110790/sports/summary');
@@ -683,9 +703,13 @@ describe('owner control center same-origin BFF', () => {
       sports: readFileSync(join(root, 'api/owner/players/[playerId]/sports.ts'), 'utf8'),
       sportsSummary: readFileSync(join(root, 'api/owner/players/[playerId]/sports/summary.ts'), 'utf8'),
       sportsBet: readFileSync(join(root, 'api/owner/players/[playerId]/sports/[betId].ts'), 'utf8'),
+      settings: readFileSync(join(root, 'api/owner/security/win-pattern-settings.ts'), 'utf8'),
+      evaluate: readFileSync(join(root, 'api/owner/players/[playerId]/win-pattern-evaluate.ts'), 'utf8'),
     };
     assert.match(files.overview, /vercelOwnerControl\('\/api\/owner\/security\/overview'\)/);
     assert.match(files.flags, /vercelOwnerControl\('\/api\/owner\/security\/flags'\)/);
+    assert.match(files.settings, /vercelOwnerControl\('\/api\/owner\/security\/win-pattern-settings'\)/);
+    assert.match(files.evaluate, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/win-pattern-evaluate`,\s*\)/);
     assert.match(files.resolve, /vercelOwnerParam\(\s*'flagId',\s*\(id\) => `\/api\/owner\/security\/flags\/\$\{id\}\/resolve`,\s*\)/);
     assert.match(files.player, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/security`,\s*\)/);
     assert.match(files.restriction, /vercelOwnerParam\(\s*'playerId',\s*\(id\) => `\/api\/owner\/players\/\$\{id\}\/security-restriction`,\s*\)/);

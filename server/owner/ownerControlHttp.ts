@@ -123,6 +123,18 @@ function requireScaledAmount(value: unknown): number {
   return n;
 }
 
+function requirePositiveInt(value: unknown, code: string): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) throw staffError(code, 400);
+  return n;
+}
+
+function requireRate(value: unknown, code: string): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) throw staffError(code, 400);
+  return n;
+}
+
 function requireReason(value: unknown): string {
   const reason = String(value ?? '').trim();
   if (!reason) throw staffError('REASON_REQUIRED', 400);
@@ -359,6 +371,9 @@ type ControlAction =
   | { kind: 'securityOverview' }
   | { kind: 'securityFlags' }
   | { kind: 'securityFlagResolve'; flagId: string }
+  | { kind: 'winPatternSettingsGet' }
+  | { kind: 'winPatternSettingsSet' }
+  | { kind: 'evaluateWinPattern'; playerId: string }
   | { kind: 'withdrawals' }
   | { kind: 'withdrawalApprove'; withdrawalId: string }
   | { kind: 'withdrawalReject'; withdrawalId: string }
@@ -406,6 +421,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   const playerSecurity = path.match(/^\/api\/owner\/players\/([^/]+)\/security$/);
   if (playerSecurity) return m === 'GET' ? { kind: 'playerSecurity', playerId: playerSecurity[1] } : 'method';
 
+  const evaluateWin = path.match(/^\/api\/owner\/players\/([^/]+)\/win-pattern-evaluate$/);
+  if (evaluateWin) return m === 'POST' ? { kind: 'evaluateWinPattern', playerId: evaluateWin[1] } : 'method';
+
   const restriction = path.match(/^\/api\/owner\/players\/([^/]+)\/security-restriction$/);
   if (restriction) {
     if (m === 'GET') return { kind: 'playerSecurityRestrictionGet', playerId: restriction[1] };
@@ -449,6 +467,11 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/owner/risk-bets') return m === 'GET' ? { kind: 'risk' } : 'method';
   if (path === '/api/owner/security/overview') return m === 'GET' ? { kind: 'securityOverview' } : 'method';
   if (path === '/api/owner/security/flags') return m === 'GET' ? { kind: 'securityFlags' } : 'method';
+  if (path === '/api/owner/security/win-pattern-settings') {
+    if (m === 'GET') return { kind: 'winPatternSettingsGet' };
+    if (m === 'POST') return { kind: 'winPatternSettingsSet' };
+    return 'method';
+  }
   const flagResolve = path.match(/^\/api\/owner\/security\/flags\/([^/]+)\/resolve$/);
   if (flagResolve) {
     return m === 'POST' ? { kind: 'securityFlagResolve', flagId: flagResolve[1] } : 'method';
@@ -572,6 +595,29 @@ async function runControl(
       });
     case 'securityOverview':
       return rpc.invoke('owner_security_overview');
+    case 'winPatternSettingsGet':
+      return rpc.invoke('owner_win_pattern_settings');
+    case 'winPatternSettingsSet':
+      return rpc.invoke('owner_set_win_pattern_settings', {
+        p_source: optionalFilter(String(rec.source ?? ''), 'WIN_PATTERN_SOURCE_INVALID') ?? (() => {
+          throw staffError('WIN_PATTERN_SOURCE_INVALID', 400);
+        })(),
+        p_enabled: requireBoolean(rec.enabled, 'ENABLED_REQUIRED'),
+        p_lookback_hours: requirePositiveInt(rec.lookbackHours ?? rec.lookback_hours, 'LOOKBACK_INVALID'),
+        p_minimum_settled_count: requirePositiveInt(
+          rec.minimumSettledCount ?? rec.minimum_settled_count,
+          'MINIMUM_SETTLED_COUNT_INVALID',
+        ),
+        p_minimum_total_stake: requireScaledAmount(rec.minimumTotalStake ?? rec.minimum_total_stake),
+        p_win_rate_threshold: requireRate(rec.winRateThreshold ?? rec.win_rate_threshold, 'WIN_RATE_THRESHOLD_INVALID'),
+        p_net_profit_threshold: requireScaledAmount(rec.netProfitThreshold ?? rec.net_profit_threshold),
+        p_roi_threshold: requireRate(rec.roiThreshold ?? rec.roi_threshold, 'ROI_THRESHOLD_INVALID'),
+      });
+    case 'evaluateWinPattern':
+      return rpc.invoke('owner_evaluate_player_win_pattern', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_source: optionalFilter(rec.source == null ? null : String(rec.source), 'WIN_PATTERN_SOURCE_INVALID'),
+      });
     case 'securityFlags':
       return rpc.invoke('owner_list_security_flags', {
         p_status: optionalFilter(query.get('status'), 'FLAG_STATUS_INVALID'),

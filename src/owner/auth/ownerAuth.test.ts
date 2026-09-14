@@ -128,6 +128,7 @@ export const OWNER_CONTROL_API_ROUTES = [
   '/api/owner/provider-settlements',
   '/api/owner/security/overview',
   '/api/owner/security/flags',
+  '/api/owner/security/win-pattern-settings',
   '/api/owner/security-staff',
 ] as const;
 

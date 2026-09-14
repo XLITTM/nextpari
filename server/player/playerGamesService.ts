@@ -87,6 +87,16 @@ async function invokeGame(
   return asRecord(data);
 }
 
+async function maybeEvaluateWinPatternAfterGame(name: string, payload: Record<string, unknown>): Promise<void> {
+  if (name !== 'player_game_start' && name !== 'player_game_action') return;
+  try {
+    const { safeEvaluateWinPatternAfterGameRound } = await import('../security/winPatternEvaluate.js');
+    await safeEvaluateWinPatternAfterGameRound(payload);
+  } catch {
+    /* investigation analytics must not fail a completed payout */
+  }
+}
+
 export async function runPlayerGameRpc(
   ports: PlayerGameGatewayPorts,
   cookieHeader: string | undefined,
@@ -121,6 +131,7 @@ export async function runPlayerGameRpc(
   const rpcStart = Date.now();
   try {
     const payload = await invokeGame(ports, accessToken, name, args);
+    await maybeEvaluateWinPatternAfterGame(name, payload);
     return withGameHeaders(
       { status: 200, body: payload, cookies: setCookies },
       { authMs, rpcMs: Date.now() - rpcStart, totalMs: Date.now() - totalStart, refreshed },
@@ -140,6 +151,7 @@ export async function runPlayerGameRpc(
     setCookies = serializePlayerCookies(tokens.accessToken, tokens.refreshToken, secure);
     const retryStart = Date.now();
     const payload = await invokeGame(ports, tokens.accessToken, name, args);
+    await maybeEvaluateWinPatternAfterGame(name, payload);
     return withGameHeaders(
       { status: 200, body: payload, cookies: setCookies },
       {

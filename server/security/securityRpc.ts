@@ -18,6 +18,8 @@ export const SECURITY_ALLOWED_RPCS = [
   'security_player_sports_bets',
   'security_player_sports_bet',
   'security_player_sports_summary',
+  'security_win_pattern_settings',
+  'security_evaluate_player_win_pattern',
 ] as const;
 
 export const SECURITY_DENIED_RPCS = [
@@ -39,6 +41,7 @@ export const SECURITY_DENIED_RPCS = [
   'sports_settle_bet',
   'sports_cancel_bet',
   'owner_list_provider_settlements',
+  'owner_set_win_pattern_settings',
 ] as const;
 
 export function mapSecurityRpcError(error: { message?: string; code?: string }): StaffOnboardingError {

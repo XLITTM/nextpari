@@ -2,6 +2,7 @@ export interface SecurityFlag {
   id: string;
   playerPublicId: string;
   flagType: string;
+  source: string;
   severity: string;
   status: string;
   signalCount: number;
@@ -112,6 +113,12 @@ export interface SecurityDossier {
   restrictionHistory: Array<Record<string, unknown>>;
   recentDecisions: Array<Record<string, unknown>>;
   linkedAccountCount: number;
+  winPattern: {
+    linkedSharingFlags: Array<Record<string, unknown>>;
+    linkedWinPatternOverlap: Array<Record<string, unknown>>;
+    ownedGamesRecent: Array<Record<string, unknown>>;
+    metrics: Record<string, unknown>;
+  };
 }
 
 export interface SecurityActivityRow {
@@ -188,17 +195,19 @@ async function securityData(path: string, init?: RequestInit): Promise<unknown> 
 
 function parseFlag(raw: unknown): SecurityFlag {
   const item = asRecord(raw);
+  const details = asRecord(item.details);
   return {
     id: str(item.id),
     playerPublicId: str(item.player_public_id ?? item.playerPublicId),
     flagType: str(item.flag_type ?? item.flagType),
+    source: str(item.source ?? details.source),
     severity: str(item.severity),
     status: str(item.status),
     signalCount: num(item.signal_count ?? item.signalCount),
     relatedPlayerCount: num(item.related_player_count ?? item.relatedPlayerCount),
     firstSeenAt: str(item.first_seen_at ?? item.firstSeenAt),
     lastSeenAt: str(item.last_seen_at ?? item.lastSeenAt),
-    details: asRecord(item.details),
+    details,
     resolutionReason: str(item.resolution_reason ?? item.resolutionReason),
   };
 }
@@ -318,6 +327,17 @@ export async function fetchSecurityDossier(playerId: string): Promise<SecurityDo
     restrictionHistory: asRows(rec.restriction_history ?? rec.restrictionHistory).map(asRecord),
     recentDecisions: asRows(rec.recent_security_decisions ?? rec.recentDecisions).map(asRecord),
     linkedAccountCount: num(rec.linked_account_count ?? rec.linkedAccountCount),
+    winPattern: parseWinPatternExtras(rec.win_pattern ?? rec.winPattern),
+  };
+}
+
+function parseWinPatternExtras(raw: unknown): SecurityDossier['winPattern'] {
+  const rec = asRecord(raw);
+  return {
+    linkedSharingFlags: asRows(rec.linked_sharing_flags ?? rec.linkedSharingFlags).map(asRecord),
+    linkedWinPatternOverlap: asRows(rec.linked_win_pattern_overlap ?? rec.linkedWinPatternOverlap).map(asRecord),
+    ownedGamesRecent: asRows(rec.owned_games_recent ?? rec.ownedGamesRecent).map(asRecord),
+    metrics: asRecord(rec.metrics),
   };
 }
 
@@ -455,6 +475,33 @@ export async function fetchSecuritySportsBet(playerId: string, betId: string): P
     `/api/security/players/${encodeURIComponent(playerId)}/sports/${encodeURIComponent(betId)}`,
   );
   return parseSportsBet(data);
+}
+
+export async function fetchSecurityWinPatternSettings(): Promise<Array<{
+  source: string;
+  enabled: boolean;
+  lookbackHours: number;
+  minimumSettledCount: number;
+  minimumTotalStake: number;
+  winRateThreshold: number;
+  netProfitThreshold: number;
+  roiThreshold: number;
+}>> {
+  const data = await securityData('/api/security/win-pattern-settings');
+  const rec = asRecord(data);
+  return asRows(rec.rows ?? data).map((row) => {
+    const item = asRecord(row);
+    return {
+      source: str(item.source),
+      enabled: Boolean(item.enabled),
+      lookbackHours: num(item.lookback_hours ?? item.lookbackHours),
+      minimumSettledCount: num(item.minimum_settled_count ?? item.minimumSettledCount),
+      minimumTotalStake: num(item.minimum_total_stake ?? item.minimumTotalStake),
+      winRateThreshold: num(item.win_rate_threshold ?? item.winRateThreshold),
+      netProfitThreshold: num(item.net_profit_threshold ?? item.netProfitThreshold),
+      roiThreshold: num(item.roi_threshold ?? item.roiThreshold),
+    };
+  });
 }
 
 export async function fetchSecurityActivity(): Promise<SecurityActivityRow[]> {
