@@ -23,6 +23,9 @@ export type PlayerSecurityEventType =
   | 'REGISTER_FAILURE'
   | 'PASSWORD_CHANGED'
   | 'EMAIL_VERIFIED'
+  | 'PASSWORD_RECOVERY_REQUESTED'
+  | 'PASSWORD_RECOVERY_VERIFIED'
+  | 'PASSWORD_RECOVERY_COMPLETED'
   | 'AUTH_RATE_LIMITED'
   | 'SHARED_DEVICE_SIGNAL'
   | 'SHARED_NETWORK_SIGNAL';
@@ -172,6 +175,10 @@ const FORBIDDEN_META_KEYS = new Set([
   'servicerolekey',
   'servicerole',
   'network',
+  'otp',
+  'code',
+  'ticket',
+  'resetticket',
 ]);
 
 const FORBIDDEN_META_TEXT = /(password|access_token|refresh_token|authorization|service_role|pepper|api[_-]?key|device_token|bearer )/i;

@@ -167,7 +167,9 @@ describe('player change password UI', () => {
     assert.match(auth, /Email или ID игрока/);
     assert.match(auth, /signUpPlayerByPhone/);
     assert.match(auth, /signUpPlayerOneClick/);
-    assert.match(auth, /Восстановление пароля скоро будет доступно/);
+    assert.match(auth, /Забыли пароль\?/);
+    assert.match(auth, /startPlayerPasswordRecovery/);
+    assert.equal(auth.includes('Восстановление пароля скоро будет доступно'), false);
     assert.equal(auth.includes('/api/player/auth/change-password'), false);
     const owner = read('owner/auth/OwnerAuthProvider.tsx');
     const manager = read('manager/auth/ManagerAuthProvider.tsx');

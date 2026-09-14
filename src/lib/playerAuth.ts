@@ -98,6 +98,10 @@ export function validatePlayerEmail(email: string): string | null {
 export const PLAYER_PASSWORD_MIN_LENGTH = 8;
 export const PLAYER_PASSWORD_POLICY_MESSAGE = 'Пароль должен содержать не менее 8 символов';
 export const PLAYER_PASSWORD_CHANGED_NOTICE = 'Пароль успешно изменён. Войдите с новым паролем.';
+export const PLAYER_PASSWORD_RECOVERY_START_MESSAGE =
+  'Если аккаунт с подтверждённой почтой существует, код отправлен.';
+export const PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE = 'Пароль изменён. Войдите с новым паролем.';
+export const PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE = 'Неверный или истёкший код.';
 
 export function validatePlayerPassword(password: string): string | null {
   if (password.length < PLAYER_PASSWORD_MIN_LENGTH) return 'password too short';
@@ -662,6 +666,132 @@ export async function verifyPlayerEmailBinding(code: string): Promise<{ ok: true
     throw new PlayerEmailBindError(err, mapPlayerEmailBindError(err));
   }
   return { ok: true, email: String(payload.email ?? '') };
+}
+
+export class PlayerPasswordRecoveryError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = 'PlayerPasswordRecoveryError';
+    this.code = code;
+  }
+}
+
+export function mapPlayerPasswordRecoveryError(code: string): string {
+  switch (code) {
+    case 'RECOVERY_CODE_INVALID':
+    case 'INVALID_CODE':
+      return PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE;
+    case 'PASSWORD_CONFIRMATION_MISMATCH':
+      return mapChangePasswordError('PASSWORD_CONFIRMATION_MISMATCH');
+    case 'PASSWORD_POLICY_INVALID':
+    case 'INVALID_PASSWORD':
+      return PLAYER_PASSWORD_POLICY_MESSAGE;
+    case 'RESET_TICKET_INVALID':
+      return 'Срок действия кода истёк. Запросите восстановление заново.';
+    default:
+      return 'Не удалось изменить пароль. Попробуйте ещё раз.';
+  }
+}
+
+export function validatePlayerPasswordReset(input: {
+  newPassword: string;
+  confirmPassword: string;
+}): { ok: true } | { ok: false; code: string; message: string } {
+  if (input.newPassword !== input.confirmPassword) {
+    return {
+      ok: false,
+      code: 'PASSWORD_CONFIRMATION_MISMATCH',
+      message: mapPlayerPasswordRecoveryError('PASSWORD_CONFIRMATION_MISMATCH'),
+    };
+  }
+  if (validatePlayerPassword(input.newPassword)) {
+    return {
+      ok: false,
+      code: 'PASSWORD_POLICY_INVALID',
+      message: mapPlayerPasswordRecoveryError('PASSWORD_POLICY_INVALID'),
+    };
+  }
+  return { ok: true };
+}
+
+export async function startPlayerPasswordRecovery(identifier: string): Promise<{
+  ok: true;
+  message: string;
+  challengeId: string;
+  resendAfterSeconds: number;
+}> {
+  const res = await fetch('/api/player/password-recovery/start', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: identifier.trim() }),
+  });
+  const payload = await readJson(res);
+  if (!res.ok || payload.ok !== true) {
+    throw new PlayerPasswordRecoveryError('RECOVERY_START_FAILED', PLAYER_PASSWORD_RECOVERY_START_MESSAGE);
+  }
+  return {
+    ok: true,
+    message: String(payload.message ?? PLAYER_PASSWORD_RECOVERY_START_MESSAGE),
+    challengeId: String(payload.challengeId ?? ''),
+    resendAfterSeconds: Number(payload.resendAfterSeconds ?? 60),
+  };
+}
+
+export async function verifyPlayerPasswordRecovery(input: {
+  challengeId: string;
+  code: string;
+}): Promise<{ ok: true; resetTicket: string }> {
+  const code = String(input.code ?? '');
+  if (!/^[0-9]{6}$/.test(code) || !input.challengeId) {
+    throw new PlayerPasswordRecoveryError('RECOVERY_CODE_INVALID', PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE);
+  }
+  const res = await fetch('/api/player/password-recovery/verify', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ challengeId: input.challengeId, code }),
+  });
+  const payload = await readJson(res);
+  if (!res.ok || payload.ok !== true || !payload.resetTicket) {
+    throw new PlayerPasswordRecoveryError(
+      String(payload.error ?? 'RECOVERY_CODE_INVALID'),
+      PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE,
+    );
+  }
+  return { ok: true, resetTicket: String(payload.resetTicket) };
+}
+
+export async function resetPlayerPasswordWithTicket(input: {
+  resetTicket: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<{ ok: true; message: string }> {
+  const local = validatePlayerPasswordReset(input);
+  if (!local.ok) {
+    throw new PlayerPasswordRecoveryError(local.code, local.message);
+  }
+  const res = await fetch('/api/player/password-recovery/reset', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      resetTicket: input.resetTicket,
+      newPassword: input.newPassword,
+      confirmPassword: input.confirmPassword,
+    }),
+  });
+  const payload = await readJson(res);
+  if (!res.ok || payload.ok !== true) {
+    const code = String(payload.error ?? 'PASSWORD_RESET_FAILED');
+    throw new PlayerPasswordRecoveryError(code, mapPlayerPasswordRecoveryError(code));
+  }
+  return {
+    ok: true,
+    message: String(payload.message ?? PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE),
+  };
 }
 
 export async function getPlayerSession() {

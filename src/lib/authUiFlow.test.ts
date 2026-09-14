@@ -46,7 +46,12 @@ describe('auth UI navigation', () => {
     assert.match(screen, /planOneClickContinue/);
     assert.match(screen, /await onAuthSuccess\(\)/);
     assert.equal(screen.includes("setIssuedSecret(''); void onAuthSuccess()"), false);
-    assert.match(screen, /Восстановление пароля скоро будет доступно/);
+    assert.match(screen, /Забыли пароль\?/);
+    assert.match(screen, /startPlayerPasswordRecovery/);
+    assert.match(screen, /Получить код/);
+    assert.match(screen, /Подтвердить код/);
+    assert.match(screen, /Изменить пароль/);
+    assert.equal(screen.includes('Восстановление пароля скоро будет доступно'), false);
     assert.equal(screen.includes('publicId'), false);
     assert.equal(screen.includes('Math.random'), false);
     const hero = readFileSync(join(here, '../components/auth/AuthHero.tsx'), 'utf8');
