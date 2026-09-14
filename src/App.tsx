@@ -640,6 +640,7 @@ export default function App() {
   // Isolated staff portals — no shared session, no cross-redirects:
   // /#/agent      → кассир
   // /#/manager    → менеджер (логин), /#/manager/dashboard → кабинет
+  // /#/security   → служба безопасности
   // /#/backoffice → владелец / Superadmin
   if (portal) {
     return (

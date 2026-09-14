@@ -1,3 +1,4 @@
+import { generateInternalAuthEmail } from '../auth/oneClickPassword.js';
 import { createAuthAdminPort } from './staffAuthAdmin.js';
 import { loadStaffOnboardingEnv } from './env.js';
 import { StaffOnboardingError, staffError } from './errors.js';
@@ -103,6 +104,48 @@ export async function provisionOwnerManager(input: {
     { admin: input.admin },
     input.log,
   );
+}
+
+export async function provisionOwnerSecurityStaff(input: {
+  body: unknown;
+  admin: AuthAdminPort;
+  invoke: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
+  log: StaffLog;
+}): Promise<unknown> {
+  const rec = rejectForbiddenStaffCreateFields(input.body);
+  const hiddenEmail = generateInternalAuthEmail();
+  return provisionAuthThenBind(
+    {
+      email: hiddenEmail,
+      temporaryPassword: rec.temporaryPassword ?? rec.password,
+      bind: (authUserId) =>
+        input.invoke('owner_provision_security_staff', {
+          p_auth_user_id: authUserId,
+          p_login: rec.login,
+          p_display_name: rec.displayName ?? rec.display_name ?? rec.fullName ?? rec.full_name,
+          p_auth_email: hiddenEmail,
+        }),
+    },
+    { admin: input.admin },
+    input.log,
+  );
+}
+
+export async function resetOwnerSecurityStaffPassword(input: {
+  authUserId: string;
+  temporaryPassword: unknown;
+  admin: AuthAdminPort;
+  invoke: (name: string, args?: Record<string, unknown>) => Promise<unknown>;
+}): Promise<unknown> {
+  const password = normalizePassword(input.temporaryPassword);
+  await input.invoke('owner_audit_security_password_reset', {
+    p_auth_user_id: input.authUserId,
+  });
+  if (!input.admin.updateUserPassword) {
+    throw staffError('AUTH_USER_UPDATE_FAILED', 502);
+  }
+  await input.admin.updateUserPassword(input.authUserId, password);
+  return { ok: true, authUserId: input.authUserId };
 }
 
 export async function provisionManagerCashier(input: {

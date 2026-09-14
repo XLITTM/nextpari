@@ -130,6 +130,10 @@ describe('staff hierarchy BFF helpers', () => {
     assert.equal(panel.includes('/api/manager/auth/login'), false);
     assert.equal(panel.includes('password'), true);
     assert.equal(panel.includes('startingBalance'), false);
+    const securityPanel = readFileSync(join(root, 'src/owner/OwnerSecurityTeamPanel.tsx'), 'utf8');
+    assert.match(dashboard, /OwnerSecurityTeamPanel/);
+    assert.match(securityPanel, /postOwnerSecurityStaff/);
+    assert.equal(securityPanel.includes('@auth.nextpari.invalid'), false);
     assert.match(screen, /postCashierDeposit/);
     assert.match(screen, /Финансовые операции активны/);
     assert.match(screen, /deadbeefcafebabe/);

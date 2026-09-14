@@ -3,6 +3,7 @@ import type { Plugin, ViteDevServer } from 'vite';
 import { attachCashierControlHttp } from '../server/cashier/cashierControlHttp';
 import { attachManagerControlHttp } from '../server/manager/managerControlHttp';
 import { attachOwnerControlHttp } from '../server/owner/ownerControlHttp';
+import { attachSecurityControlHttp } from '../server/security/securityControlHttp';
 import { attachPlayerAuthHttp } from '../server/player/playerAuthHttp';
 import { attachPlayerGamesHttp } from '../server/player/playerGamesHttp';
 import { attachPlayerSportsHttp } from '../server/player/sportsPlaceHttp';
@@ -11,6 +12,7 @@ import { attachSportsSettleHttp } from '../server/sports/settleHttp';
 import { attachCashierAuthHttp } from '../server/staff/cashierAuthHttp';
 import { attachManagerAuthHttp } from '../server/staff/managerAuthHttp';
 import { attachOwnerAuthHttp } from '../server/staff/ownerAuthHttp';
+import { attachSecurityAuthHttp } from '../server/staff/securityAuthHttp';
 import { attachOwnerStaffHttp } from '../server/staff/httpHandler';
 
 function attachOwnerStaff(server: ViteDevServer) {
@@ -23,6 +25,10 @@ function attachOwnerStaff(server: ViteDevServer) {
       .then((handled) => {
         if (handled) return true;
         return attachCashierAuthHttp(req, res);
+      })
+      .then((handled) => {
+        if (handled) return true;
+        return attachSecurityAuthHttp(req, res);
       })
       .then((handled) => {
         if (handled) return true;
@@ -51,6 +57,10 @@ function attachOwnerStaff(server: ViteDevServer) {
       .then((handled) => {
         if (handled) return true;
         return attachOwnerControlHttp(req, res);
+      })
+      .then((handled) => {
+        if (handled) return true;
+        return attachSecurityControlHttp(req, res);
       })
       .then((handled) => {
         if (handled) return true;

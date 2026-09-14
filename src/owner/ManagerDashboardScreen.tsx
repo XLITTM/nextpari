@@ -8,6 +8,7 @@ import { useOwnerAuth } from './auth/OwnerAuthProvider';
 import { isOperationalAccountActive } from '../shared/staff/financeGate';
 import { MessagesPanel } from './MessagesPanel';
 import { OwnerManagersPanel } from './OwnerManagersPanel';
+import { OwnerSecurityTeamPanel } from './OwnerSecurityTeamPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { OwnerMoneyDialog, OwnerTreasuryPanel, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
 import { GameRtpReportPanel } from './GameRtpReport';
@@ -61,7 +62,7 @@ import {
   requireOwnerSecurityAccountReason,
 } from './securityAccountActions';
 
-type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'agents' | 'players' | 'messages' | 'risk';
+type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk';
 
 export function ManagerDashboardScreen() {
   const { loading, staff, deniedMessage, signOut } = useOwnerAuth();
@@ -189,6 +190,7 @@ function BackofficeShell({
           <NavBtn active={tab === 'finance'} onClick={() => setTab('finance')} icon={LayoutDashboard} label="Финансы сети" />
           <NavBtn active={tab === 'providerSettlements'} onClick={() => setTab('providerSettlements')} icon={Scale} label="Расчёты с провайдерами" />
           <NavBtn active={tab === 'managers'} onClick={() => setTab('managers')} icon={UserCog} label="Менеджеры" />
+          <NavBtn active={tab === 'securityTeam'} onClick={() => setTab('securityTeam')} icon={Shield} label="Служба безопасности" />
           <NavBtn active={tab === 'agents'} onClick={() => setTab('agents')} icon={Building2} label="Все кассы" />
           <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="Игроки" />
           <NavBtn active={tab === 'messages'} onClick={() => setTab('messages')} icon={Mail} label="Сообщения" />
@@ -210,6 +212,7 @@ function BackofficeShell({
         {tab === 'finance' && <FinancePanel />}
         {tab === 'providerSettlements' && <ProviderSettlementsPanel />}
         {tab === 'managers' && <OwnerManagersPanel />}
+        {tab === 'securityTeam' && <OwnerSecurityTeamPanel />}
         {tab === 'agents' && <AgentsPanel />}
         {tab === 'players' && <PlayersPanel />}
         {tab === 'messages' && <MessagesPanel />}

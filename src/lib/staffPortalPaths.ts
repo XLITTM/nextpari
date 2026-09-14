@@ -26,6 +26,12 @@ export function isManagerOfficePath(): boolean {
   return isManagerPortalPath();
 }
 
+export function isSecurityPortalPath(): boolean {
+  if (typeof window === 'undefined') return false;
+  const loc = staffLocation();
+  return loc === '/security' || loc.startsWith('/security/');
+}
+
 export function isManagerLoginPath(): boolean {
   const loc = staffLocation();
   return loc === '/manager' || loc === '/manager-login' || loc === '/manager/login';
