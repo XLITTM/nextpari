@@ -26,12 +26,22 @@ const OWNER_CTX = {
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '../..');
 const sql = readFileSync(join(root, 'supabase/migrations/20260914033000_security_staff_portal_051.sql'), 'utf8');
+const sql050 = readFileSync(join(root, 'supabase/migrations/20260914023000_security_sports_investigation_050.sql'), 'utf8');
 
 function extractFn(source: string, name: string): string {
   const start = source.indexOf(`CREATE OR REPLACE FUNCTION ${name}`);
   assert.ok(start >= 0, name);
   const next = source.indexOf('CREATE OR REPLACE FUNCTION', start + 10);
   return next >= 0 ? source.slice(start, next) : source.slice(start);
+}
+
+function publicFunctions(source: string): Array<{ name: string; body: string }> {
+  const re = /CREATE OR REPLACE FUNCTION (public\.[a-z0-9_]+)\(/gi;
+  const matches = [...source.matchAll(re)];
+  return matches.map((match, index) => ({
+    name: match[1],
+    body: source.slice(match.index, index + 1 < matches.length ? matches[index + 1].index : source.length),
+  }));
 }
 
 function cookieHeader(): string {
@@ -86,6 +96,43 @@ describe('security staff portal SQL contract 051 (not executed)', () => {
     assert.match(extractFn(sql, 'private.get_current_security_context()'), /RAISE EXCEPTION 'STAFF_ACCOUNT_DISABLED'/);
     assert.match(sql, /\[a-z0-9\._-\]\{3,32\}/);
     assert.match(sql, /staff_accounts_security_login_uidx/);
+  });
+
+  it('public security wrappers that call get_current_security_context are VOLATILE', () => {
+    const ctx = extractFn(sql, 'private.get_current_security_context()');
+    assert.match(ctx, /LANGUAGE plpgsql\s+VOLATILE/, 'GET_CURRENT_SECURITY_CONTEXT: VOLATILE');
+    assert.match(ctx, /UPDATE private\.staff_accounts/);
+
+    const restriction = extractFn(sql, 'public.security_player_security_restriction(');
+    assert.match(restriction, /PERFORM private\.get_current_security_context\(\)/);
+    assert.match(restriction, /LANGUAGE plpgsql\s+VOLATILE/, 'SECURITY_PLAYER_SECURITY_RESTRICTION: VOLATILE');
+    assert.equal(/LANGUAGE plpgsql\s+STABLE/.test(restriction), false);
+
+    for (const [label, source] of [['051', sql], ['050', sql050]] as const) {
+      for (const fn of publicFunctions(source)) {
+        if (!fn.body.includes('private.get_current_security_context()')) continue;
+        assert.match(
+          fn.body,
+          /LANGUAGE plpgsql\s+VOLATILE/,
+          `${label} ${fn.name} must be VOLATILE`,
+        );
+        assert.equal(
+          /LANGUAGE plpgsql\s+STABLE/.test(fn.body),
+          false,
+          `NO STABLE PUBLIC SECURITY WRAPPER CALLS GET_CURRENT_SECURITY_CONTEXT: PASS (${fn.name})`,
+        );
+      }
+    }
+
+    for (const name of [
+      'public.security_player_sports_bets(',
+      'public.security_player_sports_bet(p_player_id TEXT, p_bet_id UUID)',
+      'public.security_player_sports_summary(',
+    ]) {
+      const sports = extractFn(sql050, name);
+      assert.match(sports, /PERFORM private\.get_current_security_context\(\)/);
+      assert.match(sports, /LANGUAGE plpgsql\s+VOLATILE/, 'SECURITY SPORTS WRAPPERS FROM 050: VOLATILE/PASS');
+    }
   });
 
   it('PLAINTEXT PASSWORD STORED: NO and INTERNAL AUTH EMAIL stays private', () => {

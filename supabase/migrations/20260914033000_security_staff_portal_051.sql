@@ -755,7 +755,7 @@ $fn$;
 CREATE OR REPLACE FUNCTION public.security_player_security_restriction(p_player_id TEXT)
 RETURNS jsonb
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = ''
 AS $fn$
