@@ -1228,34 +1228,21 @@ END;
 $fn$;
 
 
-DO $audit$
-DECLARE
-    r RECORD;
-BEGIN
-    FOR r IN
-        SELECT c.conname
-        FROM pg_constraint AS c
-        JOIN pg_class AS t ON t.oid = c.conrelid
-        JOIN pg_namespace AS n ON n.oid = t.relnamespace
-        WHERE n.nspname = 'private'
-          AND t.relname IN ('staff_audit_log', 'staff_audit', 'audit_log')
-          AND c.contype = 'c'
-          AND pg_get_constraintdef(c.oid) ILIKE '%actor%'
-          AND pg_get_constraintdef(c.oid) NOT ILIKE '%security%'
-    LOOP
-        EXECUTE format('ALTER TABLE %I.%I DROP CONSTRAINT %I', 'private', (
-            SELECT t.relname FROM pg_class AS t WHERE t.oid = (
-                SELECT c2.conrelid FROM pg_constraint AS c2 WHERE c2.conname = r.conname LIMIT 1
-            )
-        ), r.conname);
-    END LOOP;
-EXCEPTION
-    WHEN undefined_table THEN
-        NULL;
-    WHEN others THEN
-        NULL;
-END;
-$audit$;
+ALTER TABLE private.staff_audit_log
+DROP CONSTRAINT IF EXISTS staff_audit_log_actor_role_check;
+
+ALTER TABLE private.staff_audit_log
+ADD CONSTRAINT staff_audit_log_actor_role_check
+CHECK (
+  actor_role IS NULL
+  OR actor_role IN (
+    'owner',
+    'manager',
+    'cashier',
+    'security',
+    'system'
+  )
+);
 
 
 REVOKE ALL ON FUNCTION private.security_staff_actions_append_only() FROM PUBLIC, anon, authenticated, service_role;

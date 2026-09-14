@@ -115,6 +115,33 @@ describe('security staff portal SQL contract 051 (not executed)', () => {
     assert.equal(sql.includes('DELETE FROM private.security_staff_actions'), false);
   });
 
+  it('STAFF AUDIT ACTOR ROLE CHECK EXISTS and is fail-closed', () => {
+    const dropMatch = sql.match(
+      /ALTER TABLE private\.staff_audit_log\s+DROP CONSTRAINT IF EXISTS staff_audit_log_actor_role_check;/,
+    );
+    const addMatch = sql.match(
+      /ALTER TABLE private\.staff_audit_log\s+ADD CONSTRAINT staff_audit_log_actor_role_check\s+CHECK \(\s*actor_role IS NULL\s+OR actor_role IN \(\s*'owner',\s*'manager',\s*'cashier',\s*'security',\s*'system'\s*\)\s*\)/,
+    );
+    assert.ok(dropMatch, 'STAFF AUDIT ACTOR ROLE CHECK EXISTS: YES');
+    assert.ok(addMatch, 'SECURITY AUDIT INSERT COMPATIBLE: YES');
+    assert.ok(
+      (dropMatch.index ?? -1) < (addMatch.index ?? -1),
+      'constraint is replaced, not dropped without recreation',
+    );
+    assert.match(addMatch[0], /'owner'/, 'OWNER PRESERVED: YES');
+    assert.match(addMatch[0], /'manager'/, 'MANAGER PRESERVED: YES');
+    assert.match(addMatch[0], /'cashier'/, 'CASHIER PRESERVED: YES');
+    assert.match(addMatch[0], /'security'/, 'SECURITY ROLE ADDED TO AUDIT CHECK: YES');
+    assert.match(addMatch[0], /'system'/, 'SYSTEM PRESERVED: YES');
+    assert.match(addMatch[0], /actor_role IS NULL/, 'NULL if previously allowed');
+    assert.equal(/'player'/.test(addMatch[0]), false, 'INVALID ROLE REJECTED: YES');
+    assert.equal(/'unknown'/.test(addMatch[0]), false, 'arbitrary/unknown role DENIED');
+    assert.match(sql, /PERFORM private\.append_staff_audit\(/);
+    assert.equal(/CREATE OR REPLACE FUNCTION private\.append_staff_audit/.test(sql), false);
+    assert.equal(sql.includes('DO $audit$'), false);
+    assert.equal(/WHEN others THEN\s+NULL/i.test(sql), false, 'WHEN OTHERS SWALLOWING AUDIT CONSTRAINT ERRORS: NO');
+  });
+
   it('Security restriction uses 049 engine and never hard-blocks', () => {
     const setFn = extractFn(sql, 'public.security_set_player_security_restriction(');
     assert.match(setFn, /private\.set_player_security_restriction/);
