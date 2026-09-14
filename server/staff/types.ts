@@ -27,6 +27,7 @@ export interface OwnerStaffPort {
 export interface AuthAdminPort {
   createUser(email: string, password: string): Promise<{ id: string }>;
   deleteUser(id: string): Promise<void>;
+  updateUserPassword?(id: string, password: string): Promise<void>;
 }
 
 export interface StaffLog {

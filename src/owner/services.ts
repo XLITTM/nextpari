@@ -1119,6 +1119,130 @@ export async function postOwnerManager(input: {
   return parseOwnerManager(asRecord(data));
 }
 
+export interface OwnerSecurityStaffMetrics {
+  reviewed: number;
+  resolved: number;
+  dismissed: number;
+  restrictionsApplied: number;
+  restrictionsRemoved: number;
+}
+
+export interface OwnerSecurityStaffRow {
+  authUserId: string;
+  login: string;
+  displayName: string;
+  status: string;
+  createdAt: string;
+  lastActivityAt: string;
+  metrics: {
+    h24: OwnerSecurityStaffMetrics;
+    d7: OwnerSecurityStaffMetrics;
+    d30: OwnerSecurityStaffMetrics;
+  };
+}
+
+export interface OwnerSecurityTeamActivity {
+  at: string;
+  employeeLogin: string;
+  employeeName: string;
+  actorRole: string;
+  action: string;
+  playerPublicId: string;
+  target: string;
+  reason: string;
+  result: string;
+}
+
+function parseSecurityStaffMetrics(raw: unknown): OwnerSecurityStaffMetrics {
+  const item = asRecord(raw);
+  return {
+    reviewed: num(item.reviewed),
+    resolved: num(item.resolved),
+    dismissed: num(item.dismissed),
+    restrictionsApplied: num(item.restrictions_applied ?? item.restrictionsApplied),
+    restrictionsRemoved: num(item.restrictions_removed ?? item.restrictionsRemoved),
+  };
+}
+
+function parseSecurityStaffRow(raw: unknown): OwnerSecurityStaffRow {
+  const item = asRecord(raw);
+  const metrics = asRecord(item.metrics);
+  return {
+    authUserId: str(item.auth_user_id ?? item.authUserId),
+    login: str(item.login ?? item.login_name ?? item.loginName),
+    displayName: str(item.display_name ?? item.displayName),
+    status: str(item.status),
+    createdAt: str(item.created_at ?? item.createdAt),
+    lastActivityAt: str(item.last_activity_at ?? item.lastActivityAt),
+    metrics: {
+      h24: parseSecurityStaffMetrics(metrics.h24),
+      d7: parseSecurityStaffMetrics(metrics.d7),
+      d30: parseSecurityStaffMetrics(metrics.d30),
+    },
+  };
+}
+
+export async function fetchOwnerSecurityStaff(): Promise<OwnerSecurityStaffRow[]> {
+  const data = await ownerData('/api/owner/security-staff');
+  const rec = asRecord(data);
+  return asRows(rec.rows ?? data).map(parseSecurityStaffRow);
+}
+
+export async function fetchOwnerSecurityTeamActivity(): Promise<OwnerSecurityTeamActivity[]> {
+  const data = await ownerData('/api/owner/security-staff/activity');
+  const rec = asRecord(data);
+  return asRows(rec.rows ?? data).map((row) => {
+    const item = asRecord(row);
+    return {
+      at: str(item.at ?? item.created_at ?? item.createdAt),
+      employeeLogin: str(item.employee_login ?? item.employeeLogin),
+      employeeName: str(item.employee_name ?? item.employeeName),
+      actorRole: str(item.actor_role ?? item.actorRole),
+      action: str(item.action),
+      playerPublicId: str(item.player_public_id ?? item.playerPublicId),
+      target: str(item.target),
+      reason: str(item.reason),
+      result: str(item.result),
+    };
+  });
+}
+
+export async function postOwnerSecurityStaff(input: {
+  login: string;
+  displayName: string;
+  temporaryPassword: string;
+}): Promise<OwnerSecurityStaffRow> {
+  const data = await ownerData('/api/owner/security-staff', {
+    method: 'POST',
+    body: JSON.stringify({
+      login: input.login,
+      displayName: input.displayName,
+      temporaryPassword: input.temporaryPassword,
+    }),
+  });
+  return parseSecurityStaffRow(asRecord(data));
+}
+
+export async function postOwnerSecurityStaffStatus(input: {
+  authUserId: string;
+  status: 'active' | 'disabled';
+}): Promise<void> {
+  await ownerJson(`/api/owner/security-staff/${encodeURIComponent(input.authUserId)}/status`, {
+    method: 'POST',
+    body: JSON.stringify({ status: input.status }),
+  });
+}
+
+export async function postOwnerSecurityStaffResetPassword(input: {
+  authUserId: string;
+  temporaryPassword: string;
+}): Promise<void> {
+  await ownerJson(`/api/owner/security-staff/${encodeURIComponent(input.authUserId)}/reset-password`, {
+    method: 'POST',
+    body: JSON.stringify({ temporaryPassword: input.temporaryPassword }),
+  });
+}
+
 export type OwnerFundTargetType = 'manager' | 'cashier' | 'player';
 
 export interface OwnerTreasurySnapshot {

@@ -57,6 +57,24 @@ const RUNTIME_GRAPH = [
   'api/owner/security/flags.ts',
   'api/owner/security/flags/[flagId]/resolve.ts',
   'api/owner/players/[playerId]/security.ts',
+  'api/owner/security-staff.ts',
+  'api/owner/security-staff/activity.ts',
+  'api/owner/security-staff/[authUserId]/status.ts',
+  'api/owner/security-staff/[authUserId]/reset-password.ts',
+  'api/security/auth/login.ts',
+  'api/security/auth/me.ts',
+  'api/security/auth/logout.ts',
+  'api/security/overview.ts',
+  'api/security/flags.ts',
+  'api/security/activity.ts',
+  'api/security/flags/[flagId]/review.ts',
+  'api/security/flags/[flagId]/resolve.ts',
+  'api/security/flags/[flagId]/dismiss.ts',
+  'api/security/players/[playerId].ts',
+  'api/security/players/[playerId]/security-restriction.ts',
+  'api/security/players/[playerId]/sports.ts',
+  'api/security/players/[playerId]/sports/summary.ts',
+  'api/security/players/[playerId]/sports/[betId].ts',
   'api/manager/me.ts',
   'api/manager/dashboard.ts',
   'api/manager/cashiers.ts',
@@ -86,6 +104,10 @@ const RUNTIME_GRAPH = [
   'server/staff/cashierAuthService.ts',
   'server/staff/cashierCookies.ts',
   'server/staff/cashierContext.ts',
+  'server/staff/securityAuthHttp.ts',
+  'server/staff/securityAuthService.ts',
+  'server/staff/securityCookies.ts',
+  'server/staff/securityContext.ts',
   'server/player/playerAuthHttp.ts',
   'server/player/playerAuthService.ts',
   'server/player/playerCookies.ts',
@@ -111,6 +133,9 @@ const RUNTIME_GRAPH = [
   'server/cashier/cashierControlHttp.ts',
   'server/cashier/cashierPayoutRateLimit.ts',
   'server/cashier/vercelHandler.ts',
+  'server/security/securityRpc.ts',
+  'server/security/securityControlHttp.ts',
+  'server/security/vercelHandler.ts',
   'server/supabase/admin.ts',
 ] as const;
 
@@ -180,6 +205,7 @@ describe('staff onboarding Node ESM import graph', () => {
       ...listTsFiles(join(root, 'server/owner')),
       ...listTsFiles(join(root, 'server/manager')),
       ...listTsFiles(join(root, 'server/cashier')),
+      ...listTsFiles(join(root, 'server/security')),
       ...listTsFiles(join(root, 'server/auth')),
       ...(existsSync(join(root, 'server/email')) ? listTsFiles(join(root, 'server/email')) : []),
       join(root, 'server/supabase/admin.ts'),
@@ -229,6 +255,9 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/cashier/auth/login.js',
         'api/cashier/auth/session.js',
         'api/cashier/auth/logout.js',
+        'api/security/auth/login.js',
+        'api/security/auth/me.js',
+        'api/security/auth/logout.js',
       ];
       const playerAuthEntries = [
         'api/player/auth/login.js',
@@ -261,6 +290,7 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/owner/managers.js',
         'api/owner/treasury.js',
         'api/owner/fund.js',
+        'api/owner/security-staff.js',
       ];
       const managerControlEntries = [
         'api/manager/me.js',
@@ -276,6 +306,11 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/cashier/me.js',
         'api/cashier/finance.js',
         'api/cashier/transfers.js',
+      ];
+      const securityControlEntries = [
+        'api/security/overview.js',
+        'api/security/flags.js',
+        'api/security/activity.js',
       ];
 
       for (const rel of staffEntries) {
@@ -299,6 +334,11 @@ describe('staff onboarding Node ESM import graph', () => {
         assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/cashier\/vercelHandler\.js['"]/);
       }
 
+      for (const rel of securityControlEntries) {
+        const compiled = readFileSync(join(outDir, rel), 'utf8');
+        assert.match(compiled, /from ['"]\.\.\/\.\.\/server\/security\/vercelHandler\.js['"]/);
+      }
+
       for (const rel of playerAuthEntries) {
         const compiled = readFileSync(join(outDir, rel), 'utf8');
         assert.match(compiled, /from ['"]\.\.\/(?:\.\.\/)?\.\.\/server\/player\/playerAuthHttp\.js['"]/);
@@ -311,7 +351,7 @@ describe('staff onboarding Node ESM import graph', () => {
       const settleCompiled = readFileSync(join(outDir, 'api/internal/sports/settle.js'), 'utf8');
       assert.match(settleCompiled, /from ['"].*server\/sports\/settleHttp\.js['"]/);
 
-      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries, 'api/internal/sports/settle.js', 'api/owner/withdrawals/[withdrawalId]/approve.js', 'api/owner/withdrawals/[withdrawalId]/reject.js', 'api/owner/withdrawals/[withdrawalId]/paid.js', 'api/owner/players/[playerId]/debit.js', 'api/owner/security/overview.js', 'api/owner/security/flags.js', 'api/owner/security/flags/[flagId]/resolve.js', 'api/owner/players/[playerId]/security.js', 'api/cashier/deposits/[transferId]/reverse.js']) {
+      for (const rel of [...staffEntries, ...authEntries, ...playerAuthEntries, ...playerGameEntries, ...controlEntries, ...managerControlEntries, ...cashierControlEntries, ...securityControlEntries, 'api/internal/sports/settle.js', 'api/owner/withdrawals/[withdrawalId]/approve.js', 'api/owner/withdrawals/[withdrawalId]/reject.js', 'api/owner/withdrawals/[withdrawalId]/paid.js', 'api/owner/players/[playerId]/debit.js', 'api/owner/security/overview.js', 'api/owner/security/flags.js', 'api/owner/security/flags/[flagId]/resolve.js', 'api/owner/players/[playerId]/security.js', 'api/cashier/deposits/[transferId]/reverse.js']) {
         const fileUrl = pathToFileURL(join(outDir, rel)).href;
         const loaded = spawnSync(
           process.execPath,

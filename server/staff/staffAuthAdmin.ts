@@ -150,6 +150,13 @@ export function createAuthAdminPort(client: SupabaseClient): AuthAdminPort {
         throw staffError('AUTH_USER_DELETE_FAILED', 500);
       }
     },
+
+    async updateUserPassword(id, password) {
+      const { error } = await client.auth.admin.updateUserById(id, { password });
+      if (error) {
+        throw staffError('AUTH_USER_UPDATE_FAILED', 502);
+      }
+    },
   };
 }
 

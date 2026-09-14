@@ -20,6 +20,8 @@ import { createOwnerJwtRpc, type OwnerRpcPort } from './ownerRpc.js';
 import {
   liveAuthAdminPort,
   provisionOwnerManager,
+  provisionOwnerSecurityStaff,
+  resetOwnerSecurityStaffPassword,
 } from '../staff/staffHierarchyService.js';
 
 export interface OwnerControlDeps {
@@ -45,6 +47,35 @@ function asRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function publicSecurityStaffProvision(raw: unknown): Record<string, unknown> {
+  const rec = asRecord(raw);
+  const blocked = new Set([
+    'auth_email',
+    'authEmail',
+    'p_auth_email',
+    'email',
+    'password',
+    'temporaryPassword',
+    'temporary_password',
+  ]);
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rec)) {
+    if (blocked.has(key)) continue;
+    if (key === 'args' && value && typeof value === 'object' && !Array.isArray(value)) {
+      const nested = asRecord(value);
+      const cleanArgs: Record<string, unknown> = {};
+      for (const [argKey, argValue] of Object.entries(nested)) {
+        if (blocked.has(argKey)) continue;
+        cleanArgs[argKey] = argValue;
+      }
+      out[key] = cleanArgs;
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
 }
 
 function queryOf(search: string | undefined): URLSearchParams {
@@ -335,6 +366,11 @@ type ControlAction =
   | { kind: 'message' }
   | { kind: 'managers' }
   | { kind: 'createManager' }
+  | { kind: 'securityStaffList' }
+  | { kind: 'createSecurityStaff' }
+  | { kind: 'securityStaffActivity' }
+  | { kind: 'securityStaffStatus'; authUserId: string }
+  | { kind: 'securityStaffReset'; authUserId: string }
   | { kind: 'managerDetail'; managerId: string }
   | { kind: 'treasury' }
   | { kind: 'capitalIn' }
@@ -392,6 +428,22 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/owner/managers') {
     if (m === 'GET') return { kind: 'managers' };
     if (m === 'POST') return { kind: 'createManager' };
+    return 'method';
+  }
+  const securityStaffStatus = path.match(/^\/api\/owner\/security-staff\/([^/]+)\/status$/);
+  if (securityStaffStatus) {
+    return m === 'POST' ? { kind: 'securityStaffStatus', authUserId: securityStaffStatus[1] } : 'method';
+  }
+  const securityStaffReset = path.match(/^\/api\/owner\/security-staff\/([^/]+)\/reset-password$/);
+  if (securityStaffReset) {
+    return m === 'POST' ? { kind: 'securityStaffReset', authUserId: securityStaffReset[1] } : 'method';
+  }
+  if (path === '/api/owner/security-staff/activity') {
+    return m === 'GET' ? { kind: 'securityStaffActivity' } : 'method';
+  }
+  if (path === '/api/owner/security-staff') {
+    if (m === 'GET') return { kind: 'securityStaffList' };
+    if (m === 'POST') return { kind: 'createSecurityStaff' };
     return 'method';
   }
   if (path === '/api/owner/risk-bets') return m === 'GET' ? { kind: 'risk' } : 'method';
@@ -558,7 +610,30 @@ async function runControl(
         p_manager_id: requireId(decodeURIComponent(action.managerId), 'MANAGER_ID_REQUIRED'),
       });
     case 'createManager':
+    case 'createSecurityStaff':
+    case 'securityStaffReset':
       throw staffError('NOT_FOUND', 404);
+    case 'securityStaffList':
+      return rpc.invoke('owner_list_security_staff');
+    case 'securityStaffActivity':
+      return rpc.invoke('owner_security_team_activity', {
+        p_limit: parseLimit(query.get('limit'), 50),
+        p_offset: parseOffset(query.get('offset')),
+      });
+    case 'securityStaffStatus': {
+      const status = String(rec.status ?? '').trim().toLowerCase();
+      if (status !== 'active' && status !== 'disabled') {
+        throw staffError('STAFF_STATUS_INVALID', 400);
+      }
+      return rpc.invoke('owner_set_security_staff_status', {
+        p_auth_user_id: requireUuid(
+          decodeURIComponent(action.authUserId),
+          'AUTH_USER_ID_REQUIRED',
+          'AUTH_USER_ID_INVALID',
+        ),
+        p_status: status,
+      });
+    }
     case 'withdrawals':
       return rpc.invoke('owner_list_withdrawals', {
         p_status: query.get('status')?.trim() || null,
@@ -707,6 +782,37 @@ export async function handleOwnerControlRequest(
         admin: (deps.adminFactory ?? liveAuthAdminPort)(),
         invoke: (name, args) => rpc.invoke(name, args),
         log,
+      });
+      return {
+        status: 200,
+        body: { ok: true, data },
+        cookies: sessionCookies,
+      };
+    }
+    if (matched.kind === 'createSecurityStaff') {
+      const data = await provisionOwnerSecurityStaff({
+        body: parseJsonPayload(input.body),
+        admin: (deps.adminFactory ?? liveAuthAdminPort)(),
+        invoke: (name, args) => rpc.invoke(name, args),
+        log,
+      });
+      return {
+        status: 200,
+        body: { ok: true, data: publicSecurityStaffProvision(data) },
+        cookies: sessionCookies,
+      };
+    }
+    if (matched.kind === 'securityStaffReset') {
+      const rec = asRecord(parseJsonPayload(input.body));
+      const data = await resetOwnerSecurityStaffPassword({
+        authUserId: requireUuid(
+          decodeURIComponent(matched.authUserId),
+          'AUTH_USER_ID_REQUIRED',
+          'AUTH_USER_ID_INVALID',
+        ),
+        temporaryPassword: rec.temporaryPassword ?? rec.password,
+        admin: (deps.adminFactory ?? liveAuthAdminPort)(),
+        invoke: (name, args) => rpc.invoke(name, args),
       });
       return {
         status: 200,
