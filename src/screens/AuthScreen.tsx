@@ -1,13 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Copy, Eye, EyeOff, Lock, Mail, Phone, Smartphone, Zap } from 'lucide-react';
 import {
   signInPlayer,
   signUpPlayer,
   signUpPlayerByPhone,
   signUpPlayerOneClick,
+  startPlayerPasswordRecovery,
   validatePlayerEmail,
   validatePlayerPassword,
+  validatePlayerPasswordReset,
   validatePlayerPhone,
+  verifyPlayerPasswordRecovery,
+  resetPlayerPasswordWithTicket,
+  PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE,
+  PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE,
+  PLAYER_PASSWORD_RECOVERY_START_MESSAGE,
+  PlayerPasswordRecoveryError,
 } from '../lib/playerAuth';
 import { authBackView, authShowsBack, oneClickCopyAllText, planOneClickContinue, type AuthView } from '../lib/authUiFlow';
 import { AuthHero, AUTH_SPORTS_BG } from '../components/auth/AuthHero';
@@ -159,6 +167,33 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
   const [issuedSecret, setIssuedSecret] = useState('');
   const [issuedAuthenticated, setIssuedAuthenticated] = useState(false);
   const [copied, setCopied] = useState('');
+  const [recoveryStep, setRecoveryStep] = useState<'start' | 'code' | 'reset'>('start');
+  const [recoveryIdentifier, setRecoveryIdentifier] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryChallengeId, setRecoveryChallengeId] = useState('');
+  const [recoveryTicket, setRecoveryTicket] = useState('');
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryConfirm, setRecoveryConfirm] = useState('');
+  const [recoveryCooldown, setRecoveryCooldown] = useState(0);
+  const [recoveryInfo, setRecoveryInfo] = useState('');
+
+  useEffect(() => {
+    if (recoveryCooldown <= 0) return undefined;
+    const timer = window.setTimeout(() => setRecoveryCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [recoveryCooldown]);
+
+  const resetRecovery = () => {
+    setRecoveryStep('start');
+    setRecoveryIdentifier('');
+    setRecoveryCode('');
+    setRecoveryChallengeId('');
+    setRecoveryTicket('');
+    setRecoveryPassword('');
+    setRecoveryConfirm('');
+    setRecoveryCooldown(0);
+    setRecoveryInfo('');
+  };
 
   const go = (next: AuthView) => {
     setError('');
@@ -169,6 +204,7 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
       setIssuedSecret('');
       setIssuedAuthenticated(false);
     }
+    resetRecovery();
     setView(next);
   };
 
@@ -296,6 +332,85 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
     setError('');
     setView('login');
     setNotice(plan.notice);
+  };
+
+  const handleRecoveryStart = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const result = await startPlayerPasswordRecovery(recoveryIdentifier);
+      setRecoveryChallengeId(result.challengeId);
+      setRecoveryCooldown(result.resendAfterSeconds);
+      setRecoveryInfo(PLAYER_PASSWORD_RECOVERY_START_MESSAGE);
+      setRecoveryStep('code');
+    } catch (err) {
+      setRecoveryInfo(PLAYER_PASSWORD_RECOVERY_START_MESSAGE);
+      setRecoveryStep('code');
+      void err;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRecoveryResend = async () => {
+    if (busy || recoveryCooldown > 0) return;
+    setError('');
+    setBusy(true);
+    try {
+      const result = await startPlayerPasswordRecovery(recoveryIdentifier);
+      if (result.challengeId) setRecoveryChallengeId(result.challengeId);
+      setRecoveryCooldown(result.resendAfterSeconds);
+      setRecoveryInfo(PLAYER_PASSWORD_RECOVERY_START_MESSAGE);
+    } catch {
+      setRecoveryInfo(PLAYER_PASSWORD_RECOVERY_START_MESSAGE);
+      setRecoveryCooldown(60);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRecoveryVerify = async () => {
+    setError('');
+    setBusy(true);
+    try {
+      const result = await verifyPlayerPasswordRecovery({
+        challengeId: recoveryChallengeId,
+        code: recoveryCode,
+      });
+      setRecoveryTicket(result.resetTicket);
+      setRecoveryCode('');
+      setRecoveryStep('reset');
+    } catch (err) {
+      setError(err instanceof PlayerPasswordRecoveryError ? err.message : PLAYER_PASSWORD_RECOVERY_INVALID_CODE_MESSAGE);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRecoveryReset = async () => {
+    setError('');
+    const local = validatePlayerPasswordReset({
+      newPassword: recoveryPassword,
+      confirmPassword: recoveryConfirm,
+    });
+    if (!local.ok) {
+      setError(local.message);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await resetPlayerPasswordWithTicket({
+        resetTicket: recoveryTicket,
+        newPassword: recoveryPassword,
+        confirmPassword: recoveryConfirm,
+      });
+      resetRecovery();
+      goLoginWithNotice(result.message || PLAYER_PASSWORD_RECOVERY_DONE_MESSAGE);
+    } catch (err) {
+      setError(err instanceof PlayerPasswordRecoveryError ? err.message : 'Не удалось изменить пароль. Попробуйте ещё раз.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const copyText = async (key: string, value: string) => {
@@ -613,16 +728,80 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
               <h2 className="text-[30px] font-extrabold leading-tight tracking-tight text-ink-900">
                 Восстановление пароля
               </h2>
-              <p className="mt-3 text-[15px] font-medium leading-snug text-slate-500">
-                Восстановление пароля скоро будет доступно. Обратитесь в поддержку, если вам нужна помощь со входом.
-              </p>
-              <button
-                type="button"
-                onClick={() => go('login')}
-                className="mt-6 flex h-[60px] w-full items-center justify-center rounded-[18px] bg-brand-600 text-[16px] font-extrabold text-white"
-              >
-                Назад ко входу
-              </button>
+              {recoveryStep === 'start' && (
+                <form
+                  onSubmit={(event) => { event.preventDefault(); if (!busy) void handleRecoveryStart(); }}
+                  className="mt-4 space-y-4"
+                >
+                  <AuthInput
+                    label="ID игрока или подтверждённая почта"
+                    icon={<Mail className="h-5 w-5" />}
+                    placeholder="ID игрока или подтверждённая почта"
+                    value={recoveryIdentifier}
+                    onChange={setRecoveryIdentifier}
+                    type="text"
+                    inputMode="email"
+                    autoComplete="username"
+                  />
+                  <PrimaryButton disabled={busy}>{busy ? 'Отправка…' : 'Получить код'}</PrimaryButton>
+                </form>
+              )}
+              {recoveryStep === 'code' && (
+                <form
+                  onSubmit={(event) => { event.preventDefault(); if (!busy) void handleRecoveryVerify(); }}
+                  className="mt-4 space-y-4"
+                >
+                  <p className="text-[15px] font-medium leading-snug text-slate-500">
+                    {recoveryInfo || PLAYER_PASSWORD_RECOVERY_START_MESSAGE}
+                  </p>
+                  <AuthInput
+                    label="Код из письма"
+                    icon={<Lock className="h-5 w-5" />}
+                    placeholder="6-значный код"
+                    value={recoveryCode}
+                    onChange={setRecoveryCode}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                  />
+                  <PrimaryButton disabled={busy}>{busy ? 'Проверка…' : 'Подтвердить код'}</PrimaryButton>
+                  <button
+                    type="button"
+                    disabled={busy || recoveryCooldown > 0}
+                    onClick={() => { void handleRecoveryResend(); }}
+                    className="block w-full pt-1 text-center text-[15px] font-bold text-brand-600 disabled:opacity-50"
+                  >
+                    {recoveryCooldown > 0 ? `Отправить код снова (${recoveryCooldown})` : 'Отправить код снова'}
+                  </button>
+                </form>
+              )}
+              {recoveryStep === 'reset' && (
+                <form
+                  onSubmit={(event) => { event.preventDefault(); if (!busy) void handleRecoveryReset(); }}
+                  className="mt-4 space-y-4"
+                >
+                  <AuthInput
+                    label="Новый пароль"
+                    icon={<Lock className="h-5 w-5" />}
+                    placeholder="Новый пароль"
+                    value={recoveryPassword}
+                    onChange={setRecoveryPassword}
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    trailing={passwordToggle}
+                  />
+                  <AuthInput
+                    label="Повторите новый пароль"
+                    icon={<Lock className="h-5 w-5" />}
+                    placeholder="Повторите новый пароль"
+                    value={recoveryConfirm}
+                    onChange={setRecoveryConfirm}
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                  />
+                  <PrimaryButton disabled={busy}>{busy ? 'Сохранение…' : 'Изменить пароль'}</PrimaryButton>
+                </form>
+              )}
             </div>
           )}
         </AuthSheet>

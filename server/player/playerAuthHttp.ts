@@ -37,6 +37,16 @@ import {
 } from './playerSecurityService.js';
 import { trustedClientAddressFromNode, trustedClientAddressFromVercel } from './playerSecurityNetwork.js';
 import { presentedLoginIdentifier, presentedRegisterIdentifier } from './playerSecuritySignals.js';
+import type { PlayerPasswordRecoveryPorts } from '../email/playerPasswordRecoveryService.js';
+import {
+  livePlayerPasswordRecoveryPorts,
+  resetPlayerPasswordWithTicket,
+  startPlayerPasswordRecovery,
+  verifyPlayerPasswordRecovery,
+  PLAYER_PASSWORD_RECOVERY_RESET_PATH,
+  PLAYER_PASSWORD_RECOVERY_START_PATH,
+  PLAYER_PASSWORD_RECOVERY_VERIFY_PATH,
+} from '../email/playerPasswordRecoveryService.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
@@ -46,6 +56,11 @@ export const PLAYER_ME_PATH = '/api/player/me';
 export const PLAYER_WALLET_PATH = '/api/player/wallet';
 export const PLAYER_PROFILE_PATH = '/api/player/profile';
 export { PLAYER_EMAIL_START_PATH, PLAYER_EMAIL_VERIFY_PATH };
+export {
+  PLAYER_PASSWORD_RECOVERY_START_PATH,
+  PLAYER_PASSWORD_RECOVERY_VERIFY_PATH,
+  PLAYER_PASSWORD_RECOVERY_RESET_PATH,
+};
 
 function normalizePath(pathname: string): string {
   return pathname.replace(/\/$/, '') || '/';
@@ -63,6 +78,9 @@ export function isPlayerAuthPath(pathname: string): boolean {
     || path === PLAYER_PROFILE_PATH
     || path === PLAYER_EMAIL_START_PATH
     || path === PLAYER_EMAIL_VERIFY_PATH
+    || path === PLAYER_PASSWORD_RECOVERY_START_PATH
+    || path === PLAYER_PASSWORD_RECOVERY_VERIFY_PATH
+    || path === PLAYER_PASSWORD_RECOVERY_RESET_PATH
   );
 }
 
@@ -98,6 +116,7 @@ export async function handlePlayerAuthRequest(
   log: StaffLog = staffHttpLog,
   emailPorts?: PlayerEmailPorts,
   securityPorts?: PlayerSecurityPorts,
+  recoveryPorts?: PlayerPasswordRecoveryPorts,
 ): Promise<PlayerAuthHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
@@ -224,6 +243,55 @@ export async function handlePlayerAuthRequest(
         email,
         input.cookie,
         { code: String(body.code ?? '') },
+        secure,
+        security,
+      ));
+    }
+    if (path === PLAYER_PASSWORD_RECOVERY_START_PATH) {
+      if (method !== 'POST') {
+        throw staffError('METHOD_NOT_ALLOWED', 405);
+      }
+      const body = asRecord(parseJsonPayload(input.body));
+      const recovery = recoveryPorts ?? livePlayerPasswordRecoveryPorts();
+      const security = createPlayerSecurityObserver(
+        boundary,
+        String(body.identifier ?? ''),
+        securityPorts,
+        log,
+      );
+      return finish(await startPlayerPasswordRecovery(
+        recovery,
+        { identifier: String(body.identifier ?? '') },
+        security,
+      ));
+    }
+    if (path === PLAYER_PASSWORD_RECOVERY_VERIFY_PATH) {
+      if (method !== 'POST') {
+        throw staffError('METHOD_NOT_ALLOWED', 405);
+      }
+      const body = asRecord(parseJsonPayload(input.body));
+      const recovery = recoveryPorts ?? livePlayerPasswordRecoveryPorts();
+      const security = createPlayerSecurityObserver(boundary, '', securityPorts, log);
+      return finish(await verifyPlayerPasswordRecovery(
+        recovery,
+        { challengeId: String(body.challengeId ?? ''), code: String(body.code ?? '') },
+        security,
+      ));
+    }
+    if (path === PLAYER_PASSWORD_RECOVERY_RESET_PATH) {
+      if (method !== 'POST') {
+        throw staffError('METHOD_NOT_ALLOWED', 405);
+      }
+      const body = asRecord(parseJsonPayload(input.body));
+      const recovery = recoveryPorts ?? livePlayerPasswordRecoveryPorts();
+      const security = createPlayerSecurityObserver(boundary, '', securityPorts, log);
+      return finish(await resetPlayerPasswordWithTicket(
+        recovery,
+        {
+          resetTicket: String(body.resetTicket ?? ''),
+          newPassword: String(body.newPassword ?? ''),
+          confirmPassword: String(body.confirmPassword ?? ''),
+        },
         secure,
         security,
       ));
