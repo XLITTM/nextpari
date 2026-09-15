@@ -369,6 +369,7 @@ type ControlAction =
   | { kind: 'playerManualVerificationGet'; playerId: string }
   | { kind: 'playerManualVerificationSet'; playerId: string }
   | { kind: 'playerManualVerificationComplete'; playerId: string }
+  | { kind: 'playerPersonalData'; playerId: string }
   | { kind: 'playerSportsBets'; playerId: string }
   | { kind: 'playerSportsSummary'; playerId: string }
   | { kind: 'playerSportsBet'; playerId: string; betId: string }
@@ -434,6 +435,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
     if (m === 'POST') return { kind: 'playerSecurityRestrictionSet', playerId: restriction[1] };
     return 'method';
   }
+
+  const personalData = path.match(/^\/api\/owner\/players\/([^/]+)\/personal-data$/);
+  if (personalData) return m === 'GET' ? { kind: 'playerPersonalData', playerId: personalData[1] } : 'method';
 
   const complete = path.match(/^\/api\/owner\/players\/([^/]+)\/verification-complete$/);
   if (complete) return m === 'POST' ? { kind: 'playerManualVerificationComplete', playerId: complete[1] } : 'method';
@@ -590,6 +594,10 @@ async function runControl(
       });
     case 'playerManualVerificationComplete':
       return rpc.invoke('owner_complete_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
+    case 'playerPersonalData':
+      return rpc.invoke('owner_player_personal_data_summary', {
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
       });
     case 'playerSportsBets':

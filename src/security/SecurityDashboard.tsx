@@ -24,7 +24,9 @@ import {
   requestSecurityPlayerManualVerification,
   fetchSecurityPlayerManualVerification,
   completeSecurityPlayerManualVerification,
+  fetchSecurityPlayerPersonalData,
   type SecurityDossier,
+  type SecurityPlayerPersonalDataSummary,
   type SecurityFlag,
   type SecurityOverview,
   type SecuritySportsBet,
@@ -32,6 +34,7 @@ import {
   type SecuritySportsSummary,
   type SecurityActivityRow,
 } from './services';
+import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
 import type { SecurityStaffContext } from './auth/securityAuth';
 
 type SecurityTab = 'flags' | 'players' | 'sports' | 'activity';
@@ -485,6 +488,7 @@ function PlayersPanel({
   const [loading, setLoading] = useState(false);
   const [reason, setReason] = useState('');
   const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  const [personalData, setPersonalData] = useState<SecurityPlayerPersonalDataSummary | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -496,15 +500,18 @@ function PlayersPanel({
     setLoading(true);
     setError('');
     try {
-      const [next, verification] = await Promise.all([
+      const [next, verification, personal] = await Promise.all([
         fetchSecurityDossier(id),
         fetchSecurityPlayerManualVerification(id).catch(() => ({ status: null, restricted: false })),
+        fetchSecurityPlayerPersonalData(id).catch(() => null),
       ]);
       setDossier(next);
       setVerificationStatus(verification.status);
+      setPersonalData(personal);
     } catch (err) {
       setDossier(null);
       setVerificationStatus(null);
+      setPersonalData(null);
       setError(err instanceof Error ? err.message : 'Не удалось открыть досье');
     } finally {
       setLoading(false);
@@ -634,6 +641,7 @@ function PlayersPanel({
               </button>
             ) : null}
           </div>
+          <StaffPlayerPersonalDataCard data={personalData} />
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <h3 className="font-extrabold mb-2">Флаги риска</h3>
             {dossier.flags.length === 0 && <p className="text-sm text-gray-500">Нет флагов</p>}

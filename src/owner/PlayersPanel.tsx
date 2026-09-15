@@ -7,6 +7,7 @@ import {
 } from '../shared/staff/financeGate';
 import {
   fetchOwnerPlayerDossier,
+  fetchOwnerPlayerPersonalData,
   fetchOwnerPlayers,
   fetchOwnerTreasury,
   formatBackofficeDateTime,
@@ -16,7 +17,9 @@ import {
   type OwnerMoneyResult,
   type OwnerPlayerDossier,
   type OwnerPlayerListItem,
+  type OwnerPlayerPersonalDataSummary,
 } from './services';
+import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
 
 type DossierTab =
   | 'overview'
@@ -260,6 +263,7 @@ function PlayerDossierModal({
   onDebit: (publicId: string) => void;
 }) {
   const [dossier, setDossier] = useState<OwnerPlayerDossier | null>(null);
+  const [personalData, setPersonalData] = useState<OwnerPlayerPersonalDataSummary | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<DossierTab>('overview');
@@ -269,10 +273,16 @@ function PlayerDossierModal({
     setLoading(true);
     setError('');
     try {
-      setDossier(await fetchOwnerPlayerDossier(playerId));
+      const [next, personal] = await Promise.all([
+        fetchOwnerPlayerDossier(playerId),
+        fetchOwnerPlayerPersonalData(playerId).catch(() => null),
+      ]);
+      setDossier(next);
+      setPersonalData(personal);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось открыть досье');
       setDossier(null);
+      setPersonalData(null);
     } finally {
       setLoading(false);
     }
@@ -354,7 +364,7 @@ function PlayerDossierModal({
         <div className="flex-1 overflow-y-auto p-5">
           {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
           {loading && <p className="text-sm text-gray-500">Загрузка досье…</p>}
-          {dossier && <DossierBody tab={tab} dossier={dossier} />}
+          {dossier && <DossierBody tab={tab} dossier={dossier} personalData={personalData} />}
         </div>
 
         <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex flex-wrap gap-2">
@@ -394,15 +404,26 @@ function PlayerDossierModal({
   );
 }
 
-function DossierBody({ tab, dossier }: { tab: DossierTab; dossier: OwnerPlayerDossier }) {
+function DossierBody({
+  tab,
+  dossier,
+  personalData,
+}: {
+  tab: DossierTab;
+  dossier: OwnerPlayerDossier;
+  personalData: OwnerPlayerPersonalDataSummary | null;
+}) {
   if (tab === 'overview') {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-        <InfoCell label="Public ID" value={String(dossier.profile.public_id ?? dossier.wallet.public_id ?? '—')} />
-        <InfoCell label="Email" value={String(dossier.profile.email || '—')} />
-        <InfoCell label="Телефон" value={String(dossier.profile.phone || '—')} />
-        <InfoCell label="Статус кошелька" value={String(dossier.wallet.status ?? '—')} />
-        <InfoCell label="Регистрация" value={formatMaybeDate(dossier.profile.created_at)} />
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          <InfoCell label="Public ID" value={String(dossier.profile.public_id ?? dossier.wallet.public_id ?? '—')} />
+          <InfoCell label="Email" value={String(dossier.profile.email || '—')} />
+          <InfoCell label="Телефон" value={String(dossier.profile.phone || '—')} />
+          <InfoCell label="Статус кошелька" value={String(dossier.wallet.status ?? '—')} />
+          <InfoCell label="Регистрация" value={formatMaybeDate(dossier.profile.created_at)} />
+        </div>
+        <StaffPlayerPersonalDataCard data={personalData} />
       </div>
     );
   }

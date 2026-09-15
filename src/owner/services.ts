@@ -669,6 +669,46 @@ export async function completeOwnerPlayerManualVerification(playerId: string): P
   });
 }
 
+export interface OwnerPlayerPersonalDataSummary {
+  playerPublicId: string;
+  hasRow: boolean;
+  questionnaireComplete: boolean;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  citizenshipCountryCode: string;
+  residenceCountryCode: string;
+  residenceCity: string;
+  documentType: string;
+  documentNumberMasked: string;
+  updatedAt: string | null;
+}
+
+export async function fetchOwnerPlayerPersonalData(
+  playerId: string,
+): Promise<OwnerPlayerPersonalDataSummary> {
+  const data = await ownerData(
+    `/api/owner/players/${encodeURIComponent(playerId)}/personal-data`,
+  );
+  const rec = asRecord(data);
+  return {
+    playerPublicId: str(rec.player_public_id ?? rec.playerPublicId, playerId),
+    hasRow: rec.has_row === true || rec.hasRow === true,
+    questionnaireComplete: rec.questionnaire_complete === true || rec.questionnaireComplete === true,
+    firstName: str(rec.first_name ?? rec.firstName),
+    lastName: str(rec.last_name ?? rec.lastName),
+    dateOfBirth: str(rec.date_of_birth ?? rec.dateOfBirth),
+    citizenshipCountryCode: str(rec.citizenship_country_code ?? rec.citizenshipCountryCode).toUpperCase(),
+    residenceCountryCode: str(rec.residence_country_code ?? rec.residenceCountryCode).toUpperCase(),
+    residenceCity: str(rec.residence_city ?? rec.residenceCity),
+    documentType: str(rec.document_type ?? rec.documentType),
+    documentNumberMasked: str(rec.document_number_masked ?? rec.documentNumberMasked),
+    updatedAt: rec.updated_at == null && rec.updatedAt == null
+      ? null
+      : str(rec.updated_at ?? rec.updatedAt),
+  };
+}
+
 export interface OwnerSecuritySportsLeg {
   fixtureLabel: string;
   league: string;
