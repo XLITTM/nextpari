@@ -32,6 +32,7 @@ const RUNTIME_GRAPH = [
   'api/player/me.ts',
   'api/player/wallet.ts',
   'api/player/profile.ts',
+  'api/player/personal-data.ts',
   'api/player/games/start.ts',
   'api/player/games/session/aviator.ts',
   'api/player/games/[roundId].ts',
@@ -61,6 +62,7 @@ const RUNTIME_GRAPH = [
   'api/owner/security/flags/[flagId]/resolve.ts',
   'api/owner/security/win-pattern-settings.ts',
   'api/owner/players/[playerId]/security.ts',
+  'api/owner/players/[playerId]/personal-data.ts',
   'api/owner/players/[playerId]/win-pattern-evaluate.ts',
   'api/owner/security-staff.ts',
   'api/owner/security-staff/activity.ts',
@@ -78,6 +80,7 @@ const RUNTIME_GRAPH = [
   'api/security/flags/[flagId]/dismiss.ts',
   'api/security/players/[playerId].ts',
   'api/security/players/[playerId]/security-restriction.ts',
+  'api/security/players/[playerId]/personal-data.ts',
   'api/security/players/[playerId]/win-pattern-evaluate.ts',
   'api/security/players/[playerId]/sports.ts',
   'api/security/players/[playerId]/sports/summary.ts',
@@ -279,6 +282,7 @@ describe('staff onboarding Node ESM import graph', () => {
         'api/player/me.js',
         'api/player/wallet.js',
         'api/player/profile.js',
+        'api/player/personal-data.js',
       ];
       const playerGameEntries = [
         'api/player/games/start.js',

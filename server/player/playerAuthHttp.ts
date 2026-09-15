@@ -54,6 +54,13 @@ import {
   readPlayerManualVerificationNotice,
   type PlayerManualVerificationNotice,
 } from '../email/playerManualVerificationService.js';
+import {
+  PLAYER_PERSONAL_DATA_PATH,
+  livePlayerPersonalDataPorts,
+  normalizePlayerPersonalDataPayload,
+  playerPersonalDataHttpBody,
+  type PlayerPersonalDataPorts,
+} from './playerPersonalDataService.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
@@ -62,6 +69,7 @@ export const PLAYER_AUTH_CHANGE_PASSWORD_PATH = '/api/player/auth/change-passwor
 export const PLAYER_ME_PATH = '/api/player/me';
 export const PLAYER_WALLET_PATH = '/api/player/wallet';
 export const PLAYER_PROFILE_PATH = '/api/player/profile';
+export { PLAYER_PERSONAL_DATA_PATH };
 export { PLAYER_EMAIL_START_PATH, PLAYER_EMAIL_VERIFY_PATH };
 export {
   PLAYER_PASSWORD_RECOVERY_START_PATH,
@@ -90,6 +98,7 @@ export function isPlayerAuthPath(pathname: string): boolean {
     || path === PLAYER_PASSWORD_RECOVERY_VERIFY_PATH
     || path === PLAYER_PASSWORD_RECOVERY_RESET_PATH
     || path === PLAYER_VERIFICATION_NOTICE_PATH
+    || path === PLAYER_PERSONAL_DATA_PATH
   );
 }
 
@@ -130,6 +139,7 @@ export async function handlePlayerAuthRequest(
     readNotice: (accessToken: string) => Promise<PlayerManualVerificationNotice>;
     deliverInstructions: (playerUserId: string) => Promise<unknown>;
   },
+  personalDataPorts?: PlayerPersonalDataPorts,
 ): Promise<PlayerAuthHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
@@ -329,6 +339,30 @@ export async function handlePlayerAuthRequest(
         cookies: resolved.cookies,
       });
     }
+    if (path === PLAYER_PERSONAL_DATA_PATH) {
+      const resolved = await resolvePlayerSession(ports, input.cookie, secure);
+      const personal = personalDataPorts ?? livePlayerPersonalDataPorts();
+      if (method === 'GET') {
+        const view = await personal.read(resolved.accessToken);
+        return finish({
+          status: 200,
+          body: playerPersonalDataHttpBody(view),
+          cookies: resolved.cookies,
+        });
+      }
+      if (method === 'PUT' || method === 'POST') {
+        const view = await personal.save(
+          resolved.accessToken,
+          normalizePlayerPersonalDataPayload(parseJsonPayload(input.body)),
+        );
+        return finish({
+          status: 200,
+          body: playerPersonalDataHttpBody(view),
+          cookies: resolved.cookies,
+        });
+      }
+      throw staffError('METHOD_NOT_ALLOWED', 405);
+    }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {
     if (error instanceof StaffOnboardingError) {
@@ -337,8 +371,8 @@ export async function handlePlayerAuthRequest(
         body: { ok: false, authenticated: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405
           ? {
-            Allow: path === PLAYER_PROFILE_PATH
-              ? 'GET, PUT'
+            Allow: path === PLAYER_PROFILE_PATH || path === PLAYER_PERSONAL_DATA_PATH
+              ? 'GET, PUT, POST'
               : path === PLAYER_ME_PATH || path === PLAYER_WALLET_PATH || path === PLAYER_VERIFICATION_NOTICE_PATH
                 ? 'GET'
                 : 'POST',

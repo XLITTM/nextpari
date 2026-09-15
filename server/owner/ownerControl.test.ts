@@ -276,6 +276,7 @@ describe('owner control center same-origin BFF', () => {
       await denied(role, '/api/owner/security/win-pattern-settings');
       await denied(role, '/api/owner/security/win-pattern-settings', 'POST');
       await denied(role, '/api/owner/players/110790/security');
+      await denied(role, '/api/owner/players/110790/personal-data');
       await denied(role, '/api/owner/players/110790/sports');
       await denied(role, '/api/owner/players/110790/sports/summary');
       await denied(role, '/api/owner/players/110790/sports/11111111-2222-4111-8111-222222222222');

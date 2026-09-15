@@ -124,6 +124,7 @@ type ControlAction =
   | { kind: 'manualVerificationGet'; playerId: string }
   | { kind: 'manualVerificationSet'; playerId: string }
   | { kind: 'manualVerificationComplete'; playerId: string }
+  | { kind: 'personalData'; playerId: string }
   | { kind: 'sportsBets'; playerId: string }
   | { kind: 'sportsSummary'; playerId: string }
   | { kind: 'sportsBet'; playerId: string; betId: string }
@@ -166,6 +167,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
     if (m === 'POST') return { kind: 'restrictionSet', playerId: restriction[1] };
     return 'method';
   }
+
+  const personalData = path.match(/^\/api\/security\/players\/([^/]+)\/personal-data$/);
+  if (personalData) return m === 'GET' ? { kind: 'personalData', playerId: personalData[1] } : 'method';
 
   const complete = path.match(/^\/api\/security\/players\/([^/]+)\/verification-complete$/);
   if (complete) return m === 'POST' ? { kind: 'manualVerificationComplete', playerId: complete[1] } : 'method';
@@ -279,6 +283,10 @@ async function runControl(
       });
     case 'manualVerificationComplete':
       return rpc.invoke('security_complete_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
+    case 'personalData':
+      return rpc.invoke('security_player_personal_data_summary', {
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
       });
     case 'sportsBets':

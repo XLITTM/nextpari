@@ -26,6 +26,7 @@ import {
   fetchOwnerPlayerSecurity,
   fetchOwnerPlayerSecurityRestriction,
   fetchOwnerPlayerManualVerification,
+  fetchOwnerPlayerPersonalData,
   fetchOwnerPlayerSportsBets,
   fetchOwnerPlayerSportsSummary,
   fetchOwnerTreasury,
@@ -51,11 +52,13 @@ import {
   type OwnerSecurityFlag,
   type OwnerSecurityOverview,
   type OwnerPlayerSecurityDossier,
+  type OwnerPlayerPersonalDataSummary,
   type OwnerSecuritySportsBet,
   type OwnerSecuritySportsPage,
   type OwnerSecuritySportsSummary,
   type VerticalKpi,
 } from './services';
+import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
 import {
   OWNER_SECURITY_ACCOUNT_LABEL,
   OWNER_SECURITY_DOSSIER_LABEL,
@@ -1533,12 +1536,19 @@ function SecurityPanel() {
 
 function PlayerSecurityModal({ playerId, onClose }: { playerId: string; onClose: () => void }) {
   const [dossier, setDossier] = useState<OwnerPlayerSecurityDossier | null>(null);
+  const [personalData, setPersonalData] = useState<OwnerPlayerPersonalDataSummary | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
-    void fetchOwnerPlayerSecurity(playerId).then((next) => {
-      if (!cancelled) setDossier(next);
+    void Promise.all([
+      fetchOwnerPlayerSecurity(playerId),
+      fetchOwnerPlayerPersonalData(playerId).catch(() => null),
+    ]).then(([next, personal]) => {
+      if (!cancelled) {
+        setDossier(next);
+        setPersonalData(personal);
+      }
     }).catch((err) => {
       if (!cancelled) setError(err instanceof Error ? err.message : 'Не удалось загрузить историю');
     });
@@ -1559,6 +1569,7 @@ function PlayerSecurityModal({ playerId, onClose }: { playerId: string; onClose:
         </div>
         <div className="p-5 overflow-y-auto max-h-[calc(90vh-72px)] space-y-5">
           {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
+          <StaffPlayerPersonalDataCard data={personalData} />
           <div>
             <h4 className="text-sm font-extrabold mb-2">Флаги</h4>
             {(dossier?.flags ?? []).length === 0 && <p className="text-sm text-gray-500">Нет флагов</p>}
