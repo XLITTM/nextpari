@@ -76,16 +76,18 @@ describe('manual player verification SQL contract', () => {
     const requestStart = sql.indexOf('CREATE OR REPLACE FUNCTION private.request_player_manual_verification(');
     const requestEnd = sql.indexOf('CREATE OR REPLACE FUNCTION private.read_player_manual_verification(');
     const request = sql.slice(requestStart, requestEnd);
-    assert.match(request, /status TEXT NOT NULL|status = 'VERIFICATION_REQUIRED'/);
+    assert.match(sql, /CHECK \(status IN \('VERIFICATION_REQUIRED', 'VERIFIED'\)\)/);
+    assert.match(request, /status = 'VERIFICATION_REQUIRED'/);
     assert.match(request, /requested_by/);
     assert.match(request, /requested_by_role/);
-    assert.match(request, /restriction_enabled_with_request/);
-    assert.match(request, /COALESCE\(p_restrict, FALSE\)/);
-    assert.match(request, /instructions_sent_at = NULL/);
+    assert.match(request, /restriction_enabled_with_request = TRUE/);
+    assert.equal(request.includes('p_restrict'), false);
+    assert.equal(request.includes('COALESCE(p_restrict'), false);
     assert.equal(/v_restrict :=\s*NOT/.test(request), false);
     assert.equal(request.includes('IF NOT private.player_has_verified_email'), false);
     const restrictCall = request.indexOf('PERFORM private.set_player_security_restriction');
-    assert.equal(restrictCall > request.indexOf('IF v_restrict THEN'), true);
+    assert.equal(restrictCall > 0, true);
+    assert.match(request, /set_player_security_restriction\([\s\S]*TRUE/);
     assert.equal(request.includes('owner_set_player_blocked'), false);
     assert.equal(request.includes('apply_wallet_entry'), false);
     assert.equal(request.includes('UPDATE public.wallets'), false);
@@ -98,6 +100,7 @@ describe('manual player verification SQL contract', () => {
     assert.equal(notice.includes('reason_code'), false);
     assert.match(notice, /has_verified_email/);
     assert.match(notice, /bind_email_required/);
+    assert.match(notice, /VERIFICATION_REQUIRED/);
 
     const claim = sql.slice(
       sql.indexOf('CREATE OR REPLACE FUNCTION private.player_manual_verification_claim_instruction_send('),
@@ -112,7 +115,9 @@ describe('manual player verification SQL contract', () => {
   it('denies browser table access and keeps service-role execute-only on delivery RPCs', () => {
     assert.match(sql, /REVOKE ALL ON TABLE private\.player_manual_verification_requests FROM anon, authenticated/);
     assert.match(sql, /REVOKE INSERT, UPDATE, DELETE ON TABLE private\.player_manual_verification_requests FROM service_role/);
-    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.owner_request_player_manual_verification\(TEXT, TEXT, BOOLEAN, TEXT\) TO authenticated/);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.owner_request_player_manual_verification\(TEXT, TEXT, TEXT\) TO authenticated/);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.owner_complete_player_manual_verification\(TEXT\) TO authenticated/);
+    assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.security_complete_player_manual_verification\(TEXT\) TO authenticated/);
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_manual_verification_notice\(\) TO authenticated/);
     assert.match(sql, /REVOKE ALL ON FUNCTION public\.player_manual_verification_claim_instruction_send\(UUID\) FROM anon, authenticated/);
     assert.match(sql, /GRANT EXECUTE ON FUNCTION public\.player_manual_verification_claim_instruction_send\(UUID\) TO service_role/);
@@ -266,7 +271,7 @@ describe('email bind still works and can deliver pending instructions', () => {
 });
 
 describe('owner and security verification request HTTP', () => {
-  it('owner can request verification without email and without enabling restriction', async () => {
+  it('owner request verification always enables the existing Security restriction without a browser p_restrict flag', async () => {
     const calls: Array<{ name: string; args?: Record<string, unknown> }> = [];
     const result = await handleOwnerControlRequest(
       {
@@ -291,8 +296,8 @@ describe('owner and security verification request HTTP', () => {
               ok: true,
               player_user_id: USER,
               has_verified_email: false,
-              restriction_enabled_with_request: false,
-              restricted: false,
+              restriction_enabled_with_request: true,
+              restricted: true,
               status: 'VERIFICATION_REQUIRED',
             };
           },
@@ -301,13 +306,18 @@ describe('owner and security verification request HTTP', () => {
     );
     assert.equal(result.status, 200);
     assert.equal(calls[0]?.name, 'owner_request_player_manual_verification');
-    assert.equal(calls[0]?.args?.p_restrict, false);
+    assert.equal('p_restrict' in (calls[0]?.args ?? {}), false);
     assert.equal(calls[0]?.args?.p_reason, 'manual review');
-    assert.equal(calls.some((call) => call.name === 'owner_set_player_security_restriction'), false);
     assert.equal(calls.some((call) => call.name === 'owner_set_player_blocked'), false);
+    const http = readFileSync(join(root, 'server/owner/ownerControlHttp.ts'), 'utf8');
+    const requestInvoke = http.slice(
+      http.indexOf("case 'playerManualVerificationSet'"),
+      http.indexOf("case 'playerManualVerificationComplete'"),
+    );
+    assert.equal(requestInvoke.includes('p_restrict'), false);
   });
 
-  it('security request with explicit restrict uses the dedicated restriction flag, not missing email', async () => {
+  it('security request verification always enables restriction without a browser p_restrict flag', async () => {
     const calls: Array<{ name: string; args?: Record<string, unknown> }> = [];
     const result = await handleSecurityControlRequest(
       {
@@ -315,7 +325,7 @@ describe('owner and security verification request HTTP', () => {
         pathname: `/api/security/players/${PLAYER_ID}/verification-request`,
         cookie: `${SECURITY_ACCESS_COOKIE}=sec-access; ${SECURITY_REFRESH_COOKIE}=sec-refresh`,
         cookieSecure: true,
-        body: { reason: 'docs', restrict: true },
+        body: { reason: 'docs', restrict: false },
       },
       {
         sessionPorts: {
@@ -334,6 +344,8 @@ describe('owner and security verification request HTTP', () => {
               player_user_id: USER,
               restriction_enabled_with_request: true,
               has_verified_email: false,
+              restricted: true,
+              status: 'VERIFICATION_REQUIRED',
             };
           },
         }),
@@ -341,8 +353,69 @@ describe('owner and security verification request HTTP', () => {
     );
     assert.equal(result.status, 200);
     assert.equal(calls[0]?.name, 'security_request_player_manual_verification');
-    assert.equal(calls[0]?.args?.p_restrict, true);
+    assert.equal('p_restrict' in (calls[0]?.args ?? {}), false);
     assert.equal(SECURITY_DENIED_RPCS.includes('owner_set_player_blocked'), true);
+  });
+
+  it('owner and security can mark verification VERIFIED without removing restriction', async () => {
+    const ownerCalls: Array<{ name: string; args?: Record<string, unknown> }> = [];
+    const owner = await handleOwnerControlRequest(
+      {
+        method: 'POST',
+        pathname: `/api/owner/players/${PLAYER_ID}/verification-complete`,
+        cookie: `${OWNER_ACCESS_COOKIE}=owner-access; ${OWNER_REFRESH_COOKIE}=owner-refresh`,
+        cookieSecure: true,
+        body: {},
+      },
+      {
+        sessionPorts: {
+          async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
+          async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async currentStaffContext() {
+            return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
+          },
+        } as OwnerAuthGatewayPorts,
+        rpcFactory: (): OwnerRpcPort => ({
+          async invoke(name, args) {
+            ownerCalls.push({ name, args });
+            return { ok: true, status: 'VERIFIED', restricted: true };
+          },
+        }),
+      },
+    );
+    assert.equal(owner.status, 200);
+    assert.equal(ownerCalls[0]?.name, 'owner_complete_player_manual_verification');
+    assert.equal(ownerCalls.some((call) => call.name === 'owner_set_player_security_restriction'), false);
+
+    const securityCalls: Array<{ name: string; args?: Record<string, unknown> }> = [];
+    const security = await handleSecurityControlRequest(
+      {
+        method: 'POST',
+        pathname: `/api/security/players/${PLAYER_ID}/verification-complete`,
+        cookie: `${SECURITY_ACCESS_COOKIE}=sec-access; ${SECURITY_REFRESH_COOKIE}=sec-refresh`,
+        cookieSecure: true,
+        body: {},
+      },
+      {
+        sessionPorts: {
+          async lookupLoginEmail() { return 'sec@nextpari.test'; },
+          async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
+          async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async currentStaffContext() {
+            return { role: 'security', status: 'active', auth_user_id: 'sec-uid', display_name: 'Sec', login: 'security01' };
+          },
+        } as SecurityAuthGatewayPorts,
+        rpcFactory: () => ({
+          async invoke(name, args) {
+            securityCalls.push({ name, args });
+            return { ok: true, status: 'VERIFIED', restricted: true };
+          },
+        }),
+      },
+    );
+    assert.equal(security.status, 200);
+    assert.equal(securityCalls[0]?.name, 'security_complete_player_manual_verification');
+    assert.equal(securityCalls.some((call) => call.name === 'security_set_player_security_restriction'), false);
   });
 });
 
@@ -353,6 +426,7 @@ describe('security restriction remains explicit-only', () => {
       'private.player_manual_verification_claim_instruction_send',
       'private.player_manual_verification_mark_instructions_sent',
       'private.player_manual_verification_release_instruction_send',
+      'private.complete_player_manual_verification',
       'public.player_manual_verification_notice',
     ];
     for (const name of autoFns) {
@@ -364,24 +438,43 @@ describe('security restriction remains explicit-only', () => {
       assert.equal(body.includes('owner_set_player_blocked'), false, name);
       assert.equal(body.includes('apply_wallet_entry'), false, name);
     }
+    const completeStart = sql.indexOf('CREATE OR REPLACE FUNCTION private.complete_player_manual_verification(');
+    const complete = sql.slice(completeStart, sql.indexOf('CREATE OR REPLACE FUNCTION private.player_manual_verification_safe_notice('));
+    assert.match(complete, /status = 'VERIFIED'/);
+    assert.match(complete, /VERIFICATION_COMPLETED/);
+    assert.equal(complete.includes('set_player_security_restriction'), false);
+    assert.match(sql, /VERIFICATION_REQUESTED/);
+    assert.match(sql, /VERIFICATION_COMPLETED/);
+
     const delivery = readFileSync(join(root, 'server/email/playerManualVerificationService.ts'), 'utf8');
     const emailBind = readFileSync(join(root, 'server/email/playerEmailService.ts'), 'utf8');
     const playerHttp = readFileSync(join(root, 'server/player/playerAuthHttp.ts'), 'utf8');
     const env = readFileSync(join(root, 'server/staff/env.ts'), 'utf8');
+    const flagsSql = readFileSync(join(root, 'supabase/migrations/20260913234500_player_fraud_security_foundation_048.sql'), 'utf8');
     assert.equal(delivery.includes('set_player_security_restriction'), false);
     assert.equal(delivery.includes('owner_set_player_blocked'), false);
+    assert.equal(delivery.includes("'VERIFIED'"), false);
     assert.match(emailBind, /afterEmailVerified/);
     assert.match(emailBind, /deliverPendingManualVerificationInstructions/);
     assert.equal(emailBind.includes('set_player_security_restriction'), false);
+    assert.equal(emailBind.includes('complete_player_manual_verification'), false);
+    assert.equal(emailBind.includes("'VERIFIED'"), false);
     assert.match(playerHttp, /PLAYER_VERIFICATION_NOTICE_PATH/);
     assert.equal(playerHttp.includes('set_player_security_restriction'), false);
+    assert.equal(playerHttp.includes('verification-complete'), false);
+    assert.equal(playerHttp.includes('complete_player_manual_verification'), false);
     assert.match(env, /PLAYER_SUPPORT_EMAIL/);
     assert.equal(env.includes('support@nextpari.com'), false);
+    assert.equal(flagsSql.includes('request_player_manual_verification'), false);
     const ownerApi = readFileSync(join(root, 'api/owner/players/[playerId]/verification-request.ts'), 'utf8');
     const securityApi = readFileSync(join(root, 'api/security/players/[playerId]/verification-request.ts'), 'utf8');
+    const ownerComplete = readFileSync(join(root, 'api/owner/players/[playerId]/verification-complete.ts'), 'utf8');
+    const securityComplete = readFileSync(join(root, 'api/security/players/[playerId]/verification-complete.ts'), 'utf8');
     const playerApi = readFileSync(join(root, 'api/player/verification-notice.ts'), 'utf8');
     assert.match(ownerApi, /verification-request/);
     assert.match(securityApi, /verification-request/);
+    assert.match(ownerComplete, /verification-complete/);
+    assert.match(securityComplete, /verification-complete/);
     assert.match(playerApi, /PLAYER_VERIFICATION_NOTICE_PATH/);
   });
 });

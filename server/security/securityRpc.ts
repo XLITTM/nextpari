@@ -16,6 +16,7 @@ export const SECURITY_ALLOWED_RPCS = [
   'security_set_player_security_restriction',
   'security_player_manual_verification',
   'security_request_player_manual_verification',
+  'security_complete_player_manual_verification',
   'security_activity_feed',
   'security_player_sports_bets',
   'security_player_sports_bet',

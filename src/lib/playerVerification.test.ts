@@ -65,4 +65,32 @@ describe('player verification client', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('hides the player banner after VERIFIED and never maps internal fields', async () => {
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      ok: true,
+      verificationRequested: false,
+      verificationStatus: null,
+      requestedAt: null,
+      hasVerifiedEmail: true,
+      bindEmailRequired: false,
+      instructionsSent: true,
+      supportEmail: null,
+      supportConfigured: false,
+      title: null,
+      message: null,
+      supportMessage: null,
+    }), { status: 200 })) as typeof fetch;
+    try {
+      const notice = await fetchPlayerVerificationNotice();
+      assert.equal(notice?.verificationRequested, false);
+      assert.equal(notice?.title, null);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    const banner = readFileSync(join(here, '../components/player/PlayerVerificationNoticeBanner.tsx'), 'utf8');
+    assert.match(banner, /!notice\?\.verificationRequested/);
+    const client = readFileSync(join(here, './playerVerification.ts'), 'utf8');
+    assert.equal(client.includes('VERIFIED'), false);
+  });
 });

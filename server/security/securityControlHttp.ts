@@ -123,6 +123,7 @@ type ControlAction =
   | { kind: 'restrictionSet'; playerId: string }
   | { kind: 'manualVerificationGet'; playerId: string }
   | { kind: 'manualVerificationSet'; playerId: string }
+  | { kind: 'manualVerificationComplete'; playerId: string }
   | { kind: 'sportsBets'; playerId: string }
   | { kind: 'sportsSummary'; playerId: string }
   | { kind: 'sportsBet'; playerId: string; betId: string }
@@ -165,6 +166,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
     if (m === 'POST') return { kind: 'restrictionSet', playerId: restriction[1] };
     return 'method';
   }
+
+  const complete = path.match(/^\/api\/security\/players\/([^/]+)\/verification-complete$/);
+  if (complete) return m === 'POST' ? { kind: 'manualVerificationComplete', playerId: complete[1] } : 'method';
 
   const verification = path.match(/^\/api\/security\/players\/([^/]+)\/verification-request$/);
   if (verification) {
@@ -269,10 +273,13 @@ async function runControl(
       return rpc.invoke('security_request_player_manual_verification', {
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
         p_reason: requireReason(rec.reason),
-        p_restrict: rec.restrict === true,
         p_reason_code: rec.reasonCode == null && rec.reason_code == null
           ? null
           : String(rec.reasonCode ?? rec.reason_code).trim() || null,
+      });
+    case 'manualVerificationComplete':
+      return rpc.invoke('security_complete_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
       });
     case 'sportsBets':
       return rpc.invoke('security_player_sports_bets', sportsListArgs(action.playerId, query));

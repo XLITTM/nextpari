@@ -385,7 +385,6 @@ export async function setSecurityRestriction(input: {
 export async function requestSecurityPlayerManualVerification(input: {
   playerId: string;
   reason: string;
-  restrict?: boolean;
 }): Promise<void> {
   await securityJson(
     `/api/security/players/${encodeURIComponent(input.playerId)}/verification-request`,
@@ -393,9 +392,29 @@ export async function requestSecurityPlayerManualVerification(input: {
       method: 'POST',
       body: JSON.stringify({
         reason: input.reason,
-        restrict: input.restrict === true,
       }),
     },
+  );
+}
+
+export async function fetchSecurityPlayerManualVerification(playerId: string): Promise<{
+  status: string | null;
+  restricted: boolean;
+}> {
+  const data = await securityData(
+    `/api/security/players/${encodeURIComponent(playerId)}/verification-request`,
+  );
+  const rec = asRecord(data);
+  return {
+    status: rec.status == null ? null : String(rec.status),
+    restricted: rec.restricted === true,
+  };
+}
+
+export async function completeSecurityPlayerManualVerification(playerId: string): Promise<void> {
+  await securityJson(
+    `/api/security/players/${encodeURIComponent(playerId)}/verification-complete`,
+    { method: 'POST', body: JSON.stringify({}) },
   );
 }
 

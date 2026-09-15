@@ -8,12 +8,12 @@ SET LOCAL statement_timeout = '10min';
 --
 -- Repository only. DO NOT APPLY from this change.
 --
--- Verification status is independent of Security restriction.
--- Missing/unverified email MUST NOT enable restriction, hard block,
--- wallet mutation, or permission changes.
--- Security restriction may be enabled only through the existing
--- explicit owner/security setter, and only when this request
--- explicitly asks to apply it in the same authorized action.
+-- Verification status is independent of Security restriction state
+-- except for this one authorized staff action:
+-- OWNER/SECURITY clicking "request verification" always enables the
+-- existing Security restriction through the dedicated setter.
+-- Missing email, email bind, instruction delivery, VERIFIED status,
+-- risk flags, and background jobs MUST NEVER enable or remove it.
 -- ============================================================
 
 
@@ -27,13 +27,18 @@ CREATE TABLE IF NOT EXISTS private.player_manual_verification_requests (
     reason TEXT NOT NULL,
     reason_code TEXT,
     restriction_enabled_with_request BOOLEAN NOT NULL DEFAULT FALSE,
+    completed_at TIMESTAMPTZ,
+    completed_by UUID,
+    completed_by_role TEXT,
     instructions_sent_at TIMESTAMPTZ,
     instructions_send_started_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
     CONSTRAINT player_manual_verification_public_id_check
         CHECK (player_public_id ~ '^[0-9]{6}$'),
     CONSTRAINT player_manual_verification_status_check
-        CHECK (status = 'VERIFICATION_REQUIRED'),
+        CHECK (status IN ('VERIFICATION_REQUIRED', 'VERIFIED')),
+    CONSTRAINT player_manual_verification_completed_role_check
+        CHECK (completed_by_role IS NULL OR completed_by_role IN ('owner', 'security')),
     CONSTRAINT player_manual_verification_role_check
         CHECK (requested_by_role IN ('owner', 'security')),
     CONSTRAINT player_manual_verification_reason_check
@@ -57,7 +62,7 @@ CREATE TABLE IF NOT EXISTS private.player_manual_verification_events (
     payload JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
     CONSTRAINT player_manual_verification_event_type_check
-        CHECK (event_type IN ('VERIFICATION_REQUESTED', 'VERIFICATION_INSTRUCTIONS_SENT')),
+        CHECK (event_type IN ('VERIFICATION_REQUESTED', 'VERIFICATION_INSTRUCTIONS_SENT', 'VERIFICATION_COMPLETED')),
     CONSTRAINT player_manual_verification_event_role_check
         CHECK (actor_staff_role IS NULL OR actor_staff_role IN ('owner', 'security', 'system'))
 );
@@ -128,11 +133,14 @@ AS $fn$
 $fn$;
 
 
+DROP FUNCTION IF EXISTS public.owner_request_player_manual_verification(TEXT, TEXT, BOOLEAN, TEXT);
+DROP FUNCTION IF EXISTS public.security_request_player_manual_verification(TEXT, TEXT, BOOLEAN, TEXT);
+DROP FUNCTION IF EXISTS private.request_player_manual_verification(UUID, TEXT, TEXT, BOOLEAN, UUID, TEXT);
+
 CREATE OR REPLACE FUNCTION private.request_player_manual_verification(
     p_player_user_id UUID,
     p_reason TEXT,
     p_reason_code TEXT,
-    p_restrict BOOLEAN,
     p_actor_user_id UUID,
     p_actor_staff_role TEXT
 )
@@ -147,7 +155,6 @@ DECLARE
     v_code TEXT;
     v_role TEXT;
     v_public TEXT;
-    v_restrict BOOLEAN;
     v_enabled BOOLEAN := FALSE;
     v_row private.player_manual_verification_requests%ROWTYPE;
     v_restricted BOOLEAN := FALSE;
@@ -181,8 +188,6 @@ BEGIN
         RAISE EXCEPTION 'PLAYER_NOT_FOUND';
     END IF;
 
-    v_restrict := COALESCE(p_restrict, FALSE);
-
     SELECT *
     INTO v_row
     FROM private.player_manual_verification_requests AS r
@@ -199,7 +204,10 @@ BEGIN
             requested_by_role,
             reason,
             reason_code,
-            restriction_enabled_with_request
+            restriction_enabled_with_request,
+            completed_at,
+            completed_by,
+            completed_by_role
         ) VALUES (
             p_player_user_id,
             v_public,
@@ -209,7 +217,10 @@ BEGIN
             v_role,
             v_reason,
             v_code,
-            FALSE
+            TRUE,
+            NULL,
+            NULL,
+            NULL
         )
         RETURNING * INTO v_row;
     ELSE
@@ -221,6 +232,10 @@ BEGIN
             requested_by_role = v_role,
             reason = v_reason,
             reason_code = v_code,
+            restriction_enabled_with_request = TRUE,
+            completed_at = NULL,
+            completed_by = NULL,
+            completed_by_role = NULL,
             instructions_sent_at = NULL,
             instructions_send_started_at = NULL,
             updated_at = pg_catalog.now()
@@ -228,23 +243,24 @@ BEGIN
         RETURNING * INTO v_row;
     END IF;
 
-    IF v_restrict THEN
-        v_restricted := private.is_player_security_restricted(p_player_user_id);
-        IF NOT v_restricted THEN
-            PERFORM private.set_player_security_restriction(
-                p_player_user_id,
-                TRUE,
-                v_reason,
-                p_actor_user_id,
-                v_role
-            );
-            v_enabled := TRUE;
-        END IF;
+    -- This OWNER/SECURITY request click is the authorized manual action.
+    -- Always enable the existing Security restriction. Do not infer from
+    -- email, verification status, or a browser-supplied restrict flag.
+    v_restricted := private.is_player_security_restricted(p_player_user_id);
+    IF NOT v_restricted THEN
+        PERFORM private.set_player_security_restriction(
+            p_player_user_id,
+            TRUE,
+            v_reason,
+            p_actor_user_id,
+            v_role
+        );
     END IF;
+    v_enabled := TRUE;
 
     UPDATE private.player_manual_verification_requests AS r
     SET
-        restriction_enabled_with_request = v_enabled,
+        restriction_enabled_with_request = TRUE,
         updated_at = pg_catalog.now()
     WHERE r.player_user_id = p_player_user_id
     RETURNING * INTO v_row;
@@ -341,6 +357,8 @@ BEGIN
             'reason', NULL,
             'reason_code', NULL,
             'restriction_enabled_with_request', FALSE,
+            'completed_at', NULL,
+            'completed_by_role', NULL,
             'has_verified_email', private.player_has_verified_email(p_player_user_id),
             'instructions_sent', FALSE,
             'restricted', private.is_player_security_restricted(p_player_user_id)
@@ -350,7 +368,7 @@ BEGIN
     RETURN jsonb_build_object(
         'ok', TRUE,
         'player_public_id', v_public,
-        'verification_requested', TRUE,
+        'verification_requested', v_row.status = 'VERIFICATION_REQUIRED',
         'status', v_row.status,
         'requested_at', v_row.requested_at,
         'requested_by', v_row.requested_by,
@@ -358,8 +376,108 @@ BEGIN
         'reason', v_row.reason,
         'reason_code', v_row.reason_code,
         'restriction_enabled_with_request', v_row.restriction_enabled_with_request,
+        'completed_at', v_row.completed_at,
+        'completed_by_role', v_row.completed_by_role,
         'has_verified_email', private.player_has_verified_email(p_player_user_id),
         'instructions_sent', v_row.instructions_sent_at IS NOT NULL,
+        'restricted', private.is_player_security_restricted(p_player_user_id)
+    );
+END;
+$fn$;
+
+
+CREATE OR REPLACE FUNCTION private.complete_player_manual_verification(
+    p_player_user_id UUID,
+    p_actor_user_id UUID,
+    p_actor_staff_role TEXT
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_role TEXT;
+    v_public TEXT;
+    v_row private.player_manual_verification_requests%ROWTYPE;
+BEGIN
+    v_role := BTRIM(COALESCE(p_actor_staff_role, ''));
+    IF NOT private.security_restriction_mutator_role_allowed(v_role) THEN
+        RAISE EXCEPTION 'MANUAL_VERIFICATION_ACTOR_DENIED';
+    END IF;
+    IF p_actor_user_id IS NULL THEN
+        RAISE EXCEPTION 'AUTH_REQUIRED';
+    END IF;
+    IF p_player_user_id IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_NOT_FOUND';
+    END IF;
+
+    v_public := private.player_security_public_id(p_player_user_id);
+    IF v_public IS NULL OR v_public !~ '^[0-9]{6}$' THEN
+        RAISE EXCEPTION 'PLAYER_NOT_FOUND';
+    END IF;
+
+    SELECT *
+    INTO v_row
+    FROM private.player_manual_verification_requests AS r
+    WHERE r.player_user_id = p_player_user_id
+    FOR UPDATE;
+
+    IF v_row.player_user_id IS NULL THEN
+        RAISE EXCEPTION 'VERIFICATION_REQUEST_NOT_FOUND';
+    END IF;
+
+    IF v_row.status IS DISTINCT FROM 'VERIFIED' THEN
+        UPDATE private.player_manual_verification_requests AS r
+        SET
+            status = 'VERIFIED',
+            completed_at = pg_catalog.now(),
+            completed_by = p_actor_user_id,
+            completed_by_role = v_role,
+            updated_at = pg_catalog.now()
+        WHERE r.player_user_id = p_player_user_id
+        RETURNING * INTO v_row;
+
+        INSERT INTO private.player_manual_verification_events (
+            player_user_id,
+            player_public_id,
+            event_type,
+            actor_auth_user_id,
+            actor_staff_role,
+            payload
+        ) VALUES (
+            p_player_user_id,
+            v_public,
+            'VERIFICATION_COMPLETED',
+            p_actor_user_id,
+            v_role,
+            jsonb_build_object(
+                'previous_status', 'VERIFICATION_REQUIRED'
+            )
+        );
+
+        PERFORM private.append_staff_audit(
+            'PLAYER_MANUAL_VERIFICATION_COMPLETED',
+            'player',
+            v_public,
+            'owner_only',
+            jsonb_build_object(
+                'player_public_id', v_public,
+                'completed_by_role', v_role
+            )
+        );
+    END IF;
+
+    RETURN jsonb_build_object(
+        'ok', TRUE,
+        'player_public_id', v_public,
+        'player_user_id', p_player_user_id,
+        'status', v_row.status,
+        'requested_at', v_row.requested_at,
+        'completed_at', v_row.completed_at,
+        'completed_by', v_row.completed_by,
+        'completed_by_role', v_row.completed_by_role,
         'restricted', private.is_player_security_restricted(p_player_user_id)
     );
 END;
@@ -564,7 +682,6 @@ $fn$;
 CREATE OR REPLACE FUNCTION public.owner_request_player_manual_verification(
     p_player_id TEXT,
     p_reason TEXT,
-    p_restrict BOOLEAN DEFAULT FALSE,
     p_reason_code TEXT DEFAULT NULL
 )
 RETURNS jsonb
@@ -584,7 +701,29 @@ BEGIN
         private.player_security_user_id_from_public_id(p_player_id),
         p_reason,
         p_reason_code,
-        COALESCE(p_restrict, FALSE),
+        v_owner,
+        'owner'
+    );
+END;
+$fn$;
+
+
+CREATE OR REPLACE FUNCTION public.owner_complete_player_manual_verification(p_player_id TEXT)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_owner UUID;
+BEGIN
+    SELECT o.auth_user_id
+    INTO v_owner
+    FROM private.get_current_owner_context() AS o;
+
+    RETURN private.complete_player_manual_verification(
+        private.player_security_user_id_from_public_id(p_player_id),
         v_owner,
         'owner'
     );
@@ -613,7 +752,6 @@ $fn$;
 CREATE OR REPLACE FUNCTION public.security_request_player_manual_verification(
     p_player_id TEXT,
     p_reason TEXT,
-    p_restrict BOOLEAN DEFAULT FALSE,
     p_reason_code TEXT DEFAULT NULL
 )
 RETURNS jsonb
@@ -631,7 +769,6 @@ BEGIN
         private.player_security_user_id_from_public_id(p_player_id),
         p_reason,
         p_reason_code,
-        COALESCE(p_restrict, FALSE),
         v_ctx.auth_user_id,
         'security'
     );
@@ -643,6 +780,38 @@ BEGIN
         COALESCE(v_result ->> 'player_public_id', p_player_id),
         COALESCE(v_result ->> 'player_public_id', p_player_id),
         p_reason,
+        'ok'
+    );
+    RETURN v_result;
+END;
+$fn$;
+
+
+CREATE OR REPLACE FUNCTION public.security_complete_player_manual_verification(p_player_id TEXT)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_ctx RECORD;
+    v_result jsonb;
+BEGIN
+    SELECT * INTO v_ctx FROM private.get_current_security_context();
+    v_result := private.complete_player_manual_verification(
+        private.player_security_user_id_from_public_id(p_player_id),
+        v_ctx.auth_user_id,
+        'security'
+    );
+    PERFORM private.security_record_action(
+        v_ctx.auth_user_id,
+        'security',
+        'PLAYER_MANUAL_VERIFICATION_COMPLETED',
+        'player',
+        COALESCE(v_result ->> 'player_public_id', p_player_id),
+        COALESCE(v_result ->> 'player_public_id', p_player_id),
+        NULL,
         'ok'
     );
     RETURN v_result;
@@ -722,7 +891,8 @@ REVOKE INSERT, UPDATE, DELETE ON TABLE private.player_manual_verification_events
 
 REVOKE ALL ON FUNCTION private.player_verified_email(UUID) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_has_verified_email(UUID) FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION private.request_player_manual_verification(UUID, TEXT, TEXT, BOOLEAN, UUID, TEXT) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.request_player_manual_verification(UUID, TEXT, TEXT, UUID, TEXT) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.complete_player_manual_verification(UUID, UUID, TEXT) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.read_player_manual_verification(UUID) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_manual_verification_safe_notice(UUID) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_manual_verification_claim_instruction_send(UUID) FROM PUBLIC, anon, authenticated, service_role;
@@ -733,14 +903,20 @@ REVOKE ALL ON FUNCTION private.player_manual_verification_events_append_only() F
 REVOKE ALL ON FUNCTION public.owner_player_manual_verification(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.owner_player_manual_verification(TEXT) TO authenticated;
 
-REVOKE ALL ON FUNCTION public.owner_request_player_manual_verification(TEXT, TEXT, BOOLEAN, TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.owner_request_player_manual_verification(TEXT, TEXT, BOOLEAN, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.owner_request_player_manual_verification(TEXT, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.owner_request_player_manual_verification(TEXT, TEXT, TEXT) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.owner_complete_player_manual_verification(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.owner_complete_player_manual_verification(TEXT) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.security_player_manual_verification(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.security_player_manual_verification(TEXT) TO authenticated;
 
-REVOKE ALL ON FUNCTION public.security_request_player_manual_verification(TEXT, TEXT, BOOLEAN, TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.security_request_player_manual_verification(TEXT, TEXT, BOOLEAN, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.security_request_player_manual_verification(TEXT, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.security_request_player_manual_verification(TEXT, TEXT, TEXT) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.security_complete_player_manual_verification(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.security_complete_player_manual_verification(TEXT) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.player_manual_verification_notice() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.player_manual_verification_notice() TO authenticated;

@@ -651,16 +651,21 @@ export async function fetchOwnerPlayerManualVerification(
 export async function requestOwnerPlayerManualVerification(params: {
   playerId: string;
   reason: string;
-  restrict?: boolean;
   reasonCode?: string;
 }): Promise<void> {
   await ownerData(`/api/owner/players/${encodeURIComponent(params.playerId)}/verification-request`, {
     method: 'POST',
     body: JSON.stringify({
       reason: params.reason,
-      restrict: params.restrict === true,
       reasonCode: params.reasonCode ?? '',
     }),
+  });
+}
+
+export async function completeOwnerPlayerManualVerification(playerId: string): Promise<void> {
+  await ownerData(`/api/owner/players/${encodeURIComponent(playerId)}/verification-complete`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   });
 }
 

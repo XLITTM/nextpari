@@ -22,6 +22,8 @@ import {
   postSecurityFlagAction,
   setSecurityRestriction,
   requestSecurityPlayerManualVerification,
+  fetchSecurityPlayerManualVerification,
+  completeSecurityPlayerManualVerification,
   type SecurityDossier,
   type SecurityFlag,
   type SecurityOverview,
@@ -482,7 +484,7 @@ function PlayersPanel({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reason, setReason] = useState('');
-  const [verifyRestrict, setVerifyRestrict] = useState(false);
+  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -494,9 +496,15 @@ function PlayersPanel({
     setLoading(true);
     setError('');
     try {
-      setDossier(await fetchSecurityDossier(id));
+      const [next, verification] = await Promise.all([
+        fetchSecurityDossier(id),
+        fetchSecurityPlayerManualVerification(id).catch(() => ({ status: null, restricted: false })),
+      ]);
+      setDossier(next);
+      setVerificationStatus(verification.status);
     } catch (err) {
       setDossier(null);
+      setVerificationStatus(null);
       setError(err instanceof Error ? err.message : 'Не удалось открыть досье');
     } finally {
       setLoading(false);
@@ -545,13 +553,25 @@ function PlayersPanel({
       await requestSecurityPlayerManualVerification({
         playerId: dossier.playerPublicId,
         reason: text,
-        restrict: verifyRestrict,
       });
       setReason('');
-      setVerifyRestrict(false);
       await load(dossier.playerPublicId);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось запросить верификацию');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitVerificationComplete = async () => {
+    if (!dossier) return;
+    setBusy(true);
+    setError('');
+    try {
+      await completeSecurityPlayerManualVerification(dossier.playerPublicId);
+      await load(dossier.playerPublicId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось завершить верификацию');
     } finally {
       setBusy(false);
     }
@@ -578,6 +598,20 @@ function PlayersPanel({
             <p className="text-lg font-extrabold">Игрок #{dossier.playerPublicId}</p>
             <p className="text-sm text-gray-600 mt-1">Состояние: {ownerSecurityAccountStatusLabel(dossier.restricted)}</p>
             <p className="text-sm text-gray-600">Ограничение: {dossier.restricted ? 'активно' : 'нет'}</p>
+            <p className="text-sm text-gray-600">
+              Верификация: {
+                verificationStatus === 'VERIFIED'
+                  ? 'пройдена'
+                  : verificationStatus === 'VERIFICATION_REQUIRED'
+                    ? 'требуется'
+                    : 'не запрошена'
+              }
+            </p>
+            {verificationStatus === 'VERIFIED' && dossier.restricted ? (
+              <p className="text-xs text-amber-800 mt-1">
+                Верификация пройдена, но ограничение службы безопасности остаётся активным, пока его не снимут отдельно.
+              </p>
+            ) : null}
             <p className="text-sm text-gray-600">Связанных аккаунтов: {dossier.linkedAccountCount}</p>
             {dossier.restrictionReason && <p className="text-sm text-gray-600">Причина: {dossier.restrictionReason}</p>}
             <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -591,18 +625,14 @@ function PlayersPanel({
             <button type="button" disabled={busy} onClick={() => void submitRestriction()} className="mt-2 text-sm font-bold px-3 py-2 rounded-xl bg-ink-900 text-white">
               {ownerSecurityRestrictionToggle(dossier.restricted).buttonLabel}
             </button>
-            <label className="mt-3 flex items-start gap-2 text-xs text-slate-600">
-              <input
-                type="checkbox"
-                checked={verifyRestrict}
-                onChange={(e) => setVerifyRestrict(e.target.checked)}
-                className="mt-0.5"
-              />
-              Одновременно ограничить аккаунт (только явное действие, не из-за отсутствия email)
-            </label>
             <button type="button" disabled={busy} onClick={() => void submitVerification()} className="mt-2 text-sm font-bold px-3 py-2 rounded-xl bg-slate-800 text-white">
               Запросить верификацию
             </button>
+            {verificationStatus === 'VERIFICATION_REQUIRED' ? (
+              <button type="button" disabled={busy} onClick={() => void submitVerificationComplete()} className="mt-2 ml-2 text-sm font-bold px-3 py-2 rounded-xl bg-emerald-700 text-white">
+                Верификация пройдена
+              </button>
+            ) : null}
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <h3 className="font-extrabold mb-2">Флаги риска</h3>
