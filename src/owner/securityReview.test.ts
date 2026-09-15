@@ -68,6 +68,12 @@ describe('owner security review vs security restriction', () => {
     assert.match(http, /owner_set_player_security_restriction/);
     assert.match(http, /owner_set_player_blocked/);
     assert.match(playersPanel, /setOwnerPlayerBlocked/);
+    assert.match(http, /owner_request_player_manual_verification/);
+    assert.match(services, /verification-request/);
+    assert.match(ui, /Запросить верификацию/);
+    assert.match(ui, /verifyRestrict/);
+    assert.equal(ui.includes('requestOwnerPlayerManualVerification'), true);
+    assert.match(ui, /restrict: verifyRestrict/);
   });
 
   it('SECURITY FLAG AUTO-CLOSED: NO', () => {

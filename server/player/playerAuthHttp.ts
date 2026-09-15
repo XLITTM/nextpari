@@ -17,6 +17,7 @@ import {
   readPlayerProfileSession,
   readPlayerSession,
   registerPlayerWithPassword,
+  resolvePlayerSession,
   updatePlayerProfileSession,
   type PlayerAuthGatewayPorts,
   type PlayerAuthHttpResult,
@@ -47,6 +48,12 @@ import {
   PLAYER_PASSWORD_RECOVERY_START_PATH,
   PLAYER_PASSWORD_RECOVERY_VERIFY_PATH,
 } from '../email/playerPasswordRecoveryService.js';
+import {
+  PLAYER_VERIFICATION_NOTICE_PATH,
+  deliverPendingManualVerificationInstructions,
+  readPlayerManualVerificationNotice,
+  type PlayerManualVerificationNotice,
+} from '../email/playerManualVerificationService.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
@@ -61,6 +68,7 @@ export {
   PLAYER_PASSWORD_RECOVERY_VERIFY_PATH,
   PLAYER_PASSWORD_RECOVERY_RESET_PATH,
 };
+export { PLAYER_VERIFICATION_NOTICE_PATH };
 
 function normalizePath(pathname: string): string {
   return pathname.replace(/\/$/, '') || '/';
@@ -81,6 +89,7 @@ export function isPlayerAuthPath(pathname: string): boolean {
     || path === PLAYER_PASSWORD_RECOVERY_START_PATH
     || path === PLAYER_PASSWORD_RECOVERY_VERIFY_PATH
     || path === PLAYER_PASSWORD_RECOVERY_RESET_PATH
+    || path === PLAYER_VERIFICATION_NOTICE_PATH
   );
 }
 
@@ -117,6 +126,10 @@ export async function handlePlayerAuthRequest(
   emailPorts?: PlayerEmailPorts,
   securityPorts?: PlayerSecurityPorts,
   recoveryPorts?: PlayerPasswordRecoveryPorts,
+  verificationPorts?: {
+    readNotice: (accessToken: string) => Promise<PlayerManualVerificationNotice>;
+    deliverInstructions: (playerUserId: string) => Promise<unknown>;
+  },
 ): Promise<PlayerAuthHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
@@ -296,6 +309,26 @@ export async function handlePlayerAuthRequest(
         security,
       ));
     }
+    if (path === PLAYER_VERIFICATION_NOTICE_PATH) {
+      if (method !== 'GET') {
+        throw staffError('METHOD_NOT_ALLOWED', 405);
+      }
+      const resolved = await resolvePlayerSession(ports, input.cookie, secure);
+      try {
+        const user = await ports.getAuthUser(resolved.accessToken);
+        const deliver = verificationPorts?.deliverInstructions ?? deliverPendingManualVerificationInstructions;
+        await deliver(user.id);
+      } catch {
+        /* notice still returns; delivery is best-effort after a stored request */
+      }
+      const read = verificationPorts?.readNotice ?? readPlayerManualVerificationNotice;
+      const notice = await read(resolved.accessToken);
+      return finish({
+        status: 200,
+        body: { ok: true, authenticated: true, ...notice },
+        cookies: resolved.cookies,
+      });
+    }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {
     if (error instanceof StaffOnboardingError) {
@@ -306,7 +339,7 @@ export async function handlePlayerAuthRequest(
           ? {
             Allow: path === PLAYER_PROFILE_PATH
               ? 'GET, PUT'
-              : path === PLAYER_ME_PATH || path === PLAYER_WALLET_PATH
+              : path === PLAYER_ME_PATH || path === PLAYER_WALLET_PATH || path === PLAYER_VERIFICATION_NOTICE_PATH
                 ? 'GET'
                 : 'POST',
           }

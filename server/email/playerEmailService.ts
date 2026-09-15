@@ -11,6 +11,7 @@ import {
 } from '../player/playerValidators.js';
 import type { PlayerAuthGatewayPorts, PlayerAuthHttpResult } from '../player/playerAuthService.js';
 import type { PlayerSecurityObserver } from '../player/playerSecurityService.js';
+import { deliverPendingManualVerificationInstructions } from './playerManualVerificationService.js';
 
 export const PLAYER_EMAIL_START_PATH = '/api/player/email/start';
 export const PLAYER_EMAIL_VERIFY_PATH = '/api/player/email/verify';
@@ -47,6 +48,7 @@ export interface PlayerEmailPorts {
   consumeChallenge: (id: string) => Promise<boolean>;
   updateAuthEmail: (authUserId: string, email: string) => Promise<void>;
   syncProfileEmail: (authUserId: string, email: string) => Promise<void>;
+  afterEmailVerified?: (authUserId: string, email: string) => Promise<void>;
   now?: () => Date;
   generateCode?: () => string;
   hashCode?: (code: string) => string;
@@ -309,6 +311,11 @@ export async function verifyPlayerEmailBinding(
   }
 
   await security?.record('EMAIL_VERIFIED', user.id, { source: 'email_verify' });
+  try {
+    await ports.afterEmailVerified?.(user.id, challenge.email_normalized);
+  } catch {
+    /* instruction delivery must not roll back a successful email bind */
+  }
   return {
     status: 200,
     body: {
@@ -422,6 +429,9 @@ export function livePlayerEmailPorts(authPorts: PlayerAuthGatewayPorts): PlayerE
         p_email: email,
       });
       if (error) throw staffError('EMAIL_UPDATE_FAILED', 503);
+    },
+    async afterEmailVerified(authUserId) {
+      await deliverPendingManualVerificationInstructions(authUserId);
     },
   };
 }

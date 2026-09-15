@@ -21,6 +21,7 @@ import {
   formatSecurityMoney,
   postSecurityFlagAction,
   setSecurityRestriction,
+  requestSecurityPlayerManualVerification,
   type SecurityDossier,
   type SecurityFlag,
   type SecurityOverview,
@@ -481,6 +482,7 @@ function PlayersPanel({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reason, setReason] = useState('');
+  const [verifyRestrict, setVerifyRestrict] = useState(false);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -528,6 +530,33 @@ function PlayersPanel({
     }
   };
 
+  const submitVerification = async () => {
+    if (!dossier) return;
+    let text: string;
+    try {
+      text = requireOwnerSecurityAccountReason(reason);
+    } catch {
+      setError('Укажите причину');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await requestSecurityPlayerManualVerification({
+        playerId: dossier.playerPublicId,
+        reason: text,
+        restrict: verifyRestrict,
+      });
+      setReason('');
+      setVerifyRestrict(false);
+      await load(dossier.playerPublicId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось запросить верификацию');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section>
       <h2 className="text-2xl font-extrabold text-ink-900 mb-4">Игроки риска</h2>
@@ -561,6 +590,18 @@ function PlayersPanel({
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Причина обязательна" className="mt-3 w-full border border-slate-200 rounded-xl px-3 py-2 text-sm" rows={2} />
             <button type="button" disabled={busy} onClick={() => void submitRestriction()} className="mt-2 text-sm font-bold px-3 py-2 rounded-xl bg-ink-900 text-white">
               {ownerSecurityRestrictionToggle(dossier.restricted).buttonLabel}
+            </button>
+            <label className="mt-3 flex items-start gap-2 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                checked={verifyRestrict}
+                onChange={(e) => setVerifyRestrict(e.target.checked)}
+                className="mt-0.5"
+              />
+              Одновременно ограничить аккаунт (только явное действие, не из-за отсутствия email)
+            </label>
+            <button type="button" disabled={busy} onClick={() => void submitVerification()} className="mt-2 text-sm font-bold px-3 py-2 rounded-xl bg-slate-800 text-white">
+              Запросить верификацию
             </button>
           </div>
           <div className="bg-white rounded-2xl border border-slate-200 p-4">

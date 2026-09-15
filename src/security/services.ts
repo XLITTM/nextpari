@@ -382,6 +382,23 @@ export async function setSecurityRestriction(input: {
   );
 }
 
+export async function requestSecurityPlayerManualVerification(input: {
+  playerId: string;
+  reason: string;
+  restrict?: boolean;
+}): Promise<void> {
+  await securityJson(
+    `/api/security/players/${encodeURIComponent(input.playerId)}/verification-request`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        reason: input.reason,
+        restrict: input.restrict === true,
+      }),
+    },
+  );
+}
+
 export async function fetchSecuritySportsBets(params: {
   playerId: string;
   from?: string | null;

@@ -87,3 +87,16 @@ export function loadPlayerSecuritySignalPepper(): PlayerSecuritySignalPepperStat
   }
   return { ok: true, pepper };
 }
+
+const SUPPORT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function loadPlayerSupportEmail(): string | null {
+  if (readEnv('VITE_PLAYER_SUPPORT_EMAIL')) {
+    throw new Error('VITE_PLAYER_SUPPORT_EMAIL_FORBIDDEN');
+  }
+  const value = readEnv('PLAYER_SUPPORT_EMAIL');
+  if (!value) return null;
+  const email = value.toLowerCase();
+  if (!SUPPORT_EMAIL_RE.test(email)) return null;
+  return email;
+}

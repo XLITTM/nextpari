@@ -611,6 +611,59 @@ export async function setOwnerPlayerSecurityRestriction(params: {
   });
 }
 
+export interface OwnerPlayerManualVerification {
+  playerPublicId: string;
+  verificationRequested: boolean;
+  status: string | null;
+  requestedAt: string | null;
+  requestedByRole: string | null;
+  hasVerifiedEmail: boolean;
+  instructionsSent: boolean;
+  restrictionEnabledWithRequest: boolean;
+  restricted: boolean;
+}
+
+export async function fetchOwnerPlayerManualVerification(
+  playerId: string,
+): Promise<OwnerPlayerManualVerification> {
+  const data = await ownerData(
+    `/api/owner/players/${encodeURIComponent(playerId)}/verification-request`,
+  );
+  const rec = asRecord(data);
+  return {
+    playerPublicId: str(rec.player_public_id ?? rec.playerPublicId, playerId),
+    verificationRequested: rec.verification_requested === true || rec.verificationRequested === true,
+    status: rec.status == null ? null : str(rec.status),
+    requestedAt: rec.requested_at == null && rec.requestedAt == null
+      ? null
+      : str(rec.requested_at ?? rec.requestedAt),
+    requestedByRole: rec.requested_by_role == null && rec.requestedByRole == null
+      ? null
+      : str(rec.requested_by_role ?? rec.requestedByRole),
+    hasVerifiedEmail: rec.has_verified_email === true || rec.hasVerifiedEmail === true,
+    instructionsSent: rec.instructions_sent === true || rec.instructionsSent === true,
+    restrictionEnabledWithRequest:
+      rec.restriction_enabled_with_request === true || rec.restrictionEnabledWithRequest === true,
+    restricted: rec.restricted === true,
+  };
+}
+
+export async function requestOwnerPlayerManualVerification(params: {
+  playerId: string;
+  reason: string;
+  restrict?: boolean;
+  reasonCode?: string;
+}): Promise<void> {
+  await ownerData(`/api/owner/players/${encodeURIComponent(params.playerId)}/verification-request`, {
+    method: 'POST',
+    body: JSON.stringify({
+      reason: params.reason,
+      restrict: params.restrict === true,
+      reasonCode: params.reasonCode ?? '',
+    }),
+  });
+}
+
 export interface OwnerSecuritySportsLeg {
   fixtureLabel: string;
   league: string;

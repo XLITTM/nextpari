@@ -23,6 +23,7 @@ import {
   provisionOwnerSecurityStaff,
   resetOwnerSecurityStaffPassword,
 } from '../staff/staffHierarchyService.js';
+import { deliverPendingManualVerificationInstructions } from '../email/playerManualVerificationService.js';
 
 export interface OwnerControlDeps {
   sessionPorts?: OwnerAuthGatewayPorts;
@@ -365,6 +366,8 @@ type ControlAction =
   | { kind: 'playerSecurity'; playerId: string }
   | { kind: 'playerSecurityRestrictionGet'; playerId: string }
   | { kind: 'playerSecurityRestrictionSet'; playerId: string }
+  | { kind: 'playerManualVerificationGet'; playerId: string }
+  | { kind: 'playerManualVerificationSet'; playerId: string }
   | { kind: 'playerSportsBets'; playerId: string }
   | { kind: 'playerSportsSummary'; playerId: string }
   | { kind: 'playerSportsBet'; playerId: string; betId: string }
@@ -428,6 +431,13 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (restriction) {
     if (m === 'GET') return { kind: 'playerSecurityRestrictionGet', playerId: restriction[1] };
     if (m === 'POST') return { kind: 'playerSecurityRestrictionSet', playerId: restriction[1] };
+    return 'method';
+  }
+
+  const verification = path.match(/^\/api\/owner\/players\/([^/]+)\/verification-request$/);
+  if (verification) {
+    if (m === 'GET') return { kind: 'playerManualVerificationGet', playerId: verification[1] };
+    if (m === 'POST') return { kind: 'playerManualVerificationSet', playerId: verification[1] };
     return 'method';
   }
 
@@ -561,6 +571,19 @@ async function runControl(
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
         p_restricted: requireBoolean(rec.restricted, 'RESTRICTED_REQUIRED'),
         p_reason: requireReason(rec.reason),
+      });
+    case 'playerManualVerificationGet':
+      return rpc.invoke('owner_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
+    case 'playerManualVerificationSet':
+      return rpc.invoke('owner_request_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_reason: requireReason(rec.reason),
+        p_restrict: rec.restrict === true,
+        p_reason_code: rec.reasonCode == null && rec.reason_code == null
+          ? null
+          : String(rec.reasonCode ?? rec.reason_code).trim() || null,
       });
     case 'playerSportsBets':
       return rpc.invoke('owner_player_sports_bets', {
@@ -868,6 +891,16 @@ export async function handleOwnerControlRequest(
     }
 
     const data = await runControl(matched, rpc, queryOf(input.search), parseJsonPayload(input.body));
+    if (matched.kind === 'playerManualVerificationSet') {
+      const uid = String(asRecord(data).player_user_id ?? asRecord(data).playerUserId ?? '');
+      if (uid) {
+        try {
+          await deliverPendingManualVerificationInstructions(uid);
+        } catch {
+          /* request is stored even if instruction email cannot be sent yet */
+        }
+      }
+    }
     return {
       status: 200,
       body: { ok: true, data },

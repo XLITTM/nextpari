@@ -30,6 +30,7 @@ import {
   fetchOwnerTreasury,
   resolveOwnerSecurityFlag,
   setOwnerPlayerSecurityRestriction,
+  requestOwnerPlayerManualVerification,
   ledgerPeriodFrom,
   cashierOpLabel,
   cashierOpRef,
@@ -1026,6 +1027,7 @@ function SecurityPanel() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountConfirm, setAccountConfirm] = useState(false);
   const [accountReason, setAccountReason] = useState('');
+  const [verifyRestrict, setVerifyRestrict] = useState(false);
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
@@ -1099,6 +1101,7 @@ function SecurityPanel() {
     setAccountRestricted(null);
     setAccountConfirm(false);
     setAccountReason('');
+    setVerifyRestrict(false);
     setAccountLoading(true);
     setError('');
     try {
@@ -1139,6 +1142,37 @@ function SecurityPanel() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось изменить ограничение');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const submitVerification = async () => {
+    if (!accountFor) return;
+    let text: string;
+    try {
+      text = requireOwnerSecurityAccountReason(accountReason);
+    } catch {
+      setError('Укажите причину');
+      return;
+    }
+    setBusyId(accountFor.id);
+    setError('');
+    setNotice('');
+    try {
+      await requestOwnerPlayerManualVerification({
+        playerId: accountFor.playerPublicId,
+        reason: text,
+        restrict: verifyRestrict,
+      });
+      setNotice(`Запрошена верификация игрока #${accountFor.playerPublicId}`);
+      const status = await fetchOwnerPlayerSecurityRestriction(accountFor.playerPublicId);
+      setAccountRestricted(Boolean(status.restricted));
+      setAccountReason('');
+      setVerifyRestrict(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось запросить верификацию');
     } finally {
       setBusyId('');
     }
@@ -1341,6 +1375,13 @@ function SecurityPanel() {
                     <p key={row.label}>{row.label}: {row.value}</p>
                   ))}
                 </div>
+                <textarea
+                  value={accountReason}
+                  onChange={(e) => setAccountReason(e.target.value)}
+                  rows={3}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 mb-3"
+                  placeholder="Причина решения"
+                />
                 {accountConfirm ? (
                   <>
                     <p className="text-sm font-semibold text-ink-900 mb-2">
@@ -1386,6 +1427,23 @@ function SecurityPanel() {
                     {ownerSecurityRestrictionToggle(accountRestricted).buttonLabel}
                   </button>
                 )}
+                <label className="flex items-start gap-2 text-xs text-slate-600 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={verifyRestrict}
+                    onChange={(e) => setVerifyRestrict(e.target.checked)}
+                    className="mt-0.5"
+                  />
+                  Одновременно ограничить аккаунт (только явное действие, не из-за отсутствия email)
+                </label>
+                <button
+                  type="button"
+                  disabled={busyId === accountFor.id}
+                  onClick={() => void submitVerification()}
+                  className="w-full text-sm font-bold px-3 py-2 rounded-xl bg-slate-800 text-white mb-4 disabled:opacity-40"
+                >
+                  Запросить верификацию
+                </button>
               </>
             )}
             <div className="flex flex-col gap-2">
