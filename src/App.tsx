@@ -35,6 +35,7 @@ import { PromoDetailsScreen } from './screens/PromoDetailsScreen';
 import { PromoMarathonScreen } from './screens/PromoMarathonScreen';
 import { PromoWelcomeScreen } from './screens/PromoWelcomeScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
+import { PlayerVerificationNoticeBanner } from './components/player/PlayerVerificationNoticeBanner';
 import { InfoScreen } from './screens/InfoScreen';
 import { PromoUnbeatableScreen } from './screens/PromoUnbeatableScreen';
 import { BlackjackGame } from './games/blackjack/BlackjackGame';
@@ -598,6 +599,9 @@ function AppContent() {
         <Header balanceLabel={moneyLabel} onSearchClick={openSearch} onNavigate={setScreen}>
           {screen.name === 'home' && <MainTabs active={mainTab} onChange={handleMainTab} />}
         </Header>
+      )}
+      {!isArcade && isAuthenticated && (
+        <PlayerVerificationNoticeBanner enabled={authReady && isAuthenticated} />
       )}
 
       <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>

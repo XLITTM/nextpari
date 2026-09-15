@@ -17,6 +17,7 @@ import { publicSecurityStaff } from '../staff/securityContext.js';
 import { clearSecurityCookies, requestIsSecure } from '../staff/securityCookies.js';
 import type { StaffLog } from '../staff/types.js';
 import { createSecurityJwtRpc, type SecurityRpcPort } from './securityRpc.js';
+import { deliverPendingManualVerificationInstructions } from '../email/playerManualVerificationService.js';
 
 export interface SecurityControlDeps {
   sessionPorts?: SecurityAuthGatewayPorts;
@@ -120,6 +121,9 @@ type ControlAction =
   | { kind: 'dossier'; playerId: string }
   | { kind: 'restrictionGet'; playerId: string }
   | { kind: 'restrictionSet'; playerId: string }
+  | { kind: 'manualVerificationGet'; playerId: string }
+  | { kind: 'manualVerificationSet'; playerId: string }
+  | { kind: 'manualVerificationComplete'; playerId: string }
   | { kind: 'sportsBets'; playerId: string }
   | { kind: 'sportsSummary'; playerId: string }
   | { kind: 'sportsBet'; playerId: string; betId: string }
@@ -160,6 +164,16 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (restriction) {
     if (m === 'GET') return { kind: 'restrictionGet', playerId: restriction[1] };
     if (m === 'POST') return { kind: 'restrictionSet', playerId: restriction[1] };
+    return 'method';
+  }
+
+  const complete = path.match(/^\/api\/security\/players\/([^/]+)\/verification-complete$/);
+  if (complete) return m === 'POST' ? { kind: 'manualVerificationComplete', playerId: complete[1] } : 'method';
+
+  const verification = path.match(/^\/api\/security\/players\/([^/]+)\/verification-request$/);
+  if (verification) {
+    if (m === 'GET') return { kind: 'manualVerificationGet', playerId: verification[1] };
+    if (m === 'POST') return { kind: 'manualVerificationSet', playerId: verification[1] };
     return 'method';
   }
 
@@ -251,6 +265,22 @@ async function runControl(
         p_restricted: requireBoolean(rec.restricted, 'RESTRICTED_REQUIRED'),
         p_reason: requireReason(rec.reason),
       });
+    case 'manualVerificationGet':
+      return rpc.invoke('security_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
+    case 'manualVerificationSet':
+      return rpc.invoke('security_request_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_reason: requireReason(rec.reason),
+        p_reason_code: rec.reasonCode == null && rec.reason_code == null
+          ? null
+          : String(rec.reasonCode ?? rec.reason_code).trim() || null,
+      });
+    case 'manualVerificationComplete':
+      return rpc.invoke('security_complete_player_manual_verification', {
+        p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+      });
     case 'sportsBets':
       return rpc.invoke('security_player_sports_bets', sportsListArgs(action.playerId, query));
     case 'sportsSummary':
@@ -320,6 +350,16 @@ export async function handleSecurityControlRequest(
 
     const rpc = (deps.rpcFactory ?? createSecurityJwtRpc)(resolved.accessToken);
     const data = await runControl(matched, rpc, queryOf(input.search), parseJsonPayload(input.body));
+    if (matched.kind === 'manualVerificationSet') {
+      const uid = String(asRecord(data).player_user_id ?? asRecord(data).playerUserId ?? '');
+      if (uid) {
+        try {
+          await deliverPendingManualVerificationInstructions(uid);
+        } catch {
+          /* request is stored even if instruction email cannot be sent yet */
+        }
+      }
+    }
     return {
       status: 200,
       body: { ok: true, data },

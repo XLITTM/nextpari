@@ -25,11 +25,14 @@ import {
   fetchOwnerSecurityOverview,
   fetchOwnerPlayerSecurity,
   fetchOwnerPlayerSecurityRestriction,
+  fetchOwnerPlayerManualVerification,
   fetchOwnerPlayerSportsBets,
   fetchOwnerPlayerSportsSummary,
   fetchOwnerTreasury,
   resolveOwnerSecurityFlag,
   setOwnerPlayerSecurityRestriction,
+  requestOwnerPlayerManualVerification,
+  completeOwnerPlayerManualVerification,
   ledgerPeriodFrom,
   cashierOpLabel,
   cashierOpRef,
@@ -1026,6 +1029,7 @@ function SecurityPanel() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [accountConfirm, setAccountConfirm] = useState(false);
   const [accountReason, setAccountReason] = useState('');
+  const [accountVerificationStatus, setAccountVerificationStatus] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
@@ -1099,11 +1103,16 @@ function SecurityPanel() {
     setAccountRestricted(null);
     setAccountConfirm(false);
     setAccountReason('');
+    setAccountVerificationStatus(null);
     setAccountLoading(true);
     setError('');
     try {
-      const status = await fetchOwnerPlayerSecurityRestriction(flag.playerPublicId);
+      const [status, verification] = await Promise.all([
+        fetchOwnerPlayerSecurityRestriction(flag.playerPublicId),
+        fetchOwnerPlayerManualVerification(flag.playerPublicId),
+      ]);
       setAccountRestricted(Boolean(status.restricted));
+      setAccountVerificationStatus(verification.status);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить статус игрока');
       setAccountFor(null);
@@ -1139,6 +1148,65 @@ function SecurityPanel() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось изменить ограничение');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const submitVerification = async () => {
+    if (!accountFor) return;
+    let text: string;
+    try {
+      text = requireOwnerSecurityAccountReason(accountReason);
+    } catch {
+      setError('Укажите причину');
+      return;
+    }
+    setBusyId(accountFor.id);
+    setError('');
+    setNotice('');
+    try {
+      await requestOwnerPlayerManualVerification({
+        playerId: accountFor.playerPublicId,
+        reason: text,
+      });
+      setNotice(`Запрошена верификация игрока #${accountFor.playerPublicId}`);
+      const [status, verification] = await Promise.all([
+        fetchOwnerPlayerSecurityRestriction(accountFor.playerPublicId),
+        fetchOwnerPlayerManualVerification(accountFor.playerPublicId),
+      ]);
+      setAccountRestricted(Boolean(status.restricted));
+      setAccountVerificationStatus(verification.status);
+      setAccountReason('');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось запросить верификацию');
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const submitVerificationComplete = async () => {
+    if (!accountFor) return;
+    setBusyId(accountFor.id);
+    setError('');
+    setNotice('');
+    try {
+      await completeOwnerPlayerManualVerification(accountFor.playerPublicId);
+      const [status, verification] = await Promise.all([
+        fetchOwnerPlayerSecurityRestriction(accountFor.playerPublicId),
+        fetchOwnerPlayerManualVerification(accountFor.playerPublicId),
+      ]);
+      setAccountRestricted(Boolean(status.restricted));
+      setAccountVerificationStatus(verification.status);
+      setNotice(
+        status.restricted
+          ? `Верификация игрока #${accountFor.playerPublicId} пройдена. Ограничение остаётся активным, пока его не снимут отдельно.`
+          : `Верификация игрока #${accountFor.playerPublicId} пройдена.`,
+      );
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось завершить верификацию');
     } finally {
       setBusyId('');
     }
@@ -1333,14 +1401,35 @@ function SecurityPanel() {
             ) : (
               <>
                 <p className="text-sm text-ink-900 mb-1">Игрок: #{accountFor.playerPublicId}</p>
-                <p className="text-sm text-ink-900 mb-3">
+                <p className="text-sm text-ink-900 mb-1">
                   Статус: {ownerSecurityAccountStatusLabel(accountRestricted)}
                 </p>
+                <p className="text-sm text-ink-900 mb-3">
+                  Верификация: {
+                    accountVerificationStatus === 'VERIFIED'
+                      ? 'пройдена'
+                      : accountVerificationStatus === 'VERIFICATION_REQUIRED'
+                        ? 'требуется'
+                        : 'не запрошена'
+                  }
+                </p>
+                {accountVerificationStatus === 'VERIFIED' && accountRestricted ? (
+                  <p className="text-xs text-amber-800 mb-3">
+                    Верификация пройдена, но ограничение службы безопасности остаётся активным, пока его не снимут отдельно.
+                  </p>
+                ) : null}
                 <div className="text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 mb-4 space-y-0.5">
                   {OWNER_SECURITY_RESTRICTION_POLICY.map((row) => (
                     <p key={row.label}>{row.label}: {row.value}</p>
                   ))}
                 </div>
+                <textarea
+                  value={accountReason}
+                  onChange={(e) => setAccountReason(e.target.value)}
+                  rows={3}
+                  className="w-full text-sm border border-slate-200 rounded-xl px-3 py-2 mb-3"
+                  placeholder="Причина решения"
+                />
                 {accountConfirm ? (
                   <>
                     <p className="text-sm font-semibold text-ink-900 mb-2">
@@ -1386,6 +1475,24 @@ function SecurityPanel() {
                     {ownerSecurityRestrictionToggle(accountRestricted).buttonLabel}
                   </button>
                 )}
+                <button
+                  type="button"
+                  disabled={busyId === accountFor.id}
+                  onClick={() => void submitVerification()}
+                  className="w-full text-sm font-bold px-3 py-2 rounded-xl bg-slate-800 text-white mb-2 disabled:opacity-40"
+                >
+                  Запросить верификацию
+                </button>
+                {accountVerificationStatus === 'VERIFICATION_REQUIRED' ? (
+                  <button
+                    type="button"
+                    disabled={busyId === accountFor.id}
+                    onClick={() => void submitVerificationComplete()}
+                    className="w-full text-sm font-bold px-3 py-2 rounded-xl bg-emerald-700 text-white mb-4 disabled:opacity-40"
+                  >
+                    Верификация пройдена
+                  </button>
+                ) : null}
               </>
             )}
             <div className="flex flex-col gap-2">
