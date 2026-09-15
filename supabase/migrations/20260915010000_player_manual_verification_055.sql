@@ -16,6 +16,27 @@ SET LOCAL statement_timeout = '10min';
 -- risk flags, and background jobs MUST NEVER enable or remove it.
 -- ============================================================
 
+-- 051 defined private.security_staff_actions.action CHECK.
+-- 052/053/054 do not replace that constraint. Security verification
+-- RPCs call private.security_record_action with new action names, so
+-- extend the CHECK before those wrappers run.
+ALTER TABLE private.security_staff_actions
+    DROP CONSTRAINT IF EXISTS security_staff_actions_action_check;
+
+ALTER TABLE private.security_staff_actions
+    ADD CONSTRAINT security_staff_actions_action_check CHECK (action IN (
+        'SECURITY_FLAG_REVIEWED',
+        'SECURITY_FLAG_RESOLVED',
+        'SECURITY_FLAG_DISMISSED',
+        'SECURITY_RESTRICTION_APPLIED',
+        'SECURITY_RESTRICTION_REMOVED',
+        'OWNER_CREATED_SECURITY_STAFF',
+        'OWNER_SET_SECURITY_STAFF_STATUS',
+        'OWNER_RESET_SECURITY_PASSWORD',
+        'PLAYER_MANUAL_VERIFICATION_REQUESTED',
+        'PLAYER_MANUAL_VERIFICATION_COMPLETED'
+    ));
+
 
 CREATE TABLE IF NOT EXISTS private.player_manual_verification_requests (
     player_user_id UUID PRIMARY KEY,

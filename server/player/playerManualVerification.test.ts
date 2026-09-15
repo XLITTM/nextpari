@@ -50,6 +50,31 @@ const sql = readFileSync(
   join(root, 'supabase/migrations/20260915010000_player_manual_verification_055.sql'),
   'utf8',
 );
+const sql051 = readFileSync(
+  join(root, 'supabase/migrations/20260914033000_security_staff_portal_051.sql'),
+  'utf8',
+);
+const sql052 = readFileSync(
+  join(root, 'supabase/migrations/20260914043000_player_win_pattern_risk_signals_052.sql'),
+  'utf8',
+);
+const sql053 = readFileSync(
+  join(root, 'supabase/migrations/20260914050000_fix_owner_financial_dashboard_053.sql'),
+  'utf8',
+);
+const sql054 = readFileSync(
+  join(root, 'supabase/migrations/20260914060000_player_password_recovery_054.sql'),
+  'utf8',
+);
+
+function extractActionCheck(source: string, marker: string): string[] {
+  const start = source.indexOf(marker);
+  assert.ok(start >= 0, marker);
+  const open = source.indexOf('IN (', start);
+  const close = source.indexOf(')', open);
+  assert.ok(open > start && close > open, marker);
+  return [...source.slice(open, close).matchAll(/'([^']+)'/g)].map((row) => row[1]);
+}
 
 function cookie(): string {
   return `${PLAYER_ACCESS_COOKIE}=${ACCESS}; ${PLAYER_REFRESH_COOKIE}=${REFRESH}`;
@@ -125,6 +150,56 @@ describe('manual player verification SQL contract', () => {
     assert.equal(sql.includes('GRANT ALL ON TABLE auth.users'), false);
     const files = readdirSync(join(root, 'supabase/migrations')).filter((name) => name.includes('_055.sql'));
     assert.deepEqual(files, ['20260915010000_player_manual_verification_055.sql']);
+  });
+
+  it('extends security_staff_actions_action_check for verification audit actions', () => {
+    const previous = extractActionCheck(
+      sql051,
+      'CONSTRAINT security_staff_actions_action_check CHECK (action IN (',
+    );
+    assert.deepEqual(previous, [
+      'SECURITY_FLAG_REVIEWED',
+      'SECURITY_FLAG_RESOLVED',
+      'SECURITY_FLAG_DISMISSED',
+      'SECURITY_RESTRICTION_APPLIED',
+      'SECURITY_RESTRICTION_REMOVED',
+      'OWNER_CREATED_SECURITY_STAFF',
+      'OWNER_SET_SECURITY_STAFF_STATUS',
+      'OWNER_RESET_SECURITY_PASSWORD',
+    ]);
+    assert.equal(sql052.includes('security_staff_actions_action_check'), false);
+    assert.equal(sql053.includes('security_staff_actions_action_check'), false);
+    assert.equal(sql054.includes('security_staff_actions_action_check'), false);
+    assert.match(sql, /DROP CONSTRAINT IF EXISTS\s+security_staff_actions_action_check/);
+    const extended = extractActionCheck(
+      sql,
+      'ADD CONSTRAINT security_staff_actions_action_check CHECK (action IN (',
+    );
+    assert.deepEqual(extended, [
+      ...previous,
+      'PLAYER_MANUAL_VERIFICATION_REQUESTED',
+      'PLAYER_MANUAL_VERIFICATION_COMPLETED',
+    ]);
+    const requestFn = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.security_request_player_manual_verification('),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.security_complete_player_manual_verification('),
+    );
+    const completeFn = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.security_complete_player_manual_verification('),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_manual_verification_notice('),
+    );
+    assert.match(requestFn, /PERFORM private\.security_record_action\([\s\S]*'PLAYER_MANUAL_VERIFICATION_REQUESTED'/);
+    assert.match(completeFn, /PERFORM private\.security_record_action\([\s\S]*'PLAYER_MANUAL_VERIFICATION_COMPLETED'/);
+    const recorded = [...sql.matchAll(/PERFORM private\.security_record_action\(([\s\S]*?)\);/g)]
+      .map((row) => [...row[1].matchAll(/'([^']+)'/g)].map((item) => item[1]))
+      .map((values) => values[1]);
+    assert.deepEqual(recorded, [
+      'PLAYER_MANUAL_VERIFICATION_REQUESTED',
+      'PLAYER_MANUAL_VERIFICATION_COMPLETED',
+    ]);
+    for (const action of recorded) {
+      assert.equal(extended.includes(action), true, action);
+    }
   });
 });
 
