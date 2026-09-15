@@ -86,9 +86,9 @@ CREATE TABLE IF NOT EXISTS private.player_personal_data (
             AND (document_issuing_authority IS NULL OR pg_catalog.char_length(document_issuing_authority) BETWEEN 1 AND 200)
         ),
     CONSTRAINT player_personal_data_dob_past_check
-        CHECK (date_of_birth IS NULL OR date_of_birth < pg_catalog.current_date),
+        CHECK (date_of_birth IS NULL OR date_of_birth < CURRENT_DATE),
     CONSTRAINT player_personal_data_issue_not_future_check
-        CHECK (document_issue_date IS NULL OR document_issue_date <= pg_catalog.current_date),
+        CHECK (document_issue_date IS NULL OR document_issue_date <= CURRENT_DATE),
     CONSTRAINT player_personal_data_expiry_after_issue_check
         CHECK (
             document_issue_date IS NULL
@@ -775,10 +775,10 @@ BEGIN
         200
     );
 
-    IF v_dob IS NOT NULL AND v_dob >= pg_catalog.current_date THEN
+    IF v_dob IS NOT NULL AND v_dob >= CURRENT_DATE THEN
         RAISE EXCEPTION 'PERSONAL_DATA_DOB_INVALID';
     END IF;
-    IF v_issue IS NOT NULL AND v_issue > pg_catalog.current_date THEN
+    IF v_issue IS NOT NULL AND v_issue > CURRENT_DATE THEN
         RAISE EXCEPTION 'PERSONAL_DATA_ISSUE_DATE_INVALID';
     END IF;
     IF v_issue IS NOT NULL AND v_expiry IS NOT NULL AND v_expiry <= v_issue THEN
