@@ -157,7 +157,13 @@ describe('player personal data SQL contract', () => {
     assert.match(sql, /PERSONAL_DATA_COUNTRY_INVALID/);
     assert.match(sql, /\^\[A-Z\]\{2\}\$/);
     assert.match(sql, /PERSONAL_DATA_DOB_INVALID/);
-    assert.match(sql, /date_of_birth < pg_catalog\.current_date/);
+    assert.match(sql, /date_of_birth < CURRENT_DATE/);
+    assert.match(sql, /document_issue_date <= CURRENT_DATE/);
+    assert.match(sql, /v_dob >= CURRENT_DATE/);
+    assert.match(sql, /v_issue > CURRENT_DATE/);
+    assert.match(sql, /CURRENT_DATE/);
+    assert.equal(sql.includes('pg_catalog.current_date'), false);
+    assert.equal((sql.match(/CURRENT_DATE/g) ?? []).length, 4);
     assert.match(sql, /PERSONAL_DATA_ISSUE_DATE_INVALID/);
     assert.match(sql, /PERSONAL_DATA_EXPIRY_INVALID/);
     assert.match(sql, /document_expiry_date > document_issue_date/);
