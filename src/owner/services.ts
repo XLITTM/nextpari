@@ -1820,3 +1820,37 @@ export async function fetchOwnerProviderSettlements(
     rows: asRows(raw.rows).map(parseProviderSettlementRow),
   };
 }
+
+export interface OwnerUsdtRateRow {
+  targetCurrencyCode: string;
+  rate: number | null;
+  enabled: boolean;
+  updatedAt: string;
+}
+
+export async function fetchOwnerUsdtRates(): Promise<OwnerUsdtRateRow[]> {
+  const data = await ownerData('/api/owner/usdt-rates');
+  const rows = Array.isArray(data) ? data : asRows(asRecord(data));
+  return rows.map((item) => {
+    const row = asRecord(item);
+    return {
+      targetCurrencyCode: str(row.targetCurrencyCode ?? row.target_currency_code),
+      rate: row.rate == null || row.rate === '' ? null : num(row.rate),
+      enabled: row.enabled === true,
+      updatedAt: str(row.updatedAt ?? row.updated_at),
+    };
+  });
+}
+
+export async function saveOwnerUsdtRate(input: {
+  targetCurrencyCode: string;
+  rate: number;
+  enabled: boolean;
+}): Promise<void> {
+  await ownerJson('/api/owner/usdt-rates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+}
+

@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { displayPlayerCurrency } from './lib/playerCurrency';
 import { fetchPlayerMe, walletViewFromSnapshot } from './lib/playerAuth';
 import { useUserStore } from './stores/userStore';
 
 interface WalletContextValue {
   balance: number;
+  currency: string;
   publicId: string | null;
   loading: boolean;
   available: boolean;
@@ -17,6 +19,7 @@ const WalletContext = createContext<WalletContextValue | null>(null);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [balance, setBalance] = useState(0);
+  const [currency, setCurrency] = useState('TMT');
   const [publicId, setPublicId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [available, setAvailable] = useState(false);
@@ -30,6 +33,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const snapshot = await fetchPlayerMe();
       const next = walletViewFromSnapshot(snapshot);
       setBalance(next.balance);
+      setCurrency(displayPlayerCurrency(next.currency));
       setPublicId(next.publicId);
       setAvailable(next.available);
       setError(next.error);
@@ -71,7 +75,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, [hydrate, publicId]);
 
   return (
-    <WalletContext.Provider value={{ balance, publicId, loading, available, error, refresh, applyBalance, applyServerBalance }}>
+    <WalletContext.Provider value={{ balance, currency, publicId, loading, available, error, refresh, applyBalance, applyServerBalance }}>
       {children}
     </WalletContext.Provider>
   );
@@ -83,8 +87,13 @@ export function useWallet() {
   return ctx;
 }
 
-export function formatPlayerMoney(balance: number, available: boolean, loading?: boolean): string {
+export function formatPlayerMoney(
+  balance: number,
+  available: boolean,
+  loading?: boolean,
+  currency?: string,
+): string {
   if (loading) return '…';
   if (!available) return 'недоступен';
-  return `${Number(balance).toLocaleString('ru-RU')} TMTM`;
+  return `${Number(balance).toLocaleString('ru-RU')} ${displayPlayerCurrency(currency)}`;
 }

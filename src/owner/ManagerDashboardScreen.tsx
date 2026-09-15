@@ -12,6 +12,7 @@ import { OwnerSecurityTeamPanel } from './OwnerSecurityTeamPanel';
 import { OwnerWinPatternPanel } from './OwnerWinPatternPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { OwnerMoneyDialog, OwnerTreasuryPanel, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
+import { OwnerUsdtRatesPanel } from './OwnerUsdtRatesPanel';
 import { GameRtpReportPanel } from './GameRtpReport';
 import { ProviderSettlementsPanel } from './ProviderSettlementsPanel';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
@@ -288,6 +289,7 @@ function FinancePanel() {
   return (
     <section>
       <OwnerTreasuryPanel onAfterMoney={load} />
+      <OwnerUsdtRatesPanel />
       <HeaderRow
         title="Финансовый дашборд"
         subtitle="Вся платформа"

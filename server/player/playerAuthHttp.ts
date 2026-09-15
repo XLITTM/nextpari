@@ -61,6 +61,15 @@ import {
   playerPersonalDataHttpBody,
   type PlayerPersonalDataPorts,
 } from './playerPersonalDataService.js';
+import {
+  PLAYER_USDT_QUOTE_PATH,
+  PLAYER_USDT_TARGETS_PATH,
+  PLAYER_WALLETS_ACTIVE_PATH,
+  PLAYER_WALLETS_ADD_PATH,
+  PLAYER_WALLETS_PATH,
+  livePlayerWalletPorts,
+  type PlayerWalletPorts,
+} from './playerWalletsService.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
@@ -70,6 +79,13 @@ export const PLAYER_ME_PATH = '/api/player/me';
 export const PLAYER_WALLET_PATH = '/api/player/wallet';
 export const PLAYER_PROFILE_PATH = '/api/player/profile';
 export { PLAYER_PERSONAL_DATA_PATH };
+export {
+  PLAYER_WALLETS_PATH,
+  PLAYER_WALLETS_ADD_PATH,
+  PLAYER_WALLETS_ACTIVE_PATH,
+  PLAYER_USDT_TARGETS_PATH,
+  PLAYER_USDT_QUOTE_PATH,
+} from './playerWalletsService.js';
 export { PLAYER_EMAIL_START_PATH, PLAYER_EMAIL_VERIFY_PATH };
 export {
   PLAYER_PASSWORD_RECOVERY_START_PATH,
@@ -99,6 +115,11 @@ export function isPlayerAuthPath(pathname: string): boolean {
     || path === PLAYER_PASSWORD_RECOVERY_RESET_PATH
     || path === PLAYER_VERIFICATION_NOTICE_PATH
     || path === PLAYER_PERSONAL_DATA_PATH
+    || path === PLAYER_WALLETS_PATH
+    || path === PLAYER_WALLETS_ADD_PATH
+    || path === PLAYER_WALLETS_ACTIVE_PATH
+    || path === PLAYER_USDT_TARGETS_PATH
+    || path === PLAYER_USDT_QUOTE_PATH
   );
 }
 
@@ -140,6 +161,7 @@ export async function handlePlayerAuthRequest(
     deliverInstructions: (playerUserId: string) => Promise<unknown>;
   },
   personalDataPorts?: PlayerPersonalDataPorts,
+  walletPorts?: PlayerWalletPorts,
 ): Promise<PlayerAuthHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
@@ -178,6 +200,7 @@ export async function handlePlayerAuthRequest(
         password: String(body.password ?? ''),
         phone: String(body.phone ?? ''),
         ageConfirmed: body.ageConfirmed,
+        currency: body.currency,
       }, secure, security));
     }
     if (path === PLAYER_AUTH_LOGIN_PATH) {
@@ -362,6 +385,46 @@ export async function handlePlayerAuthRequest(
         });
       }
       throw staffError('METHOD_NOT_ALLOWED', 405);
+    }
+    const wallets = walletPorts ?? livePlayerWalletPorts();
+    if (path === PLAYER_WALLETS_PATH) {
+      if (method !== 'GET') throw staffError('METHOD_NOT_ALLOWED', 405);
+      const resolved = await resolvePlayerSession(ports, input.cookie, secure);
+      const body = await wallets.list(resolved.accessToken);
+      return finish({ status: 200, body: { ok: true, authenticated: true, ...body }, cookies: resolved.cookies });
+    }
+    if (path === PLAYER_WALLETS_ADD_PATH) {
+      if (method !== 'POST') throw staffError('METHOD_NOT_ALLOWED', 405);
+      const resolved = await resolvePlayerSession(ports, input.cookie, secure);
+      const body = asRecord(parseJsonPayload(input.body));
+      const added = await wallets.add(resolved.accessToken, String(body.currency ?? ''));
+      return finish({ status: 200, body: { ok: true, authenticated: true, ...added }, cookies: resolved.cookies });
+    }
+    if (path === PLAYER_WALLETS_ACTIVE_PATH) {
+      if (method !== 'POST') throw staffError('METHOD_NOT_ALLOWED', 405);
+      const resolved = await resolvePlayerSession(ports, input.cookie, secure);
+      const body = asRecord(parseJsonPayload(input.body));
+      const next = await wallets.setActive(resolved.accessToken, {
+        currency: body.currency == null ? undefined : String(body.currency),
+        walletId: body.walletId == null && body.wallet_id == null ? undefined : String(body.walletId ?? body.wallet_id),
+      });
+      return finish({ status: 200, body: { ok: true, authenticated: true, ...next }, cookies: resolved.cookies });
+    }
+    if (path === PLAYER_USDT_TARGETS_PATH) {
+      if (method !== 'GET') throw staffError('METHOD_NOT_ALLOWED', 405);
+      const resolved = await resolvePlayerSession(ports, input.cookie, secure);
+      const body = await wallets.usdtTargets(resolved.accessToken);
+      return finish({ status: 200, body: { ok: true, authenticated: true, ...body }, cookies: resolved.cookies });
+    }
+    if (path === PLAYER_USDT_QUOTE_PATH) {
+      if (method !== 'POST') throw staffError('METHOD_NOT_ALLOWED', 405);
+      const resolved = await resolvePlayerSession(ports, input.cookie, secure);
+      const body = asRecord(parseJsonPayload(input.body));
+      const quote = await wallets.createUsdtQuote(resolved.accessToken, {
+        sourceAmount: Number(body.sourceAmount ?? body.source_amount),
+        walletId: String(body.walletId ?? body.wallet_id ?? ''),
+      });
+      return finish({ status: 200, body: { ok: true, authenticated: true, ...quote }, cookies: resolved.cookies });
     }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {

@@ -259,6 +259,7 @@ export type Screen =
   | { name: 'wallet' }
   | { name: 'promo' }
   | { name: 'personal-data' }
+  | { name: 'wallets' }
   | { name: 'gamelist'; mode: 'live' | 'line' }
   | { name: 'sports'; mode: 'live' | 'line' | 'cybers' }
   | { name: 'championships'; sport: string; mode: 'live' | 'line' }

@@ -118,11 +118,11 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
   const [activeTab, setActiveTab] = useState<SubTabId>('top');
   const [isInboxOpen, setIsInboxOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const { publicId, available, loading } = useWallet();
+  const { publicId, available, loading, currency } = useWallet();
   const { personalData } = useProfile();
   const playerId = publicId || '';
   const displayName = playerDisplayName(personalData);
-  const moneyLabel = balanceLabel ?? formatPlayerMoney(balance, available, loading);
+  const moneyLabel = balanceLabel ?? formatPlayerMoney(balance, available, loading, currency);
 
   useEffect(() => {
     const refreshUnread = () => setUnreadCount(countUnreadForPlayer(playerId));
@@ -153,6 +153,12 @@ export function MenuScreen({ balance, balanceLabel, onNavigate, onLogout }: Menu
               className="text-xs text-brand-600 dark:text-brand-400 mt-0.5 font-semibold active:scale-95 transition-transform"
             >
               Заполнить профиль →
+            </button>
+            <button
+              onClick={() => onNavigate({ name: 'wallets' })}
+              className="ml-2 text-xs text-brand-600 dark:text-brand-400 mt-0.5 font-semibold active:scale-95 transition-transform"
+            >
+              Кошелёк и валюты →
             </button>
           </div>
           <button

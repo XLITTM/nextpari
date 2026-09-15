@@ -11,11 +11,11 @@ export function GameWalletBadge({
   labelClassName = 'text-[8px] font-semibold uppercase tracking-wide opacity-70',
   valueClassName = 'text-[11px] font-black tabular-nums',
 }: GameWalletBadgeProps) {
-  const { balance, publicId, available, loading } = useWallet();
+  const { balance, publicId, available, loading, currency } = useWallet();
   const id = (publicId || '').replace(/\D/g, '');
   const value = available && format
     ? format(balance)
-    : formatPlayerMoney(balance, available, loading);
+    : formatPlayerMoney(balance, available, loading, currency);
 
   return (
     <>

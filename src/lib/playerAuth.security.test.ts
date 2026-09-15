@@ -194,6 +194,7 @@ describe('player auth uses same-origin BFF', () => {
         email: 'new@nextpari.test',
         password: 'password1',
         ageConfirmed: true,
+        currency: 'TMT',
       });
       assert.equal(result.needsEmailConfirmation, true);
       assert.equal(result.session, null);
@@ -203,6 +204,7 @@ describe('player auth uses same-origin BFF', () => {
         email: 'new@nextpari.test',
         password: 'password1',
         ageConfirmed: true,
+        currency: 'TMT',
       });
     } finally {
       restore();
@@ -232,7 +234,7 @@ describe('player auth uses same-origin BFF', () => {
       oneClick: { playerId: '110790', password: 'generated-secret-1' },
     }));
     try {
-      const result = await signUpPlayerOneClick({ ageConfirmed: true });
+      const result = await signUpPlayerOneClick({ ageConfirmed: true, currency: 'TMT' });
       assert.equal(result.playerId, '110790');
       assert.equal(result.generatedPassword, 'generated-secret-1');
       assert.equal(result.authenticated, true);
@@ -248,7 +250,7 @@ describe('player auth uses same-origin BFF', () => {
       oneClick: { playerId: '110790', password: 'generated-secret-2' },
     }));
     try {
-      const result = await signUpPlayerOneClick({ ageConfirmed: true });
+      const result = await signUpPlayerOneClick({ ageConfirmed: true, currency: 'TMT' });
       assert.equal(result.playerId, '110790');
       assert.equal(result.generatedPassword, 'generated-secret-2');
       assert.equal(result.authenticated, false);
@@ -482,8 +484,8 @@ describe('new player profile onboarding', () => {
     assert.equal(playerDisplayName({ first_name: 'Азиз', last_name: 'Бердиев' }), 'Азиз Бердиев');
   });
 
-  it('zero balance renders 0 TMTM and 401 does not poison wallet state', () => {
-    assert.equal(formatPlayerMoney(0, true, false), '0 TMTM');
+  it('zero balance renders 0 TMT and 401 does not poison wallet state', () => {
+    assert.equal(formatPlayerMoney(0, true, false), '0 TMT');
     assert.equal(formatPlayerMoney(0, false, false), 'недоступен');
     const idle = walletViewFromSnapshot(null);
     assert.equal(idle.available, false);
@@ -499,7 +501,7 @@ describe('new player profile onboarding', () => {
     assert.equal(ready.available, true);
     assert.equal(ready.balance, 0);
     assert.equal(ready.publicId, '110790');
-    assert.equal(formatPlayerMoney(ready.balance, ready.available, false), '0 TMTM');
+    assert.equal(formatPlayerMoney(ready.balance, ready.available, false), '0 TMT');
   });
 
   it('wallet and profile refresh after login and register', () => {
@@ -586,7 +588,7 @@ describe('new player profile onboarding', () => {
     assert.equal(personal.includes('Сохранение временно недоступно'), false);
     assert.equal(personal.includes('Код из SMS'), false);
     assert.equal(personal.includes('Код из письма'), false);
-    assert.match(personal, /save\(/);
+    assert.match(personal, /savePlayerPersonalData/);
     assert.match(profile, /savePlayerProfile|save\(/);
     assert.match(profile, /fetchPlayerProfile/);
     assert.equal(profile.includes('localStorage'), false);
