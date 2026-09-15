@@ -688,6 +688,7 @@ BEGIN
     IF p_actor_user_id <> p_player_user_id THEN
         RAISE EXCEPTION 'AUTH_REQUIRED';
     END IF;
+    PERFORM private.player_personal_data_require_player(p_player_user_id);
 
     v_payload := COALESCE(p_payload, '{}'::JSONB);
     IF pg_catalog.jsonb_typeof(v_payload) <> 'object' THEN
@@ -1013,6 +1014,37 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.player_personal_data_require_player(p_player_user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    IF p_player_user_id IS NULL THEN
+        RAISE EXCEPTION 'AUTH_REQUIRED';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM private.staff_accounts AS s
+        WHERE s.auth_user_id = p_player_user_id
+    ) THEN
+        RAISE EXCEPTION 'STAFF_ACCOUNT';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.profiles AS p
+        WHERE p.id = p_player_user_id
+    ) THEN
+        RAISE EXCEPTION 'PLAYER_ACCOUNT_REQUIRED';
+    END IF;
+END;
+$fn$;
+
+
 CREATE OR REPLACE FUNCTION public.player_personal_data()
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -1027,6 +1059,7 @@ BEGIN
     IF v_uid IS NULL THEN
         RAISE EXCEPTION 'AUTH_REQUIRED';
     END IF;
+    PERFORM private.player_personal_data_require_player(v_uid);
     RETURN private.player_personal_data_read(v_uid);
 END;
 $fn$;
@@ -1046,6 +1079,7 @@ BEGIN
     IF v_uid IS NULL THEN
         RAISE EXCEPTION 'AUTH_REQUIRED';
     END IF;
+    PERFORM private.player_personal_data_require_player(v_uid);
     RETURN private.player_personal_data_save(v_uid, p_payload, v_uid);
 END;
 $fn$;
@@ -1112,6 +1146,7 @@ REVOKE ALL ON FUNCTION private.player_personal_data_legacy_defaults(UUID) FROM P
 REVOKE ALL ON FUNCTION private.player_personal_data_read(UUID) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_personal_data_staff_summary(UUID) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.player_personal_data_save(UUID, JSONB, UUID) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION private.player_personal_data_require_player(UUID) FROM PUBLIC, anon, authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.player_personal_data() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.player_personal_data() TO authenticated;

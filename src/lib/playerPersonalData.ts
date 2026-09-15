@@ -9,6 +9,12 @@ export const PLAYER_PERSONAL_DATA_SUPPORT_FALLBACK =
   'Свяжитесь со службой поддержки, чтобы изменить подтверждённые идентификационные данные.';
 export const PLAYER_PERSONAL_DATA_IDENTITY_LOCKED_ERROR =
   'Подтверждённые идентификационные данные нельзя изменить самостоятельно.';
+export const PLAYER_PERSONAL_DATA_LOAD_ERROR =
+  'Не удалось загрузить анкету. Сохранение недоступно, пока данные не загрузятся.';
+export const PLAYER_PERSONAL_DATA_AUTH_REQUIRED =
+  'Сессия истекла. Войдите снова, чтобы открыть личные данные.';
+export const PLAYER_PERSONAL_DATA_RETRY = 'Повторить';
+export const PLAYER_PERSONAL_DATA_LOADING = 'Загрузка анкеты…';
 
 export const PLAYER_DOCUMENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: 'Не выбрано' },
@@ -19,47 +25,7 @@ export const PLAYER_DOCUMENT_TYPE_OPTIONS: Array<{ value: string; label: string 
   { value: 'other', label: 'Другой документ' },
 ];
 
-export const PLAYER_COUNTRY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Не выбрано' },
-  { value: 'TM', label: 'Туркменистан' },
-  { value: 'RU', label: 'Россия' },
-  { value: 'UZ', label: 'Узбекистан' },
-  { value: 'KZ', label: 'Казахстан' },
-  { value: 'TJ', label: 'Таджикистан' },
-  { value: 'KG', label: 'Кыргызстан' },
-  { value: 'AZ', label: 'Азербайджан' },
-  { value: 'AM', label: 'Армения' },
-  { value: 'GE', label: 'Грузия' },
-  { value: 'TR', label: 'Турция' },
-  { value: 'UA', label: 'Украина' },
-  { value: 'BY', label: 'Беларусь' },
-  { value: 'MD', label: 'Молдова' },
-  { value: 'IR', label: 'Иран' },
-  { value: 'AF', label: 'Афганистан' },
-  { value: 'CN', label: 'Китай' },
-  { value: 'IN', label: 'Индия' },
-  { value: 'PK', label: 'Пакистан' },
-  { value: 'AE', label: 'ОАЭ' },
-  { value: 'SA', label: 'Саудовская Аравия' },
-  { value: 'QA', label: 'Катар' },
-  { value: 'KW', label: 'Кувейт' },
-  { value: 'BH', label: 'Бахрейн' },
-  { value: 'OM', label: 'Оман' },
-  { value: 'EG', label: 'Египет' },
-  { value: 'DE', label: 'Германия' },
-  { value: 'FR', label: 'Франция' },
-  { value: 'GB', label: 'Великобритания' },
-  { value: 'IT', label: 'Италия' },
-  { value: 'ES', label: 'Испания' },
-  { value: 'PL', label: 'Польша' },
-  { value: 'NL', label: 'Нидерланды' },
-  { value: 'US', label: 'США' },
-  { value: 'CA', label: 'Канада' },
-  { value: 'BR', label: 'Бразилия' },
-  { value: 'AU', label: 'Австралия' },
-  { value: 'JP', label: 'Япония' },
-  { value: 'KR', label: 'Республика Корея' },
-];
+export { PLAYER_COUNTRY_OPTIONS, ISO_3166_ALPHA2_COUNTRIES } from './iso3166Alpha2Countries';
 
 export interface PlayerPersonalDataQuestionnaire {
   hasRow: boolean;
@@ -190,15 +156,42 @@ export function mapPlayerPersonalDataError(code: string): string {
   if (code === 'PERSONAL_DATA_EXPIRY_INVALID') return 'Срок действия должен быть позже даты выдачи.';
   if (code === 'PERSONAL_DATA_FIELD_TOO_LONG') return 'Слишком длинное значение поля.';
   if (code === 'PERSONAL_DATA_DOCUMENT_TYPE_INVALID') return 'Выберите тип документа из списка.';
+  if (code === 'STAFF_ACCOUNT' || code === 'PLAYER_ACCOUNT_REQUIRED') {
+    return PLAYER_PERSONAL_DATA_AUTH_REQUIRED;
+  }
   return 'Не удалось сохранить анкету.';
 }
 
+export type PlayerPersonalDataLoadState =
+  | { kind: 'loading' }
+  | { kind: 'auth' }
+  | { kind: 'error'; message: string }
+  | { kind: 'ready'; data: PlayerPersonalDataQuestionnaire };
+
+export function canSavePlayerPersonalData(state: PlayerPersonalDataLoadState): boolean {
+  return state.kind === 'ready';
+}
+
+export async function loadPlayerPersonalDataQuestionnaire(
+  fetchFn: typeof fetch = fetch,
+): Promise<PlayerPersonalDataLoadState> {
+  try {
+    const res = await fetchFn('/api/player/personal-data', { credentials: 'same-origin' });
+    if (res.status === 401 || res.status === 403) return { kind: 'auth' };
+    const body = await res.json().catch(() => ({}));
+    const rec = asRecord(body);
+    if (!res.ok || rec.ok !== true) {
+      return { kind: 'error', message: PLAYER_PERSONAL_DATA_LOAD_ERROR };
+    }
+    return { kind: 'ready', data: playerPersonalDataFromBody(rec) };
+  } catch {
+    return { kind: 'error', message: PLAYER_PERSONAL_DATA_LOAD_ERROR };
+  }
+}
+
 export async function fetchPlayerPersonalData(): Promise<PlayerPersonalDataQuestionnaire | null> {
-  const res = await fetch('/api/player/personal-data', { credentials: 'same-origin' });
-  if (res.status === 401 || res.status === 403) return null;
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok || asRecord(body).ok !== true) return null;
-  return playerPersonalDataFromBody(body);
+  const loaded = await loadPlayerPersonalDataQuestionnaire();
+  return loaded.kind === 'ready' ? loaded.data : null;
 }
 
 export async function savePlayerPersonalData(

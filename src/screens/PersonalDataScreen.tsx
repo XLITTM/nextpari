@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ChevronLeft, Save, Phone, Mail, CheckCircle2, Clock3, ShieldCheck,
 } from 'lucide-react';
@@ -8,14 +8,20 @@ import {
   EMPTY_PLAYER_PERSONAL_DATA,
   PLAYER_COUNTRY_OPTIONS,
   PLAYER_DOCUMENT_TYPE_OPTIONS,
+  PLAYER_PERSONAL_DATA_AUTH_REQUIRED,
   PLAYER_PERSONAL_DATA_IDENTITY_LOCKED_HELP,
+  PLAYER_PERSONAL_DATA_LOADING,
+  PLAYER_PERSONAL_DATA_LOAD_ERROR,
   PLAYER_PERSONAL_DATA_NOTICE,
   PLAYER_PERSONAL_DATA_NOTICE_EXTRA,
+  PLAYER_PERSONAL_DATA_RETRY,
   PLAYER_PERSONAL_DATA_SUPPORT_FALLBACK,
   PLAYER_PERSONAL_DATA_VERIFIED_BADGE,
-  fetchPlayerPersonalData,
+  canSavePlayerPersonalData,
+  loadPlayerPersonalDataQuestionnaire,
   playerPersonalDataSavePayload,
   savePlayerPersonalData,
+  type PlayerPersonalDataLoadState,
   type PlayerPersonalDataQuestionnaire,
 } from '../lib/playerPersonalData';
 
@@ -25,7 +31,6 @@ interface PersonalDataScreenProps {
 
 export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
   const { showToast } = useToast();
-  const [data, setData] = useState<PlayerPersonalDataQuestionnaire>(EMPTY_PLAYER_PERSONAL_DATA);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [middleName, setMiddleName] = useState('');
@@ -43,11 +48,12 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
   const [issueDate, setIssueDate] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [issuingAuthority, setIssuingAuthority] = useState('');
+  const [loadState, setLoadState] = useState<PlayerPersonalDataLoadState>({ kind: 'loading' });
   const [saving, setSaving] = useState(false);
   const [emailOpen, setEmailOpen] = useState(false);
 
-  const apply = (next: PlayerPersonalDataQuestionnaire) => {
-    setData(next);
+  const apply = useCallback((next: PlayerPersonalDataQuestionnaire) => {
+    setLoadState({ kind: 'ready', data: next });
     setFirstName(next.firstName);
     setLastName(next.lastName);
     setMiddleName(next.middleName);
@@ -65,18 +71,30 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
     setIssueDate(next.documentIssueDate);
     setExpiryDate(next.documentExpiryDate);
     setIssuingAuthority(next.documentIssuingAuthority);
-  };
-
-  useEffect(() => {
-    void fetchPlayerPersonalData().then((next) => {
-      if (next) apply(next);
-    });
   }, []);
 
-  const identityLocked = data.identityLocked;
-  const verified = data.verificationStatus === 'VERIFIED';
+  const loadQuestionnaire = useCallback(async () => {
+    setLoadState({ kind: 'loading' });
+    const next = await loadPlayerPersonalDataQuestionnaire();
+    if (next.kind === 'ready') {
+      apply(next.data);
+      return;
+    }
+    setLoadState(next);
+  }, [apply]);
+
+  useEffect(() => {
+    void loadQuestionnaire();
+  }, [loadQuestionnaire]);
+
+  const ready = loadState.kind === 'ready';
+  const data = ready ? loadState.data : EMPTY_PLAYER_PERSONAL_DATA;
+  const identityLocked = ready && data.identityLocked;
+  const verified = ready && data.verificationStatus === 'VERIFIED';
+  const saveEnabled = canSavePlayerPersonalData(loadState) && !saving;
 
   const handleSave = async () => {
+    if (!canSavePlayerPersonalData(loadState)) return;
     setSaving(true);
     try {
       const next = await savePlayerPersonalData(playerPersonalDataSavePayload({
@@ -125,6 +143,33 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
           <p className="text-xs text-gray-600 dark:text-gray-300">{PLAYER_PERSONAL_DATA_NOTICE_EXTRA}</p>
         </div>
 
+        {loadState.kind === 'loading' ? (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+            <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{PLAYER_PERSONAL_DATA_LOADING}</p>
+          </div>
+        ) : null}
+
+        {loadState.kind === 'error' ? (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{loadState.message || PLAYER_PERSONAL_DATA_LOAD_ERROR}</p>
+            <button
+              type="button"
+              onClick={() => void loadQuestionnaire()}
+              className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3 rounded-xl"
+            >
+              {PLAYER_PERSONAL_DATA_RETRY}
+            </button>
+          </div>
+        ) : null}
+
+        {loadState.kind === 'auth' ? (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
+            <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{PLAYER_PERSONAL_DATA_AUTH_REQUIRED}</p>
+          </div>
+        ) : null}
+
+        {ready ? (
+          <>
         {verified ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
             <span className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-700 dark:text-brand-400 bg-brand-50 dark:bg-brand-600/15 px-2 py-1 rounded-full">
@@ -236,7 +281,7 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
 
         <button
           onClick={() => void handleSave()}
-          disabled={saving}
+          disabled={!saveEnabled}
           className="w-full bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 text-base"
         >
           {saving ? (
@@ -251,6 +296,8 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
             </>
           )}
         </button>
+          </>
+        ) : null}
       </div>
       <EmailBindModal
         open={emailOpen}
@@ -258,9 +305,7 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
         onClose={() => setEmailOpen(false)}
         onVerified={() => {
           setEmailOpen(false);
-          void fetchPlayerPersonalData().then((next) => {
-            if (next) apply(next);
-          });
+          void loadQuestionnaire();
         }}
       />
     </div>

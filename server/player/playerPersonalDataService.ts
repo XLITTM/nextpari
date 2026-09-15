@@ -351,6 +351,9 @@ export function mapPlayerPersonalDataError(error: { message?: string; code?: str
   if (code === 'PERSONAL_DATA_IDENTITY_LOCKED') {
     return staffError(code, 409);
   }
+  if (code === 'STAFF_ACCOUNT' || code === 'PLAYER_ACCOUNT_REQUIRED') {
+    return staffError(code, 403);
+  }
   if (code && (code.startsWith('PERSONAL_DATA_') || code.endsWith('_INVALID') || code.endsWith('_TOO_LONG'))) {
     return staffError(code, 400);
   }

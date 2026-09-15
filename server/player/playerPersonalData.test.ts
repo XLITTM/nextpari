@@ -209,6 +209,52 @@ describe('player personal data SQL contract', () => {
     assert.equal(sql.includes('get_current_cashier_context'), false);
   });
 
+  it('rejects OWNER/MANAGER/CASHIER/SECURITY staff identities on player personal-data RPCs via staff_accounts', () => {
+    const requireFn = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION private.player_personal_data_require_player'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_personal_data()'),
+    );
+    assert.match(requireFn, /FROM private\.staff_accounts AS s/);
+    assert.match(requireFn, /RAISE EXCEPTION 'STAFF_ACCOUNT'/);
+    assert.match(requireFn, /FROM public\.profiles AS p/);
+    assert.match(requireFn, /RAISE EXCEPTION 'PLAYER_ACCOUNT_REQUIRED'/);
+
+    const playerRead = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_personal_data()'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_save_personal_data'),
+    );
+    const playerSave = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_save_personal_data'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.owner_player_personal_data_summary'),
+    );
+    const privateSave = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION private.player_personal_data_save'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_personal_data()'),
+    );
+    assert.match(playerRead, /v_uid := auth\.uid\(\)/);
+    assert.match(playerRead, /PERFORM private\.player_personal_data_require_player\(v_uid\)/);
+    assert.equal(playerRead.includes('p_player_user_id'), false);
+    assert.match(playerSave, /v_uid := auth\.uid\(\)/);
+    assert.match(playerSave, /PERFORM private\.player_personal_data_require_player\(v_uid\)/);
+    assert.equal(playerSave.includes('p_player_user_id'), false);
+
+    const requireAt = privateSave.indexOf('player_personal_data_require_player');
+    const insertAt = privateSave.indexOf('INSERT INTO private.player_personal_data');
+    assert.ok(requireAt >= 0, 'player save must require a player account');
+    assert.ok(insertAt > requireAt, 'staff rejection must happen before creating a row');
+
+    const ownerSummary = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.owner_player_personal_data_summary'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.security_player_personal_data_summary'),
+    );
+    const securityStart = sql.indexOf('CREATE OR REPLACE FUNCTION public.security_player_personal_data_summary');
+    const securitySummary = sql.slice(securityStart, sql.indexOf('$fn$;', securityStart));
+    assert.match(ownerSummary, /PERFORM private\.get_current_owner_context\(\)/);
+    assert.equal(ownerSummary.includes('player_personal_data_require_player'), false);
+    assert.match(securitySummary, /PERFORM private\.get_current_security_context\(\)/);
+    assert.equal(securitySummary.includes('player_personal_data_require_player'), false);
+  });
+
   it('does not copy legacy passport into structured document fields', () => {
     const defaultsStart = sql.indexOf('CREATE OR REPLACE FUNCTION private.player_personal_data_legacy_defaults');
     const defaultsEnd = sql.indexOf('CREATE OR REPLACE FUNCTION', defaultsStart + 1);
@@ -409,6 +455,43 @@ describe('player personal data HTTP', () => {
     );
     assert.equal(result.status, 409);
     assert.equal(result.body.error, 'PERSONAL_DATA_IDENTITY_LOCKED');
+  });
+
+  it('maps a staff identity away from player personal-data RPCs', async () => {
+    const ports: PlayerPersonalDataPorts = {
+      async read() { throw staffError('STAFF_ACCOUNT', 403); },
+      async save() { throw staffError('STAFF_ACCOUNT', 403); },
+    };
+    const read = await handlePlayerAuthRequest(
+      { method: 'GET', pathname: PLAYER_PERSONAL_DATA_PATH, cookie: cookie(), cookieSecure: true },
+      createAuthPorts(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ports,
+    );
+    assert.equal(read.status, 403);
+    assert.equal(read.body.error, 'STAFF_ACCOUNT');
+    const write = await handlePlayerAuthRequest(
+      {
+        method: 'PUT',
+        pathname: PLAYER_PERSONAL_DATA_PATH,
+        cookie: cookie(),
+        cookieSecure: true,
+        body: { first_name: 'Ada' },
+      },
+      createAuthPorts(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ports,
+    );
+    assert.equal(write.status, 403);
+    assert.equal(write.body.error, 'STAFF_ACCOUNT');
   });
 
   it('rejects invalid country and date payloads before RPC', async () => {
