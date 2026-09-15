@@ -677,7 +677,7 @@ describe('player auth security telemetry', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'email', email: 'new@nextpari.test', password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'email', email: 'new@nextpari.test', password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       createPlayerPorts(),
     );
@@ -1009,7 +1009,7 @@ describe('player security shared-scope login pressure', () => {
           cookie: deviceCookie,
           cookieSecure: true,
           trustedNetworkAddress: '203.0.113.90',
-          body: { method: 'email', email: 'after-spray@nextpari.test', password: PLAYER_PASSWORD, ageConfirmed: true },
+          body: { method: 'email', email: 'after-spray@nextpari.test', password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
         },
         createPlayerPorts(),
         SILENT_LOG,

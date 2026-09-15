@@ -195,7 +195,7 @@ describe('player same-origin auth gateway', () => {
     assert.equal(player.publicId, '110790');
     assert.equal(player.email, PLAYER_EMAIL);
     assert.equal(wallet.balance, 0);
-    assert.equal(wallet.currency, 'TMTM');
+    assert.equal(wallet.currency, 'TMT');
     assert.equal(wallet.status, 'active');
     assert.equal(wallet.migrationState, 'active');
     assert.deepEqual(ports.signIns, [{ email: PLAYER_EMAIL, password: PLAYER_PASSWORD }]);
@@ -222,7 +222,7 @@ describe('player same-origin auth gateway', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       ports,
     );
@@ -244,7 +244,7 @@ describe('player same-origin auth gateway', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       createPlayerPorts({ signUpError: 'confirm' }),
     );

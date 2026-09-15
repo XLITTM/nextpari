@@ -277,6 +277,8 @@ describe('owner control center same-origin BFF', () => {
       await denied(role, '/api/owner/security/win-pattern-settings', 'POST');
       await denied(role, '/api/owner/players/110790/security');
       await denied(role, '/api/owner/players/110790/personal-data');
+      await denied(role, '/api/owner/usdt-rates');
+      await denied(role, '/api/owner/usdt-rates', 'POST');
       await denied(role, '/api/owner/players/110790/sports');
       await denied(role, '/api/owner/players/110790/sports/summary');
       await denied(role, '/api/owner/players/110790/sports/11111111-2222-4111-8111-222222222222');
@@ -1081,6 +1083,28 @@ describe('owner treasury and direct funding controls', () => {
       p_note: 'seed capital',
     });
     assert.equal(rpc.calls.some((call) => call.name.startsWith('owner_fund_')), false);
+  });
+
+  it('GET /api/owner/usdt-rates maps to owner_usdt_deposit_rates', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/usdt-rates');
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_usdt_deposit_rates');
+    assert.equal(rpc.calls[0]?.token, ACCESS);
+  });
+
+  it('POST /api/owner/usdt-rates maps to owner_set_usdt_deposit_rate', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/usdt-rates', {
+      targetCurrencyCode: 'USD',
+      rate: 1.25,
+      enabled: true,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_set_usdt_deposit_rate');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_target_currency_code: 'USD',
+      p_rate: 1.25,
+      p_enabled: true,
+    });
   });
 
   it('manager funding maps only owner_fund_manager', async () => {

@@ -1,3 +1,5 @@
+import { displayPlayerCurrency, normalizeRegistrationCurrency } from './playerCurrency';
+
 export const AUTH_KEY = 'nextpari-auth';
 export const PLAYER_PROFILE_KEY = 'nextpari-player-profile';
 export const PLAYER_BALANCE_KEY = 'player_balance';
@@ -34,6 +36,7 @@ export interface PlayerMeSnapshot {
 
 export interface WalletViewState {
   balance: number;
+  currency: string;
   publicId: string | null;
   available: boolean;
   error: string | null;
@@ -60,10 +63,11 @@ export function playerDisplayName(profile: { firstName?: string; lastName?: stri
 
 export function walletViewFromSnapshot(snapshot: PlayerMeSnapshot | null): WalletViewState {
   if (!snapshot?.authenticated) {
-    return { balance: 0, publicId: null, available: false, error: null };
+    return { balance: 0, currency: 'TMT', publicId: null, available: false, error: null };
   }
   return {
     balance: snapshot.wallet.balance,
+    currency: displayPlayerCurrency(snapshot.wallet.currency),
     publicId: snapshot.player.publicId,
     available: true,
     error: null,
@@ -125,6 +129,7 @@ export function mapPlayerAuthError(error: { message?: string; code?: string } | 
     return 'email confirmation required';
   }
   if (/age required|age_required/.test(text)) return 'age required';
+  if (/currency required|registration_currency_required|currency_unsupported/.test(text)) return 'currency required';
   if (/registration_failed/.test(text)) return 'registration failed';
   if (/auth_rate_limited/.test(text)) return 'too many attempts';
   if (/invalid login credentials|invalid_credentials|invalid email or password|auth_failed/.test(text)) {
@@ -189,7 +194,7 @@ function snapshotFromBody(body: Record<string, unknown>): PlayerMeSnapshot | nul
     },
     wallet: {
       balance,
-      currency: String(wallet.currency ?? 'TMTM') || 'TMTM',
+      currency: displayPlayerCurrency(String(wallet.currency ?? 'TMT')),
       status: String(wallet.status ?? 'active') || 'active',
       migrationState: wallet.migrationState == null ? null : String(wallet.migrationState),
     },
@@ -346,12 +351,15 @@ export async function signUpPlayer(input: {
   email: string;
   password: string;
   ageConfirmed: boolean;
+  currency: string;
 }) {
   const emailError = validatePlayerEmail(input.email);
   if (emailError) throw new Error(emailError);
   const passwordError = validatePlayerPassword(input.password);
   if (passwordError) throw new Error(passwordError);
   if (input.ageConfirmed !== true) throw new Error('age required');
+  const currency = normalizeRegistrationCurrency(input.currency);
+  if (!currency) throw new Error('currency required');
 
   const res = await fetch('/api/player/auth/register', {
     method: 'POST',
@@ -362,6 +370,7 @@ export async function signUpPlayer(input: {
       email: input.email.trim(),
       password: input.password,
       ageConfirmed: true,
+      currency,
     }),
   });
   return readRegisterResult(res);
@@ -371,12 +380,15 @@ export async function signUpPlayerByPhone(input: {
   phone: string;
   password: string;
   ageConfirmed: boolean;
+  currency: string;
 }) {
   const phoneError = validatePlayerPhone(input.phone);
   if (phoneError) throw new Error(phoneError);
   const passwordError = validatePlayerPassword(input.password);
   if (passwordError) throw new Error(passwordError);
   if (input.ageConfirmed !== true) throw new Error('age required');
+  const currency = normalizeRegistrationCurrency(input.currency);
+  if (!currency) throw new Error('currency required');
 
   const res = await fetch('/api/player/auth/register', {
     method: 'POST',
@@ -387,13 +399,16 @@ export async function signUpPlayerByPhone(input: {
       phone: input.phone.replace(/[\s()-]/g, ''),
       password: input.password,
       ageConfirmed: true,
+      currency,
     }),
   });
   return readRegisterResult(res);
 }
 
-export async function signUpPlayerOneClick(input: { ageConfirmed: boolean }) {
+export async function signUpPlayerOneClick(input: { ageConfirmed: boolean; currency: string }) {
   if (input.ageConfirmed !== true) throw new Error('age required');
+  const currency = normalizeRegistrationCurrency(input.currency);
+  if (!currency) throw new Error('currency required');
   const res = await fetch('/api/player/auth/register', {
     method: 'POST',
     credentials: 'same-origin',
@@ -401,6 +416,7 @@ export async function signUpPlayerOneClick(input: { ageConfirmed: boolean }) {
     body: JSON.stringify({
       method: 'one_click',
       ageConfirmed: true,
+      currency,
     }),
   });
   const payload = await readJson(res);

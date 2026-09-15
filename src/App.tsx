@@ -22,6 +22,7 @@ import { MenuScreen } from './screens/MenuScreen';
 import { WalletScreen } from './screens/WalletScreen';
 import { PromoScreen } from './screens/PromoScreen';
 import { PersonalDataScreen } from './screens/PersonalDataScreen';
+import { WalletsScreen } from './screens/WalletsScreen';
 import { GameListScreen } from './screens/GameListScreen';
 import { SportsListScreen } from './screens/SportsListScreen';
 import type { Screen, SportId, MainTab } from './types';
@@ -146,6 +147,7 @@ function fallbackScreen(screen: Screen): Screen {
     case 'wallet':
     case 'promo':
     case 'personal-data':
+    case 'wallets':
     case 'info':
     case 'sports':
     case 'slots':
@@ -347,7 +349,7 @@ function AppContent() {
     };
   }, []);
 
-  const { balance, available, loading: walletLoading, refresh: refreshWallet } = useWallet();
+  const { balance, currency, available, loading: walletLoading, refresh: refreshWallet } = useWallet();
   const { refresh: refreshProfile, reset: resetProfile } = useProfile();
 
   const handleAuthSuccess = async () => {
@@ -378,7 +380,7 @@ function AppContent() {
   const handlePasswordChanged = () => {
     finishPlayerLogout(PLAYER_PASSWORD_CHANGED_NOTICE);
   };
-  const moneyLabel = formatPlayerMoney(balance, available, walletLoading);
+  const moneyLabel = formatPlayerMoney(balance, available, walletLoading, currency);
 
   useEffect(() => {
     return subscribeMatchSoundToast(({ title, body }) => {
@@ -462,6 +464,8 @@ function AppContent() {
         return <PromoScreen onBack={goBack} onNavigate={setScreen} />;
       case 'personal-data':
         return <PersonalDataScreen onBack={goBack} />;
+      case 'wallets':
+        return <WalletsScreen onBack={goBack} />;
       case 'settings':
         return (
           <SettingsScreen

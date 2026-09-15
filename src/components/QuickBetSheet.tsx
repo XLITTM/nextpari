@@ -14,7 +14,7 @@ const QUICK_AMOUNTS = [4, 40, 100];
 export function QuickBetSheet() {
   const { pendingSelection, closeQuickBet } = useQuickBet();
   const { toast } = useToast();
-  const { balance, available, applyServerBalance, refresh } = useWallet();
+  const { balance, available, applyServerBalance, refresh, currency } = useWallet();
   const { refresh: refreshHistory } = useBetHistory();
   const [stake, setStake] = useState<number>(20);
   const [animateIn, setAnimateIn] = useState(false);
@@ -111,7 +111,7 @@ export function QuickBetSheet() {
           <span className="text-sm text-gray-600 dark:text-gray-200">
             Баланс{' '}
             <span className="font-bold text-gray-900 dark:text-white">
-              {formatPlayerMoney(balance, available)}
+              {formatPlayerMoney(balance, available, false, currency)}
             </span>
           </span>
         </div>

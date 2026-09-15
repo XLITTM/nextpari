@@ -18,6 +18,7 @@ import {
   PlayerPasswordRecoveryError,
 } from '../lib/playerAuth';
 import { authBackView, authShowsBack, oneClickCopyAllText, planOneClickContinue, type AuthView } from '../lib/authUiFlow';
+import { PLAYER_REGISTRATION_CURRENCY_OPTIONS } from '../lib/playerCurrency';
 import { AuthHero, AUTH_SPORTS_BG } from '../components/auth/AuthHero';
 import { AuthSheet } from '../components/auth/AuthSheet';
 import { AuthInput } from '../components/auth/AuthInput';
@@ -42,6 +43,7 @@ function playerFacingAuthError(raw: string): string {
   if (text.includes('invalid phone')) return 'Неверный номер телефона';
   if (text.includes('invalid email')) return 'Неверный email';
   if (text.includes('age required')) return 'Подтвердите, что вам есть 18 лет';
+  if (text.includes('currency required')) return 'Выберите валюту счёта';
   if (text.includes('registration failed')) return 'Не удалось зарегистрироваться с этими данными.';
   if (/[а-яё]/i.test(raw)) return raw;
   return 'Не удалось выполнить запрос. Попробуйте ещё раз.';
@@ -62,6 +64,30 @@ function PrimaryButton({
     >
       {children}
     </button>
+  );
+}
+
+function CurrencyPicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-[13px] font-bold text-slate-600">Валюта счёта</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-[52px] w-full rounded-[16px] border border-slate-200 bg-white px-4 text-[16px] font-semibold text-ink-900"
+      >
+        <option value="">Выберите валюту</option>
+        {PLAYER_REGISTRATION_CURRENCY_OPTIONS.map((row) => (
+          <option key={row.value} value={row.value}>{row.label}</option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -159,6 +185,7 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
+  const [regCurrency, setRegCurrency] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(initialNotice ?? '');
@@ -245,12 +272,17 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
       setError('Подтвердите, что вам есть 18 лет');
       return;
     }
+    if (!regCurrency) {
+      setError('Выберите валюту счёта');
+      return;
+    }
     setBusy(true);
     try {
       const result = await signUpPlayer({
         email: regEmail.trim(),
         password: regPassword,
         ageConfirmed: true,
+        currency: regCurrency,
       });
       if (result.needsEmailConfirmation || !result.session?.user) {
         goLoginWithNotice('Подтвердите Email, затем войдите.');
@@ -276,12 +308,17 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
       setError('Подтвердите, что вам есть 18 лет');
       return;
     }
+    if (!regCurrency) {
+      setError('Выберите валюту счёта');
+      return;
+    }
     setBusy(true);
     try {
       const result = await signUpPlayerByPhone({
         phone: regPhone,
         password: regPassword,
         ageConfirmed: true,
+        currency: regCurrency,
       });
       if (!result.session?.user) {
         setError('Не удалось зарегистрироваться с этими данными.');
@@ -298,9 +335,13 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
   const handleOneClick = async () => {
     setError('');
     if (!agreed || busy) return;
+    if (!regCurrency) {
+      setError('Выберите валюту счёта');
+      return;
+    }
     setBusy(true);
     try {
-      const result = await signUpPlayerOneClick({ ageConfirmed: true });
+      const result = await signUpPlayerOneClick({ ageConfirmed: true, currency: regCurrency });
       setIssuedId(result.playerId);
       setIssuedSecret(result.generatedPassword);
       setIssuedAuthenticated(result.authenticated);
@@ -577,6 +618,7 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
               <p className="text-[15px] font-medium leading-snug text-slate-500">
                 Мы создадим ID игрока и безопасный пароль автоматически.
               </p>
+              <CurrencyPicker value={regCurrency} onChange={setRegCurrency} />
               <AgeCheck agreed={agreed} onToggle={() => setAgreed(!agreed)} />
               <PrimaryButton disabled={busy || !agreed}>
                 {busy ? 'Создание…' : 'Создать аккаунт'}
@@ -665,6 +707,7 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
                 autoComplete="new-password"
                 trailing={passwordToggle}
               />
+              <CurrencyPicker value={regCurrency} onChange={setRegCurrency} />
               <AgeCheck agreed={agreed} onToggle={() => setAgreed(!agreed)} />
               <PrimaryButton disabled={busy || !agreed}>
                 {busy ? 'Регистрация…' : 'Зарегистрироваться'}
@@ -716,6 +759,7 @@ export function AuthScreen({ onAuthSuccess, notice: initialNotice }: AuthScreenP
                 autoComplete="new-password"
                 trailing={passwordToggle}
               />
+              <CurrencyPicker value={regCurrency} onChange={setRegCurrency} />
               <AgeCheck agreed={agreed} onToggle={() => setAgreed(!agreed)} />
               <PrimaryButton disabled={busy || !agreed}>
                 {busy ? 'Регистрация…' : 'Зарегистрироваться'}

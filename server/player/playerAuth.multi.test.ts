@@ -273,7 +273,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'email', email: PLAYER_EMAIL, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       ports,
     );
@@ -287,7 +287,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       ports,
     );
@@ -318,7 +318,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'one_click', ageConfirmed: true },
+        body: { method: 'one_click', ageConfirmed: true, currency: 'TMT' },
       },
       ports,
     );
@@ -378,7 +378,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       ports,
     );
@@ -484,7 +484,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       claimFail,
     );
@@ -498,7 +498,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'one_click', ageConfirmed: true },
+        body: { method: 'one_click', ageConfirmed: true, currency: 'TMT' },
       },
       provisionFail,
     );
@@ -518,7 +518,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       phonePorts,
     );
@@ -537,7 +537,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'one_click', ageConfirmed: true },
+        body: { method: 'one_click', ageConfirmed: true, currency: 'TMT' },
       },
       oneClickPorts,
     );
@@ -558,7 +558,7 @@ describe('multi-identifier player auth', () => {
         method: 'POST',
         pathname: PLAYER_AUTH_REGISTER_PATH,
         cookieSecure: true,
-        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true },
+        body: { method: 'phone', phone: PLAYER_PHONE, password: PLAYER_PASSWORD, ageConfirmed: true, currency: 'TMT' },
       },
       ports,
     );
