@@ -1425,6 +1425,17 @@ export interface OwnerTreasurySnapshot {
   version: number | null;
 }
 
+export interface OwnerTreasuryCurrencyRow {
+  currency: string;
+  treasuryBalance: number | null;
+  managerCount: number;
+  managerTotal: number | null;
+  cashierCount: number;
+  cashierTotal: number | null;
+  status?: string;
+  migrationState?: string;
+}
+
 export interface OwnerTreasuryTransfer {
   id: string;
   transferNo: string;
@@ -1438,6 +1449,8 @@ export interface OwnerTreasuryTransfer {
 
 export interface OwnerTreasuryOverview {
   treasury: OwnerTreasurySnapshot | null;
+  accounts: OwnerTreasurySnapshot[];
+  byCurrency: OwnerTreasuryCurrencyRow[];
   managers: { count: number; totalBalance: number | null };
   cashiers: { count: number; totalBalance: number | null };
   recentTransfers: OwnerTreasuryTransfer[];
@@ -1466,9 +1479,10 @@ function nullableNum(value: unknown): number | null {
 
 function parseTreasurySnapshot(raw: Record<string, unknown>): OwnerTreasurySnapshot | null {
   if (Object.keys(raw).length === 0) return null;
-  const available = nullableNum(raw.available_balance ?? raw.availableBalance);
+  const available = nullableNum(raw.available_balance ?? raw.availableBalance ?? raw.treasury_balance ?? raw.treasuryBalance);
+  const currency = str(raw.currency, 'TMT');
   return {
-    currency: str(raw.currency, 'TMTM'),
+    currency: currency === 'TMTM' ? 'TMT' : currency,
     availableBalance: available,
     status: str(raw.status),
     migrationState: str(raw.migration_state ?? raw.migrationState),
@@ -1476,12 +1490,17 @@ function parseTreasurySnapshot(raw: Record<string, unknown>): OwnerTreasurySnaps
   };
 }
 
+function displayCode(value: unknown, fallback = 'TMT'): string {
+  const code = str(value, fallback).toUpperCase();
+  return code === 'TMTM' ? 'TMT' : code;
+}
+
 function parseTreasuryTransfer(raw: Record<string, unknown>): OwnerTreasuryTransfer {
   return {
     id: str(raw.id),
     transferNo: str(raw.transfer_no ?? raw.transferNo),
     transferType: str(raw.transfer_type ?? raw.transferType),
-    currency: str(raw.currency, 'TMTM'),
+    currency: displayCode(raw.currency),
     amount: nullableNum(raw.amount) ?? 0,
     actorRole: str(raw.actor_role ?? raw.actorRole),
     createdAt: str(raw.created_at ?? raw.createdAt),
@@ -1495,7 +1514,7 @@ function parseOwnerMoneyResult(raw: Record<string, unknown>): OwnerMoneyResult {
     transferId: str(raw.transfer_id ?? raw.transferId),
     isDuplicate: raw.is_duplicate === true || raw.isDuplicate === true,
     amount: nullableNum(raw.amount) ?? 0,
-    currency: str(raw.currency, 'TMTM'),
+    currency: displayCode(raw.currency),
     fromBalanceAfter: nullableNum(raw.from_balance_after ?? raw.fromBalanceAfter),
     toBalanceAfter: nullableNum(raw.to_balance_after ?? raw.toBalanceAfter),
     playerBalanceAfter: nullableNum(raw.player_balance_after ?? raw.playerBalanceAfter),
@@ -1515,6 +1534,21 @@ export async function fetchOwnerTreasury(): Promise<OwnerTreasuryOverview> {
   const cashiers = asRecord(rec.cashiers);
   return {
     treasury: parseTreasurySnapshot(asRecord(rec.treasury)),
+    accounts: asRows(rec.accounts).map((row) => parseTreasurySnapshot(asRecord(row))).filter((row): row is OwnerTreasurySnapshot => row != null),
+    byCurrency: asRows(rec.by_currency ?? rec.byCurrency).map((row) => {
+      const item = asRecord(row);
+      const currency = str(item.currency, 'TMT');
+      return {
+        currency: currency === 'TMTM' ? 'TMT' : currency,
+        treasuryBalance: nullableNum(item.treasury_balance ?? item.treasuryBalance ?? item.available_balance),
+        managerCount: num(item.manager_count ?? item.managerCount),
+        managerTotal: nullableNum(item.manager_total ?? item.managerTotal),
+        cashierCount: num(item.cashier_count ?? item.cashierCount),
+        cashierTotal: nullableNum(item.cashier_total ?? item.cashierTotal),
+        status: str(item.status) || undefined,
+        migrationState: str(item.migration_state ?? item.migrationState) || undefined,
+      };
+    }),
     managers: {
       count: num(managers.count),
       totalBalance: nullableNum(managers.total_balance ?? managers.totalBalance),
@@ -1530,17 +1564,27 @@ export async function fetchOwnerTreasury(): Promise<OwnerTreasuryOverview> {
 }
 
 export async function postOwnerCapitalIn(input: {
-  amount: number;
+  amount: number | string;
   idempotencyKey: string;
   note: string;
+  currency?: string;
 }): Promise<OwnerMoneyResult> {
-  const data = await ownerData('/api/owner/treasury', {
+  const currency = (input.currency ?? 'TMT').trim().toUpperCase();
+  const useCurrencyApi = currency && currency !== 'TMT' && currency !== 'TMTM';
+  const data = await ownerData(useCurrencyApi ? '/api/owner/treasury/capital-in' : '/api/owner/treasury', {
     method: 'POST',
-    body: JSON.stringify({
-      amount: input.amount,
-      idempotencyKey: input.idempotencyKey,
-      note: input.note,
-    }),
+    body: JSON.stringify(useCurrencyApi
+      ? {
+          currency,
+          amount: String(input.amount),
+          idempotencyKey: input.idempotencyKey,
+          note: input.note,
+        }
+      : {
+          amount: input.amount,
+          idempotencyKey: input.idempotencyKey,
+          note: input.note,
+        }),
   });
   return parseOwnerMoneyResult(asRecord(data));
 }
@@ -1548,21 +1592,55 @@ export async function postOwnerCapitalIn(input: {
 export async function postOwnerFund(input: {
   targetType: OwnerFundTargetType;
   targetId: string;
-  amount: number;
+  amount: number | string;
   idempotencyKey: string;
   note?: string | null;
+  currency?: string;
 }): Promise<OwnerMoneyResult> {
-  const data = await ownerData('/api/owner/fund', {
+  const currency = (input.currency ?? 'TMT').trim().toUpperCase();
+  const useCurrencyApi = currency && currency !== 'TMT' && currency !== 'TMTM' && input.targetType !== 'player';
+  const data = await ownerData(useCurrencyApi ? '/api/owner/fund/currency' : '/api/owner/fund', {
     method: 'POST',
-    body: JSON.stringify({
-      targetType: input.targetType,
-      targetId: input.targetId,
-      amount: input.amount,
-      idempotencyKey: input.idempotencyKey,
-      note: input.note?.trim() || null,
-    }),
+    body: JSON.stringify(useCurrencyApi
+      ? {
+          targetType: input.targetType,
+          targetId: input.targetId,
+          currency,
+          amount: String(input.amount),
+          idempotencyKey: input.idempotencyKey,
+          note: input.note?.trim() || null,
+        }
+      : {
+          targetType: input.targetType,
+          targetId: input.targetId,
+          amount: input.amount,
+          idempotencyKey: input.idempotencyKey,
+          note: input.note?.trim() || null,
+        }),
   });
   return parseOwnerMoneyResult(asRecord(data));
+}
+
+export async function postOwnerAddManagerCurrency(input: {
+  managerId: string;
+  currency: string;
+}): Promise<Record<string, unknown>> {
+  const data = await ownerData(`/api/owner/managers/${encodeURIComponent(input.managerId)}/currencies`, {
+    method: 'POST',
+    body: JSON.stringify({ currency: input.currency }),
+  });
+  return asRecord(data);
+}
+
+export async function postOwnerAddCashierCurrency(input: {
+  cashierId: string;
+  currency: string;
+}): Promise<Record<string, unknown>> {
+  const data = await ownerData(`/api/owner/cashiers/${encodeURIComponent(input.cashierId)}/currencies`, {
+    method: 'POST',
+    body: JSON.stringify({ currency: input.currency }),
+  });
+  return asRecord(data);
 }
 
 export async function postOwnerPlayerDebit(input: {
@@ -1602,7 +1680,15 @@ export async function fetchOwnerCashierOperationalMap(): Promise<Record<string, 
 export function formatTmtmCompact(value: number | null | undefined): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;
-  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMTM`;
+  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMT`;
+}
+
+export function formatOperationalAmount(value: number | null | undefined, currency: string | null | undefined): string {
+  const n = Number(value);
+  const safe = Number.isFinite(n) ? n : 0;
+  const code = String(currency ?? 'TMT').toUpperCase() === 'TMTM' ? 'TMT' : String(currency ?? 'TMT').toUpperCase();
+  const digits = code === 'UZS' ? 0 : 2;
+  return `${safe.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${code}`;
 }
 
 export function formatDayLabel(isoDay: string): string {

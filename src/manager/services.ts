@@ -234,6 +234,7 @@ export interface ManagerOperationalCashier {
   cashierId: string;
   login: string;
   fullName: string;
+  currency?: string;
   availableBalance: number;
   status: string;
   migrationState: string;
@@ -242,7 +243,9 @@ export interface ManagerOperationalCashier {
 
 export interface ManagerFinanceOverview {
   manager: ManagerOperationalAccount | null;
+  managerAccounts: ManagerOperationalAccount[];
   cashiers: ManagerOperationalCashier[];
+  cashiersByCurrency: ManagerOperationalCashier[];
   activationPending: boolean;
 }
 
@@ -253,7 +256,7 @@ export async function fetchManagerFinance(): Promise<ManagerFinanceOverview> {
   const manager = managerRaw.id
     ? {
         id: str(managerRaw.id),
-        currency: str(managerRaw.currency, 'TMTM'),
+        currency: str(managerRaw.currency, 'TMT') === 'TMTM' ? 'TMT' : str(managerRaw.currency, 'TMT'),
         availableBalance: num(managerRaw.available_balance ?? managerRaw.availableBalance),
         status: str(managerRaw.status),
         migrationState: str(managerRaw.migration_state ?? managerRaw.migrationState, 'staging'),
@@ -268,6 +271,7 @@ export async function fetchManagerFinance(): Promise<ManagerFinanceOverview> {
         cashierId: str(item.cashier_id ?? item.cashierId),
         login: str(item.login),
         fullName: str(item.full_name ?? item.fullName),
+        currency: str(item.currency, 'TMT') === 'TMTM' ? 'TMT' : str(item.currency, 'TMT'),
         availableBalance: num(item.available_balance ?? item.availableBalance),
         status: str(item.status),
         migrationState: str(item.migration_state ?? item.migrationState, 'staging'),
@@ -275,6 +279,32 @@ export async function fetchManagerFinance(): Promise<ManagerFinanceOverview> {
       };
     }),
     activationPending: raw.activation_pending !== false && raw.activationPending !== false,
+    managerAccounts: asRows(raw.manager_accounts ?? raw.managerAccounts).map((row) => {
+      const item = asRecord(row);
+      const currency = str(item.currency, 'TMT');
+      return {
+        id: str(item.id),
+        currency: currency === 'TMTM' ? 'TMT' : currency,
+        availableBalance: num(item.available_balance ?? item.availableBalance),
+        status: str(item.status),
+        migrationState: str(item.migration_state ?? item.migrationState, 'staging'),
+        version: num(item.version),
+      };
+    }),
+    cashiersByCurrency: asRows(raw.cashiers_by_currency ?? raw.cashiersByCurrency).map((row) => {
+      const item = asRecord(row);
+      const currency = str(item.currency, 'TMT');
+      return {
+        cashierId: str(item.cashier_id ?? item.cashierId),
+        login: str(item.login),
+        fullName: str(item.full_name ?? item.fullName),
+        currency: currency === 'TMTM' ? 'TMT' : currency,
+        availableBalance: num(item.available_balance ?? item.availableBalance),
+        status: str(item.status),
+        migrationState: str(item.migration_state ?? item.migrationState, 'staging'),
+        legacyFloatBalance: 0,
+      };
+    }),
   };
 }
 
@@ -289,33 +319,49 @@ export async function fetchManagerTransfers(): Promise<{ rows: unknown[]; total:
 
 export async function postManagerFund(input: {
   cashierId: string;
-  amount: number;
+  amount: number | string;
   idempotencyKey: string;
   note?: string;
+  currency?: string;
 }): Promise<unknown> {
+  const currency = (input.currency ?? 'TMT').toUpperCase();
   return managerData(`/api/manager/cashiers/${encodeURIComponent(input.cashierId)}/fund`, {
     method: 'POST',
     body: JSON.stringify({
-      amount: input.amount,
+      amount: currency === 'TMT' || currency === 'TMTM' ? input.amount : String(input.amount),
       idempotencyKey: input.idempotencyKey,
       note: input.note ?? null,
+      ...(currency && currency !== 'TMT' && currency !== 'TMTM' ? { currency } : {}),
     }),
   });
 }
 
 export async function postManagerCollect(input: {
   cashierId: string;
-  amount: number;
+  amount: number | string;
   idempotencyKey: string;
   note?: string;
+  currency?: string;
 }): Promise<unknown> {
+  const currency = (input.currency ?? 'TMT').toUpperCase();
   return managerData(`/api/manager/cashiers/${encodeURIComponent(input.cashierId)}/collect`, {
     method: 'POST',
     body: JSON.stringify({
-      amount: input.amount,
+      amount: currency === 'TMT' || currency === 'TMTM' ? input.amount : String(input.amount),
       idempotencyKey: input.idempotencyKey,
       note: input.note ?? null,
+      ...(currency && currency !== 'TMT' && currency !== 'TMTM' ? { currency } : {}),
     }),
+  });
+}
+
+export async function postManagerAddCashierCurrency(input: {
+  cashierId: string;
+  currency: string;
+}): Promise<unknown> {
+  return managerData(`/api/manager/cashiers/${encodeURIComponent(input.cashierId)}/currencies`, {
+    method: 'POST',
+    body: JSON.stringify({ currency: input.currency }),
   });
 }
 
@@ -344,5 +390,5 @@ export async function postManagerCashier(input: {
 export function formatTmtmCompact(value: number | null | undefined): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;
-  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMTM`;
+  return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMT`;
 }

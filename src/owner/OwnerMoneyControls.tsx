@@ -11,7 +11,10 @@ import {
   fetchOwnerManagers,
   fetchOwnerTreasury,
   formatBackofficeDateTime,
+  formatOperationalAmount,
   formatTmtmCompact,
+  postOwnerAddCashierCurrency,
+  postOwnerAddManagerCurrency,
   postOwnerCapitalIn,
   postOwnerFund,
   type OwnerManagerRow,
@@ -34,7 +37,9 @@ export type OwnerMoneyDialogState =
   | { type: 'capital' }
   | { type: 'manager'; manager?: OwnerManagerRow }
   | { type: 'cashier'; cashier?: OwnerCashierFundTarget }
-  | { type: 'player'; publicId?: string };
+  | { type: 'player'; publicId?: string }
+  | { type: 'addManagerCurrency' }
+  | { type: 'addCashierCurrency' };
 
 export interface OwnerCashierFundTarget {
   cashierId: string;
@@ -50,11 +55,17 @@ export function formatTmtmOrUnavailable(value: number | null | undefined): strin
   return formatTmtmCompact(value);
 }
 
+const DISPLAY_CURRENCIES = ['TMT', 'USD', 'TRY', 'UZS', 'RUB', 'KZT'] as const;
+
 export function ownerTreasuryIsActive(overview: OwnerTreasuryOverview | null | undefined): boolean {
-  return isOperationalAccountActive({
+  if (isOperationalAccountActive({
     status: overview?.treasury?.status,
     migrationState: overview?.treasury?.migrationState,
-  });
+  })) return true;
+  return (overview?.accounts ?? []).some((row) => isOperationalAccountActive({
+    status: row.status,
+    migrationState: row.migrationState,
+  }));
 }
 
 export function OwnerTreasuryPanel({
@@ -85,25 +96,21 @@ export function OwnerTreasuryPanel({
   }, [load]);
 
   const treasuryActive = ownerTreasuryIsActive(overview);
-  const available = overview?.treasury?.availableBalance;
+  const cards = (overview?.accounts?.length ? overview.accounts : [
+    overview?.treasury,
+  ].filter(Boolean)) as NonNullable<OwnerTreasuryOverview['accounts']>;
 
   return (
     <section className="mb-5">
       <article className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div>
-            <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Казна владельца</p>
-            <h2 className="text-xl font-extrabold text-ink-900 mt-0.5">Казна владельца</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Доступно в казне:{' '}
-              <span className="font-extrabold text-ink-900 tabular-nums">
-                {loading ? '…' : formatTmtmOrUnavailable(available)}
-              </span>
-            </p>
+            <p className="text-[10px] uppercase tracking-wider font-bold text-gray-400">Казна</p>
+            <h2 className="text-xl font-extrabold text-ink-900 mt-0.5">Казна</h2>
             <p className="text-xs text-gray-500 mt-1">
-              status: {overview?.treasury?.status || '—'} · migrationState:{' '}
-              {overview?.treasury?.migrationState || '—'}
+              {cards.length || 6} валютных счетов · балансы разделены, без общего итога
             </p>
+            <p className="text-xs font-semibold text-ink-700 mt-1">Доступно в казне по каждой валюте отдельно</p>
           </div>
           <button
             type="button"
@@ -115,6 +122,22 @@ export function OwnerTreasuryPanel({
           </button>
         </div>
         {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+          {(cards.length ? cards : DISPLAY_CURRENCIES.map((currency) => ({
+            currency,
+            availableBalance: 0,
+            status: '',
+            migrationState: '',
+            version: null,
+          }))).map((row) => (
+            <div key={row.currency} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400">{row.currency}</p>
+              <p className="text-lg font-extrabold tabular-nums text-ink-900 mt-1">
+                {loading ? '…' : formatOperationalAmount(row.availableBalance, row.currency)}
+              </p>
+            </div>
+          ))}
+        </div>
         <div className="flex flex-wrap gap-2 mb-4">
           <button
             type="button"
@@ -136,7 +159,7 @@ export function OwnerTreasuryPanel({
             onClick={() => setDialog({ type: 'manager' })}
             className="text-sm font-bold px-3 py-2 rounded-xl bg-ink-900 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            + Пополнить менеджера
+            Выдать менеджеру
           </button>
           <button
             type="button"
@@ -145,7 +168,7 @@ export function OwnerTreasuryPanel({
             onClick={() => setDialog({ type: 'cashier' })}
             className="text-sm font-bold px-3 py-2 rounded-xl bg-ink-900 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            + Пополнить кассу
+            Выдать кассиру
           </button>
           <button
             type="button"
@@ -155,6 +178,20 @@ export function OwnerTreasuryPanel({
             className="text-sm font-bold px-3 py-2 rounded-xl bg-ink-900 text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             + Пополнить игрока
+          </button>
+          <button
+            type="button"
+            onClick={() => setDialog({ type: 'addManagerCurrency' })}
+            className="text-sm font-bold px-3 py-2 rounded-xl bg-slate-100 text-ink-900"
+          >
+            Добавить валютный счёт менеджеру
+          </button>
+          <button
+            type="button"
+            onClick={() => setDialog({ type: 'addCashierCurrency' })}
+            className="text-sm font-bold px-3 py-2 rounded-xl bg-slate-100 text-ink-900"
+          >
+            Добавить валютный счёт кассиру
           </button>
         </div>
       </article>
@@ -210,7 +247,7 @@ function OwnerTreasuryHistory({ rows }: { rows: OwnerTreasuryTransfer[] }) {
                   <p className="text-[10px] text-gray-400">{row.transferType}</p>
                 </td>
                 <td className="px-4 py-2 text-right font-extrabold tabular-nums">
-                  {formatTmtmCompact(row.amount)}
+                  {formatOperationalAmount(row.amount, row.currency)}
                 </td>
                 <td className="px-4 py-2 text-xs font-mono text-gray-600">{row.targetReference || '—'}</td>
                 <td className="px-4 py-2 text-xs font-semibold">{row.actorRole || '—'}</td>
@@ -251,6 +288,7 @@ export function OwnerMoneyDialog({
   const [cashierId, setCashierId] = useState(state.type === 'cashier' ? state.cashier?.cashierId ?? '' : '');
   const [publicId, setPublicId] = useState(state.type === 'player' ? state.publicId ?? '' : '');
   const [liveTreasuryActive, setLiveTreasuryActive] = useState(treasuryActive);
+  const [currency, setCurrency] = useState('TMT');
 
   useEffect(() => {
     let cancelled = false;
@@ -267,7 +305,7 @@ export function OwnerMoneyDialog({
   }, []);
 
   useEffect(() => {
-    if (state.type !== 'manager' || state.manager) return undefined;
+    if ((state.type !== 'manager' && state.type !== 'addManagerCurrency') || (state.type === 'manager' && state.manager)) return undefined;
     let cancelled = false;
     void fetchOwnerManagers()
       .then((rows) => {
@@ -282,7 +320,7 @@ export function OwnerMoneyDialog({
   }, [state]);
 
   useEffect(() => {
-    if (state.type !== 'cashier' || state.cashier) return undefined;
+    if ((state.type !== 'cashier' && state.type !== 'addCashierCurrency') || (state.type === 'cashier' && state.cashier)) return undefined;
     let cancelled = false;
     void fetchOwnerCashierOperationalMap()
       .then((map) => {
@@ -313,19 +351,19 @@ export function OwnerMoneyDialog({
   }, [state]);
 
   const selectedManager = useMemo(() => {
-    if (state.type !== 'manager') return null;
-    if (state.manager) return state.manager;
+    if (state.type !== 'manager' && state.type !== 'addManagerCurrency') return null;
+    if (state.type === 'manager' && state.manager) return state.manager;
     return managers.find((row) => row.managerId === managerId) ?? null;
   }, [state, managers, managerId]);
 
   const selectedCashier = useMemo(() => {
-    if (state.type !== 'cashier') return null;
-    if (state.cashier) return state.cashier;
+    if (state.type !== 'cashier' && state.type !== 'addCashierCurrency') return null;
+    if (state.type === 'cashier' && state.cashier) return state.cashier;
     return cashiers.find((row) => row.cashierId === cashierId) ?? null;
   }, [state, cashiers, cashierId]);
 
   const targetActive = useMemo(() => {
-    if (state.type === 'capital' || state.type === 'player') return true;
+    if (state.type === 'capital' || state.type === 'player' || state.type === 'addManagerCurrency' || state.type === 'addCashierCurrency') return true;
     if (state.type === 'manager') {
       return isOperationalAccountActive({
         status: selectedManager?.operationalStatus,
@@ -338,16 +376,47 @@ export function OwnerMoneyDialog({
     });
   }, [state.type, selectedManager, selectedCashier]);
 
-  const enabled = liveTreasuryActive && targetActive && !busy;
+  const moneyAction = state.type === 'capital' || state.type === 'manager' || state.type === 'cashier' || state.type === 'player';
+  const enabled = (moneyAction ? liveTreasuryActive && targetActive : true) && !busy;
   const title = state.type === 'capital'
     ? 'Внести капитал'
     : state.type === 'manager'
-      ? 'Пополнить менеджера'
+      ? 'Выдать менеджеру'
       : state.type === 'cashier'
-        ? 'Пополнить кассу напрямую'
-        : 'Пополнить баланс игрока';
+        ? 'Выдать кассиру'
+        : state.type === 'addManagerCurrency'
+          ? 'Добавить валютный счёт менеджеру'
+          : state.type === 'addCashierCurrency'
+            ? 'Добавить валютный счёт кассиру'
+            : 'Пополнить баланс игрока';
 
   const submit = async () => {
+    if (state.type === 'addManagerCurrency' || state.type === 'addCashierCurrency') {
+      const targetId = state.type === 'addManagerCurrency'
+        ? selectedManager?.managerId ?? managerId
+        : selectedCashier?.cashierId ?? cashierId;
+      if (!targetId) {
+        setError('Выберите получателя');
+        return;
+      }
+      setBusy(true);
+      setError('');
+      try {
+        if (state.type === 'addManagerCurrency') {
+          await postOwnerAddManagerCurrency({ managerId: targetId, currency });
+        } else {
+          await postOwnerAddCashierCurrency({ cashierId: targetId, currency });
+        }
+        await onSuccess();
+        onClose();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Ошибка создания счёта');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
     const n = Number(amount);
     if (!Number.isFinite(n) || n <= 0) {
       setError('Сумма должна быть больше 0');
@@ -359,18 +428,19 @@ export function OwnerMoneyDialog({
       return;
     }
     if (state.type === 'capital') {
-      const ok = window.confirm(`Внести ${n} TMTM в казну владельца?`);
+      const ok = window.confirm(`Внести ${n} ${currency} в казну владельца?`);
       if (!ok) return;
-      const fingerprint = ownerCapitalFingerprint(n, trimmedNote);
+      const fingerprint = ownerCapitalFingerprint(n, trimmedNote) + ':' + currency;
       const slot = retainIdempotencyKey(idempotency, fingerprint);
       setIdempotency(slot);
       setBusy(true);
       setError('');
       try {
         const result = await postOwnerCapitalIn({
-          amount: n,
+          amount: currency === 'TMT' ? n : amount,
           idempotencyKey: slot.key,
           note: trimmedNote,
+          currency,
         });
         setSuccess(result);
         setIdempotency(null);
@@ -402,7 +472,10 @@ export function OwnerMoneyDialog({
       return;
     }
 
-    const fingerprint = ownerFundFingerprint(state.type, targetId, n, trimmedNote);
+    if (state.type !== 'manager' && state.type !== 'cashier' && state.type !== 'player') {
+      return;
+    }
+    const fingerprint = ownerFundFingerprint(state.type, targetId, n, trimmedNote) + ':' + currency;
     const slot = retainIdempotencyKey(idempotency, fingerprint);
     setIdempotency(slot);
     setBusy(true);
@@ -411,9 +484,10 @@ export function OwnerMoneyDialog({
       const result = await postOwnerFund({
         targetType: state.type,
         targetId,
-        amount: n,
+        amount: currency === 'TMT' || state.type === 'player' ? n : amount,
         idempotencyKey: slot.key,
         note: trimmedNote || null,
+        currency: state.type === 'player' ? 'TMT' : currency,
       });
       setSuccess(result);
       setIdempotency(null);
@@ -436,12 +510,12 @@ export function OwnerMoneyDialog({
             <X className="w-5 h-5" />
           </button>
         </div>
-        {!liveTreasuryActive && (
+        {!liveTreasuryActive && moneyAction && (
           <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-3">
             Казна не активна — денежные операции отключены
           </p>
         )}
-        {state.type === 'manager' && !state.manager && (
+        {(state.type === 'manager' || state.type === 'addManagerCurrency') && !(state.type === 'manager' && state.manager) && (
           <label className="block text-xs font-semibold text-gray-500 mb-3">
             Менеджер
             <select
@@ -472,7 +546,7 @@ export function OwnerMoneyDialog({
             )}
           </div>
         )}
-        {state.type === 'cashier' && !state.cashier && (
+        {(state.type === 'cashier' || state.type === 'addCashierCurrency') && !(state.type === 'cashier' && state.cashier) && (
           <label className="block text-xs font-semibold text-gray-500 mb-3">
             Касса
             <select
@@ -513,8 +587,33 @@ export function OwnerMoneyDialog({
             />
           </label>
         )}
+        {state.type !== 'player' && (
+          <label className="block text-xs font-semibold text-gray-500 mb-3">
+            Валюта
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(e.target.value)}
+              className="mt-1 w-full bg-gray-100 rounded-xl px-3 py-2 text-sm font-semibold text-ink-900 outline-none"
+            >
+              {DISPLAY_CURRENCIES.map((code) => (
+                <option key={code} value={code}>{code}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        {state.type === 'cashier' && moneyAction && (
+          <p className="text-xs text-gray-500 mb-3">
+            Источник: Казна {currency} → Счёт {currency}
+          </p>
+        )}
+        {state.type === 'manager' && moneyAction && (
+          <p className="text-xs text-gray-500 mb-3">
+            Источник: Казна {currency} → Счёт менеджера {currency}
+          </p>
+        )}
+        {moneyAction && (
         <label className="block text-xs font-semibold text-gray-500 mb-3">
-          Сумма TMTM
+          Сумма {currency}
           <input
             type="number"
             min={0}
@@ -523,6 +622,8 @@ export function OwnerMoneyDialog({
             className="mt-1 w-full bg-gray-100 rounded-xl px-3 py-2 text-sm font-semibold text-ink-900 outline-none"
           />
         </label>
+        )}
+        {moneyAction && (
         <label className="block text-xs font-semibold text-gray-500 mb-3">
           {state.type === 'capital' ? 'Комментарий / основание' : 'Комментарий (необязательно)'}
           <textarea
@@ -532,6 +633,7 @@ export function OwnerMoneyDialog({
             className="mt-1 w-full bg-gray-100 rounded-xl px-3 py-2 text-sm font-semibold text-ink-900 outline-none resize-none"
           />
         </label>
+        )}
         {error && <p className="text-xs font-bold text-red-600 mb-3">{error}</p>}
         {success && (
           <div className="text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-3 space-y-0.5">
@@ -572,9 +674,11 @@ export function OwnerMoneyDialog({
                 ? 'Отправка…'
                 : state.type === 'capital'
                   ? 'Внести капитал'
-                  : state.type === 'cashier'
-                    ? 'Пополнить напрямую'
-                    : 'Пополнить'}
+                  : state.type === 'addManagerCurrency' || state.type === 'addCashierCurrency'
+                    ? 'Создать счёт'
+                    : state.type === 'cashier'
+                      ? 'Выдать кассиру'
+                      : 'Пополнить'}
             </button>
           )}
         </div>

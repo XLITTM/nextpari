@@ -21,8 +21,15 @@ import {
   type CashierTransferRow,
 } from '../cashier/services';
 
-function formatTmtm(value: number): string {
-  return `${value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TMTM`;
+function displayCashCurrency(code: unknown): string {
+  const raw = String(code ?? 'TMT').toUpperCase();
+  return raw === 'TMTM' ? 'TMT' : raw;
+}
+
+function formatCashAmount(value: number, currency = 'TMT'): string {
+  const code = displayCashCurrency(currency);
+  const digits = code === 'UZS' ? 0 : 2;
+  return `${value.toLocaleString('ru-RU', { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${code}`;
 }
 
 type AgentTab = 'deposit' | 'payout' | 'history';
@@ -154,6 +161,7 @@ function AgentDesk({
   const [transfersError, setTransfersError] = useState('');
   const [transfersLoading, setTransfersLoading] = useState(false);
   const [reloadTick, setReloadTick] = useState(0);
+  const [cashCurrency, setCashCurrency] = useState('TMT');
 
   const reloadCanonical = () => setReloadTick((n) => n + 1);
 
@@ -204,14 +212,27 @@ function AgentDesk({
 
   const displayName = finance?.cashier.fullName || staff.displayName || 'Кассир';
   const point = [finance?.cashier.city, finance?.cashier.pointName].filter(Boolean).join(' · ');
-  const migrationState = finance?.operational.migrationState || 'staging';
-  const balance = finance?.operational.availableBalance ?? null;
-  const moneyEnabled = isCashierFinanceEnabled(finance);
+  const cashAccounts = (finance?.accounts?.length ? finance.accounts : finance?.operational ? [finance.operational] : [])
+    .filter((row) => row.accountId);
+  const selectedCash = cashAccounts.find((row) => row.currency === cashCurrency) ?? cashAccounts[0] ?? null;
+  const migrationState = selectedCash?.migrationState || finance?.operational.migrationState || 'staging';
+  const balance = selectedCash?.availableBalance ?? finance?.operational.availableBalance ?? null;
+  const moneyEnabled = isCashierFinanceEnabled(finance)
+    && String(selectedCash?.migrationState || '').toLowerCase() === 'active'
+    && String(selectedCash?.status || '').toLowerCase() === 'active';
+
+  const cashKey = cashAccounts.map((row) => row.currency).join(',');
+  useEffect(() => {
+    if (!cashAccounts.length) return;
+    if (!cashAccounts.some((row) => row.currency === cashCurrency)) {
+      setCashCurrency(cashAccounts[0]?.currency || 'TMT');
+    }
+  }, [cashKey, cashCurrency, cashAccounts]);
 
   let balanceLabel = '…';
   if (!financeLoading && financeError) balanceLabel = 'недоступен';
   else if (!financeLoading && balance == null) balanceLabel = 'недоступен';
-  else if (!financeLoading && balance != null) balanceLabel = formatTmtm(balance);
+  else if (!financeLoading && balance != null) balanceLabel = formatCashAmount(balance, selectedCash?.currency || 'TMT');
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-50 dark:bg-gray-900 max-w-lg mx-auto relative">
@@ -244,10 +265,37 @@ function AgentDesk({
         <div className="mt-3 bg-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <Wallet className="w-4 h-4 text-brand-400 shrink-0" />
-            <span className="text-xs text-ink-300 font-semibold">Операционный баланс</span>
+            <span className="text-xs text-ink-300 font-semibold">
+              {selectedCash ? `Касса ${selectedCash.currency}` : 'Операционный баланс'}
+            </span>
           </div>
           <p className="text-base font-extrabold tabular-nums text-white">{balanceLabel}</p>
         </div>
+        {cashAccounts.length > 0 && (
+          <div className="mt-3">
+            <p className="text-[10px] uppercase tracking-wider text-ink-400 font-bold mb-2">Мои кассы</p>
+            <div className="grid grid-cols-2 gap-2">
+              {cashAccounts.map((row) => {
+                const active = row.currency === (selectedCash?.currency ?? cashCurrency);
+                return (
+                  <button
+                    key={row.accountId || row.currency}
+                    type="button"
+                    onClick={() => setCashCurrency(row.currency)}
+                    className={`rounded-xl px-3 py-2 text-left ${
+                      active ? 'bg-white text-ink-900' : 'bg-white/10 text-white'
+                    }`}
+                  >
+                    <p className="text-[10px] uppercase tracking-wider font-bold opacity-70">{row.currency}</p>
+                    <p className="text-sm font-extrabold tabular-nums">
+                      {row.availableBalance == null ? 'недоступен' : formatCashAmount(row.availableBalance, row.currency)}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <p className={`mt-2 text-[11px] font-bold rounded-lg px-3 py-2 ${
           moneyEnabled
             ? 'text-emerald-200 bg-emerald-500/15'
@@ -292,7 +340,11 @@ function AgentDesk({
 
       <div className="flex-1 overflow-y-auto px-3 py-3 pb-6">
         {tab === 'deposit' && (
-          <DepositTab enabled={moneyEnabled} onSuccess={reloadCanonical} />
+          <DepositTab
+            enabled={moneyEnabled}
+            currency={selectedCash?.currency || 'TMT'}
+            onSuccess={reloadCanonical}
+          />
         )}
         {tab === 'payout' && (
           <PayoutTab enabled={moneyEnabled} onSuccess={reloadCanonical} />
@@ -329,11 +381,14 @@ function ActiveBanner() {
 
 function DepositTab({
   enabled,
+  currency,
   onSuccess,
 }: {
   enabled: boolean;
+  currency: string;
   onSuccess: () => void;
 }) {
+  const displayCurrency = currency === 'TMTM' ? 'TMT' : currency;
   const [playerId, setPlayerId] = useState('');
   const [amount, setAmount] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -359,15 +414,16 @@ function DepositTab({
       setConfirming(true);
       return;
     }
-    const fingerprint = `${publicId}:${n}`;
+    const fingerprint = `${publicId}:${displayCurrency}:${n}`;
     const slot = retainIdempotencyKey(idempotency, fingerprint);
     setIdempotency(slot);
     setBusy(true);
     try {
       await postCashierDeposit({
         playerPublicId: publicId,
-        amount: n,
+        amount: displayCurrency === 'TMT' ? n : amount,
         idempotencyKey: slot.key,
+        currency: displayCurrency,
       });
       setIdempotency(null);
       setConfirming(false);
@@ -384,7 +440,9 @@ function DepositTab({
   return (
     <section className="bg-white dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
       <h2 className="text-base font-bold text-gray-900 dark:text-white">Приём наличных</h2>
-      <p className="text-xs text-gray-500 dark:text-gray-300 mt-0.5 mb-4">Пополнение игрока · списание с кассы</p>
+      <p className="text-xs text-gray-500 dark:text-gray-300 mt-0.5 mb-4">
+        Пополнение через кассу {displayCurrency} · кошелёк игрока {displayCurrency}
+      </p>
       {enabled ? <ActiveBanner /> : <PendingBanner />}
 
       <label className="text-xs font-semibold text-gray-500 dark:text-gray-300 mb-1.5 block">ID игрока</label>
@@ -397,7 +455,7 @@ function DepositTab({
         className="w-full bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-2xl font-extrabold tracking-[0.35em] text-center rounded-xl px-4 py-3 mb-4 outline-none border border-gray-200 dark:border-gray-600 tabular-nums disabled:opacity-60"
       />
 
-      <label className="text-xs font-semibold text-gray-500 dark:text-gray-300 mb-1.5 block">Сумма (TMTM)</label>
+      <label className="text-xs font-semibold text-gray-500 dark:text-gray-300 mb-1.5 block">Сумма ({displayCurrency})</label>
       <input
         type="number"
         min={0}
@@ -537,7 +595,7 @@ function PayoutTab({
         <div className="mb-4 rounded-xl border border-gray-200 dark:border-gray-600 px-3 py-2 text-xs">
           <p className="font-bold text-gray-900 dark:text-white">ID игрока: {String(lookup.playerPublicId ?? '—')}</p>
           <p className="text-gray-600 dark:text-gray-300">
-            Сумма: {String(lookup.amount ?? '—')} {String(lookup.currency ?? 'TMTM')}
+            Сумма: {String(lookup.amount ?? '—')} {displayCashCurrency(lookup.currency)}
           </p>
           <p className="text-gray-500">Истекает: {String(lookup.expiresAt ?? '—')}</p>
         </div>
@@ -599,7 +657,7 @@ function HistoryTab({
     }
     const amountLabel = pending.amount == null ? '—' : String(pending.amount);
     const playerLabel = pending.playerPublicId ? `#${pending.playerPublicId}` : 'игроку';
-    if (!window.confirm(`Отменить пополнение ${amountLabel} TMTM игроку ${playerLabel}?`)) return;
+    if (!window.confirm(`Отменить пополнение ${amountLabel} ${displayCashCurrency(pending.currency)} игроку ${playerLabel}?`)) return;
     const fingerprint = `cashier-reverse:${pending.id}`;
     const slot = retainIdempotencyKey(idempotency, fingerprint);
     setIdempotency(slot);
@@ -655,7 +713,7 @@ function HistoryTab({
                       <p className="text-gray-500">{row.createdAt}</p>
                     </div>
                     <p className="font-black tabular-nums">
-                      {row.amount == null ? '—' : formatTmtm(row.amount)}
+                      {row.amount == null ? '—' : formatCashAmount(row.amount, row.currency)}
                     </p>
                   </div>
                   {row.transferType === 'CASHIER_TO_PLAYER' && row.reversalStatus === 'reversed' && (
@@ -692,7 +750,7 @@ function HistoryTab({
           <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
             <h3 className="font-extrabold text-ink-900 mb-2">Отменить пополнение</h3>
             <p className="text-xs text-gray-600 mb-3">
-              Отменить пополнение {pending.amount == null ? '—' : pending.amount} TMTM игроку
+              Отменить пополнение {pending.amount == null ? '—' : pending.amount} {displayCashCurrency(pending.currency)} игроку
               {pending.playerPublicId ? ` #${pending.playerPublicId}` : ''}?
             </p>
             <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Причина отмены</label>

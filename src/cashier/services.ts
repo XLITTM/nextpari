@@ -44,6 +44,7 @@ export interface CashierOperationalAccount {
 export interface CashierFinanceOverview {
   cashier: CashierOverviewCashier;
   operational: CashierOperationalAccount;
+  accounts: CashierOperationalAccount[];
   activationPending: boolean;
 }
 
@@ -76,6 +77,12 @@ function asRecord(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
   }
   return {};
+}
+
+function asRows(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value == null) return [];
+  return [value];
 }
 
 function str(value: unknown, fallback = ''): string {
@@ -130,7 +137,7 @@ export function parseCashierFinance(raw: unknown): CashierFinanceOverview | null
     },
     operational: {
       accountId: str(operational.accountId ?? operational.account_id),
-      currency: str(operational.currency, 'TMTM'),
+      currency: str(operational.currency, 'TMT') === 'TMTM' ? 'TMT' : str(operational.currency, 'TMT'),
       availableBalance,
       status: str(operational.status),
       migrationState: str(operational.migrationState ?? operational.migration_state, 'staging'),
@@ -139,6 +146,19 @@ export function parseCashierFinance(raw: unknown): CashierFinanceOverview | null
         operational.legacyFloatDiagnostic ?? operational.legacy_float_diagnostic,
       ),
     },
+    accounts: asRows(data.accounts).map((row) => {
+      const item = asRecord(row);
+      const currency = str(item.currency ?? item.currency, 'TMT');
+      return {
+        accountId: str(item.accountId ?? item.account_id),
+        currency: currency === 'TMTM' ? 'TMT' : currency,
+        availableBalance: numOrNull(item.availableBalance ?? item.available_balance),
+        status: str(item.status),
+        migrationState: str(item.migrationState ?? item.migration_state, 'staging'),
+        version: numOrNull(item.version) ?? 0,
+        legacyFloatDiagnostic: null,
+      };
+    }),
     activationPending: data.activationPending !== false && data.activation_pending !== false,
   };
 }
@@ -193,18 +213,22 @@ export async function fetchCashierMe(fetchFn: CashierAuthFetch = fetch): Promise
 }
 
 export async function postCashierDeposit(
-  input: { playerPublicId: string; amount: number; idempotencyKey: string; note?: string },
+  input: { playerPublicId: string; amount: number | string; idempotencyKey: string; note?: string; currency?: string },
   fetchFn: CashierAuthFetch = fetch,
 ): Promise<Record<string, unknown>> {
+  const currency = (input.currency ?? 'TMT').trim().toUpperCase();
+  const display = currency === 'TMTM' ? 'TMT' : currency;
+  const useCurrencyApi = display && display !== 'TMT';
   const res = await fetchFn(CASHIER_DEPOSITS_PATH, {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       playerPublicId: input.playerPublicId,
-      amount: input.amount,
+      amount: useCurrencyApi ? String(input.amount) : input.amount,
       idempotencyKey: input.idempotencyKey,
       note: input.note ?? null,
+      ...(useCurrencyApi ? { currency: display } : {}),
     }),
   });
   const raw = await res.json().catch(() => ({}));
@@ -212,7 +236,14 @@ export async function postCashierDeposit(
   if (!res.ok || rec.ok === false) {
     const code = str(rec.error, 'DEPOSIT_UNAVAILABLE');
     if (code === 'PLAYER_CURRENCY_WALLET_REQUIRED') {
-      throw new Error('У игрока нет кошелька TMT. Игрок должен добавить эту валюту в своём аккаунте.');
+      throw new Error(
+        display === 'TMT'
+          ? 'У игрока нет кошелька TMT. Игрок должен добавить эту валюту в своём аккаунте.'
+          : `У игрока нет кошелька ${display}. Игрок должен добавить эту валюту в своём аккаунте.`,
+      );
+    }
+    if (code === 'CASHIER_CURRENCY_ACCOUNT_REQUIRED') {
+      throw new Error(`Нет кассы ${display}.`);
     }
     if (code === 'CASHIER_CURRENCY_DISABLED') {
       throw new Error('Касса для этой валюты отключена.');
@@ -279,7 +310,12 @@ export async function postCashierPayoutConfirm(
 
 export function isCashierFinanceEnabled(finance: CashierFinanceOverview | null | undefined): boolean {
   if (!finance) return false;
-  return finance.activationPending === false
-    && String(finance.operational.migrationState).toLowerCase() === 'active'
-    && String(finance.operational.status).toLowerCase() === 'active';
+  if (finance.activationPending === false) {
+    const rows = finance.accounts.length ? finance.accounts : [finance.operational];
+    return rows.some((row) => (
+      String(row.migrationState).toLowerCase() === 'active'
+      && String(row.status).toLowerCase() === 'active'
+    ));
+  }
+  return false;
 }

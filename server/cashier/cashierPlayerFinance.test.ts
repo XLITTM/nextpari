@@ -226,6 +226,8 @@ describe('cashier player finance BFF', () => {
     assert.equal(lookup.result.status, 200);
     assert.equal(lookup.rpc.calls[0]?.name, 'cashier_lookup_player_payout');
     assert.deepEqual(lookup.rpc.calls[0]?.args, { p_code: PAYOUT_CODE });
+    assert.equal((lookup.result.body.data as { currency: string }).currency, 'TMT');
+    assert.equal(JSON.stringify(lookup.result.body).includes('TMTM'), false);
 
     const confirm = await call('POST', `/api/cashier/payouts/${PAYOUT_CODE}/confirm`, {
       body: { idempotencyKey: 'pay-1', cashierId: CASHIER_ID, amount: 999 },
@@ -295,6 +297,7 @@ describe('cashier player finance BFF', () => {
     assert.equal(httpSrc.includes('createServiceRoleClient'), false);
     assert.deepEqual([...CANONICAL_CASHIER_MONEY_RPCS], [
       'cashier_deposit_player',
+      'cashier_deposit_player_currency',
       'cashier_lookup_player_payout',
       'cashier_confirm_player_payout',
       'cashier_reverse_player_deposit',

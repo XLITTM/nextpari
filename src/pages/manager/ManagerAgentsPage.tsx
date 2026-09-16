@@ -7,6 +7,7 @@ import {
   fetchManagerTransfers,
   formatTmtmCompact,
   postManagerCashier,
+  postManagerAddCashierCurrency,
   postManagerCollect,
   postManagerFund,
   setManagerCashierFrozen,
@@ -34,6 +35,7 @@ export function ManagerAgentsPage({
   const [creating, setCreating] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [money, setMoney] = useState<{ cashierId: string; kind: 'fund' | 'collect' } | null>(null);
+  const [addCurrencyFor, setAddCurrencyFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +61,12 @@ export function ManagerAgentsPage({
   }, [load]);
 
   const opById = new Map((finance?.cashiers ?? []).map((row) => [row.cashierId, row]));
+  const currenciesByCashier = new Map<string, ManagerOperationalCashier[]>();
+  for (const row of finance?.cashiersByCurrency ?? []) {
+    const list = currenciesByCashier.get(row.cashierId) ?? [];
+    list.push(row);
+    currenciesByCashier.set(row.cashierId, list);
+  }
   const managerMoneyOk = isOperationalAccountActive(finance?.manager);
   const openRow = cashiers.find((row) => row.id === openId) ?? null;
   const openOp = openId ? opById.get(openId) : undefined;
@@ -132,6 +140,7 @@ export function ManagerAgentsPage({
           <tbody>
             {cashiers.map((row) => {
               const op = opById.get(row.id);
+              const currencyRows = currenciesByCashier.get(row.id) ?? (op ? [op] : []);
               const moneyOk = managerMoneyOk && isOperationalAccountActive(op);
               return (
                 <tr key={row.id || row.login} className="border-t border-slate-100">
@@ -144,7 +153,9 @@ export function ManagerAgentsPage({
                   <td className="px-4 py-3 text-gray-700">{row.city || '—'}</td>
                   <td className="px-4 py-3 text-right">
                     <p className="font-extrabold tabular-nums">
-                      {op ? formatTmtmCompact(op.availableBalance) : 'недоступен'}
+                      {currencyRows.length
+                        ? currencyRows.map((item) => `${Number(item.availableBalance).toLocaleString('ru-RU')} ${item.currency || 'TMT'}`).join(' · ')
+                        : 'недоступен'}
                     </p>
                     <p className="text-[10px] text-gray-400">
                       {op ? `${op.status} · ${op.migrationState}` : 'нет operational account'}
@@ -183,6 +194,17 @@ export function ManagerAgentsPage({
                         }`}
                       >
                         Снять / Инкассация
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!managerMoneyOk}
+                        title="Добавить валютный счёт кассиру"
+                        onClick={() => setAddCurrencyFor(row.id)}
+                        className={`text-xs font-bold px-2.5 py-1.5 rounded-lg ${
+                          managerMoneyOk ? 'bg-slate-100 text-ink-900' : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                        }`}
+                      >
+                        Добавить валюту
                       </button>
                       <button
                         type="button"
@@ -225,10 +247,23 @@ export function ManagerAgentsPage({
           </tbody>
         </table>
       </div>
+      {addCurrencyFor && (
+        <AddCashierCurrencyDialog
+          cashierId={addCurrencyFor}
+          currencies={(finance?.managerAccounts ?? []).map((row) => row.currency).filter(Boolean)}
+          onClose={() => setAddCurrencyFor(null)}
+          onDone={async () => {
+            setAddCurrencyFor(null);
+            onNotice('Валютный счёт кассира создан');
+            await load();
+          }}
+        />
+      )}
       {money && (
         <MoneyDialog
           kind={money.kind}
           cashierId={money.cashierId}
+          currencies={(finance?.managerAccounts ?? []).map((row) => row.currency).filter(Boolean)}
           onClose={() => setMoney(null)}
           onDone={async () => {
             setMoney(null);
@@ -405,18 +440,75 @@ function CreateCashierForm({
   );
 }
 
+function AddCashierCurrencyDialog({
+  cashierId,
+  currencies,
+  onClose,
+  onDone,
+}: {
+  cashierId: string;
+  currencies: string[];
+  onClose: () => void;
+  onDone: () => Promise<void>;
+}) {
+  const [currency, setCurrency] = useState(currencies[0] || 'TMT');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      await postManagerAddCashierCurrency({ cashierId, currency });
+      await onDone();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка создания счёта');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20 px-4">
+      <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
+        <h3 className="font-extrabold text-ink-900 mb-3">Добавить валютный счёт кассиру</h3>
+        <p className="text-xs text-gray-500 mb-3">Только валюты, которые уже есть у менеджера. Счёт начнётся с 0.</p>
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+          className="w-full bg-gray-100 rounded-xl px-3 py-2 text-sm font-semibold outline-none mb-3"
+        >
+          {(currencies.length ? currencies : ['TMT']).map((code) => (
+            <option key={code} value={code}>{code}</option>
+          ))}
+        </select>
+        {error && <p className="text-xs font-bold text-red-600 mb-3">{error}</p>}
+        <div className="flex gap-2 justify-end">
+          <button type="button" onClick={onClose} className="text-sm font-semibold px-3 py-2 rounded-xl border">Отмена</button>
+          <button type="button" disabled={busy} onClick={() => void submit()} className="text-sm font-bold px-3 py-2 rounded-xl bg-brand-600 text-white disabled:opacity-50">
+            {busy ? 'Создание…' : 'Создать счёт'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MoneyDialog({
   kind,
   cashierId,
+  currencies,
   onClose,
   onDone,
 }: {
   kind: 'fund' | 'collect';
   cashierId: string;
+  currencies: string[];
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
   const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState(currencies[0] || 'TMT');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [idempotency, setIdempotency] = useState<{ key: string; fingerprint: string } | null>(null);
@@ -427,16 +519,16 @@ function MoneyDialog({
       setError('Сумма должна быть больше 0');
       return;
     }
-    const fingerprint = `${kind}:${cashierId}:${n}`;
+    const fingerprint = `${kind}:${cashierId}:${currency}:${n}`;
     const slot = retainIdempotencyKey(idempotency, fingerprint);
     setIdempotency(slot);
     setBusy(true);
     setError('');
     try {
       if (kind === 'fund') {
-        await postManagerFund({ cashierId, amount: n, idempotencyKey: slot.key });
+        await postManagerFund({ cashierId, amount: currency === 'TMT' ? n : amount, idempotencyKey: slot.key, currency });
       } else {
-        await postManagerCollect({ cashierId, amount: n, idempotencyKey: slot.key });
+        await postManagerCollect({ cashierId, amount: currency === 'TMT' ? n : amount, idempotencyKey: slot.key, currency });
       }
       await onDone();
     } catch (err) {
@@ -451,13 +543,22 @@ function MoneyDialog({
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20 px-4">
       <div className="bg-white rounded-2xl p-5 w-full max-w-sm">
         <h3 className="font-extrabold text-ink-900 mb-3">{kind === 'fund' ? 'Пополнить кассу' : 'Снять / Инкассация'}</h3>
+        <select
+          value={currency}
+          onChange={(e) => setCurrency(e.target.value)}
+          className="w-full bg-gray-100 rounded-xl px-3 py-2 text-sm font-semibold outline-none mb-3"
+        >
+          {(currencies.length ? currencies : ['TMT']).map((code) => (
+            <option key={code} value={code}>{code}</option>
+          ))}
+        </select>
         <input
           type="number"
           min={0}
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           className="w-full bg-gray-100 rounded-xl px-3 py-2 text-sm font-semibold outline-none mb-3"
-          placeholder="Сумма TMTM"
+          placeholder={`Сумма ${currency}`}
         />
         {error && <p className="text-xs font-bold text-red-600 mb-3">{error}</p>}
         <div className="flex gap-2 justify-end">

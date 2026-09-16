@@ -73,7 +73,7 @@ describe('cashier browser finance client', () => {
     assert.match(services, /postCashierDeposit/);
     assert.match(services, /postCashierPayoutConfirm/);
     assert.match(services, /PLAYER_CURRENCY_WALLET_REQUIRED/);
-    assert.match(services, /нет кошелька TMT/);
+    assert.match(services, /нет кошелька/);
   });
 
   it('calls same-origin finance and transfers only', async () => {

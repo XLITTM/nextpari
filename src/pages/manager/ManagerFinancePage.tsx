@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ComponentType } from 'react';
-import { BarChart3, Building2, Dices, Gamepad2, Landmark, TrendingUp, Trophy, Wallet } from 'lucide-react';
+import { BarChart3, Dices, Gamepad2, Landmark, TrendingUp, Trophy, Wallet } from 'lucide-react';
 import {
   fetchManagerDashboard,
   fetchManagerFinance,
@@ -38,15 +38,19 @@ export function ManagerFinancePage() {
     void load();
   }, [load]);
 
+  const managerAccounts = finance?.managerAccounts?.length
+    ? finance.managerAccounts
+    : finance?.manager
+      ? [finance.manager]
+      : [];
   const cards = [
     {
-      label: 'Операционный баланс',
-      valueLabel: finance?.manager
-        ? formatTmtmCompact(finance.manager.availableBalance)
+      label: 'Мои счета',
+      valueLabel: managerAccounts.length
+        ? managerAccounts.map((row) => `${row.currency} ${Number(row.availableBalance).toLocaleString('ru-RU')}`).join(' · ')
         : 'недоступен',
       icon: Wallet,
     },
-    { label: 'Остаток во всех кассах', valueLabel: formatTmtmCompact(finance?.cashiers.reduce((sum, row) => sum + row.availableBalance, 0) ?? 0), icon: Building2 },
     { label: 'Депозиты Мобкеш', valueLabel: formatTmtmCompact(kpis?.deposits ?? 0), icon: Landmark },
     { label: 'Выплаты наличными', valueLabel: formatTmtmCompact(kpis?.payouts ?? 0), icon: TrendingUp },
     { label: 'Оборот кассовой сети', valueLabel: formatTmtmCompact(kpis?.turnover ?? 0), icon: BarChart3 },
@@ -100,7 +104,7 @@ export function ManagerFinancePage() {
 
       <h3 className="text-lg font-semibold mt-8 mb-4">Канонические кассы сети</h3>
       <p className="text-xs text-gray-500 -mt-2 mb-4">
-        available_balance — канонический остаток. legacy float только как diagnostic.
+        Остатки по валютам разделены. legacy float только как TMT diagnostic.
       </p>
       <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden mb-8">
         <table className="w-full text-sm">
@@ -113,17 +117,19 @@ export function ManagerFinancePage() {
             </tr>
           </thead>
           <tbody>
-            {(finance?.cashiers ?? []).map((row) => {
+            {(finance?.cashiersByCurrency?.length ? finance.cashiersByCurrency : finance?.cashiers ?? []).map((row) => {
               const moneyOk = managerMoneyOk && isOperationalAccountActive(row);
               return (
-              <tr key={row.cashierId} className="border-t border-slate-100">
+              <tr key={`${row.cashierId}:${row.currency || 'TMT'}`} className="border-t border-slate-100">
                 <td className="px-4 py-3">
                   <p className="font-bold">{row.fullName || row.login}</p>
-                  <p className="text-xs text-gray-500">{row.login}</p>
+                  <p className="text-xs text-gray-500">{row.login} · {row.currency || 'TMT'}</p>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <p className="font-extrabold tabular-nums">{formatTmtmCompact(row.availableBalance)}</p>
-                  <p className="text-[10px] text-gray-400">legacy float (diagnostic): {formatTmtmCompact(row.legacyFloatBalance)}</p>
+                  <p className="font-extrabold tabular-nums">{Number(row.availableBalance).toLocaleString('ru-RU')} {row.currency || 'TMT'}</p>
+                  {(!row.currency || row.currency === 'TMT') && (
+                    <p className="text-[10px] text-gray-400">legacy float (diagnostic): {formatTmtmCompact(row.legacyFloatBalance)}</p>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-xs font-semibold text-amber-700">{row.status} · {row.migrationState}</td>
                 <td className="px-4 py-3 text-right">

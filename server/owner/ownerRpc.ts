@@ -29,6 +29,8 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE'
     || code === 'INSUFFICIENT_OPERATIONAL_BALANCE'
     || code === 'IDEMPOTENCY_KEY_CONFLICT'
+    || code === 'CURRENCY_MISMATCH'
+    || code === 'OPERATIONAL_CURRENCY_ACCOUNT_ALREADY_EXISTS'
     || code === 'LOGIN_TAKEN'
     || code === 'STAFF_AUTH_ALREADY_BOUND'
     || code === 'PLAYER_ACCOUNT_CANNOT_BECOME_STAFF'

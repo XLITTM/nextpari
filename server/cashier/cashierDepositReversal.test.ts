@@ -142,6 +142,8 @@ describe('cashier deposit reversal HTTP', () => {
     assert.equal(data.reversalTransferId, REVERSAL);
     assert.equal(data.amount, 100);
     assert.equal(data.playerPublicId, '110790');
+    assert.equal(data.currency, 'TMT');
+    assert.equal(JSON.stringify(result.body).includes('TMTM'), false);
     assert.equal(JSON.stringify(result.body).includes('wallet-uuid-secret'), false);
     assert.equal(Object.prototype.hasOwnProperty.call(rpc.calls[0]?.args ?? {}, 'p_amount'), false);
   });
@@ -297,3 +299,35 @@ describe('cashier deposit reversal SQL/UI contract (not executed)', () => {
     assert.equal(httpSrc.includes("rpc.invoke('cashier_deposit_to_player')"), false);
   });
 });
+
+describe('phase 058 multi-currency cashier deposit reversal', () => {
+  const sql058 = readFileSync(
+    join(root, 'supabase/migrations/20260916163208_multi_currency_operational_treasury_058.sql'),
+    'utf8',
+  );
+  const start = sql058.indexOf('CREATE OR REPLACE FUNCTION public.cashier_reverse_player_deposit');
+  const end = sql058.indexOf('$fn$;', start);
+  const reverse = sql058.slice(start, end + 5);
+
+  it('reverses RUB into the same cashier RUB account without touching TMT', () => {
+    assert.equal(start >= 0, true);
+    const loadAt = reverse.indexOf('FOR UPDATE');
+    const resolveAt = reverse.indexOf('resolve_cashier_currency_account');
+    const fromMatchAt = reverse.indexOf('from_account_id IS DISTINCT FROM v_cashier_account');
+    assert.equal(loadAt >= 0 && resolveAt > loadAt && fromMatchAt > resolveAt, true);
+    assert.match(reverse, /v_orig\.currency/);
+    assert.match(reverse, /v_cashier_account,/);
+    assert.equal(reverse.includes('cashier_resolve_own_operational_account'), false);
+    assert.equal(/FX|exchange_rate|CONVERT/i.test(reverse), false);
+  });
+
+  it('keeps legacy TMT reversal identity and rejects cross-cashier / cross-currency', () => {
+    assert.match(reverse, /'cashier-deposit-reversal:' \|\| v_ctx\.auth_user_id::TEXT \|\| ':' \|\| v_key/);
+    assert.equal(reverse.includes("':' || v_storage || ':'"), false);
+    assert.match(reverse, /actor_user_id IS DISTINCT FROM v_ctx\.auth_user_id/);
+    assert.match(reverse, /CASHIER_REVERSAL_NOT_ALLOWED/);
+    assert.equal(reverse.includes('player_wallet_preferences'), false);
+    assert.match(reverse, /'currency', v_display/);
+  });
+});
+
