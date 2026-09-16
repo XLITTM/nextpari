@@ -811,7 +811,7 @@ function parseSportsBet(raw: unknown): OwnerSecuritySportsBet {
     stake: num(item.stake),
     acceptedOdds: num(item.accepted_odds ?? item.acceptedOdds),
     potentialPayout: num(item.potential_payout ?? item.potentialPayout),
-    currency: str(item.currency, 'TMTM'),
+    currency: displayCode(item.currency, 'TMT'),
     status: str(item.status),
     statusBucket: str(item.status_bucket ?? item.statusBucket),
     settlementState: str(item.settlement_state ?? item.settlementState),
@@ -1942,5 +1942,86 @@ export async function saveOwnerUsdtRate(input: {
       enabled: input.enabled,
     }),
   });
+}
+
+export interface OwnerCurrencyLimitRow {
+  currency: string;
+  displayNameRu: string;
+  symbol: string;
+  displayScale: number;
+  limitsConfigured: boolean;
+  minStake: string | null;
+  maxStake: string | null;
+  maxPayout: string | null;
+  minDeposit: string | null;
+  minWithdrawal: string | null;
+  sportsEnabled: boolean;
+  ownedGamesEnabled: boolean;
+}
+
+function parseCurrencyLimitRow(raw: unknown): OwnerCurrencyLimitRow {
+  const row = asRecord(raw);
+  const money = (value: unknown): string | null => {
+    if (value == null || value === '') return null;
+    return String(value);
+  };
+  return {
+    currency: displayCode(row.currency, 'TMT'),
+    displayNameRu: str(row.displayNameRu ?? row.display_name_ru),
+    symbol: str(row.symbol),
+    displayScale: num(row.displayScale ?? row.display_scale),
+    limitsConfigured: row.limitsConfigured === true || row.limits_configured === true,
+    minStake: money(row.minStake ?? row.min_stake),
+    maxStake: money(row.maxStake ?? row.max_stake),
+    maxPayout: money(row.maxPayout ?? row.max_payout),
+    minDeposit: money(row.minDeposit ?? row.min_deposit),
+    minWithdrawal: money(row.minWithdrawal ?? row.min_withdrawal),
+    sportsEnabled: row.sportsEnabled === true || row.sports_enabled === true,
+    ownedGamesEnabled: row.ownedGamesEnabled === true || row.owned_games_enabled === true,
+  };
+}
+
+export async function fetchOwnerCurrencyLimits(): Promise<OwnerCurrencyLimitRow[]> {
+  const data = await ownerData('/api/owner/currency-limits');
+  const rows = Array.isArray(data) ? data : asRows(asRecord(data));
+  return rows.map(parseCurrencyLimitRow);
+}
+
+export async function saveOwnerCurrencyLimits(input: {
+  currency: string;
+  minStake: string;
+  maxStake: string;
+  maxPayout: string;
+  minDeposit: string;
+  minWithdrawal: string;
+}): Promise<OwnerCurrencyLimitRow> {
+  const data = await ownerData('/api/owner/currency-limits', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      currency: input.currency,
+      minStake: input.minStake,
+      maxStake: input.maxStake,
+      maxPayout: input.maxPayout,
+      minDeposit: input.minDeposit,
+      minWithdrawal: input.minWithdrawal,
+    }),
+  });
+  return parseCurrencyLimitRow(data);
+}
+
+export async function setOwnerCurrencySportsEnabled(input: {
+  currency: string;
+  enabled: boolean;
+}): Promise<OwnerCurrencyLimitRow> {
+  const data = await ownerData('/api/owner/currency-limits/sports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      currency: input.currency,
+      enabled: input.enabled,
+    }),
+  });
+  return parseCurrencyLimitRow(data);
 }
 

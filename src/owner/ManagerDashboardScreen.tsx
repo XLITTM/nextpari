@@ -13,6 +13,7 @@ import { OwnerWinPatternPanel } from './OwnerWinPatternPanel';
 import { PlayersPanel } from './PlayersPanel';
 import { OwnerMoneyDialog, OwnerTreasuryPanel, ownerTreasuryIsActive, type OwnerMoneyDialogState } from './OwnerMoneyControls';
 import { OwnerUsdtRatesPanel } from './OwnerUsdtRatesPanel';
+import { OwnerCurrencyLimitsPanel } from './OwnerCurrencyLimitsPanel';
 import { GameRtpReportPanel } from './GameRtpReport';
 import { ProviderSettlementsPanel } from './ProviderSettlementsPanel';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
@@ -289,6 +290,7 @@ function FinancePanel() {
   return (
     <section>
       <OwnerTreasuryPanel onAfterMoney={load} />
+      <OwnerCurrencyLimitsPanel />
       <OwnerUsdtRatesPanel />
       <HeaderRow
         title="Финансовый дашборд"
@@ -1650,9 +1652,10 @@ function sportsStatusLabel(status: string, settlement: string, bucket: string): 
   return parts.length ? parts.join(' / ') : '—';
 }
 
-function sportsMoney(value: number | null | undefined, currency = 'TMTM'): string {
+function sportsMoney(value: number | null | undefined, currency = 'TMT'): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `${formatTmtmCompact(value)} ${currency}`;
+  const code = currency === 'TMTM' ? 'TMT' : currency;
+  return `${formatTmtmCompact(value)} ${code}`;
 }
 
 function PlayerSportsInvestigation({ playerId }: { playerId: string }) {

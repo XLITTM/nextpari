@@ -1,3 +1,5 @@
+import { displayPlayerCurrency } from '../lib/playerCurrency';
+
 export interface SecurityFlag {
   id: string;
   playerPublicId: string;
@@ -272,7 +274,7 @@ function parseSportsBet(raw: unknown): SecuritySportsBet {
     stake: num(item.stake),
     acceptedOdds: num(item.accepted_odds ?? item.acceptedOdds),
     potentialPayout: num(item.potential_payout ?? item.potentialPayout),
-    currency: str(item.currency, 'TMTM'),
+    currency: displayPlayerCurrency(str(item.currency, 'TMT')),
     status: str(item.status),
     statusBucket: str(item.status_bucket ?? item.statusBucket),
     settlementState: str(item.settlement_state ?? item.settlementState),
@@ -609,7 +611,7 @@ export function formatSecurityDateTime(iso: string): string {
   return `${dd}.${mm}.${yyyy}, ${hh}:${min}`;
 }
 
-export function formatSecurityMoney(value: number | null | undefined, currency = 'TMTM'): string {
+export function formatSecurityMoney(value: number | null | undefined, currency = 'TMT'): string {
   if (value == null || !Number.isFinite(value)) return '—';
-  return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${currency}`;
+  return `${value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ${displayPlayerCurrency(currency)}`;
 }

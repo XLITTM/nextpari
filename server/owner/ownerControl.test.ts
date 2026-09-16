@@ -279,6 +279,10 @@ describe('owner control center same-origin BFF', () => {
       await denied(role, '/api/owner/players/110790/personal-data');
       await denied(role, '/api/owner/usdt-rates');
       await denied(role, '/api/owner/usdt-rates', 'POST');
+      await denied(role, '/api/owner/currency-limits');
+      await denied(role, '/api/owner/currency-limits', 'POST');
+      await denied(role, '/api/owner/currency-limits/sports', 'POST');
+      await denied(role, '/api/owner/currency-limits/owned-games', 'POST');
       await denied(role, '/api/owner/players/110790/sports');
       await denied(role, '/api/owner/players/110790/sports/summary');
       await denied(role, '/api/owner/players/110790/sports/11111111-2222-4111-8111-222222222222');
@@ -1116,6 +1120,86 @@ describe('owner treasury and direct funding controls', () => {
     assert.equal(result.status, 400);
     assert.equal(result.body.error, 'USDT_RATE_INVALID');
     assert.equal(rpc.calls.length, 0);
+  });
+
+  it('GET /api/owner/currency-limits maps to owner_currency_limits', async () => {
+    const { result, rpc } = await ownerGet('/api/owner/currency-limits');
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_currency_limits');
+    assert.equal(rpc.calls[0]?.token, ACCESS);
+  });
+
+  it('POST /api/owner/currency-limits maps decimal strings to owner_set_currency_limits', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/currency-limits', {
+      currency: 'USD',
+      minStake: '1.25',
+      maxStake: '100.00',
+      maxPayout: '100000',
+      minDeposit: '10',
+      minWithdrawal: '20',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_set_currency_limits');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_currency: 'USD',
+      p_min_stake: '1.25',
+      p_max_stake: '100.00',
+      p_max_payout: '100000',
+      p_min_deposit: '10',
+      p_min_withdrawal: '20',
+    });
+  });
+
+  it('POST /api/owner/currency-limits rejects JSON numbers and TMTM', async () => {
+    const numeric = await ownerPost('/api/owner/currency-limits', {
+      currency: 'USD',
+      minStake: 1.25,
+      maxStake: '100',
+      maxPayout: '1000',
+      minDeposit: '10',
+      minWithdrawal: '10',
+    });
+    assert.equal(numeric.result.status, 400);
+    assert.equal(numeric.result.body.error, 'AMOUNT_INVALID');
+    assert.equal(numeric.rpc.calls.length, 0);
+
+    const tmtm = await ownerPost('/api/owner/currency-limits', {
+      currency: 'TMTM',
+      minStake: '1',
+      maxStake: '100',
+      maxPayout: '1000',
+      minDeposit: '10',
+      minWithdrawal: '10',
+    });
+    assert.equal(tmtm.result.status, 400);
+    assert.equal(tmtm.result.body.error, 'CURRENCY_UNSUPPORTED');
+    assert.equal(tmtm.rpc.calls.length, 0);
+  });
+
+  it('POST /api/owner/currency-limits/sports maps owner_set_currency_sports_enabled', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/currency-limits/sports', {
+      currency: 'RUB',
+      enabled: true,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_set_currency_sports_enabled');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_currency: 'RUB',
+      p_enabled: true,
+    });
+  });
+
+  it('POST /api/owner/currency-limits/owned-games maps owner_set_currency_owned_games_enabled', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/currency-limits/owned-games', {
+      currency: 'USD',
+      enabled: true,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(rpc.calls[0]?.name, 'owner_set_currency_owned_games_enabled');
+    assert.deepEqual(rpc.calls[0]?.args, {
+      p_currency: 'USD',
+      p_enabled: true,
+    });
   });
 
   it('manager funding maps only owner_fund_manager', async () => {

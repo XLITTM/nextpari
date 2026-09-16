@@ -31,6 +31,11 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     || code === 'IDEMPOTENCY_KEY_CONFLICT'
     || code === 'CURRENCY_MISMATCH'
     || code === 'OPERATIONAL_CURRENCY_ACCOUNT_ALREADY_EXISTS'
+    || code === 'CURRENCY_LIMITS_UNCONFIGURED'
+    || code === 'OWNED_GAMES_CURRENCY_NOT_READY'
+    || code === 'OWNED_GAMES_CURRENCY_DISABLED'
+    || code === 'CURRENCY_DISABLED'
+    || code === 'SPORTS_CURRENCY_DISABLED'
     || code === 'LOGIN_TAKEN'
     || code === 'STAFF_AUTH_ALREADY_BOUND'
     || code === 'PLAYER_ACCOUNT_CANNOT_BECOME_STAFF'
@@ -48,7 +53,11 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
   ) {
     return staffError(code, 409);
   }
-  if (code === 'PERIOD_TOO_LONG' || (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED') || code.endsWith('_UNSUPPORTED')))) {
+  if (
+    code === 'PERIOD_TOO_LONG'
+    || code === 'LIMIT_NOT_POSITIVE'
+    || (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED') || code.endsWith('_UNSUPPORTED')))
+  ) {
     return staffError(code, 400);
   }
   if (code && code.endsWith('_NOT_FOUND')) {
