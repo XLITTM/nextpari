@@ -120,6 +120,27 @@ async function ownerPost(pathname: string, body: unknown) {
   return { result, rpc };
 }
 
+async function ownerGet(
+  pathname: string,
+  invoke?: (name: string, args?: Record<string, unknown>) => unknown,
+) {
+  const calls: Array<{ name: string; args?: Record<string, unknown> }> = [];
+  const result = await handleOwnerControlRequest(
+    { method: 'GET', pathname, cookie: ownerCookie(), cookieSecure: true },
+    {
+      sessionPorts: ownerPorts(),
+      rpcFactory: (): OwnerRpcPort => ({
+        async invoke(name, args) {
+          calls.push({ name, args });
+          if (invoke) return invoke(name, args);
+          return { ok: true, rpc: name };
+        },
+      }),
+    },
+  );
+  return { result, calls };
+}
+
 async function managerPost(pathname: string, body: unknown) {
   const calls: Array<{ name: string; args?: Record<string, unknown> }> = [];
   const result = await handleManagerControlRequest(
@@ -257,9 +278,16 @@ describe('phase 058 multi-currency operational treasury SQL', () => {
 describe('phase 058 HTTP / exact decimal', () => {
   it('maps display currencies through the PHASE 057 mapper', () => {
     assert.equal(parseOperationalDisplayCurrency('tmt'), 'TMT');
-    assert.equal(parseOperationalDisplayCurrency('TMTM'), 'TMT');
+    assert.equal(parseOperationalDisplayCurrency('TMTM'), null);
     assert.equal(parseOperationalDisplayCurrency('RUB'), 'RUB');
+    assert.equal(parseOperationalDisplayCurrency('USD'), 'USD');
+    assert.equal(parseOperationalDisplayCurrency('TRY'), 'TRY');
+    assert.equal(parseOperationalDisplayCurrency('UZS'), 'UZS');
+    assert.equal(parseOperationalDisplayCurrency('KZT'), 'KZT');
     assert.equal(parseOperationalDisplayCurrency('USDT'), null);
+    assert.equal(parseOperationalDisplayCurrency('EUR'), null);
+    assert.equal(parseOperationalDisplayCurrency('ABC'), null);
+    assert.equal(parseOperationalDisplayCurrency(''), null);
   });
 
   it('new currency amounts must be exact decimal strings', () => {
@@ -424,3 +452,221 @@ describe('phase 058 HTTP error mapping', () => {
     assert.equal(result.status, 409);
   });
 });
+
+describe('phase 058 final pre-merge hardening', () => {
+  it('1-6. cashier reverse uses original transfer currency, not TMT-only resolver', () => {
+    const reverse = functionSql('public.cashier_reverse_player_deposit');
+    const deposit = functionSql('public.cashier_deposit_player_currency');
+    assert.match(reverse, /get_current_cashier_context_locked/);
+    assert.match(reverse, /TRANSFER_ID_REQUIRED/);
+    assert.match(reverse, /REASON_REQUIRED/);
+    assert.match(reverse, /owner_require_idempotency_key/);
+    assert.match(reverse, /nextpari:cashier-deposit-reversal:/);
+    assert.match(reverse, /FOR UPDATE/);
+    assert.match(reverse, /transfer_type IS DISTINCT FROM 'CASHIER_TO_PLAYER'/);
+    assert.match(reverse, /actor_user_id IS DISTINCT FROM v_ctx\.auth_user_id/);
+    assert.match(reverse, /player_wallet_id IS NULL/);
+    assert.match(reverse, /resolve_cashier_currency_account\(/);
+    assert.match(reverse, /from_account_id IS DISTINCT FROM v_cashier_account/);
+    assert.match(reverse, /INTERVAL '5 minutes'/);
+    assert.match(reverse, /operation_type = 'CASH_DEPOSIT'/);
+    assert.match(reverse, /cashier_deposit_reversals/);
+    assert.match(reverse, /apply_operational_transfer/);
+    assert.match(reverse, /'CASHIER_DEPOSIT_REVERSAL'/);
+    assert.match(reverse, /v_cashier_account,/);
+    assert.match(reverse, /v_orig\.player_wallet_id/);
+    assert.match(reverse, /'cashier-deposit-reversal:' \|\| v_ctx\.auth_user_id::TEXT \|\| ':' \|\| v_key/);
+    assert.equal(reverse.includes("':' || v_storage || ':'"), false);
+    assert.equal(reverse.includes('cashier_resolve_own_operational_account'), false);
+    assert.equal(reverse.includes('player_wallet_preferences'), false);
+    assert.equal(reverse.includes('active_wallet'), false);
+    assert.equal(/FX|exchange_rate|CONVERT/i.test(reverse), false);
+    assert.match(reverse, /private\.operational_display_currency\(v_orig\.currency\)/);
+    assert.match(reverse, /'currency', v_display/);
+    assert.equal(reverse.includes("'currency', v_orig.currency"), false);
+    assert.match(deposit, /IF v_storage = 'TMTM' THEN\s+RETURN public\.cashier_deposit_player/);
+    assert.match(functionSql('private.cashier_resolve_own_operational_account'), /a\.currency = 'TMTM'/);
+  });
+
+  it('7-9. owner capital-in restores NOTE_REQUIRED and keeps legacy identity', () => {
+    const legacy = functionSql('public.owner_capital_in');
+    const currency = functionSql('public.owner_capital_in_currency');
+    assert.equal(legacy.includes('p_note TEXT DEFAULT NULL'), false);
+    assert.match(legacy, /v_note := private\.owner_trim_reason\(p_note\);\s+IF v_note IS NULL THEN\s+RAISE EXCEPTION 'NOTE_REQUIRED'/);
+    assert.match(legacy, /v_key := private\.owner_require_idempotency_key\(p_idempotency_key\)/);
+    assert.match(legacy, /v_key,/);
+    assert.equal(legacy.includes('owner-capital-in:'), false);
+    assert.match(legacy, /resolve_company_treasury\('TMTM', TRUE\)/);
+    assert.match(legacy, /'CAPITAL_IN'/);
+    assert.equal(/FX|exchange_rate|CONVERT/i.test(legacy), false);
+    assert.match(currency, /IF v_storage = 'TMTM' THEN\s+RETURN public\.owner_capital_in/);
+    assert.match(currency, /RAISE EXCEPTION 'NOTE_REQUIRED'/);
+  });
+
+  it('10-12. public 058 responses expose display TMT, never TMTM or storage_currency', () => {
+    const overview = functionSql('public.owner_treasury_overview');
+    const lookup = functionSql('public.cashier_lookup_player_payout');
+    const reverse = functionSql('public.cashier_reverse_player_deposit');
+    assert.equal(overview.includes("'storage_currency'"), false);
+    assert.equal(overview.includes('storage_currency'), false);
+    assert.match(overview, /'currency', private\.operational_display_currency\(a\.currency\)/);
+    assert.match(lookup, /'currency', private\.operational_display_currency\(v_req\.currency\)/);
+    assert.match(reverse, /'currency', v_display/);
+    for (const name of [
+      'public.owner_capital_in',
+      'public.owner_capital_in_currency',
+      'public.owner_fund_manager',
+      'public.owner_fund_manager_currency',
+      'public.owner_fund_cashier',
+      'public.owner_fund_cashier_currency',
+      'public.manager_operational_overview',
+      'public.manager_fund_cashier_currency',
+      'public.manager_collect_cashier_currency',
+      'public.cashier_operational_overview',
+      'public.cashier_list_operational_transfers',
+      'public.cashier_deposit_player_currency',
+      'public.cashier_confirm_player_payout',
+    ]) {
+      const body = functionSql(name);
+      assert.equal(body.includes("'storage_currency'"), false, name);
+      assert.equal(body.includes("'currency', a.currency"), false, name);
+      assert.equal(body.includes("'currency', v_orig.currency"), false, name);
+      assert.equal(body.includes("'currency', v_req.currency"), false, name);
+      assert.equal(body.includes("'currency', 'TMTM'"), false, name);
+    }
+  });
+
+  it('13-15. new operational inputs are display codes; TMTM is rejected', () => {
+    const requireFn = functionSql('private.require_operational_storage_currency');
+    assert.match(requireFn, /p_display_code TEXT/);
+    assert.match(requireFn, /WHERE c\.code = v_display/);
+    assert.match(requireFn, /v_display = '' OR v_display = 'TMTM'/);
+    assert.match(requireFn, /RAISE EXCEPTION 'CURRENCY_UNSUPPORTED'/);
+    assert.match(requireFn, /RAISE EXCEPTION 'OPERATIONAL_CURRENCY_DISABLED'/);
+    assert.equal(requireFn.includes('wallet_storage_currency'), false);
+    assert.equal(sql058.includes('CREATE OR REPLACE FUNCTION private.wallet_storage_currency'), false);
+  });
+
+  it('16-18. inactive manager cannot receive a new zero currency account', () => {
+    const add = functionSql('public.owner_add_manager_currency');
+    assert.match(add, /IF v_manager\.is_active IS DISTINCT FROM TRUE THEN\s+RAISE EXCEPTION 'MANAGER_NOT_ACTIVE'/);
+    assert.match(add, /insert_zero_operational_account/);
+    assert.match(add, /'available_balance', 0/);
+    const insert = functionSql('private.insert_zero_operational_account');
+    assert.equal(insert.includes('apply_operational_transfer'), false);
+    assert.match(insert, /p_network_id,\s+0,/);
+  });
+
+  it('HTTP capital-in blank note is NOTE_REQUIRED; TMTM input is CURRENCY_UNSUPPORTED', async () => {
+    const blank = await ownerPost('/api/owner/treasury/capital-in', {
+      currency: 'RUB',
+      amount: '100000',
+      idempotencyKey: 'cap-blank',
+      note: '   ',
+    });
+    assert.equal(blank.result.status, 400);
+    assert.equal(blank.result.body.error, 'NOTE_REQUIRED');
+    const missing = await ownerPost('/api/owner/treasury', {
+      amount: 10,
+      idempotencyKey: 'cap-legacy-blank',
+      note: '',
+    });
+    assert.equal(missing.result.status, 400);
+    assert.equal(missing.result.body.error, 'NOTE_REQUIRED');
+    const tmtm = await ownerPost('/api/owner/treasury/capital-in', {
+      currency: 'TMTM',
+      amount: '10.00',
+      idempotencyKey: 'cap-tmtm',
+      note: 'seed',
+    });
+    assert.equal(tmtm.result.status, 400);
+    assert.equal(tmtm.result.body.error, 'CURRENCY_UNSUPPORTED');
+    const tmt = await ownerPost('/api/owner/treasury/capital-in', {
+      currency: 'TMT',
+      amount: '10.50',
+      idempotencyKey: 'legacy-key-1',
+      note: 'tmt',
+    });
+    assert.equal(tmt.rpc.calls[0]?.name, 'owner_capital_in');
+    for (const currency of ['RUB', 'USD', 'TRY', 'UZS', 'KZT']) {
+      const ok = await ownerPost('/api/owner/treasury/capital-in', {
+        currency,
+        amount: '1.00',
+        idempotencyKey: `cap-${currency}`,
+        note: 'seed',
+      });
+      assert.equal(ok.result.status, 200, currency);
+      assert.equal(ok.rpc.calls[0]?.args?.p_currency, currency);
+    }
+    const cashierTmtm = await cashierPost('/api/cashier/deposits', {
+      playerPublicId: PLAYER_PUBLIC,
+      currency: 'TMTM',
+      amount: '5000',
+      idempotencyKey: 'dep-tmtm',
+    });
+    assert.equal(cashierTmtm.result.status, 400);
+    assert.equal(cashierTmtm.result.body.error, 'CURRENCY_UNSUPPORTED');
+  });
+
+  it('treasury overview and payout/reversal HTTP never leak TMTM', async () => {
+    const treasury = await ownerGet('/api/owner/treasury', () => ({
+      treasury: { currency: 'TMTM', available_balance: 0, status: 'active', migration_state: 'active', version: 1 },
+      accounts: [{ currency: 'TMTM', storage_currency: 'TMTM', available_balance: 0 }],
+      by_currency: [{ currency: 'TMTM', treasury_balance: 0 }],
+      recent_transfers: [{ id: 't1', currency: 'TMTM', amount: 1 }],
+    }));
+    const dumped = JSON.stringify(treasury.result.body);
+    assert.equal(dumped.includes('TMTM'), false);
+    assert.equal(dumped.includes('storage_currency'), false);
+    assert.match(dumped, /"currency":"TMT"/);
+
+    const payout = await handleCashierControlRequest(
+      {
+        method: 'GET',
+        pathname: '/api/cashier/payouts/0123456789abcdef',
+        cookie: cashierCookie(),
+        cookieSecure: true,
+      },
+      {
+        sessionPorts: cashierPorts(),
+        rpcFactory: () => ({
+          async invoke() {
+            return { ok: true, player_public_id: PLAYER_PUBLIC, amount: 150, currency: 'TMTM', status: 'pending' };
+          },
+        }),
+      },
+    );
+    assert.equal(payout.status, 200);
+    assert.equal((payout.body.data as { currency: string }).currency, 'TMT');
+    assert.equal(JSON.stringify(payout.body).includes('TMTM'), false);
+
+    const reverse = await handleCashierControlRequest(
+      {
+        method: 'POST',
+        pathname: '/api/cashier/deposits/11111111-1111-4111-8111-111111111111/reverse',
+        cookie: cashierCookie(),
+        cookieSecure: true,
+        body: { idempotencyKey: 'rev-tmt', reason: 'ошибка' },
+      },
+      {
+        sessionPorts: cashierPorts(),
+        rpcFactory: () => ({
+          async invoke() {
+            return {
+              ok: true,
+              original_transfer_id: '11111111-1111-4111-8111-111111111111',
+              reversal_transfer_id: '22222222-2222-4222-8222-222222222222',
+              amount: 10,
+              currency: 'TMTM',
+              player_public_id: PLAYER_PUBLIC,
+            };
+          },
+        }),
+      },
+    );
+    assert.equal(reverse.status, 200);
+    assert.equal((reverse.body.data as { currency: string }).currency, 'TMT');
+    assert.equal(JSON.stringify(reverse.body).includes('TMTM'), false);
+  });
+});
+

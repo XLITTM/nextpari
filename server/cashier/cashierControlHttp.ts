@@ -219,11 +219,19 @@ function mapDepositReverse(raw: unknown): Record<string, unknown> {
     reversalTransferId: str(rec.reversal_transfer_id ?? rec.reversalTransferId),
     playerPublicId: str(rec.player_public_id ?? rec.playerPublicId),
     amount: num(rec.amount),
-    currency: str(rec.currency) || 'TMTM',
+    currency: displayPlayerCurrency(str(rec.currency) || 'TMT'),
     cashierBalanceAfter: num(rec.cashier_balance_after ?? rec.cashierBalanceAfter),
     playerBalanceAfter: num(rec.player_balance_after ?? rec.playerBalanceAfter),
     reversedAt: str(rec.reversed_at ?? rec.reversedAt),
     isDuplicate: rec.is_duplicate === true || rec.isDuplicate === true,
+  };
+}
+
+function mapPayoutPayload(raw: unknown): Record<string, unknown> {
+  const rec = asRecord(raw);
+  return {
+    ...rec,
+    currency: displayPlayerCurrency(str(rec.currency) || 'TMT'),
   };
 }
 
@@ -342,9 +350,9 @@ async function runControl(
       }));
     }
     case 'payoutLookup':
-      return rpc.invoke('cashier_lookup_player_payout', {
+      return mapPayoutPayload(await rpc.invoke('cashier_lookup_player_payout', {
         p_code: requirePayoutCode(action.code),
-      });
+      }));
     case 'payoutConfirm': {
       const confirmed = await rpc.invoke('cashier_confirm_player_payout', {
         p_code: requirePayoutCode(action.code),
@@ -361,7 +369,7 @@ async function runControl(
         const code = String((confirmed as { error?: unknown }).error ?? 'PAYOUT_EXPIRED');
         throw staffError(code, 409);
       }
-      return confirmed;
+      return mapPayoutPayload(confirmed);
     }
     default:
       throw staffError('NOT_FOUND', 404);

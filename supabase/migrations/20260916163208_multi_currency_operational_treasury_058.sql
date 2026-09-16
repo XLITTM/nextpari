@@ -64,7 +64,7 @@ WHERE c.is_active
   );
 
 
-CREATE OR REPLACE FUNCTION private.require_operational_storage_currency(p_code TEXT)
+CREATE OR REPLACE FUNCTION private.require_operational_storage_currency(p_display_code TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
 STABLE
@@ -72,22 +72,30 @@ SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
+    v_display TEXT;
     v_storage TEXT;
-    v_ok BOOLEAN;
+    v_active BOOLEAN;
+    v_enabled BOOLEAN;
 BEGIN
-    v_storage := private.wallet_storage_currency(p_code);
+    v_display := pg_catalog.upper(BTRIM(COALESCE(p_display_code, '')));
+    IF v_display = '' OR v_display = 'TMTM' THEN
+        RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
+    END IF;
+
+    SELECT c.wallet_currency_code, c.is_active, c.operational_enabled
+    INTO v_storage, v_active, v_enabled
+    FROM private.supported_currencies AS c
+    WHERE c.code = v_display
+    LIMIT 1;
+
     IF v_storage IS NULL THEN
         RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
     END IF;
-    SELECT TRUE
-    INTO v_ok
-    FROM private.supported_currencies AS c
-    WHERE c.wallet_currency_code = v_storage
-      AND c.is_active
-      AND c.operational_enabled
-    LIMIT 1;
-    IF v_ok IS DISTINCT FROM TRUE THEN
+    IF v_enabled IS DISTINCT FROM TRUE THEN
         RAISE EXCEPTION 'OPERATIONAL_CURRENCY_DISABLED';
+    END IF;
+    IF v_active IS DISTINCT FROM TRUE THEN
+        RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
     END IF;
     RETURN v_storage;
 END;
@@ -460,7 +468,6 @@ BEGIN
             private.operational_display_currency(a.currency) AS display_currency,
             jsonb_build_object(
                 'currency', private.operational_display_currency(a.currency),
-                'storage_currency', a.currency,
                 'available_balance', a.available_balance,
                 'status', a.status,
                 'migration_state', a.migration_state,
@@ -572,7 +579,7 @@ $fn$;
 CREATE OR REPLACE FUNCTION public.owner_capital_in(
     p_amount NUMERIC,
     p_idempotency_key TEXT,
-    p_note TEXT DEFAULT NULL
+    p_note TEXT
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -592,6 +599,9 @@ BEGIN
 
     v_key := private.owner_require_idempotency_key(p_idempotency_key);
     v_note := private.owner_trim_reason(p_note);
+    IF v_note IS NULL THEN
+        RAISE EXCEPTION 'NOTE_REQUIRED';
+    END IF;
     v_treasury := private.resolve_company_treasury('TMTM', TRUE);
 
     SELECT e.transfer_id, e.is_duplicate, e.from_balance_after, e.to_balance_after, e.player_balance_after
@@ -669,6 +679,9 @@ BEGIN
 
     v_key := private.owner_require_idempotency_key(p_idempotency_key);
     v_note := private.owner_trim_reason(p_note);
+    IF v_note IS NULL THEN
+        RAISE EXCEPTION 'NOTE_REQUIRED';
+    END IF;
     v_engine_key := 'owner-capital-in:' || v_owner::TEXT || ':' || v_storage || ':' || v_key;
     v_treasury := private.resolve_company_treasury(v_storage, TRUE);
 
@@ -1147,6 +1160,9 @@ BEGIN
     FOR UPDATE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'MANAGER_NOT_FOUND';
+    END IF;
+    IF v_manager.is_active IS DISTINCT FROM TRUE THEN
+        RAISE EXCEPTION 'MANAGER_NOT_ACTIVE';
     END IF;
 
     v_id := private.insert_zero_operational_account(
@@ -2246,6 +2262,271 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION public.cashier_lookup_player_payout(
+    p_code TEXT
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_code TEXT;
+    v_req private.cashier_player_payout_requests%ROWTYPE;
+    v_status TEXT;
+BEGIN
+    PERFORM 1 FROM private.get_current_cashier_context() AS c;
+
+    v_code := lower(NULLIF(BTRIM(COALESCE(p_code, '')), ''));
+    IF v_code IS NULL OR v_code !~ '^[0-9a-f]{16}$' THEN
+        RAISE EXCEPTION 'PAYOUT_CODE_INVALID';
+    END IF;
+
+    SELECT r.*
+    INTO v_req
+    FROM private.cashier_player_payout_requests AS r
+    WHERE r.secret_code = v_code
+    ORDER BY CASE WHEN r.status = 'pending' THEN 0 ELSE 1 END, r.created_at DESC
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'PAYOUT_NOT_FOUND';
+    END IF;
+
+    v_status := v_req.status;
+    IF v_status = 'pending' AND v_req.expires_at <= pg_catalog.now() THEN
+        v_status := 'expired';
+    END IF;
+
+    RETURN jsonb_build_object(
+        'ok', true,
+        'player_public_id', v_req.player_public_id,
+        'amount', v_req.amount,
+        'currency', private.operational_display_currency(v_req.currency),
+        'status', v_status,
+        'expires_at', v_req.expires_at
+    );
+END;
+$fn$;
+
+
+CREATE OR REPLACE FUNCTION public.cashier_reverse_player_deposit(
+    p_original_transfer_id UUID,
+    p_idempotency_key TEXT,
+    p_reason TEXT
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_ctx RECORD;
+    v_key TEXT;
+    v_reason TEXT;
+    v_engine_key TEXT;
+    v_orig private.operational_transfers%ROWTYPE;
+    v_existing private.cashier_deposit_reversals%ROWTYPE;
+    v_entry_no BIGINT;
+    v_public_id TEXT;
+    v_result RECORD;
+    v_now TIMESTAMPTZ;
+    v_until TIMESTAMPTZ;
+    v_storage TEXT;
+    v_display TEXT;
+    v_cashier_account UUID;
+BEGIN
+    SELECT
+        c.auth_user_id,
+        c.network_id,
+        c.legacy_cashier_id
+    INTO v_ctx
+    FROM private.get_current_cashier_context_locked() AS c;
+
+    IF p_original_transfer_id IS NULL THEN
+        RAISE EXCEPTION 'TRANSFER_ID_REQUIRED';
+    END IF;
+
+    v_reason := NULLIF(BTRIM(COALESCE(p_reason, '')), '');
+    IF v_reason IS NULL THEN
+        RAISE EXCEPTION 'REASON_REQUIRED';
+    END IF;
+    IF char_length(v_reason) > 500 THEN
+        RAISE EXCEPTION 'REASON_TOO_LONG';
+    END IF;
+
+    v_key := private.owner_require_idempotency_key(p_idempotency_key);
+    v_engine_key := 'cashier-deposit-reversal:' || v_ctx.auth_user_id::TEXT || ':' || v_key;
+
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(
+            'nextpari:cashier-deposit-reversal:' || p_original_transfer_id::TEXT,
+            0
+        )
+    );
+
+    SELECT t.*
+    INTO v_orig
+    FROM private.operational_transfers AS t
+    WHERE t.id = p_original_transfer_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'TRANSFER_NOT_FOUND';
+    END IF;
+
+    IF v_orig.transfer_type IS DISTINCT FROM 'CASHIER_TO_PLAYER'
+       OR v_orig.actor_user_id IS DISTINCT FROM v_ctx.auth_user_id
+       OR v_orig.player_wallet_id IS NULL THEN
+        RAISE EXCEPTION 'CASHIER_REVERSAL_NOT_ALLOWED';
+    END IF;
+
+    v_storage := CASE
+        WHEN pg_catalog.upper(BTRIM(COALESCE(v_orig.currency, ''))) IN ('TMT', 'TMTM') THEN 'TMTM'
+        ELSE v_orig.currency
+    END;
+    v_display := private.operational_display_currency(v_orig.currency);
+
+    v_cashier_account := private.resolve_cashier_currency_account(
+        v_ctx.legacy_cashier_id,
+        v_ctx.network_id,
+        v_storage,
+        TRUE
+    );
+
+    IF v_orig.from_account_id IS DISTINCT FROM v_cashier_account THEN
+        RAISE EXCEPTION 'CASHIER_REVERSAL_NOT_ALLOWED';
+    END IF;
+
+    PERFORM private.cashier_require_own_ops_active(v_cashier_account);
+
+    SELECT r.*
+    INTO v_existing
+    FROM private.cashier_deposit_reversals AS r
+    WHERE r.original_transfer_id = v_orig.id
+    FOR UPDATE;
+
+    v_now := pg_catalog.now();
+    v_until := v_orig.created_at + INTERVAL '5 minutes';
+
+    IF FOUND THEN
+        IF v_existing.request_idempotency_key IS DISTINCT FROM v_key THEN
+            RAISE EXCEPTION 'CASHIER_DEPOSIT_ALREADY_REVERSED';
+        END IF;
+    ELSE
+        IF v_now > v_until THEN
+            RAISE EXCEPTION 'CASHIER_REVERSAL_WINDOW_EXPIRED';
+        END IF;
+    END IF;
+
+    BEGIN
+        SELECT l.entry_no
+        INTO STRICT v_entry_no
+        FROM private.wallet_ledger AS l
+        WHERE l.wallet_id = v_orig.player_wallet_id
+          AND l.reference_type = 'operational_transfer'
+          AND l.reference_id = v_orig.id::TEXT
+          AND l.operation_type = 'CASH_DEPOSIT';
+    EXCEPTION
+        WHEN no_data_found OR too_many_rows THEN
+            RAISE EXCEPTION 'CASHIER_REVERSAL_DEPOSIT_ENTRY_NOT_FOUND';
+    END;
+
+    v_public_id := NULLIF(BTRIM(COALESCE(v_orig.metadata->>'player_public_id', '')), '');
+    IF v_public_id IS NULL THEN
+        SELECT COALESCE(w.public_id, p.public_id)
+        INTO v_public_id
+        FROM private.wallet_accounts AS a
+        LEFT JOIN public.wallets AS w ON w.id = a.wallet_id
+        LEFT JOIN public.profiles AS p ON p.wallet_id = a.wallet_id
+        WHERE a.wallet_id = v_orig.player_wallet_id;
+    END IF;
+
+    SELECT e.transfer_id, e.is_duplicate, e.from_balance_after, e.to_balance_after, e.player_balance_after
+    INTO v_result
+    FROM private.apply_operational_transfer(
+        'CASHIER_DEPOSIT_REVERSAL',
+        v_orig.amount,
+        v_orig.currency,
+        v_engine_key,
+        NULL,
+        v_cashier_account,
+        v_orig.player_wallet_id,
+        v_ctx.auth_user_id,
+        'cashier',
+        jsonb_build_object(
+            'original_transfer_id', v_orig.id,
+            'original_deposit_entry_no', v_entry_no::TEXT,
+            'player_public_id', v_public_id,
+            'reason', v_reason,
+            'display_currency', v_display
+        )
+    ) AS e;
+
+    INSERT INTO private.cashier_deposit_reversals (
+        original_transfer_id,
+        reversal_transfer_id,
+        cashier_auth_user_id,
+        request_idempotency_key
+    )
+    VALUES (
+        v_orig.id,
+        v_result.transfer_id,
+        v_ctx.auth_user_id,
+        v_key
+    )
+    ON CONFLICT (original_transfer_id) DO NOTHING;
+
+    SELECT r.*
+    INTO v_existing
+    FROM private.cashier_deposit_reversals AS r
+    WHERE r.original_transfer_id = v_orig.id;
+
+    IF v_existing.reversal_transfer_id IS DISTINCT FROM v_result.transfer_id THEN
+        RAISE EXCEPTION 'CASHIER_DEPOSIT_ALREADY_REVERSED';
+    END IF;
+
+    PERFORM private.cashier_revalidate_legacy_cashier(
+        v_ctx.legacy_cashier_id,
+        v_ctx.network_id
+    );
+
+    IF v_result.is_duplicate IS NOT TRUE THEN
+        PERFORM private.append_staff_audit(
+            'CASHIER_REVERSED_PLAYER_DEPOSIT',
+            'player',
+            COALESCE(v_public_id, v_orig.id::TEXT),
+            'cashier_self',
+            jsonb_build_object(
+                'original_transfer_id', v_orig.id,
+                'reversal_transfer_id', v_result.transfer_id,
+                'player_public_id', v_public_id,
+                'amount', v_orig.amount,
+                'currency', v_display,
+                'reason', v_reason,
+                'original_created_at', v_orig.created_at,
+                'reversed_at', pg_catalog.now()
+            )
+        );
+    END IF;
+
+    RETURN jsonb_build_object(
+        'ok', true,
+        'original_transfer_id', v_orig.id,
+        'reversal_transfer_id', v_result.transfer_id,
+        'player_public_id', v_public_id,
+        'amount', v_orig.amount,
+        'currency', v_display,
+        'cashier_balance_after', v_result.to_balance_after,
+        'player_balance_after', v_result.player_balance_after,
+        'reversed_at', pg_catalog.now(),
+        'is_duplicate', v_result.is_duplicate,
+        'reversible_until', v_until
+    );
+END;
+$fn$;
+
+
 REVOKE ALL ON FUNCTION private.require_operational_storage_currency(TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.require_operational_storage_currency(TEXT) TO service_role;
 REVOKE ALL ON FUNCTION private.operational_display_currency(TEXT) FROM PUBLIC, anon, authenticated;
@@ -2294,8 +2575,12 @@ REVOKE ALL ON FUNCTION public.cashier_list_operational_transfers(INTEGER, INTEGE
 GRANT EXECUTE ON FUNCTION public.cashier_list_operational_transfers(INTEGER, INTEGER) TO authenticated;
 REVOKE ALL ON FUNCTION public.cashier_deposit_player_currency(TEXT, TEXT, NUMERIC, TEXT, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.cashier_deposit_player_currency(TEXT, TEXT, NUMERIC, TEXT, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.cashier_lookup_player_payout(TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cashier_lookup_player_payout(TEXT) TO authenticated;
 REVOKE ALL ON FUNCTION public.cashier_confirm_player_payout(TEXT, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.cashier_confirm_player_payout(TEXT, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.cashier_reverse_player_deposit(UUID, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.cashier_reverse_player_deposit(UUID, TEXT, TEXT) TO authenticated;
 
 COMMIT;
 

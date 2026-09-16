@@ -18,7 +18,7 @@ import { clearOwnerCookies, requestIsSecure } from '../staff/ownerCookies.js';
 import type { AuthAdminPort, StaffLog } from '../staff/types.js';
 import { createOwnerJwtRpc, type OwnerRpcPort } from './ownerRpc.js';
 import { parseExactPositiveDecimal } from '../player/exactDecimal.js';
-import { parseOperationalDisplayCurrency } from '../player/playerCurrency.js';
+import { displayPlayerCurrency, parseOperationalDisplayCurrency } from '../player/playerCurrency.js';
 import {
   liveAuthAdminPort,
   provisionOwnerManager,
@@ -298,6 +298,21 @@ function stripMoneySecrets(value: unknown): unknown {
   return out;
 }
 
+function displayOpCurrency(value: unknown): string {
+  return displayPlayerCurrency(String(value ?? '').trim() || 'TMT');
+}
+
+function mapPublicCurrencyRow(row: unknown): Record<string, unknown> {
+  const item = asRecord(row);
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(item)) {
+    if (key === 'storage_currency' || key === 'storageCurrency') continue;
+    out[key] = nested;
+  }
+  if ('currency' in out) out.currency = displayOpCurrency(out.currency);
+  return out;
+}
+
 function sanitizeTreasuryOverview(data: unknown): unknown {
   const rec = asRecord(data);
   if (!('treasury' in rec) && !('recent_transfers' in rec) && !('recentTransfers' in rec)) {
@@ -307,7 +322,7 @@ function sanitizeTreasuryOverview(data: unknown): unknown {
   const treasury = Object.keys(treasuryRaw).length === 0
     ? rec.treasury
     : {
-        currency: treasuryRaw.currency,
+        currency: displayOpCurrency(treasuryRaw.currency),
         available_balance: treasuryRaw.available_balance ?? treasuryRaw.availableBalance,
         status: treasuryRaw.status,
         migration_state: treasuryRaw.migration_state ?? treasuryRaw.migrationState,
@@ -319,7 +334,7 @@ function sanitizeTreasuryOverview(data: unknown): unknown {
       id: item.id,
       transfer_no: item.transfer_no ?? item.transferNo,
       transfer_type: item.transfer_type ?? item.transferType,
-      currency: item.currency,
+      currency: displayOpCurrency(item.currency),
       amount: item.amount,
       actor_role: item.actor_role ?? item.actorRole,
       created_at: item.created_at ?? item.createdAt,
@@ -328,8 +343,8 @@ function sanitizeTreasuryOverview(data: unknown): unknown {
   });
   return {
     treasury,
-    accounts: rec.accounts ?? rec.currencies ?? [],
-    by_currency: rec.by_currency ?? rec.byCurrency ?? [],
+    accounts: asRows(rec.accounts ?? rec.currencies).map(mapPublicCurrencyRow),
+    by_currency: asRows(rec.by_currency ?? rec.byCurrency).map(mapPublicCurrencyRow),
     managers: rec.managers,
     cashiers: rec.cashiers,
     recent_transfers: transfers,
@@ -346,7 +361,7 @@ function sanitizeMoneyResult(data: unknown): unknown {
     transfer_id: rec.transfer_id ?? rec.transferId,
     is_duplicate: rec.is_duplicate ?? rec.isDuplicate,
     amount: rec.amount,
-    currency: rec.currency,
+    currency: displayOpCurrency(rec.currency),
     from_balance_after: rec.from_balance_after ?? rec.fromBalanceAfter,
     to_balance_after: rec.to_balance_after ?? rec.toBalanceAfter,
     player_balance_after: rec.player_balance_after ?? rec.playerBalanceAfter,
