@@ -665,6 +665,7 @@ describe('player sports place mode and RPC mapping', () => {
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_BET_IDEMPOTENCY_CONFLICT' }).code, 'SPORTS_BET_IDEMPOTENCY_CONFLICT');
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_STAKE_LIMIT' }).code, 'SPORTS_STAKE_LIMIT');
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_PAYOUT_LIMIT' }).code, 'SPORTS_PAYOUT_LIMIT');
+    assert.equal(mapPlayerGameRpcError({ message: 'CURRENCY_LIMITS_UNCONFIGURED' }).code, 'CURRENCY_LIMITS_UNCONFIGURED');
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_EXPRESS_LEG_LIMIT' }).code, 'SPORTS_EXPRESS_LEG_LIMIT');
     const ambiguous = mapPlayerGameRpcError({ message: 'column reference "v_leg" is ambiguous' });
     assert.equal(ambiguous.code, 'GAME_RPC_FAILED');

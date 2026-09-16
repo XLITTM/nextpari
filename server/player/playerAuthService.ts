@@ -1,6 +1,7 @@
 import { createAnonAuthClient, createUserJwtClient } from '../supabase/admin.js';
 import { loadOwnerAuthEnv } from '../staff/env.js';
 import { extractErrorCode, rpcMessage, staffError, StaffOnboardingError } from '../staff/errors.js';
+import { displayPlayerCurrency, normalizeRegistrationCurrency } from './playerCurrency.js';
 import {
   clearPlayerCookies,
   readPlayerCookies,
@@ -86,7 +87,7 @@ export interface PlayerAuthGatewayPorts {
   generateOneClickPassword?: () => string;
   refreshSession: (refreshToken: string) => Promise<PlayerAuthTokens>;
   getAuthUser: (accessToken: string) => Promise<PlayerAuthUser>;
-  ensurePlayerAccount: (accessToken: string) => Promise<PlayerAccountProvision>;
+  ensurePlayerAccount: (accessToken: string, displayCurrency?: string | null) => Promise<PlayerAccountProvision>;
   loadOwnWallet: (accessToken: string, walletId: string) => Promise<PlayerOwnWallet>;
   savePlayerProfile: (
     accessToken: string,
@@ -190,7 +191,7 @@ function publicPlayerSnapshot(input: {
     },
     wallet: {
       balance: input.balance,
-      currency: input.currency,
+          currency: displayPlayerCurrency(input.currency),
       status: input.status,
       migrationState: input.migrationState,
     },
@@ -223,6 +224,7 @@ async function bootstrapPlayerSession(
   ports: PlayerAuthGatewayPorts,
   tokens: PlayerAuthTokens,
   secure: boolean,
+  displayCurrency?: string | null,
 ): Promise<PlayerSessionBootstrap> {
   let provisioned = false;
   let publicId = '';
@@ -241,7 +243,7 @@ async function bootstrapPlayerSession(
         throw staffError('SESSION_EXPIRED', 401);
       }
     }
-    const provision = await ports.ensurePlayerAccount(tokens.accessToken);
+    const provision = await ports.ensurePlayerAccount(tokens.accessToken, displayCurrency);
     publicId = parseLoginPlayerId(provision.publicId) ?? '';
     if (!provision.walletId || !publicId) {
       throw staffError('WALLET_UNAVAILABLE', 503);
@@ -269,7 +271,7 @@ async function bootstrapPlayerSession(
           email: publicAuthEmail(user.email),
           publicId: snapshotId,
           balance,
-          currency: own.currency || 'TMTM',
+          currency: displayPlayerCurrency(own.currency || 'TMTM'),
           status: own.status || 'active',
           migrationState: provision.migrationState,
           profile: publicProfileFromUser(user),
@@ -343,8 +345,9 @@ async function issuedSession(
   tokens: PlayerAuthTokens,
   secure: boolean,
   extra: Record<string, unknown> = {},
+  displayCurrency?: string | null,
 ): Promise<PlayerAuthHttpResult> {
-  const boot = await bootstrapPlayerSession(ports, tokens, secure);
+  const boot = await bootstrapPlayerSession(ports, tokens, secure, displayCurrency);
   if (boot.result.status === 200 && Object.keys(extra).length) {
     boot.result.body = { ...boot.result.body, ...extra };
   }
@@ -357,8 +360,9 @@ async function finishManagedRegistration(
   tokens: PlayerAuthTokens,
   secure: boolean,
   oneClickPassword?: string,
+  displayCurrency?: string | null,
 ): Promise<{ provisioned: boolean; result: PlayerAuthHttpResult }> {
-  const boot = await bootstrapPlayerSession(ports, tokens, secure);
+  const boot = await bootstrapPlayerSession(ports, tokens, secure, displayCurrency);
   if (!boot.provisioned) {
     await abandonCreatedAuthUser(ports, created);
     return { provisioned: false, result: failedRegistrationResult(boot.result, secure) };
@@ -461,9 +465,12 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
         metadata: asRecord(data.user.user_metadata),
       };
     },
-    async ensurePlayerAccount(accessToken) {
+    async ensurePlayerAccount(accessToken, displayCurrency) {
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
-      const { data, error } = await client.rpc('ensure_player_account');
+      const { data, error } = await client.rpc(
+        'ensure_player_account',
+        displayCurrency ? { p_display_currency: displayCurrency } : {},
+      );
       if (error) {
         const text = rpcMessage(error);
         if (error.code === 'PGRST301' || /jwt|expired|unauthorized/i.test(text)) {
@@ -472,6 +479,9 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
         const code = extractErrorCode(text);
         if (code === 'STAFF_ACCOUNT_CANNOT_PROVISION_PLAYER') {
           throw staffError(code, 403);
+        }
+        if (code === 'REGISTRATION_CURRENCY_REQUIRED' || code === 'CURRENCY_UNSUPPORTED') {
+          throw staffError(code, 400);
         }
         if (code) {
           throw staffError(code, /STAFF_|OWNER_|MANAGER_|CASHIER_/.test(code) ? 403 : 401);
@@ -506,7 +516,7 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
       }
       return {
         balance: Number(own.data?.balance),
-        currency: String(own.data?.currency ?? 'TMTM') || 'TMTM',
+        currency: displayPlayerCurrency(String(own.data?.currency ?? 'TMTM') || 'TMTM'),
         status: 'active',
         publicId: own.data?.public_id == null ? undefined : String(own.data.public_id),
       };
@@ -606,6 +616,7 @@ export async function registerPlayerWithPassword(
     password?: string;
     phone?: string;
     ageConfirmed?: unknown;
+    currency?: unknown;
   },
   secure: boolean,
   security?: PlayerSecurityObserver,
@@ -617,17 +628,25 @@ export async function registerPlayerWithPassword(
       cookies: clearPlayerCookies(secure),
     };
   }
+  const currency = normalizeRegistrationCurrency(input.currency);
+  if (!currency) {
+    return {
+      status: 400,
+      body: { ok: false, authenticated: false, error: 'REGISTRATION_CURRENCY_REQUIRED' },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
 
   const method = String(input.method ?? '').trim().toLowerCase().replace(/-/g, '_')
     || (String(input.email ?? '').trim() ? 'email' : '');
 
   let result: PlayerAuthHttpResult;
   if (method === 'one_click') {
-    result = await registerOneClick(ports, secure);
+    result = await registerOneClick(ports, secure, currency);
   } else if (method === 'phone') {
-    result = await registerWithPhone(ports, input, secure);
+    result = await registerWithPhone(ports, input, secure, currency);
   } else if (method === 'email') {
-    result = await registerWithEmail(ports, input, secure);
+    result = await registerWithEmail(ports, input, secure, currency);
   } else {
     result = {
       status: 400,
@@ -648,6 +667,7 @@ async function registerWithEmail(
   ports: PlayerAuthGatewayPorts,
   input: { email?: string; password?: string },
   secure: boolean,
+  displayCurrency: string,
 ): Promise<PlayerAuthHttpResult> {
   const email = String(input.email ?? '').trim();
   const password = String(input.password ?? '');
@@ -676,13 +696,14 @@ async function registerWithEmail(
       cookies: clearPlayerCookies(secure),
     };
   }
-  return issuedSession(ports, tokens, secure);
+  return issuedSession(ports, tokens, secure, {}, displayCurrency);
 }
 
 async function registerWithPhone(
   ports: PlayerAuthGatewayPorts,
   input: { phone?: string; password?: string },
   secure: boolean,
+  displayCurrency: string,
 ): Promise<PlayerAuthHttpResult> {
   const phone = normalizePlayerPhone(String(input.phone ?? ''));
   const password = String(input.password ?? '');
@@ -730,7 +751,7 @@ async function registerWithPhone(
       await ports.claimLoginPhone(created.id, phone);
     }
     const tokens = await ports.signInWithPassword(created.email, password);
-    const finished = await finishManagedRegistration(ports, created, tokens, secure);
+    const finished = await finishManagedRegistration(ports, created, tokens, secure, undefined, displayCurrency);
     provisioned = finished.provisioned;
     return finished.result;
   } catch (err) {
@@ -744,6 +765,7 @@ async function registerWithPhone(
 async function registerOneClick(
   ports: PlayerAuthGatewayPorts,
   secure: boolean,
+  displayCurrency: string,
 ): Promise<PlayerAuthHttpResult> {
   if (!ports.createManagedPasswordUser) {
     return {
@@ -763,7 +785,7 @@ async function registerOneClick(
       metadata: { loginKind: 'one_click' },
     });
     const tokens = await ports.signInWithPassword(created.email, password);
-    const finished = await finishManagedRegistration(ports, created, tokens, secure, password);
+    const finished = await finishManagedRegistration(ports, created, tokens, secure, password, displayCurrency);
     provisioned = finished.provisioned;
     return finished.result;
   } catch (err) {

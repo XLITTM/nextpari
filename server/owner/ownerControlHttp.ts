@@ -17,6 +17,7 @@ import { publicOwnerStaff } from '../staff/ownerContext.js';
 import { clearOwnerCookies, requestIsSecure } from '../staff/ownerCookies.js';
 import type { AuthAdminPort, StaffLog } from '../staff/types.js';
 import { createOwnerJwtRpc, type OwnerRpcPort } from './ownerRpc.js';
+import { parseExactPositiveDecimal } from '../player/exactDecimal.js';
 import {
   liveAuthAdminPort,
   provisionOwnerManager,
@@ -397,7 +398,9 @@ type ControlAction =
   | { kind: 'fund' }
   | { kind: 'gameReport' }
   | { kind: 'providerGgr' }
-  | { kind: 'providerSettlements' };
+  | { kind: 'providerSettlements' }
+  | { kind: 'usdtRatesGet' }
+  | { kind: 'usdtRatesSet' };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -519,6 +522,11 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/owner/provider-ggr') return m === 'GET' ? { kind: 'providerGgr' } : 'method';
   if (path === '/api/owner/provider-settlements') {
     return m === 'GET' ? { kind: 'providerSettlements' } : 'method';
+  }
+  if (path === '/api/owner/usdt-rates') {
+    if (m === 'GET') return { kind: 'usdtRatesGet' };
+    if (m === 'POST') return { kind: 'usdtRatesSet' };
+    return 'method';
   }
   return null;
 }
@@ -817,6 +825,18 @@ async function runControl(
       return rpc.invoke('owner_provider_ggr_summary', providerSettlementArgs(query, false));
     case 'providerSettlements':
       return rpc.invoke('owner_list_provider_settlements', providerSettlementArgs(query, true));
+    case 'usdtRatesGet':
+      return rpc.invoke('owner_usdt_deposit_rates');
+    case 'usdtRatesSet': {
+      const target = String(rec.targetCurrencyCode ?? rec.target_currency_code ?? '').trim().toUpperCase();
+      if (!target) throw staffError('CURRENCY_UNSUPPORTED', 400);
+      const rate = parseExactPositiveDecimal(rec.rate, 'USDT_RATE_INVALID');
+      return rpc.invoke('owner_set_usdt_deposit_rate', {
+        p_target_currency_code: target,
+        p_rate: rate,
+        p_enabled: rec.enabled !== false,
+      });
+    }
     default:
       throw staffError('NOT_FOUND', 404);
   }
@@ -928,7 +948,7 @@ export async function handleOwnerControlRequest(
         body: { ok: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405
           ? {
-              Allow: path === '/api/owner/treasury'
+              Allow: path === '/api/owner/treasury' || path === '/api/owner/usdt-rates'
                 ? 'GET, POST'
                 : path === '/api/owner/fund'
                   ? 'POST'

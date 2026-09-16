@@ -37,6 +37,9 @@ describe('auth UI navigation', () => {
     assert.match(screen, /signUpPlayer/);
     assert.match(screen, /signUpPlayerByPhone/);
     assert.match(screen, /signUpPlayerOneClick/);
+    assert.match(screen, /Валюта счёта/);
+    assert.equal((screen.match(/<CurrencyPicker /g) ?? []).length, 3);
+    assert.match(screen, /useState\(''\)/);
     assert.match(screen, /Я подтверждаю, что мне есть 18 лет/);
     assert.match(screen, /Email или ID игрока/);
     assert.match(screen, /Телефон/);

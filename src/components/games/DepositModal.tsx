@@ -1,7 +1,9 @@
 import { Copy, X } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useToast } from '../../ToastContext';
 import { formatPlayerMoney } from '../../WalletContext';
+import { createUsdtQuote, fetchUsdtQuoteTargets } from '../../lib/playerWallets';
+import { displayPlayerCurrency } from '../../lib/playerCurrency';
 
 interface DepositModalProps {
   publicId: string | null;
@@ -12,8 +14,19 @@ interface DepositModalProps {
 export function DepositModal({ publicId, onClose, onWallet }: DepositModalProps) {
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
+  const [usdtAmount, setUsdtAmount] = useState('100');
+  const [targetWallet, setTargetWallet] = useState('');
+  const [targets, setTargets] = useState<Array<{ walletId: string; currency: string; rate: number }>>([]);
+  const [quote, setQuote] = useState<Record<string, unknown> | null>(null);
   const playerId = (publicId || '').replace(/\D/g, '');
   const playerIdLabel = playerId || formatPlayerMoney(0, false);
+
+  useEffect(() => {
+    void fetchUsdtQuoteTargets().then((next) => {
+      setTargets(next);
+      setTargetWallet(next[0]?.walletId ?? '');
+    }).catch(() => setTargets([]));
+  }, []);
 
   const copyId = async () => {
     if (!playerId) {
@@ -62,6 +75,57 @@ export function DepositModal({ publicId, onClose, onWallet }: DepositModalProps)
           </button>
         </div>
         {copied && <p className="mt-2 text-xs font-semibold text-emerald-400">Скопировано</p>}
+        <div className="mt-5 border-t border-white/10 pt-4">
+          <h3 className="text-sm font-black">Криптовалюта → USDT</h3>
+          <p className="mt-1 text-xs text-slate-400">Только котировка. Реальный платёж провайдера не создаётся.</p>
+          {targets.length === 0 ? (
+            <p className="mt-2 text-xs text-slate-400">Сначала добавьте валюту в разделе Кошелёк и валюты.</p>
+          ) : (
+            <>
+              <input
+                value={usdtAmount}
+                onChange={(event) => setUsdtAmount(event.target.value)}
+                className="mt-2 w-full rounded-xl bg-black/30 px-3 py-2 text-sm"
+                placeholder="Сумма USDT"
+              />
+              <select
+                value={targetWallet}
+                onChange={(event) => setTargetWallet(event.target.value)}
+                className="mt-2 w-full rounded-xl bg-black/30 px-3 py-2 text-sm"
+              >
+                {targets.map((row) => (
+                  <option key={row.walletId} value={row.walletId}>
+                    {displayPlayerCurrency(row.currency)} · 1 USDT = {row.rate}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  const amount = usdtAmount;
+                  const walletId = targetWallet || targets[0]?.walletId;
+                  if (!walletId) return;
+                  void createUsdtQuote(amount, walletId)
+                    .then((next) => {
+                      setQuote(next);
+                      showToast('Котировка создана. Оплата недоступна.');
+                    })
+                    .catch((err: unknown) => {
+                      showToast(err instanceof Error ? err.message : 'Не удалось создать котировку');
+                    });
+                }}
+                className="mt-2 w-full rounded-xl bg-white/10 py-2 text-sm font-bold"
+              >
+                Получить котировку
+              </button>
+              {quote ? (
+                <p className="mt-2 text-xs text-slate-300">
+                  Вы отправляете: {String(quote.sourceAmount)} USDT. Курс Nextpari: 1 USDT = {String(quote.rateSnapshot)} {displayPlayerCurrency(String(quote.targetCurrencyCode))}. К зачислению: {String(quote.creditAmount)}. Кошелёк: {displayPlayerCurrency(String(quote.targetCurrencyCode))}. Статус: {String(quote.status)}. Провайдер не подключён.
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
         <button
           type="button"
           onClick={onWallet}
