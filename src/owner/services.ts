@@ -1823,7 +1823,7 @@ export async function fetchOwnerProviderSettlements(
 
 export interface OwnerUsdtRateRow {
   targetCurrencyCode: string;
-  rate: number | null;
+  rate: string | null;
   enabled: boolean;
   updatedAt: string;
 }
@@ -1835,7 +1835,7 @@ export async function fetchOwnerUsdtRates(): Promise<OwnerUsdtRateRow[]> {
     const row = asRecord(item);
     return {
       targetCurrencyCode: str(row.targetCurrencyCode ?? row.target_currency_code),
-      rate: row.rate == null || row.rate === '' ? null : num(row.rate),
+      rate: row.rate == null || row.rate === '' ? null : String(row.rate),
       enabled: row.enabled === true,
       updatedAt: str(row.updatedAt ?? row.updated_at),
     };
@@ -1844,13 +1844,17 @@ export async function fetchOwnerUsdtRates(): Promise<OwnerUsdtRateRow[]> {
 
 export async function saveOwnerUsdtRate(input: {
   targetCurrencyCode: string;
-  rate: number;
+  rate: string;
   enabled: boolean;
 }): Promise<void> {
   await ownerJson('/api/owner/usdt-rates', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      targetCurrencyCode: input.targetCurrencyCode,
+      rate: input.rate,
+      enabled: input.enabled,
+    }),
   });
 }
 

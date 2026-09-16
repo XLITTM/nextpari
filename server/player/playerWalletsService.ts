@@ -1,7 +1,8 @@
 import { createUserJwtClient } from '../supabase/admin.js';
 import { loadOwnerAuthEnv } from '../staff/env.js';
 import { extractErrorCode, rpcMessage, staffError, StaffOnboardingError } from '../staff/errors.js';
-import { displayPlayerCurrency, normalizeRegistrationCurrency } from './playerCurrency.js';
+import { normalizeRegistrationCurrency } from './playerCurrency.js';
+import { parseExactPositiveDecimal } from './exactDecimal.js';
 
 export const PLAYER_WALLETS_PATH = '/api/player/wallets';
 export const PLAYER_WALLETS_ADD_PATH = '/api/player/wallets/add';
@@ -47,7 +48,7 @@ export function mapPlayerWalletError(error: { message?: string; code?: string })
   if (code === 'CURRENCY_WALLET_ALREADY_EXISTS') {
     return staffError(code, 409);
   }
-  if (code === 'USDT_RATE_UNAVAILABLE' || code === 'CURRENCY_LIMITS_UNCONFIGURED') {
+  if (code === 'USDT_RATE_UNAVAILABLE' || code === 'CURRENCY_LIMITS_UNCONFIGURED' || code === 'WALLET_BLOCKED' || code === 'WALLET_CLOSED' || code === 'PLAYER_WALLET_NOT_ACTIVE' || code === 'QUOTE_IMMUTABLE') {
     return staffError(code, 409);
   }
   if (code && (code.endsWith('_REQUIRED') || code.endsWith('_INVALID') || code.endsWith('_UNSUPPORTED') || code === 'WALLET_NOT_OWNED')) {
@@ -61,7 +62,7 @@ export interface PlayerWalletPorts {
   add: (accessToken: string, currency: string) => Promise<Record<string, unknown>>;
   setActive: (accessToken: string, input: { currency?: string; walletId?: string }) => Promise<Record<string, unknown>>;
   usdtTargets: (accessToken: string) => Promise<Record<string, unknown>>;
-  createUsdtQuote: (accessToken: string, input: { sourceAmount: number; walletId: string }) => Promise<Record<string, unknown>>;
+  createUsdtQuote: (accessToken: string, input: { sourceAmount: string; walletId: string }) => Promise<Record<string, unknown>>;
 }
 
 export function livePlayerWalletPorts(): PlayerWalletPorts {
@@ -85,7 +86,11 @@ export function livePlayerWalletPorts(): PlayerWalletPorts {
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
       const args: Record<string, unknown> = {};
       if (input.walletId) args.p_wallet_id = input.walletId;
-      if (input.currency) args.p_currency = displayPlayerCurrency(input.currency);
+      if (input.currency) {
+        const display = normalizeRegistrationCurrency(input.currency);
+        if (!display) throw staffError('CURRENCY_UNSUPPORTED', 400);
+        args.p_currency = display;
+      }
       const { data, error } = await client.rpc('player_set_active_wallet', args);
       if (error) throw mapPlayerWalletError(error);
       return asRecord(stripTmtm(data));
@@ -97,13 +102,11 @@ export function livePlayerWalletPorts(): PlayerWalletPorts {
       return asRecord(stripTmtm(data));
     },
     async createUsdtQuote(accessToken, input) {
-      if (!Number.isFinite(input.sourceAmount) || input.sourceAmount <= 0) {
-        throw staffError('USDT_AMOUNT_INVALID', 400);
-      }
+      const sourceAmount = parseExactPositiveDecimal(input.sourceAmount, 'USDT_AMOUNT_INVALID');
       if (!input.walletId) throw staffError('WALLET_NOT_OWNED', 400);
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
       const { data, error } = await client.rpc('player_create_usdt_quote', {
-        p_source_amount: input.sourceAmount,
+        p_source_amount: sourceAmount,
         p_wallet_id: input.walletId,
       });
       if (error) throw mapPlayerWalletError(error);

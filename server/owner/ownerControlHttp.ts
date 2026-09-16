@@ -17,6 +17,7 @@ import { publicOwnerStaff } from '../staff/ownerContext.js';
 import { clearOwnerCookies, requestIsSecure } from '../staff/ownerCookies.js';
 import type { AuthAdminPort, StaffLog } from '../staff/types.js';
 import { createOwnerJwtRpc, type OwnerRpcPort } from './ownerRpc.js';
+import { parseExactPositiveDecimal } from '../player/exactDecimal.js';
 import {
   liveAuthAdminPort,
   provisionOwnerManager,
@@ -828,9 +829,8 @@ async function runControl(
       return rpc.invoke('owner_usdt_deposit_rates');
     case 'usdtRatesSet': {
       const target = String(rec.targetCurrencyCode ?? rec.target_currency_code ?? '').trim().toUpperCase();
-      const rate = Number(rec.rate);
       if (!target) throw staffError('CURRENCY_UNSUPPORTED', 400);
-      if (!Number.isFinite(rate) || rate <= 0) throw staffError('USDT_RATE_INVALID', 400);
+      const rate = parseExactPositiveDecimal(rec.rate, 'USDT_RATE_INVALID');
       return rpc.invoke('owner_set_usdt_deposit_rate', {
         p_target_currency_code: target,
         p_rate: rate,

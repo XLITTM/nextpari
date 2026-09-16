@@ -67,7 +67,13 @@ SET search_path = ''
 AS $fn$
     SELECT CASE pg_catalog.upper(BTRIM(COALESCE(p_code, '')))
         WHEN 'TMTM' THEN 'TMT'
-        ELSE pg_catalog.upper(BTRIM(COALESCE(p_code, '')))
+        WHEN 'TMT' THEN 'TMT'
+        WHEN 'USD' THEN 'USD'
+        WHEN 'TRY' THEN 'TRY'
+        WHEN 'UZS' THEN 'UZS'
+        WHEN 'RUB' THEN 'RUB'
+        WHEN 'KZT' THEN 'KZT'
+        ELSE NULL
     END;
 $fn$;
 
@@ -80,11 +86,19 @@ SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
+    v_raw TEXT;
     v_display TEXT;
     v_storage TEXT;
 BEGIN
-    v_display := private.wallet_display_currency(p_code);
-    IF v_display = '' THEN
+    v_raw := pg_catalog.upper(BTRIM(COALESCE(p_code, '')));
+    IF v_raw = '' THEN
+        RETURN NULL;
+    END IF;
+    v_display := CASE v_raw
+        WHEN 'TMTM' THEN 'TMT'
+        ELSE v_raw
+    END;
+    IF v_display NOT IN ('TMT', 'USD', 'TRY', 'UZS', 'RUB', 'KZT') THEN
         RETURN NULL;
     END IF;
     SELECT c.wallet_currency_code
@@ -98,7 +112,7 @@ BEGIN
     IF v_display = 'TMT' THEN
         RETURN 'TMTM';
     END IF;
-    RETURN v_display;
+    RETURN NULL;
 END;
 $fn$;
 
@@ -766,6 +780,9 @@ BEGIN
         v_wallet := p_wallet_id;
     ELSE
         v_storage := private.wallet_storage_currency(p_currency);
+        IF v_storage IS NULL THEN
+            RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
+        END IF;
         SELECT a.wallet_id
         INTO v_wallet
         FROM private.wallet_accounts AS a
@@ -814,6 +831,15 @@ BEGIN
     v_storage := private.wallet_storage_currency(p_ops_currency);
     IF v_storage IS NULL THEN
         RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM private.supported_currencies AS c
+        WHERE c.wallet_currency_code = v_storage
+          AND c.is_active
+          AND c.cashier_enabled
+    ) THEN
+        RAISE EXCEPTION 'CASHIER_CURRENCY_DISABLED';
     END IF;
 
     SELECT p.id, p.public_id
@@ -1211,6 +1237,76 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.sports_require_player_by_id(p_player_user_id UUID)
+RETURNS TABLE (
+    user_id UUID,
+    wallet_id UUID,
+    wallet_status TEXT,
+    migration_state TEXT
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_uid UUID;
+    v_staff UUID;
+    v_active RECORD;
+    v_locked RECORD;
+    v_display TEXT;
+BEGIN
+    v_uid := p_player_user_id;
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'AUTH_REQUIRED';
+    END IF;
+
+    SELECT s.auth_user_id
+    INTO v_staff
+    FROM private.staff_accounts AS s
+    WHERE s.auth_user_id = v_uid
+    LIMIT 1;
+    IF v_staff IS NOT NULL THEN
+        RAISE EXCEPTION 'STAFF_CANNOT_PLAY';
+    END IF;
+
+    SELECT *
+    INTO v_active
+    FROM private.player_active_wallet(v_uid);
+
+    SELECT a.wallet_id, a.currency, a.status, a.migration_state
+    INTO v_locked
+    FROM private.wallet_accounts AS a
+    WHERE a.wallet_id = v_active.wallet_id
+      AND a.owner_user_id = v_uid
+    FOR UPDATE;
+
+    IF v_locked.wallet_id IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_WALLET_MISSING';
+    END IF;
+    IF v_locked.status = 'blocked' THEN
+        RAISE EXCEPTION 'WALLET_BLOCKED';
+    END IF;
+    IF v_locked.status = 'closed' THEN
+        RAISE EXCEPTION 'WALLET_CLOSED';
+    END IF;
+    IF v_locked.status IS DISTINCT FROM 'active' THEN
+        RAISE EXCEPTION 'PLAYER_WALLET_NOT_ACTIVE';
+    END IF;
+    IF v_locked.migration_state NOT IN ('staging', 'active') THEN
+        RAISE EXCEPTION 'PLAYER_WALLET_NOT_ACTIVE';
+    END IF;
+
+    v_display := private.wallet_display_currency(v_locked.currency);
+    IF v_display IS DISTINCT FROM 'TMT' THEN
+        RAISE EXCEPTION 'CURRENCY_LIMITS_UNCONFIGURED';
+    END IF;
+
+    RETURN QUERY SELECT v_uid, v_locked.wallet_id, v_locked.status, v_locked.migration_state;
+END;
+$fn$;
+
+
 CREATE OR REPLACE FUNCTION private.withdrawal_lock_player_wallet(p_uid UUID)
 RETURNS TABLE (
     wallet_id UUID,
@@ -1305,6 +1401,40 @@ REVOKE ALL ON TABLE private.crypto_deposit_quotes FROM PUBLIC;
 REVOKE ALL ON TABLE private.crypto_deposit_quotes FROM anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE private.crypto_deposit_quotes TO service_role;
 REVOKE DELETE ON TABLE private.crypto_deposit_quotes FROM service_role;
+
+CREATE OR REPLACE FUNCTION private.crypto_deposit_quotes_protect_snapshot()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'QUOTE_IMMUTABLE';
+    END IF;
+    IF NEW.player_user_id IS DISTINCT FROM OLD.player_user_id
+        OR NEW.target_wallet_id IS DISTINCT FROM OLD.target_wallet_id
+        OR NEW.source_asset IS DISTINCT FROM OLD.source_asset
+        OR NEW.source_amount IS DISTINCT FROM OLD.source_amount
+        OR NEW.target_currency_code IS DISTINCT FROM OLD.target_currency_code
+        OR NEW.rate_snapshot IS DISTINCT FROM OLD.rate_snapshot
+        OR NEW.fee_source_amount IS DISTINCT FROM OLD.fee_source_amount
+        OR NEW.credit_amount IS DISTINCT FROM OLD.credit_amount
+        OR NEW.created_at IS DISTINCT FROM OLD.created_at
+        OR NEW.expires_at IS DISTINCT FROM OLD.expires_at
+        OR NEW.id IS DISTINCT FROM OLD.id
+    THEN
+        RAISE EXCEPTION 'QUOTE_IMMUTABLE';
+    END IF;
+    RETURN NEW;
+END;
+$fn$;
+
+DROP TRIGGER IF EXISTS crypto_deposit_quotes_protect_snapshot ON private.crypto_deposit_quotes;
+CREATE TRIGGER crypto_deposit_quotes_protect_snapshot
+    BEFORE UPDATE OR DELETE ON private.crypto_deposit_quotes
+    FOR EACH ROW
+    EXECUTE FUNCTION private.crypto_deposit_quotes_protect_snapshot();
 
 
 CREATE OR REPLACE FUNCTION public.owner_usdt_deposit_rates()
@@ -1454,7 +1584,7 @@ BEGIN
     IF p_source_amount IS NULL OR p_source_amount <= 0 THEN
         RAISE EXCEPTION 'USDT_AMOUNT_INVALID';
     END IF;
-    SELECT a.wallet_id, a.currency, a.owner_user_id
+    SELECT a.wallet_id, a.currency, a.owner_user_id, a.status
     INTO v_wallet
     FROM private.wallet_accounts AS a
     WHERE a.wallet_id = p_wallet_id
@@ -1462,16 +1592,38 @@ BEGIN
     IF v_wallet.wallet_id IS NULL OR v_wallet.owner_user_id IS DISTINCT FROM v_uid THEN
         RAISE EXCEPTION 'WALLET_NOT_OWNED';
     END IF;
+    IF v_wallet.status = 'blocked' THEN
+        RAISE EXCEPTION 'WALLET_BLOCKED';
+    END IF;
+    IF v_wallet.status = 'closed' THEN
+        RAISE EXCEPTION 'WALLET_CLOSED';
+    END IF;
+    IF v_wallet.status IS DISTINCT FROM 'active' THEN
+        RAISE EXCEPTION 'PLAYER_WALLET_NOT_ACTIVE';
+    END IF;
     v_display := private.wallet_display_currency(v_wallet.currency);
+    IF v_display IS NULL THEN
+        RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM private.supported_currencies AS c
+        WHERE c.code = v_display
+          AND c.is_active
+          AND c.wallet_enabled
+          AND c.usdt_deposit_enabled
+    ) THEN
+        RAISE EXCEPTION 'USDT_RATE_UNAVAILABLE';
+    END IF;
     SELECT r.rate, r.enabled
     INTO v_rate, v_enabled
     FROM private.usdt_deposit_rates AS r
     WHERE r.target_currency_code = v_display
     FOR SHARE;
-    IF v_rate IS NULL OR v_enabled IS NOT TRUE THEN
+    IF NOT FOUND OR v_rate IS NULL OR v_enabled IS NOT TRUE THEN
         RAISE EXCEPTION 'USDT_RATE_UNAVAILABLE';
     END IF;
-    v_credit := (p_source_amount - 0) * v_rate;
+    v_credit := p_source_amount * v_rate;
     v_expires := pg_catalog.now() + INTERVAL '10 minutes';
     INSERT INTO private.crypto_deposit_quotes (
         player_user_id,
@@ -1517,6 +1669,306 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.owner_resolve_player_tmt_wallet(p_player_public_id TEXT)
+RETURNS TABLE (
+    player_user_id UUID,
+    wallet_id UUID,
+    public_id TEXT,
+    currency TEXT
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_raw TEXT;
+    v_player UUID;
+    v_public TEXT;
+    v_storage TEXT;
+    v_wallet UUID;
+    v_currency TEXT;
+    v_status TEXT;
+BEGIN
+    v_raw := NULLIF(BTRIM(COALESCE(p_player_public_id, '')), '');
+    IF v_raw IS NULL OR v_raw !~ '^[0-9]{6}$' THEN
+        RAISE EXCEPTION 'PLAYER_NOT_FOUND';
+    END IF;
+
+    SELECT p.id, p.public_id
+    INTO v_player, v_public
+    FROM public.profiles AS p
+    WHERE p.public_id = v_raw
+    LIMIT 1;
+    IF v_player IS NULL THEN
+        SELECT a.owner_user_id, COALESCE(p.public_id, w.public_id)
+        INTO v_player, v_public
+        FROM public.wallets AS w
+        JOIN private.wallet_accounts AS a ON a.wallet_id = w.id
+        LEFT JOIN public.profiles AS p ON p.id = a.owner_user_id
+        WHERE w.public_id = v_raw
+        LIMIT 1;
+    END IF;
+    IF v_player IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_NOT_FOUND';
+    END IF;
+
+    v_storage := private.wallet_storage_currency('TMT');
+    IF v_storage IS NULL THEN
+        RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
+    END IF;
+
+    SELECT a.wallet_id, a.currency, a.status
+    INTO v_wallet, v_currency, v_status
+    FROM private.wallet_accounts AS a
+    WHERE a.owner_user_id = v_player
+      AND a.currency = v_storage
+    LIMIT 1;
+
+    IF v_wallet IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_CURRENCY_WALLET_REQUIRED';
+    END IF;
+    IF v_status IS DISTINCT FROM 'active' THEN
+        RAISE EXCEPTION 'PLAYER_WALLET_NOT_ACTIVE';
+    END IF;
+
+    RETURN QUERY
+    SELECT v_player, v_wallet, COALESCE(v_public, v_raw), v_currency;
+END;
+$fn$;
+
+
+CREATE OR REPLACE FUNCTION public.owner_fund_player(
+    p_player_id TEXT,
+    p_amount NUMERIC,
+    p_idempotency_key TEXT,
+    p_note TEXT DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_owner UUID;
+    v_key TEXT;
+    v_note TEXT;
+    v_player RECORD;
+    v_treasury RECORD;
+    v_engine_key TEXT;
+    v_result RECORD;
+    v_active UUID;
+BEGIN
+    SELECT o.auth_user_id
+    INTO v_owner
+    FROM private.get_current_owner_context() AS o;
+
+    v_key := private.owner_require_idempotency_key(p_idempotency_key);
+    v_note := private.owner_trim_reason(p_note);
+    v_engine_key := 'owner-fund-player:' || v_owner::TEXT || ':' || v_key;
+
+    SELECT r.player_user_id, r.wallet_id, r.public_id, r.currency
+    INTO v_player
+    FROM private.owner_resolve_player_tmt_wallet(p_player_id) AS r;
+
+    SELECT pref.active_wallet_id
+    INTO v_active
+    FROM private.player_wallet_preferences AS pref
+    WHERE pref.player_user_id = v_player.player_user_id;
+
+    SELECT a.id, a.currency
+    INTO v_treasury
+    FROM private.operational_accounts AS a
+    WHERE a.account_type = 'company_treasury'
+      AND a.status = 'active'
+      AND a.migration_state = 'active'
+      AND a.currency = v_player.currency
+    ORDER BY a.created_at ASC
+    LIMIT 1;
+
+    IF v_treasury.id IS NULL THEN
+        RAISE EXCEPTION 'TREASURY_NOT_FOUND';
+    END IF;
+
+    SELECT e.transfer_id, e.is_duplicate, e.from_balance_after, e.to_balance_after, e.player_balance_after
+    INTO v_result
+    FROM private.apply_operational_transfer(
+        'TREASURY_TO_PLAYER',
+        p_amount,
+        v_player.currency,
+        v_engine_key,
+        v_treasury.id,
+        NULL,
+        v_player.wallet_id,
+        v_owner,
+        'owner',
+        jsonb_build_object(
+            'player_public_id', v_player.public_id,
+            'note', v_note
+        )
+    ) AS e;
+
+    IF v_active IS NOT NULL THEN
+        UPDATE private.player_wallet_preferences AS pref
+        SET active_wallet_id = v_active,
+            updated_at = pref.updated_at
+        WHERE pref.player_user_id = v_player.player_user_id
+          AND pref.active_wallet_id IS DISTINCT FROM v_active;
+        UPDATE public.profiles AS p
+        SET wallet_id = v_active
+        WHERE p.id = v_player.player_user_id
+          AND p.wallet_id IS DISTINCT FROM v_active;
+    END IF;
+
+    IF v_result.is_duplicate IS NOT TRUE THEN
+        PERFORM private.append_staff_audit(
+            'OWNER_FUNDED_PLAYER',
+            'player',
+            v_player.public_id,
+            'owner_only',
+            jsonb_build_object(
+                'player_public_id', v_player.public_id,
+                'amount', p_amount,
+                'currency', v_player.currency,
+                'transfer_id', v_result.transfer_id,
+                'note', v_note
+            )
+        );
+    END IF;
+
+    RETURN jsonb_build_object(
+        'ok', true,
+        'transfer_id', v_result.transfer_id,
+        'is_duplicate', v_result.is_duplicate,
+        'amount', p_amount,
+        'currency', private.wallet_display_currency(v_player.currency),
+        'player_public_id', v_player.public_id,
+        'player_balance_after', v_result.player_balance_after,
+        'treasury_balance_after', v_result.from_balance_after
+    );
+END;
+$fn$;
+
+
+CREATE OR REPLACE FUNCTION public.owner_debit_player(
+    p_player_id TEXT,
+    p_amount NUMERIC,
+    p_idempotency_key TEXT,
+    p_reason TEXT
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_owner UUID;
+    v_key TEXT;
+    v_reason TEXT;
+    v_player RECORD;
+    v_treasury RECORD;
+    v_engine_key TEXT;
+    v_result RECORD;
+    v_active UUID;
+BEGIN
+    SELECT o.auth_user_id
+    INTO v_owner
+    FROM private.get_current_owner_context() AS o;
+
+    v_reason := NULLIF(BTRIM(COALESCE(p_reason, '')), '');
+    IF v_reason IS NULL THEN
+        RAISE EXCEPTION 'REASON_REQUIRED';
+    END IF;
+    IF char_length(v_reason) > 500 THEN
+        RAISE EXCEPTION 'REASON_TOO_LONG';
+    END IF;
+
+    v_key := private.owner_require_idempotency_key(p_idempotency_key);
+    v_engine_key := 'owner-debit-player:' || v_owner::TEXT || ':' || v_key;
+
+    SELECT r.player_user_id, r.wallet_id, r.public_id, r.currency
+    INTO v_player
+    FROM private.owner_resolve_player_tmt_wallet(p_player_id) AS r;
+
+    SELECT pref.active_wallet_id
+    INTO v_active
+    FROM private.player_wallet_preferences AS pref
+    WHERE pref.player_user_id = v_player.player_user_id;
+
+    SELECT a.id, a.currency
+    INTO v_treasury
+    FROM private.operational_accounts AS a
+    WHERE a.account_type = 'company_treasury'
+      AND a.status = 'active'
+      AND a.migration_state = 'active'
+      AND a.currency = v_player.currency
+    ORDER BY a.created_at ASC
+    LIMIT 1;
+
+    IF v_treasury.id IS NULL THEN
+        RAISE EXCEPTION 'TREASURY_NOT_FOUND';
+    END IF;
+
+    SELECT e.transfer_id, e.is_duplicate, e.from_balance_after, e.to_balance_after, e.player_balance_after
+    INTO v_result
+    FROM private.apply_operational_transfer(
+        'PLAYER_TO_TREASURY',
+        p_amount,
+        v_player.currency,
+        v_engine_key,
+        NULL,
+        v_treasury.id,
+        v_player.wallet_id,
+        v_owner,
+        'owner',
+        jsonb_build_object(
+            'player_public_id', v_player.public_id,
+            'reason', v_reason
+        )
+    ) AS e;
+
+    IF v_active IS NOT NULL THEN
+        UPDATE private.player_wallet_preferences AS pref
+        SET active_wallet_id = v_active,
+            updated_at = pref.updated_at
+        WHERE pref.player_user_id = v_player.player_user_id
+          AND pref.active_wallet_id IS DISTINCT FROM v_active;
+        UPDATE public.profiles AS p
+        SET wallet_id = v_active
+        WHERE p.id = v_player.player_user_id
+          AND p.wallet_id IS DISTINCT FROM v_active;
+    END IF;
+
+    IF v_result.is_duplicate IS NOT TRUE THEN
+        PERFORM private.append_staff_audit(
+            'OWNER_DEBITED_PLAYER',
+            'player',
+            v_player.public_id,
+            'owner_only',
+            jsonb_build_object(
+                'player_public_id', v_player.public_id,
+                'amount', p_amount,
+                'currency', v_player.currency,
+                'transfer_id', v_result.transfer_id,
+                'reason', v_reason
+            )
+        );
+    END IF;
+
+    RETURN jsonb_build_object(
+        'ok', true,
+        'transfer_id', v_result.transfer_id,
+        'is_duplicate', v_result.is_duplicate,
+        'amount', p_amount,
+        'currency', private.wallet_display_currency(v_player.currency),
+        'player_public_id', v_player.public_id,
+        'player_balance_after', v_result.player_balance_after,
+        'treasury_balance_after', v_result.to_balance_after
+    );
+END;
+$fn$;
+
+
 REVOKE ALL ON FUNCTION private.wallet_display_currency(TEXT) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.wallet_storage_currency(TEXT) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.wallet_currencies_match(TEXT, TEXT) FROM PUBLIC, anon, authenticated, service_role;
@@ -1528,6 +1980,10 @@ REVOKE ALL ON FUNCTION private.player_wallet_public_json(UUID, UUID) FROM PUBLIC
 REVOKE ALL ON FUNCTION private.player_create_zero_wallet(UUID, TEXT) FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION private.cashier_resolve_player_wallet_for_ops_currency(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.cashier_resolve_player_wallet_for_ops_currency(TEXT, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION private.sports_require_player_by_id(UUID) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION private.owner_resolve_player_tmt_wallet(TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.owner_resolve_player_tmt_wallet(TEXT) TO service_role;
+REVOKE ALL ON FUNCTION private.crypto_deposit_quotes_protect_snapshot() FROM PUBLIC, anon, authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.ensure_player_account(TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.ensure_player_account(TEXT) TO authenticated;
@@ -1561,5 +2017,11 @@ GRANT EXECUTE ON FUNCTION public.player_usdt_quote_targets() TO authenticated;
 
 REVOKE ALL ON FUNCTION public.player_create_usdt_quote(NUMERIC, UUID) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.player_create_usdt_quote(NUMERIC, UUID) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.owner_fund_player(TEXT, NUMERIC, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.owner_fund_player(TEXT, NUMERIC, TEXT, TEXT) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.owner_debit_player(TEXT, NUMERIC, TEXT, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.owner_debit_player(TEXT, NUMERIC, TEXT, TEXT) TO authenticated;
 
 COMMIT;

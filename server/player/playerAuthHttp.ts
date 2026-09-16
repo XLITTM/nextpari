@@ -70,6 +70,7 @@ import {
   livePlayerWalletPorts,
   type PlayerWalletPorts,
 } from './playerWalletsService.js';
+import { parseExactPositiveDecimal } from './exactDecimal.js';
 
 export const PLAYER_AUTH_REGISTER_PATH = '/api/player/auth/register';
 export const PLAYER_AUTH_LOGIN_PATH = '/api/player/auth/login';
@@ -421,7 +422,7 @@ export async function handlePlayerAuthRequest(
       const resolved = await resolvePlayerSession(ports, input.cookie, secure);
       const body = asRecord(parseJsonPayload(input.body));
       const quote = await wallets.createUsdtQuote(resolved.accessToken, {
-        sourceAmount: Number(body.sourceAmount ?? body.source_amount),
+        sourceAmount: parseExactPositiveDecimal(body.sourceAmount ?? body.source_amount, 'USDT_AMOUNT_INVALID'),
         walletId: String(body.walletId ?? body.wallet_id ?? ''),
       });
       return finish({ status: 200, body: { ok: true, authenticated: true, ...quote }, cookies: resolved.cookies });

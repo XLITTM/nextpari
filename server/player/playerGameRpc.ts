@@ -45,6 +45,7 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'EVENT_UNAVAILABLE'
     || code === 'FEED_STALE'
     || code === 'SPORTS_BET_DISABLED'
+    || code === 'CURRENCY_LIMITS_UNCONFIGURED'
     || code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE'
     || code === 'INSUFFICIENT_LOCKED_BALANCE'
     || code === 'WITHDRAWAL_ALREADY_PAID'

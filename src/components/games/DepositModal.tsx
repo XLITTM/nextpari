@@ -102,7 +102,7 @@ export function DepositModal({ publicId, onClose, onWallet }: DepositModalProps)
               <button
                 type="button"
                 onClick={() => {
-                  const amount = Number(usdtAmount);
+                  const amount = usdtAmount;
                   const walletId = targetWallet || targets[0]?.walletId;
                   if (!walletId) return;
                   void createUsdtQuote(amount, walletId)

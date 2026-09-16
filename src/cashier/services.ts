@@ -214,6 +214,9 @@ export async function postCashierDeposit(
     if (code === 'PLAYER_CURRENCY_WALLET_REQUIRED') {
       throw new Error('У игрока нет кошелька TMT. Игрок должен добавить эту валюту в своём аккаунте.');
     }
+    if (code === 'CASHIER_CURRENCY_DISABLED') {
+      throw new Error('Касса для этой валюты отключена.');
+    }
     throw new Error(code);
   }
   return rec;

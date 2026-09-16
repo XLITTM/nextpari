@@ -1102,7 +1102,7 @@ describe('owner treasury and direct funding controls', () => {
     assert.equal(rpc.calls[0]?.name, 'owner_set_usdt_deposit_rate');
     assert.deepEqual(rpc.calls[0]?.args, {
       p_target_currency_code: 'USD',
-      p_rate: 1.25,
+      p_rate: '1.25',
       p_enabled: true,
     });
   });

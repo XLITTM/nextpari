@@ -13,7 +13,7 @@ export function OwnerUsdtRatesPanel() {
     setError('');
     const next = await fetchOwnerUsdtRates();
     setRows(next.sort((a, b) => ORDER.indexOf(a.targetCurrencyCode) - ORDER.indexOf(b.targetCurrencyCode)));
-    setDraft(Object.fromEntries(next.map((row) => [row.targetCurrencyCode, row.rate == null ? '' : String(row.rate)])));
+    setDraft(Object.fromEntries(next.map((row) => [row.targetCurrencyCode, row.rate ?? ''])));
   }, []);
 
   useEffect(() => {
@@ -23,7 +23,7 @@ export function OwnerUsdtRatesPanel() {
   }, [load]);
 
   const save = async (code: string, enabled: boolean) => {
-    const rate = Number(draft[code]);
+    const rate = draft[code] ?? '';
     setBusy(true);
     try {
       await saveOwnerUsdtRate({ targetCurrencyCode: code, rate, enabled });

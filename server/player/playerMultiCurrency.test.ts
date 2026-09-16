@@ -12,7 +12,9 @@ import {
   PLAYER_WALLETS_PATH,
   handlePlayerAuthRequest,
 } from './playerAuthHttp.js';
-import { displayPlayerCurrency, storagePlayerCurrency, walletCurrenciesMatch } from './playerCurrency.js';
+import { displayPlayerCurrency, PLAYER_DISPLAY_CURRENCIES, storagePlayerCurrency, walletCurrenciesMatch } from './playerCurrency.js';
+import { parseExactPositiveDecimal } from './exactDecimal.js';
+import { mapPlayerGameRpcError } from './playerGameRpc.js';
 import { staffError } from '../staff/errors.js';
 import type { PlayerAuthGatewayPorts } from './playerAuthService.js';
 import type { PlayerWalletPorts } from './playerWalletsService.js';
@@ -38,6 +40,14 @@ const ACCESS = 'player-access-token';
 const REFRESH = 'player-refresh-token';
 const WALLET_TMT = '11111111-1111-4111-8111-111111111111';
 const WALLET_USD = '22222222-2222-4222-8222-222222222222';
+
+function functionSql(sql: string, signature: string): string {
+  const start = sql.indexOf(`CREATE OR REPLACE FUNCTION ${signature}`);
+  assert.equal(start >= 0, true, `missing ${signature}`);
+  const end = sql.indexOf('$fn$;', start);
+  assert.equal(end > start, true, `missing body ${signature}`);
+  return sql.slice(start, end + 5);
+}
 
 function latestMigration(namePart: string): string {
   const names = readdirSync(migrationsDir).filter((name) => name.includes(namePart)).sort();
@@ -77,7 +87,7 @@ function authPorts(init?: { currency?: string }): PlayerAuthGatewayPorts & { ens
     async loadOwnWallet() {
       return {
         balance: 0,
-        currency: storagePlayerCurrency(init?.currency ?? 'USD'),
+        currency: storagePlayerCurrency(init?.currency ?? 'USD') ?? 'TMTM',
         status: 'active',
         publicId: '110790',
       };
@@ -92,11 +102,11 @@ function authPorts(init?: { currency?: string }): PlayerAuthGatewayPorts & { ens
 function walletPorts(init?: { listError?: string; addError?: string }): PlayerWalletPorts & {
   added: string[];
   activated: Array<{ currency?: string; walletId?: string }>;
-  quotes: Array<{ sourceAmount: number; walletId: string }>;
+  quotes: Array<{ sourceAmount: string; walletId: string }>;
 } {
   const added: string[] = [];
   const activated: Array<{ currency?: string; walletId?: string }> = [];
-  const quotes: Array<{ sourceAmount: number; walletId: string }> = [];
+  const quotes: Array<{ sourceAmount: string; walletId: string }> = [];
   return {
     added,
     activated,
@@ -125,7 +135,7 @@ function walletPorts(init?: { listError?: string; addError?: string }): PlayerWa
         currency,
         availableBalance: 0,
         lockedBalance: 0,
-        isActive: false,
+        isActive: true,
         displayNameRu: 'Доллар США',
       };
     },
@@ -239,10 +249,14 @@ describe('phase 057 multi-currency SQL', () => {
 
   it('settlement helpers keep recorded wallet_id and game context uses active wallet', () => {
     const sports = latestMigration('sports_betting_engine');
+    const settle038 = latestMigration('provider_aware_sports_settlement');
     const games = latestMigration('canonical_games_engine');
     assert.match(sports, /v_bet\.wallet_id/);
+    assert.match(settle038, /v_bet\.wallet_id/);
+    assert.equal(settle038.includes('player_active_wallet'), false);
+    assert.equal(sports.includes('player_active_wallet'), false);
     assert.match(games, /v_round\.wallet_id/);
-    const ctx = sql057.slice(sql057.indexOf('CREATE OR REPLACE FUNCTION private.game_require_player_context'));
+    const ctx = functionSql(sql057, 'private.game_require_player_context');
     assert.match(ctx, /player_active_wallet/);
     assert.match(ctx, /CURRENCY_LIMITS_UNCONFIGURED/);
   });
@@ -353,15 +367,26 @@ describe('player wallet HTTP', () => {
     assert.equal((result.body.wallets as Array<{ currency: string }>)[0]?.currency, 'TMT');
   });
 
-  it('adds a zero USD wallet without switching active and can set active later', async () => {
+  it('adds a zero USD wallet that becomes active immediately without moving money', async () => {
     const wallets = walletPorts();
     const added = await playerWallet('POST', PLAYER_WALLETS_ADD_PATH, { body: { currency: 'USD' }, wallets });
     assert.equal(added.status, 200);
     assert.deepEqual(wallets.added, ['USD']);
-    assert.equal((added.body as { isActive?: boolean }).isActive, false);
-    const active = await playerWallet('POST', PLAYER_WALLETS_ACTIVE_PATH, { body: { currency: 'USD' }, wallets });
-    assert.equal(active.status, 200);
-    assert.deepEqual(wallets.activated, [{ currency: 'USD', walletId: undefined }]);
+    assert.equal((added.body as { isActive?: boolean }).isActive, true);
+    assert.equal((added.body as { availableBalance?: number }).availableBalance, 0);
+    assert.equal((added.body as { currency?: string }).currency, 'USD');
+    assert.equal(wallets.activated.length, 0);
+    const createZero = functionSql(sql057, 'private.player_create_zero_wallet');
+    const setActive = functionSql(sql057, 'private.player_set_active_wallet_id');
+    assert.match(createZero, /PERFORM private\.player_set_active_wallet_id\(p_player_user_id, v_wallet\)/);
+    assert.match(createZero, /v_storage,\s+0,\s+0,/);
+    assert.equal(createZero.includes('TREASURY_TO_PLAYER'), false);
+    assert.equal(createZero.includes('CASHIER_TO_PLAYER'), false);
+    assert.match(setActive, /UPDATE public\.profiles AS p\s+SET wallet_id = p_wallet_id/);
+    const switcher = readFileSync(join(root, 'src/components/HeaderWalletSwitcher.tsx'), 'utf8');
+    const profile = readFileSync(join(root, 'src/screens/WalletsScreen.tsx'), 'utf8');
+    assert.match(switcher, /await addPlayerWallet\(currency\);\s+await refresh\(\)/);
+    assert.match(profile, /await addPlayerWallet\(currency\);[\s\S]*await load\(\);[\s\S]*await refresh\(\)/);
   });
 
   it('rejects staff JWTs on player wallet routes', async () => {
@@ -374,11 +399,11 @@ describe('player wallet HTTP', () => {
   it('USDT quotes snapshot rate/credit and do not mention provider addresses', async () => {
     const wallets = walletPorts();
     const result = await playerWallet('POST', PLAYER_USDT_QUOTE_PATH, {
-      body: { sourceAmount: 100, walletId: WALLET_USD },
+      body: { sourceAmount: '100.2500', walletId: WALLET_USD },
       wallets,
     });
     assert.equal(result.status, 200);
-    assert.deepEqual(wallets.quotes, [{ sourceAmount: 100, walletId: WALLET_USD }]);
+    assert.deepEqual(wallets.quotes, [{ sourceAmount: '100.2500', walletId: WALLET_USD }]);
     assert.equal(result.body.status, 'QUOTED');
     assert.equal(JSON.stringify(result.body).includes('address'), false);
     assert.equal(JSON.stringify(result.body).includes('PAID'), false);
@@ -418,7 +443,7 @@ describe('owner USDT rates and staff isolation', () => {
         pathname: '/api/owner/usdt-rates',
         cookie: `${OWNER_ACCESS_COOKIE}=oa; ${OWNER_REFRESH_COOKIE}=or`,
         cookieSecure: true,
-        body: { targetCurrencyCode: 'USD', rate: 1.25, enabled: true },
+        body: { targetCurrencyCode: 'USD', rate: '1.2500', enabled: true },
       },
       { sessionPorts: session, rpcFactory },
     );
@@ -426,7 +451,7 @@ describe('owner USDT rates and staff isolation', () => {
     assert.equal(calls[1]?.name, 'owner_set_usdt_deposit_rate');
     assert.deepEqual(calls[1]?.args, {
       p_target_currency_code: 'USD',
-      p_rate: 1.25,
+      p_rate: '1.2500',
       p_enabled: true,
     });
   });
@@ -539,5 +564,182 @@ describe('phase 057 UI and adapters', () => {
     ].join('\n');
     assert.equal(ui.includes('SERVICE_ROLE'), false);
     assert.equal(ui.includes('service_role'), false);
+  });
+});
+
+describe('strict currency mapping', () => {
+  it('allows exactly six player currencies and rejects unknown storage codes', () => {
+    assert.deepEqual([...PLAYER_DISPLAY_CURRENCIES], ['TMT', 'USD', 'TRY', 'UZS', 'RUB', 'KZT']);
+    assert.equal(storagePlayerCurrency('TMT'), 'TMTM');
+    assert.equal(storagePlayerCurrency('TMTM'), 'TMTM');
+    assert.equal(displayPlayerCurrency('TMTM'), 'TMT');
+    for (const code of ['USD', 'TRY', 'UZS', 'RUB', 'KZT'] as const) {
+      assert.equal(storagePlayerCurrency(code), code);
+      assert.equal(displayPlayerCurrency(code), code);
+    }
+    for (const bad of ['EUR', 'ABC', 'USDT', '', 'usd1']) {
+      assert.equal(storagePlayerCurrency(bad), null, bad);
+      assert.equal(walletCurrenciesMatch(bad, bad), false, bad);
+    }
+    const storageFn = functionSql(sql057, 'private.wallet_storage_currency');
+    assert.match(storageFn, /NOT IN \('TMT', 'USD', 'TRY', 'UZS', 'RUB', 'KZT'\)/);
+    assert.match(storageFn, /RETURN NULL/);
+    assert.equal(storageFn.includes('RETURN v_display'), false);
+    assert.match(storageFn, /IF v_display = 'TMT' THEN\s+RETURN 'TMTM'/);
+  });
+});
+
+describe('sports TMT-only placement guard', () => {
+  it('patches sports_require_player_by_id itself and rejects non-TMT before money mutation', () => {
+    const requireFn = functionSql(sql057, 'private.sports_require_player_by_id');
+    const gameFn = functionSql(sql057, 'private.game_require_player_context');
+    assert.match(requireFn, /STAFF_CANNOT_PLAY/);
+    assert.match(requireFn, /player_active_wallet/);
+    assert.match(requireFn, /WALLET_BLOCKED/);
+    assert.match(requireFn, /WALLET_CLOSED/);
+    assert.match(requireFn, /PLAYER_WALLET_NOT_ACTIVE/);
+    assert.match(requireFn, /wallet_display_currency\(v_locked\.currency\)/);
+    assert.match(requireFn, /IF v_display IS DISTINCT FROM 'TMT'/);
+    assert.match(requireFn, /CURRENCY_LIMITS_UNCONFIGURED/);
+    assert.equal(/SELECT p\.wallet_id\s+INTO v_wallet\s+FROM public\.profiles/.test(requireFn), false);
+    assert.equal(requireFn.includes('INSERT INTO private.sports_bets'), false);
+    assert.equal(requireFn.includes('CASINO_BET'), false);
+    assert.equal(requireFn.includes('TREASURY_FUNDING'), false);
+    assert.notEqual(requireFn, gameFn);
+
+    const sql047 = latestMigration('sports_bet_acceptance_integrity_047');
+    const engine = functionSql(sql047, 'private.sports_engine_place_as');
+    const requireAt = engine.indexOf('sports_require_player_by_id');
+    const insertAt = engine.indexOf('INSERT INTO private.sports_bets');
+    const debitAt = engine.indexOf('apply_wallet_entry');
+    assert.equal(requireAt >= 0, true);
+    assert.equal(insertAt > requireAt, true);
+    assert.equal(debitAt > requireAt, true);
+    assert.equal(debitAt > insertAt, true);
+
+    function placement(display: string) {
+      const rejected = display !== 'TMT';
+      return {
+        rejected,
+        code: rejected ? 'CURRENCY_LIMITS_UNCONFIGURED' : null,
+        beforeInsert: requireAt < insertAt && !requireFn.includes('INSERT INTO private.sports_bets'),
+        beforeDebit: requireAt < debitAt && !requireFn.includes('CASINO_BET'),
+      };
+    }
+    const tmt = placement('TMT');
+    assert.equal(tmt.rejected, false);
+    assert.equal(tmt.code, null);
+    assert.equal(tmt.beforeInsert, true);
+    for (const code of ['USD', 'TRY', 'UZS', 'RUB', 'KZT']) {
+      const result = placement(code);
+      assert.equal(result.rejected, true, code);
+      assert.equal(result.code, 'CURRENCY_LIMITS_UNCONFIGURED', code);
+      assert.equal(result.beforeInsert, true, code);
+      assert.equal(result.beforeDebit, true, code);
+    }
+    assert.equal(mapPlayerGameRpcError({ message: 'CURRENCY_LIMITS_UNCONFIGURED' }).code, 'CURRENCY_LIMITS_UNCONFIGURED');
+    assert.equal(mapPlayerGameRpcError({ message: 'CURRENCY_LIMITS_UNCONFIGURED' }).httpStatus, 409);
+  });
+});
+
+describe('cashier_enabled server enforcement', () => {
+  it('requires catalog is_active and cashier_enabled and keeps TMT cashier on the TMT wallet', () => {
+    const resolver = functionSql(sql057, 'private.cashier_resolve_player_wallet_for_ops_currency');
+    const deposit = functionSql(sql057, 'public.cashier_deposit_player');
+    assert.match(resolver, /c\.is_active/);
+    assert.match(resolver, /c\.cashier_enabled/);
+    assert.match(resolver, /CASHIER_CURRENCY_DISABLED/);
+    assert.match(resolver, /PLAYER_CURRENCY_WALLET_REQUIRED/);
+    assert.match(resolver, /a\.currency = v_storage/);
+    assert.equal(resolver.includes('player_create_zero_wallet'), false);
+    assert.equal(resolver.includes('player_set_active_wallet_id'), false);
+    assert.match(deposit, /cashier_resolve_player_wallet_for_ops_currency\(p_player_public_id, v_op\.currency\)/);
+    assert.match(deposit, /active_wallet_unchanged/);
+    assert.equal(deposit.includes('player_create_zero_wallet'), false);
+    const services = readFileSync(join(root, 'src/cashier/services.ts'), 'utf8');
+    assert.match(services, /CASHIER_CURRENCY_DISABLED/);
+  });
+});
+
+describe('USDT quote mutation recheck and exact decimal', () => {
+  it('rechecks catalog flags and wallet status inside player_create_usdt_quote', () => {
+    const quote = functionSql(sql057, 'public.player_create_usdt_quote');
+    const targets = functionSql(sql057, 'public.player_usdt_quote_targets');
+    assert.match(quote, /require_player_deposit_allowed/);
+    assert.match(quote, /usdt_deposit_enabled/);
+    assert.match(quote, /wallet_enabled/);
+    assert.match(quote, /c\.is_active/);
+    assert.match(quote, /WALLET_BLOCKED/);
+    assert.match(quote, /WALLET_CLOSED/);
+    assert.match(quote, /PLAYER_WALLET_NOT_ACTIVE/);
+    assert.match(quote, /USDT_RATE_UNAVAILABLE/);
+    assert.match(quote, /v_credit := p_source_amount \* v_rate/);
+    assert.equal(quote.includes('player_create_zero_wallet'), false);
+    assert.match(targets, /usdt_deposit_enabled/);
+    assert.notEqual(quote.includes('usdt_deposit_enabled'), false);
+  });
+
+  it('keeps quote financial snapshot immutable after insert', () => {
+    const protect = functionSql(sql057, 'private.crypto_deposit_quotes_protect_snapshot');
+    for (const column of [
+      'player_user_id',
+      'target_wallet_id',
+      'source_asset',
+      'source_amount',
+      'target_currency_code',
+      'rate_snapshot',
+      'fee_source_amount',
+      'credit_amount',
+      'created_at',
+      'expires_at',
+    ]) {
+      assert.match(protect, new RegExp(`NEW\\.${column} IS DISTINCT FROM OLD\\.${column}`));
+    }
+    assert.match(protect, /TG_OP = 'DELETE'/);
+    assert.match(protect, /QUOTE_IMMUTABLE/);
+    assert.match(sql057, /REVOKE DELETE ON TABLE private\.crypto_deposit_quotes FROM service_role/);
+    assert.match(sql057, /BEFORE UPDATE OR DELETE ON private\.crypto_deposit_quotes/);
+    const setRate = functionSql(sql057, 'public.owner_set_usdt_deposit_rate');
+    assert.equal(setRate.includes('crypto_deposit_quotes'), false);
+  });
+
+  it('rejects empty, zero, negative, and scientific USDT decimals and preserves exact strings', () => {
+    assert.equal(parseExactPositiveDecimal('1.2500', 'USDT_RATE_INVALID'), '1.2500');
+    assert.equal(parseExactPositiveDecimal('100.50', 'USDT_AMOUNT_INVALID'), '100.50');
+    assert.equal(parseExactPositiveDecimal(25, 'USDT_RATE_INVALID'), '25');
+    for (const bad of ['', ' ', '0', '0.0', '-1', '1e3', '1E-2', 'Infinity', 'NaN', 'abc', '+1', '1.2.3']) {
+      assert.throws(() => parseExactPositiveDecimal(bad, 'USDT_RATE_INVALID'), /USDT_RATE_INVALID/, String(bad));
+    }
+    assert.throws(() => parseExactPositiveDecimal('1'.repeat(41), 'USDT_AMOUNT_INVALID'), /USDT_AMOUNT_INVALID/);
+  });
+
+  it('rejects garbage USDT quote amounts at the HTTP boundary', async () => {
+    for (const sourceAmount of ['', '0', '-5', '1e2', 'NaN']) {
+      const result = await playerWallet('POST', PLAYER_USDT_QUOTE_PATH, {
+        body: { sourceAmount, walletId: WALLET_USD },
+      });
+      assert.equal(result.status, 400, String(sourceAmount));
+      assert.equal(result.body.error, 'USDT_AMOUNT_INVALID', String(sourceAmount));
+    }
+  });
+});
+
+describe('owner TMT funding safety', () => {
+  it('funds and debits the TMT wallet even when another currency is active', () => {
+    const resolver = functionSql(sql057, 'private.owner_resolve_player_tmt_wallet');
+    const fund = functionSql(sql057, 'public.owner_fund_player');
+    const debit = functionSql(sql057, 'public.owner_debit_player');
+    assert.match(resolver, /wallet_storage_currency\('TMT'\)/);
+    assert.match(resolver, /PLAYER_CURRENCY_WALLET_REQUIRED/);
+    assert.equal(resolver.includes('player_create_zero_wallet'), false);
+    assert.match(fund, /owner_resolve_player_tmt_wallet/);
+    assert.match(debit, /owner_resolve_player_tmt_wallet/);
+    assert.equal(fund.includes('cashier_resolve_player_by_public_id'), false);
+    assert.equal(debit.includes('cashier_resolve_player_by_public_id'), false);
+    assert.match(fund, /TREASURY_TO_PLAYER/);
+    assert.equal(fund.includes('player_set_active_wallet_id'), false);
+    assert.equal(debit.includes('player_set_active_wallet_id'), false);
+    assert.match(fund, /SET active_wallet_id = v_active/);
+    assert.match(debit, /SET active_wallet_id = v_active/);
   });
 });

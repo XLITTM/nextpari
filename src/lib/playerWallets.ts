@@ -84,7 +84,7 @@ export async function fetchUsdtQuoteTargets(): Promise<Array<{
   });
 }
 
-export async function createUsdtQuote(sourceAmount: number, walletId: string): Promise<Record<string, unknown>> {
+export async function createUsdtQuote(sourceAmount: string, walletId: string): Promise<Record<string, unknown>> {
   const res = await fetch('/api/player/crypto/usdt-quote', {
     method: 'POST',
     credentials: 'same-origin',

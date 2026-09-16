@@ -15,14 +15,17 @@ export const PLAYER_REGISTRATION_CURRENCY_OPTIONS: Array<{
 
 export function displayPlayerCurrency(code: string | null | undefined): string {
   const raw = String(code ?? '').trim().toUpperCase();
-  if (raw === 'TMTM') return 'TMT';
+  if (raw === 'TMTM' || raw === 'TMT') return 'TMT';
+  if ((PLAYER_DISPLAY_CURRENCIES as readonly string[]).includes(raw)) return raw;
   return raw || 'TMT';
 }
 
-export function storagePlayerCurrency(code: string | null | undefined): string {
-  const display = displayPlayerCurrency(code);
-  if (display === 'TMT') return 'TMTM';
-  return display;
+export function storagePlayerCurrency(code: string | null | undefined): string | null {
+  const raw = String(code ?? '').trim().toUpperCase();
+  if (!raw) return null;
+  if (raw === 'TMT' || raw === 'TMTM') return 'TMTM';
+  if (raw === 'USD' || raw === 'TRY' || raw === 'UZS' || raw === 'RUB' || raw === 'KZT') return raw;
+  return null;
 }
 
 export function isPlayerDisplayCurrency(code: string | null | undefined): code is PlayerDisplayCurrency {
