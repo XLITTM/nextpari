@@ -56,7 +56,7 @@ export function mapCashierRpcError(error: { message?: string; code?: string }): 
   if (code === 'FIELD_FORBIDDEN') {
     return staffError(code, 400);
   }
-  if (code === 'CASHIER_CURRENCY_DISABLED' || code === 'CURRENCY_UNSUPPORTED' || code === 'DEPOSIT_BELOW_CURRENCY_MIN') {
+  if (code === 'CASHIER_CURRENCY_DISABLED' || code === 'CURRENCY_UNSUPPORTED' || code === 'DEPOSIT_BELOW_CURRENCY_MIN' || code === 'CURRENCY_AMOUNT_SCALE_INVALID') {
     return staffError(code, 400);
   }
   if (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED') || code.endsWith('_UNSUPPORTED') || code.endsWith('_DISABLED'))) {

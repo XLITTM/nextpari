@@ -40,7 +40,7 @@ function requireStake(value: unknown): number {
   if (!Number.isFinite(n) || n <= 0) {
     throw staffError('STAKE_NOT_POSITIVE', 400);
   }
-  return Number(n.toFixed(2));
+  return n;
 }
 
 function isUuid(value: string): boolean {
@@ -49,7 +49,7 @@ function isUuid(value: string): boolean {
 
 function quoteHttpStatus(reason: string): number {
   if (reason === 'SPORTS_BET_DISABLED') return 403;
-  if (reason === 'INVALID_PRICE' || reason === 'MISSING_BET_ID' || reason === 'MISSING_FIXTURE') return 400;
+  if (reason === 'INVALID_PRICE' || reason === 'MISSING_BET_ID' || reason === 'MISSING_FIXTURE' || reason === 'CURRENCY_AMOUNT_SCALE_INVALID') return 400;
   if (
     reason === 'SPORTS_STAKE_LIMIT'
     || reason === 'SPORTS_PAYOUT_LIMIT'

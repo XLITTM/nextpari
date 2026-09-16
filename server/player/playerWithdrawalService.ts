@@ -7,7 +7,6 @@ import {
 import type { PlayerAuthHttpResult } from './playerAuthService.js';
 
 const METHODS = new Set(['cash', 'card', 'crypto', 'ewallet', 'other']);
-const CASH_WITHDRAWAL_MIN = 40;
 const AMOUNT_SCALE_TOLERANCE = 1e-8;
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -74,9 +73,6 @@ export async function createPlayerWithdrawal(
   if (!METHODS.has(method)) throw staffError('WITHDRAWAL_METHOD_INVALID', 400);
   if (method === 'card') throw staffError('CARD_WITHDRAWAL_PROVIDER_REQUIRED', 400);
   const amount = requireAmount(rec.amount);
-  if (method === 'cash' && amount < CASH_WITHDRAWAL_MIN) {
-    throw staffError('CASH_WITHDRAWAL_BELOW_MIN', 400);
-  }
   return wrapOk(await runPlayerGameRpc(ports, cookieHeader, secure, 'player_create_withdrawal', {
     p_method: method,
     p_amount: amount,

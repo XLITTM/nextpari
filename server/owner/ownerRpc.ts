@@ -33,6 +33,7 @@ export function mapOwnerRpcError(error: { message?: string; code?: string }): St
     || code === 'OPERATIONAL_CURRENCY_ACCOUNT_ALREADY_EXISTS'
     || code === 'CURRENCY_LIMITS_UNCONFIGURED'
     || code === 'OWNED_GAMES_CURRENCY_NOT_READY'
+    || code === 'OWNED_GAMES_CURRENCY_DISABLED'
     || code === 'CURRENCY_DISABLED'
     || code === 'SPORTS_CURRENCY_DISABLED'
     || code === 'LOGIN_TAKEN'

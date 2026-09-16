@@ -208,7 +208,8 @@ describe('phase 059 owner HTTP and audit', () => {
     assert.match(sports, /SPORTS_ENABLED_CHANGED/);
     const owned = functionSql(sql059, 'public.owner_set_currency_owned_games_enabled(');
     assert.match(owned, /OWNED_GAMES_CURRENCY_NOT_READY/);
-    assert.match(owned, /OWNED_GAMES_ENABLED_REJECTED/);
+    assert.equal(owned.includes('OWNED_GAMES_ENABLED_REJECTED'), false);
+    assert.match(owned, /OWNED_GAMES_ENABLED_CHANGED/);
     assert.match(sql059, /supported_currencies_non_tmt_owned_games_blocked/);
 
     const enable = await ownerReq('POST', '/api/owner/currency-limits/sports', { currency: 'RUB', enabled: true });
@@ -277,9 +278,15 @@ describe('phase 059 sports placement and settlement', () => {
     const place = functionSql(sql059, 'private.sports_engine_place_as(');
     assert.ok(place.indexOf('enforce_sports_currency_limits') < place.indexOf('INSERT INTO private.sports_bets'));
     assert.ok(place.indexOf('enforce_sports_currency_limits') < place.indexOf('apply_wallet_entry'));
+    assert.match(place, /require_currency_amount_scale\(v_display, p_stake\)/);
+    assert.ok(place.indexOf('INTO v_existing') < place.indexOf('require_currency_amount_scale(v_display, p_stake)'));
+    assert.ok(place.indexOf('require_currency_amount_scale(v_display, p_stake)') < place.indexOf('INSERT INTO private.sports_bets'));
+    assert.equal(place.includes('require_currency_amount_scale(v_display, v_payout)'), false);
+    assert.equal(place.includes('require_currency_amount_scale(v_display, v_stake)'), false);
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_STAKE_BELOW_CURRENCY_MIN' }).httpStatus, 409);
     assert.equal(mapPlayerGameRpcError({ message: 'SPORTS_CURRENCY_DISABLED' }).httpStatus, 409);
     assert.equal(mapPlayerGameRpcError({ message: 'CURRENCY_LIMITS_UNCONFIGURED' }).httpStatus, 409);
+    assert.equal(mapPlayerGameRpcError({ message: 'CURRENCY_AMOUNT_SCALE_INVALID' }).httpStatus, 400);
   });
 
   it('sports place HTTP replay uses original payload and does not inject current wallet', async () => {
@@ -412,6 +419,9 @@ describe('phase 059 player funding limits', () => {
     assert.equal(calls[0]?.args?.p_amount, '5');
     const deposit = functionSql(sql059, 'public.cashier_deposit_player_currency(');
     assert.match(deposit, /SET active_wallet_id = v_active/);
+    assert.match(deposit, /require_currency_amount_scale\(v_display, p_amount\)/);
+    assert.ok(deposit.indexOf('require_currency_amount_scale') < deposit.indexOf('apply_operational_transfer'));
+    assert.equal(mapCashierRpcError({ message: 'CURRENCY_AMOUNT_SCALE_INVALID' }).httpStatus, 400);
   });
 
   it('USDT quotes compare credited target amount, not the USDT source', () => {
@@ -429,6 +439,17 @@ describe('phase 059 player funding limits', () => {
     assert.match(create, /withdrawal_lock_player_wallet/);
     assert.match(create, /require_player_min_amount/);
     assert.match(create, /'withdrawal'/);
+    const beforeLock = create.slice(0, create.indexOf('withdrawal_lock_player_wallet'));
+    const afterLock = create.slice(create.indexOf('withdrawal_lock_player_wallet'));
+    assert.equal(beforeLock.includes('CASH_WITHDRAWAL_BELOW_MIN'), false);
+    assert.equal(beforeLock.includes('p_amount < 40'), false);
+    assert.match(afterLock, /CASH_WITHDRAWAL_BELOW_MIN/);
+    assert.match(afterLock, /v_display = 'TMT'/);
+    assert.match(afterLock, /limits_configured/);
+    assert.match(afterLock, /v_method = 'cash'/);
+    assert.match(afterLock, /p_amount < 40/);
+    assert.match(afterLock, /require_currency_amount_scale\(v_display, p_amount\)/);
+    assert.ok(afterLock.indexOf('INTO v_existing') < 0 || create.indexOf('INTO v_existing') < create.indexOf('withdrawal_lock_player_wallet'));
     const helper = functionSql(sql059, 'private.require_player_min_amount(');
     assert.match(helper, /WITHDRAWAL_BELOW_CURRENCY_MIN/);
     const json = functionSql(sql059, 'private.withdrawal_public_json(');
@@ -441,10 +462,19 @@ describe('phase 059 owned games safety', () => {
   it('blocks non-TMT owned games even when limits exist and does not clip payouts', () => {
     const ready = functionSql(sql059, 'private.require_owned_games_currency_ready(p_display TEXT)');
     assert.match(ready, /OWNED_GAMES_CURRENCY_NOT_READY/);
+    const startReady = functionSql(sql059, 'private.require_owned_games_new_start_ready(p_display TEXT)');
+    assert.match(startReady, /OWNED_GAMES_CURRENCY_NOT_READY/);
+    assert.match(startReady, /OWNED_GAMES_CURRENCY_DISABLED/);
+    assert.match(startReady, /CURRENCY_DISABLED/);
     const ctx = functionSql(sql059, 'private.game_require_player_context()');
-    assert.match(ctx, /require_owned_games_currency_ready/);
+    assert.equal(ctx.includes('require_owned_games_currency_ready'), false);
+    assert.equal(ctx.includes('require_owned_games_new_start_ready'), false);
     const start = functionSql(sql059, 'private.game_engine_start(');
     assert.match(start, /game_effective_stake_bounds/);
+    assert.match(start, /require_owned_games_new_start_ready/);
+    assert.ok(start.indexOf('start_idempotency_key = v_key') < start.indexOf('game_require_player_context'));
+    assert.ok(start.indexOf('start_idempotency_key = v_key') < start.indexOf('require_owned_games_new_start_ready'));
+    assert.ok(start.indexOf('game_current_balance(v_existing.wallet_id)') < start.indexOf('require_owned_games_new_start_ready'));
     assert.equal(start.includes('CLIP'), false);
     assert.equal(start.includes('max_payout'), false);
     assert.match(start, /game_current_balance\(v_existing\.wallet_id\)/);
@@ -453,6 +483,90 @@ describe('phase 059 owned games safety', () => {
     assert.match(sql034, /1\.013623494/);
     assert.equal(sql059.includes('rtp_target'), false);
     assert.equal(mapPlayerGameRpcError({ message: 'OWNED_GAMES_CURRENCY_NOT_READY' }).httpStatus, 409);
+    assert.equal(mapPlayerGameRpcError({ message: 'OWNED_GAMES_CURRENCY_DISABLED' }).httpStatus, 409);
+  });
+});
+
+describe('phase 059 pre-merge hardening', () => {
+  it('keeps TMT cash-40 as unconfigured-legacy only and never applies it to non-TMT', () => {
+    const create = functionSql(sql059, 'public.player_create_withdrawal(');
+    const minHelper = functionSql(sql059, 'private.require_player_min_amount(');
+    const beforeLock = create.slice(0, create.indexOf('withdrawal_lock_player_wallet'));
+    const afterLock = create.slice(create.indexOf('withdrawal_lock_player_wallet'));
+    assert.ok(create.indexOf('INTO v_existing') < create.indexOf('withdrawal_lock_player_wallet'));
+    assert.equal(beforeLock.includes('CASH_WITHDRAWAL_BELOW_MIN'), false);
+    assert.match(afterLock, /v_display = 'TMT'/);
+    assert.match(afterLock, /COALESCE\(v_limits_configured, FALSE\) IS NOT TRUE/);
+    assert.match(afterLock, /v_method = 'cash'/);
+    assert.match(afterLock, /p_amount < 40/);
+    assert.match(afterLock, /CASH_WITHDRAWAL_BELOW_MIN/);
+    assert.ok(afterLock.indexOf('CASH_WITHDRAWAL_BELOW_MIN') < afterLock.indexOf("require_player_min_amount(v_display, p_amount, 'withdrawal')"));
+    assert.match(minHelper, /WITHDRAWAL_BELOW_CURRENCY_MIN/);
+    assert.match(minHelper, /v_row\.limits_configured IS DISTINCT FROM TRUE/);
+    assert.equal(afterLock.includes("v_display <> 'TMT' AND p_amount < 40"), false);
+    assert.equal(afterLock.includes("v_display IS DISTINCT FROM 'TMT' AND p_amount < 40"), false);
+  });
+
+  it('rejects user-entered money that exceeds display_scale without rounding it', () => {
+    const scale = functionSql(sql059, 'private.require_currency_amount_scale(');
+    assert.match(scale, /CURRENCY_UNSUPPORTED/);
+    assert.match(scale, /CURRENCY_AMOUNT_SCALE_INVALID/);
+    assert.match(scale, /pg_catalog\.scale\(p_amount\)/);
+    assert.equal(scale.includes('ROUND('), false);
+    assert.equal(scale.includes('game_money'), false);
+
+    const place = functionSql(sql059, 'private.sports_engine_place_as(');
+    assert.match(place, /sports_place_request_fingerprint\(v_stake, v_mode, p_legs\)/);
+    assert.match(place, /require_currency_amount_scale\(v_display, p_stake\)/);
+    assert.ok(place.indexOf('INTO v_existing') < place.indexOf('require_currency_amount_scale(v_display, p_stake)'));
+    assert.ok(place.indexOf('require_currency_amount_scale(v_display, p_stake)') < place.indexOf('INSERT INTO private.sports_bets'));
+    assert.ok(place.indexOf('require_currency_amount_scale(v_display, p_stake)') < place.indexOf('apply_wallet_entry'));
+    assert.equal(place.includes('require_currency_amount_scale(v_display, v_payout)'), false);
+
+    const deposit = functionSql(sql059, 'public.cashier_deposit_player_currency(');
+    assert.match(deposit, /require_currency_amount_scale\(v_display, p_amount\)/);
+    assert.ok(deposit.indexOf('require_currency_amount_scale') < deposit.indexOf('apply_operational_transfer'));
+
+    const create = functionSql(sql059, 'public.player_create_withdrawal(');
+    assert.match(create, /require_currency_amount_scale\(v_display, p_amount\)/);
+    assert.ok(create.indexOf('is_duplicate\', true') < create.indexOf('require_currency_amount_scale'));
+
+    const quote = functionSql(sql059, 'public.player_create_usdt_quote(');
+    assert.equal(quote.includes('require_currency_amount_scale'), false);
+    const settle = functionSql(sql038, 'private.sports_apply_one(');
+    assert.equal(settle.includes('require_currency_amount_scale'), false);
+
+    const sportsHttp = readFileSync(join(root, 'server/player/sportsPlaceService.ts'), 'utf8');
+    assert.equal(sportsHttp.includes('n.toFixed(2)'), false);
+    assert.equal(mapPlayerGameRpcError({ message: 'CURRENCY_AMOUNT_SCALE_INVALID' }).httpStatus, 400);
+    assert.equal(mapCashierRpcError({ message: 'CURRENCY_AMOUNT_SCALE_INVALID' }).httpStatus, 400);
+  });
+
+  it('replays existing game starts from recorded wallet_id after product or wallet changes', () => {
+    const start = functionSql(sql059, 'private.game_engine_start(');
+    const ctx = functionSql(sql059, 'private.game_require_player_context()');
+    const startReady = functionSql(sql059, 'private.require_owned_games_new_start_ready(p_display TEXT)');
+    const bounds = functionSql(sql059, 'private.game_effective_stake_bounds(');
+    const ownedOwner = functionSql(sql059, 'public.owner_set_currency_owned_games_enabled(');
+    assert.equal(ctx.includes('require_owned_games'), false);
+    assert.equal(bounds.includes('require_owned_games'), false);
+    assert.match(startReady, /OWNED_GAMES_CURRENCY_DISABLED/);
+    assert.match(start, /player_user_id = v_uid/);
+    assert.ok(start.indexOf('start_idempotency_key = v_key') < start.indexOf('SELECT * INTO v_ctx FROM private.game_require_player_context()'));
+    assert.ok(start.indexOf('game_current_balance(v_existing.wallet_id)') < start.indexOf('require_owned_games_new_start_ready'));
+    assert.ok(start.indexOf('require_owned_games_new_start_ready') < start.indexOf('INSERT INTO private.game_rounds'));
+    assert.ok(start.indexOf('require_owned_games_new_start_ready') < start.indexOf('game_apply_bet'));
+    const foundBlock = start.slice(start.indexOf('IF FOUND THEN'), start.indexOf('SELECT * INTO v_ctx FROM private.game_require_player_context()'));
+    assert.equal(foundBlock.includes('game_apply_bet'), false);
+    assert.equal(foundBlock.includes('INSERT INTO private.game_rounds'), false);
+    assert.match(foundBlock, /game_current_balance\(v_existing\.wallet_id\)/);
+    assert.equal(sql059.includes('CREATE OR REPLACE FUNCTION private.game_engine_action('), false);
+    assert.equal(ownedOwner.includes('OWNED_GAMES_ENABLED_REJECTED'), false);
+    assert.match(ownedOwner, /OWNED_GAMES_CURRENCY_NOT_READY/);
+    assert.ok(ownedOwner.indexOf("v_code IS DISTINCT FROM 'TMT'") < ownedOwner.indexOf("RAISE EXCEPTION 'OWNED_GAMES_CURRENCY_NOT_READY'"));
+    assert.equal(ownedOwner.slice(0, ownedOwner.indexOf("RAISE EXCEPTION 'OWNED_GAMES_CURRENCY_NOT_READY'")).includes('record_currency_limit_event'), false);
+    assert.equal(mapPlayerGameRpcError({ message: 'OWNED_GAMES_CURRENCY_DISABLED' }).httpStatus, 409);
+    assert.equal(mapOwnerRpcError({ message: 'OWNED_GAMES_CURRENCY_NOT_READY' }).httpStatus, 409);
   });
 });
 

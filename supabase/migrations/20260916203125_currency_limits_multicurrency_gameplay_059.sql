@@ -218,6 +218,36 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.require_currency_amount_scale(
+    p_display_currency TEXT,
+    p_amount NUMERIC
+)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_row private.supported_currencies%ROWTYPE;
+BEGIN
+    SELECT c.*
+    INTO v_row
+    FROM private.supported_currencies AS c
+    WHERE c.code = p_display_currency;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
+    END IF;
+    IF p_amount IS NULL OR p_amount <= 0 THEN
+        RETURN;
+    END IF;
+    IF pg_catalog.scale(p_amount) > COALESCE(v_row.display_scale, 2) THEN
+        RAISE EXCEPTION 'CURRENCY_AMOUNT_SCALE_INVALID';
+    END IF;
+END;
+$fn$;
+
+
 CREATE OR REPLACE FUNCTION private.require_player_min_amount(
     p_display TEXT,
     p_amount NUMERIC,
@@ -351,6 +381,36 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.require_owned_games_new_start_ready(p_display TEXT)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_row private.supported_currencies%ROWTYPE;
+BEGIN
+    SELECT c.*
+    INTO v_row
+    FROM private.supported_currencies AS c
+    WHERE c.code = p_display;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
+    END IF;
+    IF v_row.is_active IS DISTINCT FROM TRUE OR v_row.wallet_enabled IS DISTINCT FROM TRUE THEN
+        RAISE EXCEPTION 'CURRENCY_DISABLED';
+    END IF;
+    IF v_row.code IS DISTINCT FROM 'TMT' THEN
+        RAISE EXCEPTION 'OWNED_GAMES_CURRENCY_NOT_READY';
+    END IF;
+    IF v_row.owned_games_enabled IS DISTINCT FROM TRUE THEN
+        RAISE EXCEPTION 'OWNED_GAMES_CURRENCY_DISABLED';
+    END IF;
+END;
+$fn$;
+
+
 CREATE OR REPLACE FUNCTION private.game_effective_stake_bounds(
     p_display TEXT,
     p_game_min NUMERIC,
@@ -370,7 +430,6 @@ DECLARE
     v_min NUMERIC;
     v_max NUMERIC;
 BEGIN
-    PERFORM private.require_owned_games_currency_ready(p_display);
     v_min := p_game_min;
     v_max := p_game_max;
     SELECT c.*
@@ -544,13 +603,10 @@ BEGIN
     v_code := private.require_supported_display_currency(p_currency);
     v_old := private.currency_public_limit_json(v_code);
     IF v_code IS DISTINCT FROM 'TMT' THEN
-        PERFORM private.record_currency_limit_event(
-            v_code,
-            'OWNED_GAMES_ENABLED_REJECTED',
-            v_old,
-            jsonb_build_object('requested_enabled', COALESCE(p_enabled, FALSE))
-        );
-        RAISE EXCEPTION 'OWNED_GAMES_CURRENCY_NOT_READY';
+        IF COALESCE(p_enabled, FALSE) IS TRUE THEN
+            RAISE EXCEPTION 'OWNED_GAMES_CURRENCY_NOT_READY';
+        END IF;
+        RETURN v_old;
     END IF;
 
     UPDATE private.supported_currencies AS c
@@ -853,6 +909,7 @@ BEGIN
     FROM private.wallet_accounts AS a
     WHERE a.wallet_id = v_ctx.wallet_id;
     v_display := COALESCE(private.wallet_display_currency(v_storage), 'TMT');
+    PERFORM private.require_currency_amount_scale(v_display, p_stake);
 
     SELECT s.*
     INTO v_settings
@@ -1129,7 +1186,6 @@ AS $fn$
 DECLARE
     v_uid UUID;
     v_active RECORD;
-    v_display TEXT;
 BEGIN
     v_uid := auth.uid();
     IF v_uid IS NULL THEN
@@ -1155,9 +1211,6 @@ BEGIN
         RAISE EXCEPTION 'PLAYER_WALLET_NOT_ACTIVE';
     END IF;
 
-    v_display := v_active.display_currency;
-    PERFORM private.require_owned_games_currency_ready(v_display);
-
     RETURN QUERY SELECT v_uid, v_active.wallet_id, v_active.status, v_active.migration_state;
 END;
 $fn$;
@@ -1176,6 +1229,7 @@ SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
+    v_uid UUID;
     v_ctx RECORD;
     v_cat private.game_catalog%ROWTYPE;
     v_key TEXT;
@@ -1194,11 +1248,20 @@ DECLARE
     v_eff_min NUMERIC;
     v_eff_max NUMERIC;
 BEGIN
+    v_uid := auth.uid();
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'AUTH_REQUIRED';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM private.staff_accounts AS s WHERE s.auth_user_id = v_uid
+    ) THEN
+        RAISE EXCEPTION 'STAFF_CANNOT_PLAY';
+    END IF;
+
     v_code := NULLIF(BTRIM(LOWER(COALESCE(p_game_code, ''))), '');
     IF v_code = 'aviator' THEN
         PERFORM private.game_aviator_lock_current();
     END IF;
-    SELECT * INTO v_ctx FROM private.game_require_player_context();
     v_cat := private.game_require_catalog(p_game_code);
     v_key := private.game_require_idempotency_key(p_idempotency_key);
     v_opts := private.game_sanitize_options(p_options);
@@ -1211,20 +1274,6 @@ BEGIN
     END IF;
     v_stake := ROUND(p_stake, 2);
 
-    SELECT private.wallet_display_currency(a.currency)
-    INTO v_display
-    FROM private.wallet_accounts AS a
-    WHERE a.wallet_id = v_ctx.wallet_id;
-    SELECT b.min_stake, b.max_stake
-    INTO v_eff_min, v_eff_max
-    FROM private.game_effective_stake_bounds(v_display, v_cat.min_stake, v_cat.max_stake) AS b;
-    IF v_stake < v_eff_min THEN
-        RAISE EXCEPTION 'STAKE_BELOW_MIN';
-    END IF;
-    IF v_eff_max IS NOT NULL AND v_stake > v_eff_max THEN
-        RAISE EXCEPTION 'STAKE_ABOVE_MAX';
-    END IF;
-
     v_fp := private.game_fingerprint(jsonb_build_object(
         'gameCode', v_cat.game_code,
         'stake', v_stake,
@@ -1234,7 +1283,7 @@ BEGIN
     SELECT r.*
     INTO v_existing
     FROM private.game_rounds AS r
-    WHERE r.player_user_id = v_ctx.user_id
+    WHERE r.player_user_id = v_uid
       AND r.start_idempotency_key = v_key
     FOR UPDATE;
 
@@ -1251,6 +1300,23 @@ BEGIN
             true,
             private.game_allowed_actions(v_existing)
         );
+    END IF;
+
+    SELECT * INTO v_ctx FROM private.game_require_player_context();
+    SELECT private.wallet_display_currency(a.currency)
+    INTO v_display
+    FROM private.wallet_accounts AS a
+    WHERE a.wallet_id = v_ctx.wallet_id;
+    PERFORM private.require_owned_games_new_start_ready(v_display);
+
+    SELECT b.min_stake, b.max_stake
+    INTO v_eff_min, v_eff_max
+    FROM private.game_effective_stake_bounds(v_display, v_cat.min_stake, v_cat.max_stake) AS b;
+    IF v_stake < v_eff_min THEN
+        RAISE EXCEPTION 'STAKE_BELOW_MIN';
+    END IF;
+    IF v_eff_max IS NOT NULL AND v_stake > v_eff_max THEN
+        RAISE EXCEPTION 'STAKE_ABOVE_MAX';
     END IF;
 
     v_math := private.game_math_version(v_cat.game_code);
@@ -1289,7 +1355,7 @@ EXCEPTION
         SELECT r.*
         INTO v_existing
         FROM private.game_rounds AS r
-        WHERE r.player_user_id = v_ctx.user_id
+        WHERE r.player_user_id = v_uid
           AND r.start_idempotency_key = v_key
         FOR UPDATE;
         IF NOT FOUND THEN
@@ -1499,6 +1565,7 @@ BEGIN
     END IF;
 
     PERFORM private.require_player_deposit_allowed(v_player.player_user_id);
+    PERFORM private.require_currency_amount_scale(v_display, p_amount);
     PERFORM private.require_player_min_amount(v_display, p_amount, 'deposit');
 
     SELECT pref.active_wallet_id
@@ -1755,6 +1822,8 @@ DECLARE
     v_dest TEXT;
     v_city TEXT;
     v_point TEXT;
+    v_display TEXT;
+    v_limits_configured BOOLEAN;
 BEGIN
     v_uid := auth.uid();
     IF v_uid IS NULL THEN
@@ -1781,13 +1850,7 @@ BEGIN
     IF p_amount IS NULL OR p_amount <= 0 THEN
         RAISE EXCEPTION 'AMOUNT_NOT_POSITIVE';
     END IF;
-    IF p_amount <> ROUND(p_amount, 2) THEN
-        RAISE EXCEPTION 'AMOUNT_SCALE_INVALID';
-    END IF;
-    v_amount := ROUND(p_amount, 2);
-    IF v_method = 'cash' AND v_amount < 40 THEN
-        RAISE EXCEPTION 'CASH_WITHDRAWAL_BELOW_MIN';
-    END IF;
+    v_amount := p_amount;
 
     v_city := NULLIF(BTRIM(COALESCE(p_cash_pickup_city, '')), '');
     v_point := NULLIF(BTRIM(COALESCE(p_cash_pickup_point, '')), '');
@@ -1830,12 +1893,24 @@ BEGIN
     INTO v_player
     FROM private.withdrawal_lock_player_wallet(v_uid) AS w;
 
+    v_display := COALESCE(private.wallet_display_currency(v_player.currency), 'TMT');
+    PERFORM private.require_currency_amount_scale(v_display, p_amount);
+    v_amount := p_amount;
+
+    SELECT c.limits_configured
+    INTO v_limits_configured
+    FROM private.supported_currencies AS c
+    WHERE c.code = v_display;
+
+    IF v_display = 'TMT'
+       AND COALESCE(v_limits_configured, FALSE) IS NOT TRUE
+       AND v_method = 'cash'
+       AND p_amount < 40 THEN
+        RAISE EXCEPTION 'CASH_WITHDRAWAL_BELOW_MIN';
+    END IF;
+
     PERFORM private.require_player_withdrawal_allowed(v_uid);
-    PERFORM private.require_player_min_amount(
-        COALESCE(private.wallet_display_currency(v_player.currency), 'TMT'),
-        v_amount,
-        'withdrawal'
-    );
+    PERFORM private.require_player_min_amount(v_display, p_amount, 'withdrawal');
 
     IF v_method = 'cash' THEN
         v_hold := public.player_request_cashier_payout(v_amount, v_key);
@@ -1950,6 +2025,10 @@ REVOKE ALL ON FUNCTION private.enforce_sports_currency_limits(TEXT, NUMERIC, NUM
 GRANT EXECUTE ON FUNCTION private.enforce_sports_currency_limits(TEXT, NUMERIC, NUMERIC) TO service_role;
 REVOKE ALL ON FUNCTION private.require_owned_games_currency_ready(TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.require_owned_games_currency_ready(TEXT) TO service_role;
+REVOKE ALL ON FUNCTION private.require_owned_games_new_start_ready(TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.require_owned_games_new_start_ready(TEXT) TO service_role;
+REVOKE ALL ON FUNCTION private.require_currency_amount_scale(TEXT, NUMERIC) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.require_currency_amount_scale(TEXT, NUMERIC) TO service_role;
 REVOKE ALL ON FUNCTION private.game_effective_stake_bounds(TEXT, NUMERIC, NUMERIC) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.game_effective_stake_bounds(TEXT, NUMERIC, NUMERIC) TO service_role;
 REVOKE ALL ON FUNCTION private.currency_limit_events_append_only() FROM PUBLIC, anon, authenticated, service_role;

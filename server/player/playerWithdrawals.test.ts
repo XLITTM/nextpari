@@ -321,7 +321,7 @@ describe('player withdrawal HTTP gateway', () => {
     assert.equal(ports.rpcs.length, 3);
   });
 
-  it('rejects cash below 40 TMTM and accepts 40', async () => {
+  it('does not apply the TMT cash-40 minimum at HTTP before wallet currency is known', async () => {
     const below = createPlayerPorts();
     const low = await handlePlayerWithdrawalsRequest(
       {
@@ -333,9 +333,9 @@ describe('player withdrawal HTTP gateway', () => {
       },
       below,
     );
-    assert.equal(low.status, 400);
-    assert.equal(low.body.error, 'CASH_WITHDRAWAL_BELOW_MIN');
-    assert.equal(below.rpcs.length, 0);
+    assert.equal(low.status, 200);
+    assert.equal(below.rpcs.length, 1);
+    assert.equal(below.rpcs[0]?.args?.p_amount, 39.99);
 
     const ok = createPlayerPorts();
     const allowed = await handlePlayerWithdrawalsRequest(
