@@ -55,6 +55,11 @@ function quoteHttpStatus(reason: string): number {
     || reason === 'SPORTS_PAYOUT_LIMIT'
     || reason === 'SPORTS_EXPRESS_LEG_LIMIT'
     || reason === 'SPORTS_BET_IDEMPOTENCY_CONFLICT'
+    || reason === 'SPORTS_STAKE_BELOW_CURRENCY_MIN'
+    || reason === 'SPORTS_STAKE_ABOVE_CURRENCY_MAX'
+    || reason === 'SPORTS_PAYOUT_ABOVE_CURRENCY_MAX'
+    || reason === 'SPORTS_CURRENCY_DISABLED'
+    || reason === 'CURRENCY_LIMITS_UNCONFIGURED'
   ) return 409;
   return 409;
 }

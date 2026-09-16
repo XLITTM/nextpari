@@ -432,7 +432,11 @@ type ControlAction =
   | { kind: 'providerGgr' }
   | { kind: 'providerSettlements' }
   | { kind: 'usdtRatesGet' }
-  | { kind: 'usdtRatesSet' };
+  | { kind: 'usdtRatesSet' }
+  | { kind: 'currencyLimitsGet' }
+  | { kind: 'currencyLimitsSet' }
+  | { kind: 'currencySportsSet' }
+  | { kind: 'currencyOwnedGamesSet' };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -572,6 +576,17 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/owner/usdt-rates') {
     if (m === 'GET') return { kind: 'usdtRatesGet' };
     if (m === 'POST') return { kind: 'usdtRatesSet' };
+    return 'method';
+  }
+  if (path === '/api/owner/currency-limits/sports') {
+    return m === 'POST' ? { kind: 'currencySportsSet' } : 'method';
+  }
+  if (path === '/api/owner/currency-limits/owned-games') {
+    return m === 'POST' ? { kind: 'currencyOwnedGamesSet' } : 'method';
+  }
+  if (path === '/api/owner/currency-limits') {
+    if (m === 'GET') return { kind: 'currencyLimitsGet' };
+    if (m === 'POST') return { kind: 'currencyLimitsSet' };
     return 'method';
   }
   return null;
@@ -969,6 +984,27 @@ async function runControl(
         p_enabled: rec.enabled !== false,
       });
     }
+    case 'currencyLimitsGet':
+      return rpc.invoke('owner_currency_limits');
+    case 'currencyLimitsSet':
+      return rpc.invoke('owner_set_currency_limits', {
+        p_currency: requireOperationalCurrency(rec.currency),
+        p_min_stake: parseExactPositiveDecimal(rec.minStake ?? rec.min_stake, 'AMOUNT_INVALID'),
+        p_max_stake: parseExactPositiveDecimal(rec.maxStake ?? rec.max_stake, 'AMOUNT_INVALID'),
+        p_max_payout: parseExactPositiveDecimal(rec.maxPayout ?? rec.max_payout, 'AMOUNT_INVALID'),
+        p_min_deposit: parseExactPositiveDecimal(rec.minDeposit ?? rec.min_deposit, 'AMOUNT_INVALID'),
+        p_min_withdrawal: parseExactPositiveDecimal(rec.minWithdrawal ?? rec.min_withdrawal, 'AMOUNT_INVALID'),
+      });
+    case 'currencySportsSet':
+      return rpc.invoke('owner_set_currency_sports_enabled', {
+        p_currency: requireOperationalCurrency(rec.currency),
+        p_enabled: requireBoolean(rec.enabled, 'ENABLED_REQUIRED'),
+      });
+    case 'currencyOwnedGamesSet':
+      return rpc.invoke('owner_set_currency_owned_games_enabled', {
+        p_currency: requireOperationalCurrency(rec.currency),
+        p_enabled: requireBoolean(rec.enabled, 'ENABLED_REQUIRED'),
+      });
     default:
       throw staffError('NOT_FOUND', 404);
   }
@@ -1080,7 +1116,7 @@ export async function handleOwnerControlRequest(
         body: { ok: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405
           ? {
-              Allow: path === '/api/owner/treasury' || path === '/api/owner/usdt-rates'
+              Allow: path === '/api/owner/treasury' || path === '/api/owner/usdt-rates' || path === '/api/owner/currency-limits'
                 ? 'GET, POST'
                 : path === '/api/owner/fund'
                   ? 'POST'

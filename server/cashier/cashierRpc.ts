@@ -45,6 +45,7 @@ export function mapCashierRpcError(error: { message?: string; code?: string }): 
     || code === 'CASHIER_REVERSAL_NOT_ALLOWED'
     || code === 'CASHIER_REVERSAL_DEPOSIT_ENTRY_NOT_FOUND'
     || code === 'CURRENCY_MISMATCH'
+    || code === 'CURRENCY_LIMITS_UNCONFIGURED'
     || (code != null && code.endsWith('_RESTRICTED'))
   ) {
     return staffError(code, 409);
@@ -55,7 +56,7 @@ export function mapCashierRpcError(error: { message?: string; code?: string }): 
   if (code === 'FIELD_FORBIDDEN') {
     return staffError(code, 400);
   }
-  if (code === 'CASHIER_CURRENCY_DISABLED' || code === 'CURRENCY_UNSUPPORTED') {
+  if (code === 'CASHIER_CURRENCY_DISABLED' || code === 'CURRENCY_UNSUPPORTED' || code === 'DEPOSIT_BELOW_CURRENCY_MIN') {
     return staffError(code, 400);
   }
   if (code && (code.endsWith('_INVALID') || code.endsWith('_REQUIRED') || code.endsWith('_UNSUPPORTED') || code.endsWith('_DISABLED'))) {

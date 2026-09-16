@@ -51,6 +51,9 @@ export function mapPlayerWalletError(error: { message?: string; code?: string })
   if (code === 'USDT_RATE_UNAVAILABLE' || code === 'CURRENCY_LIMITS_UNCONFIGURED' || code === 'WALLET_BLOCKED' || code === 'WALLET_CLOSED' || code === 'PLAYER_WALLET_NOT_ACTIVE' || code === 'QUOTE_IMMUTABLE') {
     return staffError(code, 409);
   }
+  if (code === 'DEPOSIT_BELOW_CURRENCY_MIN' || code === 'WITHDRAWAL_BELOW_CURRENCY_MIN') {
+    return staffError(code, 400);
+  }
   if (code && (code.endsWith('_REQUIRED') || code.endsWith('_INVALID') || code.endsWith('_UNSUPPORTED') || code === 'WALLET_NOT_OWNED')) {
     return staffError(code, 400);
   }
