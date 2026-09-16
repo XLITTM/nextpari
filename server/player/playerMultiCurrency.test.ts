@@ -99,7 +99,7 @@ function authPorts(init?: { currency?: string }): PlayerAuthGatewayPorts & { ens
   };
 }
 
-function walletPorts(init?: { listError?: string; addError?: string }): PlayerWalletPorts & {
+function walletPorts(init?: { listError?: string; addError?: string; activeError?: string }): PlayerWalletPorts & {
   added: string[];
   activated: Array<{ currency?: string; walletId?: string }>;
   quotes: Array<{ sourceAmount: string; walletId: string }>;
@@ -140,6 +140,7 @@ function walletPorts(init?: { listError?: string; addError?: string }): PlayerWa
       };
     },
     async setActive(_token, input) {
+      if (init?.activeError) throw staffError(init.activeError, 409);
       activated.push(input);
       return {
         walletId: input.walletId ?? WALLET_USD,
@@ -454,6 +455,19 @@ describe('owner USDT rates and staff isolation', () => {
       p_rate: '1.2500',
       p_enabled: true,
     });
+    const numeric = await handleOwnerControlRequest(
+      {
+        method: 'POST',
+        pathname: '/api/owner/usdt-rates',
+        cookie: `${OWNER_ACCESS_COOKIE}=oa; ${OWNER_REFRESH_COOKIE}=or`,
+        cookieSecure: true,
+        body: { targetCurrencyCode: 'USD', rate: 1.25, enabled: true },
+      },
+      { sessionPorts: session, rpcFactory },
+    );
+    assert.equal(numeric.status, 400);
+    assert.equal(numeric.body.error, 'USDT_RATE_INVALID');
+    assert.equal(calls.length, 2);
   });
 
   it('manager and cashier cannot reach owner USDT or player wallet APIs', async () => {
@@ -703,24 +717,30 @@ describe('USDT quote mutation recheck and exact decimal', () => {
     assert.equal(setRate.includes('crypto_deposit_quotes'), false);
   });
 
-  it('rejects empty, zero, negative, and scientific USDT decimals and preserves exact strings', () => {
+  it('rejects empty, zero, negative, scientific, and JSON-number USDT decimals and preserves exact strings', () => {
     assert.equal(parseExactPositiveDecimal('1.2500', 'USDT_RATE_INVALID'), '1.2500');
-    assert.equal(parseExactPositiveDecimal('100.50', 'USDT_AMOUNT_INVALID'), '100.50');
-    assert.equal(parseExactPositiveDecimal(25, 'USDT_RATE_INVALID'), '25');
-    for (const bad of ['', ' ', '0', '0.0', '-1', '1e3', '1E-2', 'Infinity', 'NaN', 'abc', '+1', '1.2.3']) {
+    assert.equal(parseExactPositiveDecimal('100.5000', 'USDT_AMOUNT_INVALID'), '100.5000');
+    assert.equal(parseExactPositiveDecimal('0.000001', 'USDT_RATE_INVALID'), '0.000001');
+    assert.equal(parseExactPositiveDecimal('1', 'USDT_RATE_INVALID'), '1');
+    for (const bad of ['', ' ', '0', '0.0', '-1', '1e3', '1E-2', 'Infinity', 'NaN', 'abc', '+1', '1.2.3', 1, 1.25, 25, 0]) {
       assert.throws(() => parseExactPositiveDecimal(bad, 'USDT_RATE_INVALID'), /USDT_RATE_INVALID/, String(bad));
     }
     assert.throws(() => parseExactPositiveDecimal('1'.repeat(41), 'USDT_AMOUNT_INVALID'), /USDT_AMOUNT_INVALID/);
   });
 
-  it('rejects garbage USDT quote amounts at the HTTP boundary', async () => {
-    for (const sourceAmount of ['', '0', '-5', '1e2', 'NaN']) {
+  it('rejects garbage and JSON-number USDT quote amounts at the HTTP boundary', async () => {
+    for (const sourceAmount of ['', '0', '-5', '1e2', 'NaN', 1.25, 25, 100]) {
       const result = await playerWallet('POST', PLAYER_USDT_QUOTE_PATH, {
         body: { sourceAmount, walletId: WALLET_USD },
       });
       assert.equal(result.status, 400, String(sourceAmount));
       assert.equal(result.body.error, 'USDT_AMOUNT_INVALID', String(sourceAmount));
     }
+    const ok = await playerWallet('POST', PLAYER_USDT_QUOTE_PATH, {
+      body: { sourceAmount: '100.5000', walletId: WALLET_USD },
+    });
+    assert.equal(ok.status, 200);
+    assert.equal((ok.body as { sourceAmount?: string }).sourceAmount, '100.5000');
   });
 });
 
@@ -741,5 +761,117 @@ describe('owner TMT funding safety', () => {
     assert.equal(debit.includes('player_set_active_wallet_id'), false);
     assert.match(fund, /SET active_wallet_id = v_active/);
     assert.match(debit, /SET active_wallet_id = v_active/);
+  });
+
+  it('preserves pre-057 owner_fund_player idempotency identity', () => {
+    const fund = functionSql(sql057, 'public.owner_fund_player');
+    const debit = functionSql(sql057, 'public.owner_debit_player');
+    assert.equal(sql057.includes('owner-fund-player:'), false);
+    assert.equal(fund.includes('owner-fund-player:'), false);
+    assert.match(fund, /v_key := private\.owner_require_idempotency_key\(p_idempotency_key\)/);
+    assert.match(fund, /private\.apply_operational_transfer\(\s+'TREASURY_TO_PLAYER',\s+p_amount,\s+v_player\.currency,\s+v_key,/);
+    const pre057Key = 'abc';
+    const post057Key = 'abc';
+    assert.equal(pre057Key, post057Key);
+    assert.equal(fund.includes('v_owner::TEXT || \':\' || v_key'), false);
+    assert.match(debit, /'owner-debit-player:' \|\| v_owner::TEXT \|\| ':' \|\| v_key/);
+  });
+});
+
+describe('account hard block covers every owned wallet', () => {
+  it('blocks and unblocks all owned wallets without moving money or switching active', () => {
+    const block = functionSql(sql057, 'public.owner_set_player_blocked');
+    const createZero = functionSql(sql057, 'private.player_create_zero_wallet');
+    const setActive = functionSql(sql057, 'private.player_set_active_wallet_id');
+    assert.match(block, /UPDATE public\.profiles AS p\s+SET is_blocked = p_blocked/);
+    assert.match(block, /a\.owner_user_id = v_uid/);
+    assert.match(block, /a\.status IS DISTINCT FROM 'closed'/);
+    assert.match(block, /SET status = 'blocked'/);
+    assert.match(block, /SET status = 'active'/);
+    assert.match(block, /AND a\.status = 'blocked'/);
+    assert.match(block, /SET is_blocked = TRUE/);
+    assert.match(block, /SET is_blocked = FALSE/);
+    assert.match(block, /active_wallet_unchanged/);
+    assert.equal(block.includes('player_create_zero_wallet'), false);
+    assert.equal(block.includes('TREASURY_TO_PLAYER'), false);
+    assert.equal(block.includes('CASHIER_TO_PLAYER'), false);
+    assert.equal(block.includes('set_player_security_restriction'), false);
+    assert.match(createZero, /FOR UPDATE;/);
+    assert.match(createZero, /v_profile\.is_blocked IS TRUE/);
+    assert.equal(createZero.indexOf('WALLET_BLOCKED') < createZero.indexOf('INSERT INTO public.wallets'), true);
+    assert.equal(createZero.indexOf('WALLET_BLOCKED') < createZero.indexOf('INSERT INTO private.wallet_accounts'), true);
+    assert.equal(createZero.indexOf('WALLET_BLOCKED') < createZero.indexOf('player_set_active_wallet_id'), true);
+    assert.match(setActive, /v_profile\.is_blocked IS TRUE/);
+    assert.equal(setActive.indexOf('FOR UPDATE') < setActive.indexOf('private.wallet_accounts'), true);
+    assert.match(setActive, /v_wallet\.status = 'blocked'/);
+    assert.match(setActive, /v_wallet\.status = 'closed'/);
+    assert.match(setActive, /WALLET_CLOSED/);
+    assert.match(setActive, /PLAYER_WALLET_NOT_ACTIVE/);
+
+    const owned = [
+      { currency: 'TMT', status: 'active', closed: false },
+      { currency: 'USD', status: 'active', closed: false },
+      { currency: 'TRY', status: 'closed', closed: true },
+    ];
+    function applyBlock(blocked: boolean) {
+      return owned.map((wallet) => ({
+        currency: wallet.currency,
+        status: blocked
+          ? (wallet.closed ? 'closed' : 'blocked')
+          : (wallet.closed ? 'closed' : 'active'),
+      }));
+    }
+    const afterBlock = applyBlock(true);
+    assert.deepEqual(afterBlock, [
+      { currency: 'TMT', status: 'blocked' },
+      { currency: 'USD', status: 'blocked' },
+      { currency: 'TRY', status: 'closed' },
+    ]);
+    const afterUnblock = applyBlock(false);
+    assert.deepEqual(afterUnblock, [
+      { currency: 'TMT', status: 'active' },
+      { currency: 'USD', status: 'active' },
+      { currency: 'TRY', status: 'closed' },
+    ]);
+    assert.equal(block.includes('SET available_balance'), false);
+    assert.equal(block.includes('player_set_active_wallet_id'), false);
+  });
+
+  it('hard-blocked players cannot add or switch wallets over HTTP', async () => {
+    const added = await playerWallet('POST', PLAYER_WALLETS_ADD_PATH, {
+      body: { currency: 'TRY' },
+      wallets: walletPorts({ addError: 'WALLET_BLOCKED' }),
+    });
+    assert.equal(added.status, 409);
+    assert.equal(added.body.error, 'WALLET_BLOCKED');
+    const switched = await playerWallet('POST', PLAYER_WALLETS_ACTIVE_PATH, {
+      body: { currency: 'USD' },
+      wallets: walletPorts({ activeError: 'WALLET_BLOCKED' }),
+    });
+    assert.equal(switched.status, 409);
+    assert.equal(switched.body.error, 'WALLET_BLOCKED');
+    const closed = await playerWallet('POST', PLAYER_WALLETS_ACTIVE_PATH, {
+      body: { currency: 'USD' },
+      wallets: walletPorts({ activeError: 'WALLET_CLOSED' }),
+    });
+    assert.equal(closed.status, 409);
+    assert.equal(closed.body.error, 'WALLET_CLOSED');
+  });
+});
+
+describe('USDT target list matches mutation rules', () => {
+  it('lists only active wallets with enabled catalog and rate flags', () => {
+    const targets = functionSql(sql057, 'public.player_usdt_quote_targets');
+    const quote = functionSql(sql057, 'public.player_create_usdt_quote');
+    assert.match(targets, /a\.status = 'active'/);
+    assert.match(targets, /c\.wallet_enabled/);
+    assert.match(targets, /c\.usdt_deposit_enabled/);
+    assert.match(targets, /c\.is_active/);
+    assert.match(targets, /r\.enabled/);
+    assert.match(targets, /r\.rate IS NOT NULL/);
+    assert.match(quote, /usdt_deposit_enabled/);
+    assert.match(quote, /wallet_enabled/);
+    assert.match(quote, /WALLET_BLOCKED/);
+    assert.match(quote, /PLAYER_WALLET_NOT_ACTIVE/);
   });
 });

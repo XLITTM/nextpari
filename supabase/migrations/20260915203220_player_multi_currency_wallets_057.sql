@@ -243,19 +243,46 @@ SECURITY DEFINER
 SET search_path = ''
 AS $fn$
 DECLARE
-    v_owner UUID;
+    v_profile RECORD;
+    v_wallet RECORD;
 BEGIN
     IF p_player_user_id IS NULL OR p_wallet_id IS NULL THEN
         RAISE EXCEPTION 'AUTH_REQUIRED';
     END IF;
-    SELECT a.owner_user_id
-    INTO v_owner
+
+    SELECT p.id, p.is_blocked
+    INTO v_profile
+    FROM public.profiles AS p
+    WHERE p.id = p_player_user_id
+    FOR UPDATE;
+    IF v_profile.id IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_ACCOUNT_REQUIRED';
+    END IF;
+    IF v_profile.is_blocked IS TRUE THEN
+        RAISE EXCEPTION 'WALLET_BLOCKED';
+    END IF;
+
+    SELECT a.owner_user_id, a.status, a.migration_state
+    INTO v_wallet
     FROM private.wallet_accounts AS a
     WHERE a.wallet_id = p_wallet_id
     FOR UPDATE;
-    IF v_owner IS NULL OR v_owner IS DISTINCT FROM p_player_user_id THEN
+    IF v_wallet.owner_user_id IS NULL OR v_wallet.owner_user_id IS DISTINCT FROM p_player_user_id THEN
         RAISE EXCEPTION 'WALLET_NOT_OWNED';
     END IF;
+    IF v_wallet.status = 'blocked' THEN
+        RAISE EXCEPTION 'WALLET_BLOCKED';
+    END IF;
+    IF v_wallet.status = 'closed' THEN
+        RAISE EXCEPTION 'WALLET_CLOSED';
+    END IF;
+    IF v_wallet.status IS DISTINCT FROM 'active' THEN
+        RAISE EXCEPTION 'PLAYER_WALLET_NOT_ACTIVE';
+    END IF;
+    IF v_wallet.migration_state NOT IN ('staging', 'active') THEN
+        RAISE EXCEPTION 'PLAYER_WALLET_NOT_ACTIVE';
+    END IF;
+
     INSERT INTO private.player_wallet_preferences (player_user_id, active_wallet_id, updated_at)
     VALUES (p_player_user_id, p_wallet_id, pg_catalog.now())
     ON CONFLICT (player_user_id) DO UPDATE
@@ -404,9 +431,20 @@ DECLARE
     v_catalog RECORD;
     v_existing UUID;
     v_wallet UUID;
-    v_public TEXT;
+    v_profile RECORD;
 BEGIN
     PERFORM private.player_require_player_account(p_player_user_id);
+    SELECT p.id, p.public_id, p.is_blocked
+    INTO v_profile
+    FROM public.profiles AS p
+    WHERE p.id = p_player_user_id
+    FOR UPDATE;
+    IF v_profile.id IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_ACCOUNT_REQUIRED';
+    END IF;
+    IF v_profile.is_blocked IS TRUE THEN
+        RAISE EXCEPTION 'WALLET_BLOCKED';
+    END IF;
     IF pg_catalog.upper(BTRIM(COALESCE(p_display_currency, ''))) = 'TMTM' THEN
         RAISE EXCEPTION 'CURRENCY_UNSUPPORTED';
     END IF;
@@ -431,11 +469,6 @@ BEGIN
     IF v_existing IS NOT NULL THEN
         RAISE EXCEPTION 'CURRENCY_WALLET_ALREADY_EXISTS';
     END IF;
-
-    SELECT p.public_id
-    INTO v_public
-    FROM public.profiles AS p
-    WHERE p.id = p_player_user_id;
 
     INSERT INTO public.wallets AS w (
         balance,
@@ -1548,9 +1581,11 @@ BEGIN
             JOIN private.usdt_deposit_rates AS r
                 ON r.target_currency_code = c.code
             WHERE a.owner_user_id = v_uid
+              AND a.status = 'active'
               AND r.enabled
               AND r.rate IS NOT NULL
               AND c.usdt_deposit_enabled
+              AND c.wallet_enabled
               AND c.is_active
         ), '[]'::JSONB)
     );
@@ -1738,6 +1773,172 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION public.owner_set_player_blocked(
+    p_player_id TEXT,
+    p_blocked BOOLEAN,
+    p_reason TEXT DEFAULT NULL
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_owner UUID;
+    v_raw TEXT;
+    v_uid UUID;
+    v_public TEXT;
+    v_reason TEXT;
+    v_before JSONB;
+    v_after JSONB;
+    v_count INTEGER;
+    v_active UUID;
+BEGIN
+    SELECT o.auth_user_id
+    INTO v_owner
+    FROM private.get_current_owner_context() AS o;
+
+    v_raw := NULLIF(BTRIM(COALESCE(p_player_id, '')), '');
+    IF v_raw IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_NOT_FOUND';
+    END IF;
+    IF p_blocked IS NULL THEN
+        RAISE EXCEPTION 'BLOCKED_REQUIRED';
+    END IF;
+    v_reason := NULLIF(BTRIM(COALESCE(p_reason, '')), '');
+
+    IF v_raw ~ '^[0-9]{6}$' THEN
+        SELECT p.id, p.public_id
+        INTO v_uid, v_public
+        FROM public.profiles AS p
+        WHERE p.public_id = v_raw
+        LIMIT 1;
+        IF v_uid IS NULL THEN
+            SELECT a.owner_user_id, COALESCE(p.public_id, w.public_id)
+            INTO v_uid, v_public
+            FROM public.wallets AS w
+            JOIN private.wallet_accounts AS a ON a.wallet_id = w.id
+            LEFT JOIN public.profiles AS p ON p.id = a.owner_user_id
+            WHERE w.public_id = v_raw
+            LIMIT 1;
+        END IF;
+    ELSIF v_raw ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        SELECT p.id, p.public_id
+        INTO v_uid, v_public
+        FROM public.profiles AS p
+        WHERE p.id = v_raw::UUID
+        LIMIT 1;
+    END IF;
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_NOT_FOUND';
+    END IF;
+
+    SELECT p.id, p.public_id, pref.active_wallet_id
+    INTO v_uid, v_public, v_active
+    FROM public.profiles AS p
+    LEFT JOIN private.player_wallet_preferences AS pref
+        ON pref.player_user_id = p.id
+    WHERE p.id = v_uid
+    FOR UPDATE OF p;
+    IF v_uid IS NULL THEN
+        RAISE EXCEPTION 'PLAYER_NOT_FOUND';
+    END IF;
+
+    PERFORM 1
+    FROM private.wallet_accounts AS a
+    WHERE a.owner_user_id = v_uid
+    FOR UPDATE;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'currency', private.wallet_display_currency(a.currency),
+        'status', a.status
+    ) ORDER BY a.currency), '[]'::JSONB)
+    INTO v_before
+    FROM private.wallet_accounts AS a
+    WHERE a.owner_user_id = v_uid;
+
+    UPDATE public.profiles AS p
+    SET is_blocked = p_blocked
+    WHERE p.id = v_uid;
+
+    IF p_blocked IS TRUE THEN
+        UPDATE private.wallet_accounts AS a
+        SET status = 'blocked'
+        WHERE a.owner_user_id = v_uid
+          AND a.status IS DISTINCT FROM 'closed';
+        UPDATE public.wallets AS w
+        SET is_blocked = TRUE
+        WHERE w.id IN (
+            SELECT a.wallet_id
+            FROM private.wallet_accounts AS a
+            WHERE a.owner_user_id = v_uid
+        );
+    ELSE
+        UPDATE private.wallet_accounts AS a
+        SET status = 'active'
+        WHERE a.owner_user_id = v_uid
+          AND a.status = 'blocked';
+        UPDATE public.wallets AS w
+        SET is_blocked = FALSE
+        WHERE w.id IN (
+            SELECT a.wallet_id
+            FROM private.wallet_accounts AS a
+            WHERE a.owner_user_id = v_uid
+        );
+    END IF;
+
+    IF v_active IS NOT NULL THEN
+        UPDATE private.player_wallet_preferences AS pref
+        SET active_wallet_id = v_active,
+            updated_at = pref.updated_at
+        WHERE pref.player_user_id = v_uid
+          AND pref.active_wallet_id IS DISTINCT FROM v_active;
+        UPDATE public.profiles AS p
+        SET wallet_id = v_active
+        WHERE p.id = v_uid
+          AND p.wallet_id IS DISTINCT FROM v_active;
+    END IF;
+
+    SELECT COUNT(*)::INTEGER
+    INTO v_count
+    FROM private.wallet_accounts AS a
+    WHERE a.owner_user_id = v_uid;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'currency', private.wallet_display_currency(a.currency),
+        'status', a.status
+    ) ORDER BY a.currency), '[]'::JSONB)
+    INTO v_after
+    FROM private.wallet_accounts AS a
+    WHERE a.owner_user_id = v_uid;
+
+    PERFORM private.append_staff_audit(
+        'OWNER_SET_PLAYER_BLOCKED',
+        'player',
+        COALESCE(v_public, v_raw),
+        'owner_only',
+        jsonb_build_object(
+            'player_public_id', COALESCE(v_public, v_raw),
+            'blocked', p_blocked,
+            'owned_wallet_count', v_count,
+            'wallet_status_before', v_before,
+            'wallet_status_after', v_after,
+            'reason', v_reason
+        )
+    );
+
+    RETURN jsonb_build_object(
+        'ok', true,
+        'blocked', p_blocked,
+        'player_public_id', COALESCE(v_public, v_raw),
+        'owned_wallet_count', v_count,
+        'active_wallet_unchanged', true
+    );
+END;
+$fn$;
+
+
 CREATE OR REPLACE FUNCTION public.owner_fund_player(
     p_player_id TEXT,
     p_amount NUMERIC,
@@ -1755,7 +1956,6 @@ DECLARE
     v_note TEXT;
     v_player RECORD;
     v_treasury RECORD;
-    v_engine_key TEXT;
     v_result RECORD;
     v_active UUID;
 BEGIN
@@ -1765,7 +1965,6 @@ BEGIN
 
     v_key := private.owner_require_idempotency_key(p_idempotency_key);
     v_note := private.owner_trim_reason(p_note);
-    v_engine_key := 'owner-fund-player:' || v_owner::TEXT || ':' || v_key;
 
     SELECT r.player_user_id, r.wallet_id, r.public_id, r.currency
     INTO v_player
@@ -1796,7 +1995,7 @@ BEGIN
         'TREASURY_TO_PLAYER',
         p_amount,
         v_player.currency,
-        v_engine_key,
+        v_key,
         v_treasury.id,
         NULL,
         v_player.wallet_id,
@@ -2023,5 +2222,8 @@ GRANT EXECUTE ON FUNCTION public.owner_fund_player(TEXT, NUMERIC, TEXT, TEXT) TO
 
 REVOKE ALL ON FUNCTION public.owner_debit_player(TEXT, NUMERIC, TEXT, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.owner_debit_player(TEXT, NUMERIC, TEXT, TEXT) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.owner_set_player_blocked(TEXT, BOOLEAN, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.owner_set_player_blocked(TEXT, BOOLEAN, TEXT) TO authenticated;
 
 COMMIT;

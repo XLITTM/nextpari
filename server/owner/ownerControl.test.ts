@@ -1095,7 +1095,7 @@ describe('owner treasury and direct funding controls', () => {
   it('POST /api/owner/usdt-rates maps to owner_set_usdt_deposit_rate', async () => {
     const { result, rpc } = await ownerPost('/api/owner/usdt-rates', {
       targetCurrencyCode: 'USD',
-      rate: 1.25,
+      rate: '1.25',
       enabled: true,
     });
     assert.equal(result.status, 200);
@@ -1105,6 +1105,17 @@ describe('owner treasury and direct funding controls', () => {
       p_rate: '1.25',
       p_enabled: true,
     });
+  });
+
+  it('POST /api/owner/usdt-rates rejects JSON numbers for rate', async () => {
+    const { result, rpc } = await ownerPost('/api/owner/usdt-rates', {
+      targetCurrencyCode: 'USD',
+      rate: 1.25,
+      enabled: true,
+    });
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error, 'USDT_RATE_INVALID');
+    assert.equal(rpc.calls.length, 0);
   });
 
   it('manager funding maps only owner_fund_manager', async () => {
