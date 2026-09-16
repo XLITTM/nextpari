@@ -17,6 +17,8 @@ import { publicManagerStaff, type ManagerStaffContext } from '../staff/managerCo
 import { clearManagerCookies, requestIsSecure } from '../staff/managerCookies.js';
 import type { AuthAdminPort, StaffLog } from '../staff/types.js';
 import { createManagerJwtRpc, type ManagerRpcPort } from './managerRpc.js';
+import { parseExactPositiveDecimal } from '../player/exactDecimal.js';
+import { parseOperationalDisplayCurrency } from '../player/playerCurrency.js';
 import {
   liveAuthAdminPort,
   provisionManagerCashier,
@@ -33,6 +35,9 @@ export const CANONICAL_MANAGER_FINANCE_RPCS = [
   'manager_operational_overview',
   'manager_fund_cashier',
   'manager_collect_cashier',
+  'manager_fund_cashier_currency',
+  'manager_collect_cashier_currency',
+  'manager_add_cashier_currency',
   'manager_list_operational_transfers',
 ] as const;
 
@@ -102,6 +107,12 @@ function requireAmount(value: unknown): number {
   return n;
 }
 
+function requireOperationalCurrency(value: unknown): string {
+  const parsed = parseOperationalDisplayCurrency(value);
+  if (!parsed) throw staffError('CURRENCY_UNSUPPORTED', 400);
+  return parsed;
+}
+
 function requireIdempotencyKey(value: unknown): string {
   const key = String(value ?? '').trim();
   if (!key) throw staffError('IDEMPOTENCY_KEY_REQUIRED', 400);
@@ -119,7 +130,7 @@ function optionalNote(value: unknown): string | null {
 
 function skipLegacyManagerId(kind: ControlAction['kind']): boolean {
   return kind === 'me' || kind === 'risk' || kind === 'finance' || kind === 'fund'
-    || kind === 'collect' || kind === 'transfers';
+    || kind === 'collect' || kind === 'transfers' || kind === 'addCashierCurrency';
 }
 
 function managerAccountId(staff: ManagerStaffContext): string {
@@ -146,6 +157,7 @@ type ControlAction =
   | { kind: 'freeze'; cashierId: string }
   | { kind: 'fund'; cashierId: string }
   | { kind: 'collect'; cashierId: string }
+  | { kind: 'addCashierCurrency'; cashierId: string }
   | { kind: 'finance' }
   | { kind: 'transfers' }
   | { kind: 'risk' }
@@ -163,6 +175,9 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 
   const freeze = path.match(/^\/api\/manager\/cashiers\/([^/]+)\/freeze$/);
   if (freeze) return m === 'POST' ? { kind: 'freeze', cashierId: freeze[1] } : 'method';
+
+  const currencies = path.match(/^\/api\/manager\/cashiers\/([^/]+)\/currencies$/);
+  if (currencies) return m === 'POST' ? { kind: 'addCashierCurrency', cashierId: currencies[1] } : 'method';
 
   const fund = path.match(/^\/api\/manager\/cashiers\/([^/]+)\/fund$/);
   if (fund) return m === 'POST' ? { kind: 'fund', cashierId: fund[1] } : 'method';
@@ -235,6 +250,19 @@ async function runControl(
       });
     case 'fund': {
       const cashierId = requireId(action.cashierId, 'CASHIER_ID_REQUIRED');
+      const currencyRaw = rec.currency ?? rec.displayCurrency ?? rec.display_currency;
+      const currency = currencyRaw == null || currencyRaw === ''
+        ? null
+        : requireOperationalCurrency(currencyRaw);
+      if (currency && currency !== 'TMT') {
+        return rpc.invoke('manager_fund_cashier_currency', {
+          p_cashier_id: cashierId,
+          p_currency: currency,
+          p_amount: parseExactPositiveDecimal(rec.amount, 'AMOUNT_INVALID'),
+          p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+          p_note: optionalNote(rec.note),
+        });
+      }
       return rpc.invoke('manager_fund_cashier', {
         p_cashier_id: cashierId,
         p_amount: requireAmount(rec.amount),
@@ -244,11 +272,31 @@ async function runControl(
     }
     case 'collect': {
       const cashierId = requireId(action.cashierId, 'CASHIER_ID_REQUIRED');
+      const currencyRaw = rec.currency ?? rec.displayCurrency ?? rec.display_currency;
+      const currency = currencyRaw == null || currencyRaw === ''
+        ? null
+        : requireOperationalCurrency(currencyRaw);
+      if (currency && currency !== 'TMT') {
+        return rpc.invoke('manager_collect_cashier_currency', {
+          p_cashier_id: cashierId,
+          p_currency: currency,
+          p_amount: parseExactPositiveDecimal(rec.amount, 'AMOUNT_INVALID'),
+          p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+          p_note: optionalNote(rec.note),
+        });
+      }
       return rpc.invoke('manager_collect_cashier', {
         p_cashier_id: cashierId,
         p_amount: requireAmount(rec.amount),
         p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
         p_note: optionalNote(rec.note),
+      });
+    }
+    case 'addCashierCurrency': {
+      const cashierId = requireId(action.cashierId, 'CASHIER_ID_REQUIRED');
+      return rpc.invoke('manager_add_cashier_currency', {
+        p_cashier_id: cashierId,
+        p_currency: requireOperationalCurrency(rec.currency),
       });
     }
     case 'risk':

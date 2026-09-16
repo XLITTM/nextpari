@@ -393,6 +393,7 @@ describe('cashier canonical gateway and removed browser money modules', () => {
     ]);
     assert.deepEqual([...CANONICAL_CASHIER_MONEY_RPCS], [
       'cashier_deposit_player',
+      'cashier_deposit_player_currency',
       'cashier_lookup_player_payout',
       'cashier_confirm_player_payout',
       'cashier_reverse_player_deposit',

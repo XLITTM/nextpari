@@ -2,7 +2,7 @@ import { useEffect, useState, type ComponentType } from 'react';
 import { ClipboardList, LogOut, Shield, ShieldAlert, Store, User, UserCheck } from 'lucide-react';
 import { isManagerLoginPath } from '../../lib/staffPortalPaths';
 import { useManagerAuth } from '../../manager/auth/ManagerAuthProvider';
-import { fetchManagerFinance, formatTmtmCompact } from '../../manager/services';
+import { fetchManagerFinance } from '../../manager/services';
 import { ManagerAgentsPage } from './ManagerAgentsPage';
 import { ManagerFinancePage } from './ManagerFinancePage';
 import { ManagerPlayersPage } from './ManagerPlayersPage';
@@ -142,7 +142,10 @@ function ManagerOfficeShell({
           return;
         }
         setBalanceLabel(
-          `${manager.status} · ${manager.migrationState} · ${formatTmtmCompact(manager.availableBalance)}`,
+          (finance.managerAccounts.length
+            ? finance.managerAccounts
+            : [manager]
+          ).map((row) => `${row.currency} ${Number(row.availableBalance).toLocaleString('ru-RU')}`).join(' · '),
         );
       })
       .catch(() => {

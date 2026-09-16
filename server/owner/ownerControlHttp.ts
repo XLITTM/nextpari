@@ -18,6 +18,7 @@ import { clearOwnerCookies, requestIsSecure } from '../staff/ownerCookies.js';
 import type { AuthAdminPort, StaffLog } from '../staff/types.js';
 import { createOwnerJwtRpc, type OwnerRpcPort } from './ownerRpc.js';
 import { parseExactPositiveDecimal } from '../player/exactDecimal.js';
+import { parseOperationalDisplayCurrency } from '../player/playerCurrency.js';
 import {
   liveAuthAdminPort,
   provisionOwnerManager,
@@ -135,6 +136,16 @@ function requireRate(value: unknown, code: string): number {
   const n = typeof value === 'number' ? value : Number(value);
   if (!Number.isFinite(n) || n <= 0) throw staffError(code, 400);
   return n;
+}
+
+function requireOperationalCurrency(value: unknown): string {
+  const parsed = parseOperationalDisplayCurrency(value);
+  if (!parsed) throw staffError('CURRENCY_UNSUPPORTED', 400);
+  return parsed;
+}
+
+function requireExactAmountString(value: unknown): string {
+  return parseExactPositiveDecimal(value, 'AMOUNT_INVALID');
 }
 
 function requireReason(value: unknown): string {
@@ -317,6 +328,8 @@ function sanitizeTreasuryOverview(data: unknown): unknown {
   });
   return {
     treasury,
+    accounts: rec.accounts ?? rec.currencies ?? [],
+    by_currency: rec.by_currency ?? rec.byCurrency ?? [],
     managers: rec.managers,
     cashiers: rec.cashiers,
     recent_transfers: transfers,
@@ -395,7 +408,11 @@ type ControlAction =
   | { kind: 'managerDetail'; managerId: string }
   | { kind: 'treasury' }
   | { kind: 'capitalIn' }
+  | { kind: 'capitalInCurrency' }
   | { kind: 'fund' }
+  | { kind: 'fundCurrency' }
+  | { kind: 'addManagerCurrency'; managerId: string }
+  | { kind: 'addCashierCurrency'; cashierId: string }
   | { kind: 'gameReport' }
   | { kind: 'providerGgr' }
   | { kind: 'providerSettlements' }
@@ -411,6 +428,11 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 
   const freeze = path.match(/^\/api\/owner\/cashiers\/([^/]+)\/freeze$/);
   if (freeze) return m === 'POST' ? { kind: 'freeze', cashierId: freeze[1] } : 'method';
+
+  const cashierCurrency = path.match(/^\/api\/owner\/cashiers\/([^/]+)\/currencies$/);
+  if (cashierCurrency) {
+    return m === 'POST' ? { kind: 'addCashierCurrency', cashierId: cashierCurrency[1] } : 'method';
+  }
 
   const debit = path.match(/^\/api\/owner\/players\/([^/]+)\/debit$/);
   if (debit) return m === 'POST' ? { kind: 'playerDebit', playerId: debit[1] } : 'method';
@@ -457,6 +479,11 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
 
   const dossier = path.match(/^\/api\/owner\/players\/([^/]+)$/);
   if (dossier) return m === 'GET' ? { kind: 'dossier', playerId: dossier[1] } : 'method';
+
+  const managerCurrency = path.match(/^\/api\/owner\/managers\/([^/]+)\/currencies$/);
+  if (managerCurrency) {
+    return m === 'POST' ? { kind: 'addManagerCurrency', managerId: managerCurrency[1] } : 'method';
+  }
 
   const managerDetail = path.match(/^\/api\/owner\/managers\/([^/]+)$/);
   if (managerDetail) return m === 'GET' ? { kind: 'managerDetail', managerId: managerDetail[1] } : 'method';
@@ -512,11 +539,15 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   }
   if (path === '/api/owner/withdrawals') return m === 'GET' ? { kind: 'withdrawals' } : 'method';
   if (path === '/api/owner/messages') return m === 'POST' ? { kind: 'message' } : 'method';
+  if (path === '/api/owner/treasury/capital-in') {
+    return m === 'POST' ? { kind: 'capitalInCurrency' } : 'method';
+  }
   if (path === '/api/owner/treasury') {
     if (m === 'GET') return { kind: 'treasury' };
     if (m === 'POST') return { kind: 'capitalIn' };
     return 'method';
   }
+  if (path === '/api/owner/fund/currency') return m === 'POST' ? { kind: 'fundCurrency' } : 'method';
   if (path === '/api/owner/fund') return m === 'POST' ? { kind: 'fund' } : 'method';
   if (path === '/api/owner/games/report') return m === 'GET' ? { kind: 'gameReport' } : 'method';
   if (path === '/api/owner/provider-ggr') return m === 'GET' ? { kind: 'providerGgr' } : 'method';
@@ -771,6 +802,92 @@ async function runControl(
         p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
         p_note: requireNote(rec.note),
       }));
+    }
+    case 'capitalInCurrency': {
+      rejectForbiddenFinanceFields(rec);
+      const currency = requireOperationalCurrency(rec.currency);
+      const amount = requireExactAmountString(rec.amount);
+      const idempotencyKey = requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key);
+      const note = requireNote(rec.note);
+      if (currency === 'TMT') {
+        return sanitizeMoneyResult(await rpc.invoke('owner_capital_in', {
+          p_amount: amount,
+          p_idempotency_key: idempotencyKey,
+          p_note: note,
+        }));
+      }
+      return sanitizeMoneyResult(await rpc.invoke('owner_capital_in_currency', {
+        p_currency: currency,
+        p_amount: amount,
+        p_idempotency_key: idempotencyKey,
+        p_note: note,
+      }));
+    }
+    case 'addManagerCurrency': {
+      rejectForbiddenFinanceFields(rec);
+      return rpc.invoke('owner_add_manager_currency', {
+        p_manager_id: requireUuid(
+          decodeURIComponent(action.managerId),
+          'MANAGER_ID_REQUIRED',
+          'MANAGER_ID_INVALID',
+        ),
+        p_currency: requireOperationalCurrency(rec.currency),
+      });
+    }
+    case 'addCashierCurrency': {
+      rejectForbiddenFinanceFields(rec);
+      return rpc.invoke('owner_add_cashier_currency', {
+        p_cashier_id: requireUuid(
+          decodeURIComponent(action.cashierId),
+          'CASHIER_ID_REQUIRED',
+          'CASHIER_ID_INVALID',
+        ),
+        p_currency: requireOperationalCurrency(rec.currency),
+      });
+    }
+    case 'fundCurrency': {
+      rejectForbiddenFinanceFields(rec);
+      const currency = requireOperationalCurrency(rec.currency);
+      const amount = requireExactAmountString(rec.amount);
+      const idempotencyKey = requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key);
+      const note = optionalNote(rec.note);
+      const targetType = String(rec.targetType ?? rec.target_type ?? '').trim();
+      const targetId = rec.targetId ?? rec.target_id;
+      if (targetType === 'manager') {
+        if (currency === 'TMT') {
+          return sanitizeMoneyResult(await rpc.invoke('owner_fund_manager', {
+            p_manager_id: requireUuid(targetId, 'MANAGER_ID_REQUIRED', 'MANAGER_ID_INVALID'),
+            p_amount: amount,
+            p_idempotency_key: idempotencyKey,
+            p_note: note,
+          }));
+        }
+        return sanitizeMoneyResult(await rpc.invoke('owner_fund_manager_currency', {
+          p_manager_id: requireUuid(targetId, 'MANAGER_ID_REQUIRED', 'MANAGER_ID_INVALID'),
+          p_currency: currency,
+          p_amount: amount,
+          p_idempotency_key: idempotencyKey,
+          p_note: note,
+        }));
+      }
+      if (targetType === 'cashier') {
+        if (currency === 'TMT') {
+          return sanitizeMoneyResult(await rpc.invoke('owner_fund_cashier', {
+            p_cashier_id: requireUuid(targetId, 'CASHIER_ID_REQUIRED', 'CASHIER_ID_INVALID'),
+            p_amount: amount,
+            p_idempotency_key: idempotencyKey,
+            p_note: note,
+          }));
+        }
+        return sanitizeMoneyResult(await rpc.invoke('owner_fund_cashier_currency', {
+          p_cashier_id: requireUuid(targetId, 'CASHIER_ID_REQUIRED', 'CASHIER_ID_INVALID'),
+          p_currency: currency,
+          p_amount: amount,
+          p_idempotency_key: idempotencyKey,
+          p_note: note,
+        }));
+      }
+      throw staffError('TARGET_TYPE_INVALID', 400);
     }
     case 'fund': {
       rejectForbiddenFinanceFields(rec);

@@ -18,6 +18,8 @@ import { clearCashierCookies, requestIsSecure } from '../staff/cashierCookies.js
 import type { StaffLog } from '../staff/types.js';
 import { createCashierJwtRpc, type CashierRpcPort } from './cashierRpc.js';
 import { assertCashierPayoutRateLimit } from './cashierPayoutRateLimit.js';
+import { parseExactPositiveDecimal } from '../player/exactDecimal.js';
+import { displayPlayerCurrency, parseOperationalDisplayCurrency } from '../player/playerCurrency.js';
 
 export const CASHIER_MONEY_RPC_DENYLIST = [
   'cashier_deposit_to_player',
@@ -38,6 +40,7 @@ export const CANONICAL_CASHIER_READ_RPCS = [
 
 export const CANONICAL_CASHIER_MONEY_RPCS = [
   'cashier_deposit_player',
+  'cashier_deposit_player_currency',
   'cashier_lookup_player_payout',
   'cashier_confirm_player_payout',
   'cashier_reverse_player_deposit',
@@ -110,7 +113,7 @@ function mapOverview(raw: unknown): Record<string, unknown> {
     },
     operational: {
       accountId: str(operational.account_id ?? operational.accountId),
-      currency: str(operational.currency || 'TMTM'),
+      currency: displayPlayerCurrency(str(operational.currency || 'TMT')),
       availableBalance,
       status: str(operational.status),
       migrationState: str((operational.migration_state ?? operational.migrationState) || 'staging'),
@@ -119,6 +122,17 @@ function mapOverview(raw: unknown): Record<string, unknown> {
         operational.legacy_float_diagnostic ?? operational.legacyFloatDiagnostic,
       ),
     },
+    accounts: asRows(rec.accounts).map((row) => {
+      const item = asRecord(row);
+      return {
+        accountId: str(item.account_id ?? item.accountId),
+        currency: displayPlayerCurrency(str(item.currency || 'TMT')),
+        availableBalance: num(item.available_balance ?? item.availableBalance),
+        status: str(item.status),
+        migrationState: str((item.migration_state ?? item.migrationState) || 'staging'),
+        version: num(item.version) ?? 0,
+      };
+    }),
     activationPending: rec.activation_pending !== false && rec.activationPending !== false,
   };
 }
@@ -131,7 +145,7 @@ function mapTransfers(raw: unknown): Record<string, unknown> {
       id: str(item.id),
       transferNo: item.transfer_no ?? item.transferNo ?? null,
       transferType: str(item.transfer_type ?? item.transferType),
-      currency: str(item.currency),
+      currency: displayPlayerCurrency(str(item.currency)),
       amount: num(item.amount),
       fromAccountId: str(item.from_account_id ?? item.fromAccountId),
       toAccountId: str(item.to_account_id ?? item.toAccountId),
@@ -287,13 +301,30 @@ async function runControl(
         p_limit: query.get('limit') ? Number(query.get('limit')) : 100,
         p_offset: query.get('offset') ? Number(query.get('offset')) : 0,
       }));
-    case 'deposit':
+    case 'deposit': {
+      const currencyRaw = rec.currency ?? rec.displayCurrency ?? rec.display_currency;
+      const currency = currencyRaw == null || currencyRaw === ''
+        ? null
+        : parseOperationalDisplayCurrency(currencyRaw);
+      if (currencyRaw != null && currencyRaw !== '' && !currency) {
+        throw staffError('CURRENCY_UNSUPPORTED', 400);
+      }
+      if (currency && currency !== 'TMT') {
+        return rpc.invoke('cashier_deposit_player_currency', {
+          p_player_public_id: requirePlayerPublicId(rec.playerPublicId ?? rec.player_public_id),
+          p_currency: currency,
+          p_amount: parseExactPositiveDecimal(rec.amount, 'AMOUNT_INVALID'),
+          p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+          p_note: optionalNote(rec.note),
+        });
+      }
       return rpc.invoke('cashier_deposit_player', {
         p_player_public_id: requirePlayerPublicId(rec.playerPublicId ?? rec.player_public_id),
         p_amount: requireAmount(rec.amount),
         p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
         p_note: optionalNote(rec.note),
       });
+    }
     case 'depositReverse': {
       if (
         Object.prototype.hasOwnProperty.call(rec, 'amount')

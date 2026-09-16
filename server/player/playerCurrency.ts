@@ -35,3 +35,9 @@ export function walletCurrenciesMatch(left: string | null | undefined, right: st
   const b = storagePlayerCurrency(right);
   return Boolean(a) && a === b;
 }
+
+export function parseOperationalDisplayCurrency(value: unknown): PlayerDisplayCurrency | null {
+  const raw = String(value ?? '').trim().toUpperCase();
+  if (raw === 'TMTM') return 'TMT';
+  return isPlayerDisplayCurrency(raw) ? raw : null;
+}
