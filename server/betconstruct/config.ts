@@ -2,6 +2,7 @@ export const BETCONSTRUCT_PROVIDER_KEY = 'betconstruct';
 
 export const BETCONSTRUCT_NOT_CONFIGURED = 'BETCONSTRUCT_NOT_CONFIGURED';
 export const BETCONSTRUCT_WALLET_NOT_WIRED = 'BETCONSTRUCT_WALLET_NOT_WIRED';
+export const BETCONSTRUCT_METHOD_UNSUPPORTED = 'BETCONSTRUCT_METHOD_UNSUPPORTED';
 
 export const BETCONSTRUCT_SPORTSBOOK_OPERATOR_METHODS = [
   'GetClientDetails',
@@ -28,10 +29,12 @@ export type BetConstructSingleWalletMethod =
 export interface BetConstructCredentialStatus {
   enabledFlag: boolean;
   operatorId: boolean;
-  sharedKey: boolean;
+  sportsSharedKey: boolean;
+  sportsAllowedIps: boolean;
+  casinoSharedKey: boolean;
+  casinoAllowedIps: boolean;
   sportsbookIframeOrigin: boolean;
   casinoIframeOrigin: boolean;
-  ipAllowlist: boolean;
   allPresent: boolean;
 }
 
@@ -45,10 +48,12 @@ export function betConstructCredentialStatus(
   const status = {
     enabledFlag: String(env.BETCONSTRUCT_ENABLED ?? '').trim() === '1',
     operatorId: present(env.BETCONSTRUCT_OPERATOR_ID),
-    sharedKey: present(env.BETCONSTRUCT_SHARED_KEY),
+    sportsSharedKey: present(env.BETCONSTRUCT_SPORTS_SHARED_KEY),
+    sportsAllowedIps: present(env.BETCONSTRUCT_SPORTS_ALLOWED_IPS),
+    casinoSharedKey: present(env.BETCONSTRUCT_CASINO_SHARED_KEY),
+    casinoAllowedIps: present(env.BETCONSTRUCT_CASINO_ALLOWED_IPS),
     sportsbookIframeOrigin: present(env.BETCONSTRUCT_SPORTSBOOK_IFRAME_ORIGIN),
     casinoIframeOrigin: present(env.BETCONSTRUCT_CASINO_IFRAME_ORIGIN),
-    ipAllowlist: present(env.BETCONSTRUCT_IP_ALLOWLIST),
   };
   return {
     ...status,

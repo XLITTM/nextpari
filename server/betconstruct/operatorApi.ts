@@ -1,5 +1,6 @@
-import { staffError } from '../staff/errors.js';
+import type { StaffHttpResult } from '../staff/httpHandler.js';
 import {
+  BETCONSTRUCT_METHOD_UNSUPPORTED,
   BETCONSTRUCT_NOT_CONFIGURED,
   BETCONSTRUCT_SPORTSBOOK_OPERATOR_METHODS,
   BETCONSTRUCT_WALLET_NOT_WIRED,
@@ -7,7 +8,11 @@ import {
   type BetConstructSportsbookOperatorMethod,
 } from './config.js';
 
-export const BETCONSTRUCT_OPERATOR_PATH = '/api/betconstruct/operator';
+export const BETCONSTRUCT_OPERATOR_BASE = '/api/betconstruct/operator';
+
+export function betConstructOperatorCallbackPath(method: string): string {
+  return `${BETCONSTRUCT_OPERATOR_BASE}/${method}`;
+}
 
 export function isBetConstructSportsbookOperatorMethod(
   value: unknown,
@@ -17,16 +22,17 @@ export function isBetConstructSportsbookOperatorMethod(
 
 /**
  * BetConstruct sportsbook Operator API.
- * Money must later go through Wallet Ledger. Never call the native Nextpari sports place engine.
+ * Money must later go through Wallet Ledger. Never call the native Nextpari sports engine.
+ * The public URL path identifies the method. Request JSON must not be required to carry "method".
  */
 export function handleBetConstructOperatorMethod(input: {
   method: unknown;
   env?: NodeJS.ProcessEnv;
-}): never {
+}): StaffHttpResult {
   void isBetConstructLive(input.env);
   void BETCONSTRUCT_WALLET_NOT_WIRED;
   if (!isBetConstructSportsbookOperatorMethod(input.method)) {
-    throw staffError('BETCONSTRUCT_METHOD_UNSUPPORTED', 400);
+    return { status: 404, body: { ok: false, error: BETCONSTRUCT_METHOD_UNSUPPORTED } };
   }
-  throw staffError(BETCONSTRUCT_NOT_CONFIGURED, 409);
+  return { status: 409, body: { ok: false, error: BETCONSTRUCT_NOT_CONFIGURED } };
 }

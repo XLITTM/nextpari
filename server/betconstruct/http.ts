@@ -1,7 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StaffOnboardingError, redactForLog } from '../staff/errors.js';
 import {
-  parseJsonPayload,
   readJsonBody,
   staffHttpLog,
   writeStaffJson,
@@ -10,38 +9,47 @@ import {
 } from '../staff/httpHandler.js';
 import { GAME_NO_STORE_HEADERS } from '../games/httpCache.js';
 import { requestIsSecure } from '../player/playerCookies.js';
+import type { PlayerAuthGatewayPorts } from '../player/playerAuthService.js';
 import type { StaffLog } from '../staff/types.js';
 import {
   PLAYER_BETCONSTRUCT_CASINO_LAUNCH_PATH,
   PLAYER_BETCONSTRUCT_SPORTSBOOK_LAUNCH_PATH,
   requestBetConstructLaunch,
 } from './launch.js';
-import { BETCONSTRUCT_OPERATOR_PATH, handleBetConstructOperatorMethod } from './operatorApi.js';
-import { BETCONSTRUCT_WALLET_PATH, handleBetConstructSingleWalletMethod } from './singleWallet.js';
+import {
+  BETCONSTRUCT_OPERATOR_BASE,
+  betConstructOperatorCallbackPath,
+  handleBetConstructOperatorMethod,
+} from './operatorApi.js';
+import {
+  BETCONSTRUCT_WALLET_BASE,
+  betConstructWalletCallbackPath,
+  handleBetConstructSingleWalletMethod,
+} from './singleWallet.js';
 
 export {
   PLAYER_BETCONSTRUCT_CASINO_LAUNCH_PATH,
   PLAYER_BETCONSTRUCT_SPORTSBOOK_LAUNCH_PATH,
 };
-export { BETCONSTRUCT_OPERATOR_PATH, BETCONSTRUCT_WALLET_PATH };
+export { BETCONSTRUCT_OPERATOR_BASE, BETCONSTRUCT_WALLET_BASE };
 
 function normalizePath(pathname: string): string {
   return pathname.replace(/\/$/, '') || '/';
+}
+
+function callbackMethodFromPath(pathname: string, base: string): string | null {
+  const path = normalizePath(pathname);
+  if (path === base) return '';
+  if (!path.startsWith(`${base}/`)) return null;
+  return path.slice(base.length + 1);
 }
 
 export function isBetConstructPath(pathname: string): boolean {
   const path = normalizePath(pathname);
   return path === PLAYER_BETCONSTRUCT_SPORTSBOOK_LAUNCH_PATH
     || path === PLAYER_BETCONSTRUCT_CASINO_LAUNCH_PATH
-    || path === BETCONSTRUCT_OPERATOR_PATH
-    || path === BETCONSTRUCT_WALLET_PATH;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>;
-  }
-  return {};
+    || callbackMethodFromPath(path, BETCONSTRUCT_OPERATOR_BASE) !== null
+    || callbackMethodFromPath(path, BETCONSTRUCT_WALLET_BASE) !== null;
 }
 
 function toStaffResult(result: StaffHttpResult): StaffHttpResult {
@@ -62,6 +70,15 @@ function headerValue(
   return value;
 }
 
+function queryValue(
+  query: Record<string, string | string[] | undefined> | undefined,
+  key: string,
+): string {
+  const value = query?.[key];
+  if (Array.isArray(value)) return value[0] ?? '';
+  return value ?? '';
+}
+
 export async function handleBetConstructRequest(
   input: {
     method: string;
@@ -69,33 +86,46 @@ export async function handleBetConstructRequest(
     cookie?: string;
     cookieSecure?: boolean;
     body?: unknown;
+    ports?: PlayerAuthGatewayPorts;
   },
   log: StaffLog = staffHttpLog,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<StaffHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
-  void input.cookieSecure;
+  void input.body;
   try {
     if (path === PLAYER_BETCONSTRUCT_SPORTSBOOK_LAUNCH_PATH) {
       if (method !== 'POST') throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
-      requestBetConstructLaunch({ product: 'sportsbook', cookieHeader: input.cookie, env });
+      return toStaffResult(await requestBetConstructLaunch({
+        product: 'sportsbook',
+        cookieHeader: input.cookie,
+        cookieSecure: input.cookieSecure,
+        env,
+        ports: input.ports,
+      }));
     }
     if (path === PLAYER_BETCONSTRUCT_CASINO_LAUNCH_PATH) {
       if (method !== 'POST') throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
-      requestBetConstructLaunch({ product: 'casino', cookieHeader: input.cookie, env });
+      return toStaffResult(await requestBetConstructLaunch({
+        product: 'casino',
+        cookieHeader: input.cookie,
+        cookieSecure: input.cookieSecure,
+        env,
+        ports: input.ports,
+      }));
     }
-    if (path === BETCONSTRUCT_OPERATOR_PATH) {
+    const operatorMethod = callbackMethodFromPath(path, BETCONSTRUCT_OPERATOR_BASE);
+    if (operatorMethod !== null) {
       if (method !== 'POST') throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
-      const body = asRecord(parseJsonPayload(input.body));
-      handleBetConstructOperatorMethod({ method: body.method ?? body.Method, env });
+      return toStaffResult(handleBetConstructOperatorMethod({ method: operatorMethod, env }));
     }
-    if (path === BETCONSTRUCT_WALLET_PATH) {
+    const walletMethod = callbackMethodFromPath(path, BETCONSTRUCT_WALLET_BASE);
+    if (walletMethod !== null) {
       if (method !== 'POST') throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
-      const body = asRecord(parseJsonPayload(input.body));
-      handleBetConstructSingleWalletMethod({ method: body.method ?? body.Method, env });
+      return toStaffResult(handleBetConstructSingleWalletMethod({ method: walletMethod, env }));
     }
-    throw new StaffOnboardingError('NOT_FOUND', 404);
+    return toStaffResult({ status: 404, body: { ok: false, error: 'NOT_FOUND' } });
   } catch (error) {
     if (error instanceof StaffOnboardingError) {
       return toStaffResult({
@@ -142,13 +172,16 @@ export async function attachBetConstructHttp(
   return true;
 }
 
+type VercelBetConstructReq = {
+  method?: string;
+  url?: string;
+  headers: Record<string, string | string[] | undefined>;
+  body?: unknown;
+  query?: Record<string, string | string[] | undefined>;
+};
+
 export async function handleVercelBetConstruct(
-  req: {
-    method?: string;
-    url?: string;
-    headers: Record<string, string | string[] | undefined>;
-    body?: unknown;
-  },
+  req: VercelBetConstructReq,
   res: StaffJsonResponse,
   pathname: string,
   log: StaffLog = staffHttpLog,
@@ -165,4 +198,17 @@ export async function handleVercelBetConstruct(
     log,
   );
   writeStaffJson(res, result);
+}
+
+export function vercelBetConstructCallback(kind: 'operator' | 'wallet') {
+  return async function handler(
+    req: VercelBetConstructReq,
+    res: StaffJsonResponse,
+  ): Promise<void> {
+    const methodName = queryValue(req.query, 'method');
+    const pathname = kind === 'wallet'
+      ? betConstructWalletCallbackPath(methodName)
+      : betConstructOperatorCallbackPath(methodName);
+    await handleVercelBetConstruct(req, res, pathname);
+  };
 }

@@ -4,6 +4,7 @@ import { BetConstructIframeHost } from '../components/BetConstructIframeHost';
 import {
   requestBetConstructLaunchSession,
   type BetConstructLaunchProduct,
+  type BetConstructLaunchSession,
 } from '../lib/betconstructLaunch';
 
 interface ProviderIframeScreenProps {
@@ -19,15 +20,15 @@ export function ProviderIframeScreen({
   fallback,
   onBack,
 }: ProviderIframeScreenProps) {
-  const [iframeUrl, setIframeUrl] = useState<string | null>(null);
+  const [session, setSession] = useState<BetConstructLaunchSession | null>(null);
   const [message, setMessage] = useState(fallback);
 
   useEffect(() => {
     let cancelled = false;
     void requestBetConstructLaunchSession({ product })
-      .then((session) => {
+      .then((next) => {
         if (cancelled) return;
-        setIframeUrl(session.iframeUrl);
+        setSession(next);
       })
       .catch(() => {
         if (cancelled) return;
@@ -54,9 +55,13 @@ export function ProviderIframeScreen({
         </div>
       </div>
       <div className="flex flex-1 items-center justify-center overflow-y-auto p-4 pb-24">
-        {iframeUrl ? (
+        {session ? (
           <div className="h-[min(70vh,32rem)] w-full">
-            <BetConstructIframeHost iframeUrl={iframeUrl} title={title} />
+            <BetConstructIframeHost
+              iframeUrl={session.iframeUrl}
+              providerOrigin={session.providerOrigin}
+              title={title}
+            />
           </div>
         ) : (
           <p className="text-center text-sm text-gray-400">{message}</p>
