@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import {
   DICE_V2_MATH_VERSION,
   DICE_V3_MATH_VERSION,
+  DICE_V4_MATH_VERSION,
   DiceMathVersionError,
   dicePayoutForVersion,
 } from './dicePayout.js';
@@ -18,6 +19,12 @@ describe('dice v2 to v3 cutover', () => {
     assert.equal(dicePayoutForVersion(10, 'win', DICE_V3_MATH_VERSION), 20);
     assert.equal(dicePayoutForVersion(10, 'draw', DICE_V3_MATH_VERSION), 10);
     assert.equal(dicePayoutForVersion(10, 'lose', DICE_V3_MATH_VERSION), 0);
+  });
+
+  it('pays v4 win ×1.96 with draw ×1.00', () => {
+    assert.equal(dicePayoutForVersion(10, 'win', DICE_V4_MATH_VERSION), 19.6);
+    assert.equal(dicePayoutForVersion(10, 'draw', DICE_V4_MATH_VERSION), 10);
+    assert.equal(dicePayoutForVersion(10, 'lose', DICE_V4_MATH_VERSION), 0);
   });
 
   it('rejects unknown and missing math versions', () => {

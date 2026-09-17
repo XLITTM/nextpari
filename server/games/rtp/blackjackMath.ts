@@ -3,10 +3,14 @@ export const BLACKJACK_V2_WIN_PAYOUT = 1.84;
 export const BLACKJACK_V2_EXACT_RTP = 0.875492820201475;
 export const BLACKJACK_V3_MATH_VERSION = 'blackjack-v3-visible-dealer-rtp875';
 export const BLACKJACK_V3_WIN_PAYOUT = 1.7;
-export const BLACKJACK_MATH_VERSION = 'blackjack-v4-visible-dealer-win2';
-export const BLACKJACK_WIN_PAYOUT = 2;
+export const BLACKJACK_V4_MATH_VERSION = 'blackjack-v4-visible-dealer-win2';
+export const BLACKJACK_MATH_VERSION = 'blackjack-v5-visible-dealer-house-edge';
+export const BLACKJACK_V4_WIN_PAYOUT = 2;
+export const BLACKJACK_WIN_PAYOUT = 1.94;
 export const BLACKJACK_GOLDEN_PAYOUT = 2;
 export const BLACKJACK_PUSH_PAYOUT = 1;
+export const BLACKJACK_V5_EXACT_RTP = 0.9863278373317749;
+export const BLACKJACK_V5_HOUSE_EDGE = 1 - BLACKJACK_V5_EXACT_RTP;
 export const BLACKJACK_VISIBLE_THEORETICAL_WIN_PAYOUT = 1.6952395194023846;
 export const BLACKJACK_VISIBLE_EXACT_RTP = 0.8771651467167154;
 export const BLACKJACK_V4_EXACT_RTP = 1.0136234940440312;
@@ -17,8 +21,10 @@ export const BLACKJACK_V2_METHOD =
   'Exact finite-shoe DP: 36-card shoe (4 of each rank), composition-dependent hit/stand, unknown dealer hole mixed into remaining counts, dealer draws to 17, no soft-Ace, AA golden.';
 export const BLACKJACK_V3_METHOD =
   'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×1.70 golden×2 push×1.';
-export const BLACKJACK_METHOD =
+export const BLACKJACK_V4_METHOD =
   'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×2.00 golden×2 push×1. Product decision does not preserve 87.5% RTP.';
+export const BLACKJACK_METHOD =
+  'Exact finite-shoe DP with both initial dealer cards visible. 36-card shoe, composition-dependent hit/stand, dealer draws to 17, AA golden, win×1.94 golden×2 push×1. Verified optimal-policy RTP is between 0.980 and 0.990.';
 
 const RANKS = 9;
 const VALUES = [6, 7, 8, 9, 10, 2, 3, 4, 11] as const;
@@ -321,11 +327,15 @@ function shouldHitKnown(solver: Solver, player: number, dealerTotal: number, cou
   return hitKnownEv(solver, player, dealerTotal, counts) > dealerPlay(solver, dealerTotal, counts, player) + 1e-15;
 }
 
-export function simulateBlackjackOptimal(rounds = BLACKJACK_EVAL_ROUNDS, seed = BLACKJACK_EVAL_SEED) {
+export function simulateBlackjackOptimal(
+  rounds = BLACKJACK_EVAL_ROUNDS,
+  seed = BLACKJACK_EVAL_SEED,
+  winPayout = BLACKJACK_WIN_PAYOUT,
+) {
   const solver: Solver = {
     valueMemo: new Map(),
     dealerMemo: new Map(),
-    winPayout: BLACKJACK_WIN_PAYOUT,
+    winPayout,
     pushPayout: BLACKJACK_PUSH_PAYOUT,
   };
   const rand = mulberry32(seed);
@@ -366,7 +376,7 @@ export function simulateBlackjackOptimal(rounds = BLACKJACK_EVAL_ROUNDS, seed = 
     while (dealer < 17) dealer += drawFromShoe(shoe, rand);
     if (dealer > 21 || player > dealer) {
       counts.win += 1;
-      payout += BLACKJACK_WIN_PAYOUT;
+      payout += winPayout;
     } else if (player === dealer) {
       counts.push += 1;
       payout += BLACKJACK_PUSH_PAYOUT;
@@ -379,7 +389,7 @@ export function simulateBlackjackOptimal(rounds = BLACKJACK_EVAL_ROUNDS, seed = 
     rounds,
     seed,
     method: `${BLACKJACK_METHOD} Then ${rounds} deterministic finite-shoe hands using the same solver.`,
-    winPayout: BLACKJACK_WIN_PAYOUT,
+    winPayout,
     goldenPayout: BLACKJACK_GOLDEN_PAYOUT,
     pushPayout: BLACKJACK_PUSH_PAYOUT,
     counts,

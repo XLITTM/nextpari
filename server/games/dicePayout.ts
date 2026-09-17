@@ -1,5 +1,6 @@
 export const DICE_V2_MATH_VERSION = 'dice-v2-rtp875';
 export const DICE_V3_MATH_VERSION = 'dice-v3-win2';
+export const DICE_V4_MATH_VERSION = 'dice-v4-house-edge';
 
 export class DiceMathVersionError extends Error {
   readonly code: string;
@@ -17,6 +18,7 @@ function winMultiplierForVersion(mathVersion: string | null): number {
   }
   if (mathVersion === DICE_V2_MATH_VERSION) return 1.72;
   if (mathVersion === DICE_V3_MATH_VERSION) return 2;
+  if (mathVersion === DICE_V4_MATH_VERSION) return 1.96;
   throw new DiceMathVersionError('DICE_MATH_VERSION_UNSUPPORTED');
 }
 

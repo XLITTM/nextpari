@@ -1957,6 +1957,9 @@ export interface OwnerCurrencyLimitRow {
   minWithdrawal: string | null;
   sportsEnabled: boolean;
   ownedGamesEnabled: boolean;
+  ownedGamesReady: boolean;
+  readyGames: string[];
+  blockedGames: string[];
 }
 
 function parseCurrencyLimitRow(raw: unknown): OwnerCurrencyLimitRow {
@@ -1978,6 +1981,17 @@ function parseCurrencyLimitRow(raw: unknown): OwnerCurrencyLimitRow {
     minWithdrawal: money(row.minWithdrawal ?? row.min_withdrawal),
     sportsEnabled: row.sportsEnabled === true || row.sports_enabled === true,
     ownedGamesEnabled: row.ownedGamesEnabled === true || row.owned_games_enabled === true,
+    ownedGamesReady: row.ownedGamesReady === true || row.owned_games_ready === true,
+    readyGames: Array.isArray(row.readyGames)
+      ? row.readyGames.map((item) => String(item))
+      : Array.isArray(row.ready_games)
+        ? (row.ready_games as unknown[]).map((item) => String(item))
+        : [],
+    blockedGames: Array.isArray(row.blockedGames)
+      ? row.blockedGames.map((item) => String(item))
+      : Array.isArray(row.blocked_games)
+        ? (row.blocked_games as unknown[]).map((item) => String(item))
+        : [],
   };
 }
 
@@ -2015,6 +2029,21 @@ export async function setOwnerCurrencySportsEnabled(input: {
   enabled: boolean;
 }): Promise<OwnerCurrencyLimitRow> {
   const data = await ownerData('/api/owner/currency-limits/sports', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      currency: input.currency,
+      enabled: input.enabled,
+    }),
+  });
+  return parseCurrencyLimitRow(data);
+}
+
+export async function setOwnerCurrencyOwnedGamesEnabled(input: {
+  currency: string;
+  enabled: boolean;
+}): Promise<OwnerCurrencyLimitRow> {
+  const data = await ownerData('/api/owner/currency-limits/owned-games', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

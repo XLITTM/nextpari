@@ -18,6 +18,8 @@ import { GameWalletBadge } from '@/components/games/GameWalletBadge';
 import { Card, type CardScale } from './Card';
 import { calculateHandScore, isBust, isGoldenOchko } from './deck';
 import {
+  BLACKJACK_GOLDEN_PAYOUT,
+  BLACKJACK_WIN_PAYOUT,
   CHIP_VALUES,
   MIN_STAKE,
   resultCopy,
@@ -584,7 +586,7 @@ export function BlackjackGame({ onBack }: BlackjackGameProps) {
             <li>Два туза — золотое очко, мгновенная победа.</li>
             <li>Дилер останавливается на 17 и выше.</li>
             <li>Равный счёт с дилером — ничья, ставка возвращается.</li>
-            <li>Выплата при обычной победе — ×2.00 от ставки. Золотое очко — ×2.00. Ничья возвращает ставку (×1.00).</li>
+            <li>Выплата при обычной победе — ×{BLACKJACK_WIN_PAYOUT.toFixed(2)} от ставки. Золотое очко — ×{BLACKJACK_GOLDEN_PAYOUT.toFixed(2)}. Ничья возвращает ставку (×1.00).</li>
           </ul>
         </Drawer>
       )}

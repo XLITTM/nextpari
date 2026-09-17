@@ -38,6 +38,8 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'SPORTS_CURRENCY_DISABLED'
     || code === 'OWNED_GAMES_CURRENCY_NOT_READY'
     || code === 'OWNED_GAMES_CURRENCY_DISABLED'
+    || code === 'GAME_MULTI_CURRENCY_NOT_READY'
+    || code === 'GAME_PAYOUT_ABOVE_CURRENCY_MAX'
     || code === 'CURRENCY_DISABLED'
     || code === 'GAME_DISABLED'
     || code === 'GAME_MAINTENANCE'

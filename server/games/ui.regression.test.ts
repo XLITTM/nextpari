@@ -55,7 +55,7 @@ describe('phase 031 frontend regressions', () => {
     assert.equal(ui.includes('setInterval(() =>'), false);
     assert.equal(ui.includes(', 80)'), false);
     assert.equal(ui.includes('Math.random'), false);
-    assert.match(ui, /DICE_WIN_MULTIPLIER = 2/);
+    assert.match(ui, /DICE_WIN_MULTIPLIER = 1\.96/);
     assert.match(ui, /ставка × \{DICE_WIN_MULTIPLIER\.toFixed\(2\)\}/);
   });
 
@@ -135,7 +135,7 @@ describe('phase 032 visual restore', () => {
     assert.match(ui, /Number\(round\.payout\)/);
     assert.equal(ui.includes('stake * DICE_WIN_MULTIPLIER'), false);
     assert.equal(ui.includes('Math.random'), false);
-    assert.match(ui, /DICE_WIN_MULTIPLIER = 2/);
+    assert.match(ui, /DICE_WIN_MULTIPLIER = 1\.96/);
   });
 
   it('Blackjack presents both initial dealer cards face-up', () => {
@@ -148,8 +148,8 @@ describe('phase 032 visual restore', () => {
     assert.match(parse, /BLACKJACK_V4_MATH_VERSION/);
     assert.match(parse, /forceFaceUp \? false : card\.isHidden === true/);
     assert.equal(parse.includes('isHidden: false,'), false);
-    assert.match(ui, /×2.00 от ставки/);
-    assert.match(ui, /×2.00/);
+    assert.match(ui, /BLACKJACK_WIN_PAYOUT\.toFixed\(2\)/);
+    assert.match(ui, /BLACKJACK_GOLDEN_PAYOUT\.toFixed\(2\)/);
     assert.match(ui, /×1.00/);
     assert.match(card, /data-face=\{faceDown \? 'down' : 'up'\}/);
     assert.match(ui, /dealerDraws/);

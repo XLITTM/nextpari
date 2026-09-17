@@ -33,7 +33,7 @@ function requireStake(value: unknown): number {
   if (!Number.isFinite(n) || n <= 0) {
     throw staffError('STAKE_NOT_POSITIVE', 400);
   }
-  return Number(n.toFixed(2));
+  return n;
 }
 
 function optionsOf(body: Record<string, unknown>): Record<string, unknown> {

@@ -123,11 +123,13 @@ describe('Apples theoretical RTP reporting exception', () => {
       });
     }
     assert.deepEqual(gameRtpReportingMeta('dice'), {
-      theoreticalRtpTarget: 1,
+      theoreticalRtpTarget: 1273 / 1296,
       rtpModel: 'fixed-target',
     });
     assert.equal(gameRtpReportingMeta('blackjack').rtpModel, 'fixed-target');
-    assert.ok((gameRtpReportingMeta('blackjack').theoreticalRtpTarget ?? 0) > 1);
+    assert.ok((gameRtpReportingMeta('blackjack').theoreticalRtpTarget ?? 0) < 1);
+    assert.ok((gameRtpReportingMeta('blackjack').theoreticalRtpTarget ?? 0) >= 0.98);
+    assert.ok((gameRtpReportingMeta('blackjack').theoreticalRtpTarget ?? 1) <= 0.99);
     assert.match(rollback, /five controlled games target 0\.875/);
     assert.match(migration, /p_game_code IN \('pharaoh', 'dice', 'blackjack', 'crystal', 'aviator'\)/);
     const sql034 = read('supabase/migrations/20260902_034_dice_blackjack_win2.sql');

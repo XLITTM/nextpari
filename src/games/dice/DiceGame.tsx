@@ -7,7 +7,7 @@ import { PlayerGameError, startGame } from '@/lib/playerGames';
 import './dice.css';
 
 export const DICE_BG = '/images/26164.png';
-export const DICE_WIN_MULTIPLIER = 2;
+export const DICE_WIN_MULTIPLIER = 1.96;
 export const DICE_DRAW_MULTIPLIER = 1;
 export const DICE_ROLL_MS = 800;
 
