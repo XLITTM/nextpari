@@ -1,0 +1,78 @@
+---
+description: BetConstruct is iframe-first. Do not build a native BetConstruct sportsbook or casino UI.
+alwaysApply: true
+---
+
+# BetConstruct is iframe-first
+
+BetConstruct integration uses BetConstruct-hosted iFrames. Do not invent a parallel Nextpari sportsbook or casino client for this provider.
+
+## Do not build
+
+- a Nextpari BetConstruct event feed
+- Nextpari BetConstruct markets UI
+- a Nextpari BetConstruct betslip
+- Nextpari BetConstruct casino/game UI
+- BetConstruct market ingestion into `sportsStore`
+- synchronization of BetConstruct markets into the native sportsbook UI
+- routing BetConstruct bets through the native Nextpari sports engine (`sports_engine_place`, LSports quotes, native betslip)
+
+Native LSports sportsbook remains separate and unchanged.
+
+## BetConstruct owns inside the iframe
+
+Sportsbook UI, prematch, live, markets, betslip, bet acceptance/trading UI, and casino/game UI.
+
+## Nextpari owns
+
+- player authentication
+- opaque short-lived AuthToken plus separate launch-session metadata
+- active wallet and currency
+- player balance
+- Wallet Ledger (all actual player-money changes)
+- method-specific provider callback endpoints
+- security restrictions
+- deposits/withdrawals outside the provider iframe
+- provider accounting/reconciliation
+
+## Sportsbook flow
+
+Nextpari frontend requests a launch session from Nextpari backend → receives `iframeUrl`, `providerOrigin`, currency, product, and a short-lived opaque AuthToken → opens the BetConstruct iframe only if the iframe URL origin matches `providerOrigin`, with `integrationMode=1` and `AuthToken`. BetConstruct then calls Nextpari Operator API at method-specific URLs:
+
+- `POST /api/betconstruct/operator/GetClientDetails`
+- `POST /api/betconstruct/operator/GetClientBalance`
+- `POST /api/betconstruct/operator/BetPlaced`
+- `POST /api/betconstruct/operator/BetResulted`
+- `POST /api/betconstruct/operator/Rollback`
+
+Do not require a JSON `method` field for routing.
+
+## Casino flow
+
+Nextpari frontend requests a casino game launch → opens the provider-hosted game iframe after the same origin check. BetConstruct RGS calls Nextpari Single Wallet at method-specific URLs:
+
+- `POST /api/betconstruct/wallet/Authentication`
+- `POST /api/betconstruct/wallet/GetBalance`
+- `POST /api/betconstruct/wallet/Withdraw`
+- `POST /api/betconstruct/wallet/Deposit`
+- `POST /api/betconstruct/wallet/WithdrawAndDeposit`
+- `POST /api/betconstruct/wallet/Rollback`
+
+## Credentials
+
+Sportsbook and Casino credentials are separate. Do not assume one SharedKey or one IP allowlist covers both:
+
+- `BETCONSTRUCT_SPORTS_SHARED_KEY`
+- `BETCONSTRUCT_SPORTS_ALLOWED_IPS`
+- `BETCONSTRUCT_CASINO_SHARED_KEY`
+- `BETCONSTRUCT_CASINO_ALLOWED_IPS`
+- `BETCONSTRUCT_OPERATOR_ID`
+- `BETCONSTRUCT_SPORTSBOOK_IFRAME_ORIGIN`
+- `BETCONSTRUCT_CASINO_IFRAME_ORIGIN`
+- `BETCONSTRUCT_ENABLED` (future master switch only)
+
+No `VITE_*` provider secrets.
+
+## Enablement
+
+Keep the integration fail-closed until real test credentials, domain, SharedKeys, OperatorId, and IP allowlists are supplied. Do not treat dummy env as production-ready. Do not move player money until Wallet Ledger adapters are explicitly wired in a later phase.

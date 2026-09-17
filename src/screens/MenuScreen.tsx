@@ -72,6 +72,7 @@ const sections: Record<SubTabId, CardItem[]> = {
     { icon: Zap, label: 'Экспресс дня', desc: 'Ставки на выгодные экспрессы', ...grayIcon, ...soon },
     { icon: Video, label: 'Стрим', desc: 'Игры с онлайн-трансляцией', ...grayIcon, ...soon },
     { icon: IconEsports, label: 'Киберспорт', desc: 'Лучшие киберспортивные события', ...grayIcon, route: { name: 'sports', mode: 'cybers' } },
+    { icon: LayoutGrid, label: 'Спортбук провайдера', desc: 'Откроется во встроенном окне после подключения', ...grayIcon, route: { name: 'provider-sportsbook' } },
     { icon: CheckCircle, label: 'Результаты', desc: 'Итоги прошедших событий', ...grayIcon, ...soon },
     { icon: Flag, label: 'Ставь на своих', desc: 'События любимых стран', ...grayIcon, ...soon },
   ],
