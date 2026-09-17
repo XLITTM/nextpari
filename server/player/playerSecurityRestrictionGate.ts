@@ -1,10 +1,11 @@
 /**
  * Canonical Security restriction gates for future adapters.
  *
- * BetB2B casino/slot/live-casino launch is not connected in this PR.
- * Do not invent a provider session here. When a real adapter lands, it MUST
- * call `public.require_player_external_casino_allowed(player_user_id)` with
- * service-role authority before issuing a provider session/launch.
+ * BetConstruct casino/slot/live-casino launch is iframe-first and currently
+ * fail-closed (`BETCONSTRUCT_NOT_CONFIGURED`). Do not invent a native casino
+ * canvas or a provider session here. When credentials exist, the launch
+ * adapter MUST call `public.require_player_external_casino_allowed(player_user_id)`
+ * with service-role authority before issuing an AuthToken.
  * Expected deny code: SECURITY_CASINO_RESTRICTED.
  *
  * Sports and Nextpari-owned games must keep using wallet-active checks only.

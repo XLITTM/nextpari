@@ -30,6 +30,7 @@ import { setArcadeSportsPaused } from './lib/sportsPollGate';
 import { ChampionshipsScreen } from './screens/ChampionshipsScreen';
 import { SlotsScreen } from './screens/SlotsScreen';
 import { LiveCasinoScreen } from './screens/LiveCasinoScreen';
+import { ProviderSportsbookScreen } from './screens/ProviderSportsbookScreen';
 import { GamesScreen } from './screens/GamesScreen';
 import { CrystalGame } from './games/crystal/CrystalGame';
 import { PromoDetailsScreen } from './screens/PromoDetailsScreen';
@@ -152,6 +153,7 @@ function fallbackScreen(screen: Screen): Screen {
     case 'sports':
     case 'slots':
     case 'live-casino':
+    case 'provider-sportsbook':
       return { name: 'menu' };
     case 'championships':
       return { name: 'sports', mode: screen.mode };
@@ -510,6 +512,8 @@ function AppContent() {
         return <SlotsScreen onBack={goBack} onNavigate={setScreen} />;
       case 'live-casino':
         return <LiveCasinoScreen onBack={goBack} onNavigate={setScreen} />;
+      case 'provider-sportsbook':
+        return <ProviderSportsbookScreen onBack={goBack} />;
       case 'games':
         return <GamesScreen onBack={goBack} onNavigate={setScreen} />;
       case 'crystal':

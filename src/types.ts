@@ -265,6 +265,7 @@ export type Screen =
   | { name: 'championships'; sport: string; mode: 'live' | 'line' }
   | { name: 'slots' }
   | { name: 'live-casino' }
+  | { name: 'provider-sportsbook' }
   | { name: 'games' }
   | { name: 'promo-details' }
   | { name: 'promo-marathon' }

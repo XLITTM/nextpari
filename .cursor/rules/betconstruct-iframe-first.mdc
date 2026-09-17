@@ -1,0 +1,48 @@
+---
+description: BetConstruct is iframe-first. Do not build a native BetConstruct sportsbook or casino UI.
+alwaysApply: true
+---
+
+# BetConstruct is iframe-first
+
+BetConstruct integration uses BetConstruct-hosted iFrames. Do not invent a parallel Nextpari sportsbook or casino client for this provider.
+
+## Do not build
+
+- a Nextpari BetConstruct event feed
+- Nextpari BetConstruct odds/markets UI
+- a Nextpari BetConstruct betslip
+- Nextpari BetConstruct casino/game UI
+- BetConstruct odds ingestion into `sportsStore`
+- synchronization of BetConstruct markets into the native sportsbook UI
+- routing BetConstruct bets through the native Nextpari odds engine (`sports_engine_place`, LSports quotes, native betslip)
+
+Native LSports sportsbook remains separate and unchanged.
+
+## BetConstruct owns inside the iframe
+
+Sportsbook UI, prematch, live, markets, odds, betslip, bet acceptance/trading UI, and casino/game UI.
+
+## Nextpari owns
+
+- player authentication
+- short-lived currency-bound AuthToken / launch session
+- active wallet and currency
+- player balance
+- Wallet Ledger (all actual player-money changes)
+- provider callback endpoints
+- security restrictions
+- deposits/withdrawals outside the provider iframe
+- provider accounting/reconciliation
+
+## Sportsbook flow
+
+Nextpari frontend requests a launch session from Nextpari backend → receives a short-lived currency-bound AuthToken → opens the BetConstruct iframe with `integrationMode=1` and `AuthToken`. BetConstruct then calls Nextpari Operator API: `GetClientDetails`, `GetClientBalance`, `BetPlaced`, `BetResulted`, `Rollback`.
+
+## Casino flow
+
+Nextpari frontend requests a casino game launch → opens the provider-hosted game iframe. BetConstruct RGS calls Nextpari Single Wallet: `Authentication`, `GetBalance`, `Withdraw`, `Deposit`, `WithdrawAndDeposit`, `Rollback`.
+
+## Enablement
+
+Keep the integration fail-closed until real test credentials, domain, SharedKeys, OperatorId, and IP allowlist are supplied. Do not treat dummy env as production-ready. Do not move player money until Wallet Ledger adapters are explicitly wired in a later phase.
