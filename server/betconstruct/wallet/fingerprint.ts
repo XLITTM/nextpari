@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
+import { ordinalKeySort } from './canonicalKeys.js';
 
 export function financialFingerprint(fields: Record<string, unknown>): string {
-  const keys = Object.keys(fields).sort((a, b) => a.localeCompare(b));
+  const keys = ordinalKeySort(Object.keys(fields));
   const payload: Record<string, unknown> = {};
   for (const key of keys) {
     const value = fields[key];

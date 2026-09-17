@@ -3,9 +3,15 @@ import { BETCONSTRUCT_SESSION_EXTEND_MS } from './constants.js';
 import { casinoPlayerIdFromPublicId } from './casinoPlayerId.js';
 import { providerDisplayCurrency } from './currency.js';
 import { digestAuthToken } from './tokenDigest.js';
-import type { BetConstructProduct, BetConstructWalletPorts, SessionBinding } from './types.js';
+import type {
+  BetConstructProduct,
+  BetConstructTokenKind,
+  BetConstructWalletPorts,
+  SessionBinding,
+} from './types.js';
 
 export { digestAuthToken };
+export { createCasinoSessionToken, CASINO_SESSION_TOKEN_MAX_LEN } from './sessionToken.js';
 
 export function bindingIsRevoked(binding: SessionBinding): boolean {
   return binding.revokedAtMs != null;
@@ -26,6 +32,7 @@ export async function persistLaunchBinding(
     displayCurrency: string;
     issuedAtMs: number;
     expiresAtMs: number;
+    tokenKind?: BetConstructTokenKind;
   },
 ): Promise<SessionBinding> {
   const displayCurrency = providerDisplayCurrency(input.displayCurrency);
@@ -36,6 +43,7 @@ export async function persistLaunchBinding(
   return ports.sessions.insert({
     id: randomUUID(),
     product: input.product,
+    tokenKind: input.tokenKind ?? 'launch',
     tokenDigest: digestAuthToken(input.rawToken),
     playerAuthUserId: input.playerAuthUserId,
     playerPublicId: input.playerPublicId,
@@ -55,10 +63,14 @@ export async function resolveBinding(
   rawToken: string,
   product: BetConstructProduct,
   mode: 'new_play' | 'settlement',
+  tokenKind?: BetConstructTokenKind,
 ): Promise<SessionBinding> {
-  const digest = digestAuthToken(String(rawToken ?? ''));
+  const digest = digestAuthToken(rawToken);
   const binding = await ports.sessions.findByDigest(digest);
   if (!binding || binding.product !== product || bindingIsRevoked(binding)) {
+    throw new Error(product === 'casino' ? 'INVALID_TOKEN' : 'TOKEN_INVALID');
+  }
+  if (tokenKind && binding.tokenKind !== tokenKind) {
     throw new Error(product === 'casino' ? 'INVALID_TOKEN' : 'TOKEN_INVALID');
   }
   const now = ports.nowMs();

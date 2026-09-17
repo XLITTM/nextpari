@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { ordinalKeySort } from './canonicalKeys.js';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -8,7 +9,7 @@ function sortJson(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortJson);
   if (!isPlainObject(value)) return value;
   const out: Record<string, unknown> = {};
-  for (const key of Object.keys(value).sort((a, b) => a.localeCompare(b))) {
+  for (const key of ordinalKeySort(Object.keys(value))) {
     if (key === 'PublicKey' || key === 'publicKey') continue;
     out[key] = sortJson(value[key]);
   }

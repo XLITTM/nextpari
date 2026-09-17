@@ -3,9 +3,11 @@ import {
   MemoryProviderAccountingStore,
   ingestProviderAccountingEvent,
 } from '../../providerAccounting/ingest.js';
-import { money2 } from './currency.js';
+import { displayScaleOf, exactToNumber, fromMinorUnits, toMinorUnits } from './exactAmount.js';
+import { providerDisplayCurrency } from './currency.js';
 import type {
   ApplyWalletEntryInput,
+  AtomicFailAfter,
   BetConstructWalletPorts,
   CallbackEventRecord,
   ProviderTransactionRecord,
@@ -19,30 +21,58 @@ function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
+const CASINO_FINANCIAL_METHODS = new Set(['Withdraw', 'Deposit', 'WithdrawAndDeposit']);
+
 export class MemoryWalletLedger implements WalletAccountState {
   walletId: string;
   playerAuthUserId: string;
   currency: string;
   status: WalletAccountState['status'];
   entries: WalletLedgerEntry[] = [];
-  private initialBalance: number;
+  private initialMinor: bigint;
+  private readonly scale: number;
 
   constructor(input: {
     walletId: string;
     playerAuthUserId: string;
     currency: string;
     status?: WalletAccountState['status'];
-    balance?: number;
+    balance?: number | string;
   }) {
     this.walletId = input.walletId;
     this.playerAuthUserId = input.playerAuthUserId;
     this.currency = input.currency;
     this.status = input.status ?? 'active';
-    this.initialBalance = money2(input.balance ?? 0);
+    const display = providerDisplayCurrency(input.currency);
+    if (!display) throw new Error('CURRENCY_UNSUPPORTED');
+    this.scale = displayScaleOf(display);
+    const initial = input.balance == null ? '0' : typeof input.balance === 'string'
+      ? input.balance
+      : Number.isInteger(input.balance)
+        ? String(input.balance)
+        : String(input.balance);
+    this.initialMinor = toMinorUnits(initial, this.scale);
+  }
+
+  balanceExact(): string {
+    const minor = this.entries.reduce(
+      (sum, row) => sum + toMinorUnits(row.signedAmountExact, this.scale),
+      this.initialMinor,
+    );
+    return fromMinorUnits(minor, this.scale);
   }
 
   balance(): number {
-    return money2(this.initialBalance + this.entries.reduce((sum, row) => sum + row.signedAmount, 0));
+    return exactToNumber(this.balanceExact());
+  }
+
+  snapshot(): { entries: WalletLedgerEntry[]; initialMinor: bigint } {
+    return { entries: clone(this.entries), initialMinor: this.initialMinor };
+  }
+
+  restore(snap: { entries: WalletLedgerEntry[]; initialMinor: bigint }): void {
+    this.entries = clone(snap.entries);
+    this.initialMinor = snap.initialMinor;
   }
 }
 
@@ -50,6 +80,7 @@ export function createMemoryWalletPorts(input: {
   wallets: MemoryWalletLedger[];
   restrictedPlayerIds?: string[];
   nowMs?: number;
+  failAfter?: AtomicFailAfter | null;
 }): BetConstructWalletPorts & {
   wallets: Map<string, MemoryWalletLedger>;
   sessionRows: SessionBinding[];
@@ -58,6 +89,7 @@ export function createMemoryWalletPorts(input: {
   callbackRows: CallbackEventRecord[];
   accounting: MemoryProviderAccountingStore;
   setNow: (ms: number) => void;
+  setFailAfter: (step: AtomicFailAfter | null) => void;
 } {
   const wallets = new Map(input.wallets.map((wallet) => [wallet.walletId, wallet]));
   const sessions: SessionBinding[] = [];
@@ -68,9 +100,43 @@ export function createMemoryWalletPorts(input: {
   const restricted = new Set(input.restrictedPlayerIds ?? []);
   let now = input.nowMs ?? Date.now();
   let platformSeq = 1;
+  let failAfter: AtomicFailAfter | null = input.failAfter ?? null;
 
   const ports: BetConstructWalletPorts = {
     nowMs: () => now,
+    failAfter,
+    trip(step) {
+      if (failAfter === step) throw new Error('INJECTED_FAILURE');
+    },
+    async runAtomic(fn) {
+      const walletSnaps = new Map(
+        [...wallets.entries()].map(([id, wallet]) => [id, wallet.snapshot()]),
+      );
+      const sessionSnap = clone(sessions);
+      const sportsSnap = clone(sportsBets);
+      const txSnap = clone(transactions);
+      const callbackSnap = clone(callbacks);
+      const accountingRows = clone([...accounting.rows.entries()]);
+      const accountingPeriods = clone([...accounting.periods.entries()]);
+      const seqSnap = platformSeq;
+      try {
+        return await fn();
+      } catch (error) {
+        for (const [id, snap] of walletSnaps) {
+          wallets.get(id)?.restore(snap);
+        }
+        sessions.splice(0, sessions.length, ...sessionSnap);
+        sportsBets.splice(0, sportsBets.length, ...sportsSnap);
+        transactions.splice(0, transactions.length, ...txSnap);
+        callbacks.splice(0, callbacks.length, ...callbackSnap);
+        accounting.rows.clear();
+        for (const [key, row] of accountingRows) accounting.rows.set(key, row);
+        accounting.periods.clear();
+        for (const [key, period] of accountingPeriods) accounting.periods.set(key, period);
+        platformSeq = seqSnap;
+        throw error;
+      }
+    },
     wallet: {
       async getAccount(walletId) {
         const wallet = wallets.get(walletId);
@@ -90,10 +156,14 @@ export function createMemoryWalletPorts(input: {
         if (wallet.status !== 'active' && entry.allowBlocked !== true) {
           throw new Error(wallet.status === 'closed' ? 'WALLET_CLOSED' : 'WALLET_BLOCKED');
         }
+        const display = providerDisplayCurrency(wallet.currency);
+        if (!display) throw new Error('CURRENCY_UNSUPPORTED');
+        const scale = displayScaleOf(display);
+        const signedMinor = toMinorUnits(entry.signedAmountExact, scale);
         const existing = wallet.entries.find((row) => row.idempotencyKey === entry.idempotencyKey);
         if (existing) {
           if (
-            existing.signedAmount !== money2(entry.signedAmount)
+            toMinorUnits(existing.signedAmountExact, scale) !== signedMinor
             || existing.operation !== entry.operation
             || existing.walletId !== entry.walletId
           ) {
@@ -101,14 +171,13 @@ export function createMemoryWalletPorts(input: {
           }
           return { ledgerId: existing.ledgerId, balanceAfter: wallet.balance() };
         }
-        const signedAmount = money2(entry.signedAmount);
-        if (signedAmount < 0 && wallet.balance() + signedAmount < 0) {
+        if (signedMinor < 0n && toMinorUnits(wallet.balanceExact(), scale) + signedMinor < 0n) {
           throw new Error('INSUFFICIENT_AVAILABLE_BALANCE');
         }
         const next: WalletLedgerEntry = {
           ledgerId: randomUUID(),
           walletId: entry.walletId,
-          signedAmount,
+          signedAmountExact: fromMinorUnits(signedMinor, scale),
           operation: entry.operation,
           idempotencyKey: entry.idempotencyKey,
           currency: entry.currency,
@@ -143,6 +212,7 @@ export function createMemoryWalletPorts(input: {
           previous.playerAuthUserId !== binding.playerAuthUserId
           || previous.walletId !== binding.walletId
           || previous.displayCurrency !== binding.displayCurrency
+          || previous.tokenKind !== binding.tokenKind
         ) {
           throw new Error('SESSION_IMMUTABLE');
         }
@@ -182,6 +252,18 @@ export function createMemoryWalletPorts(input: {
     },
     transactions: {
       async insert(row) {
+        if (
+          row.product === 'casino'
+          && row.externalTransactionId
+          && CASINO_FINANCIAL_METHODS.has(row.method)
+        ) {
+          const collision = transactions.find((item) =>
+            item.product === 'casino'
+            && item.externalTransactionId === row.externalTransactionId
+            && CASINO_FINANCIAL_METHODS.has(item.method)
+          );
+          if (collision) throw new Error('TRANSACTION_METHOD_CONFLICT');
+        }
         transactions.push(clone(row));
         return clone(row);
       },
@@ -189,6 +271,14 @@ export function createMemoryWalletPorts(input: {
         const found = transactions.find((row) =>
           row.product === product
           && row.method === method
+          && row.externalTransactionId === externalTransactionId
+        );
+        return found ? clone(found) : null;
+      },
+      async findCasinoFinancial(externalTransactionId) {
+        const found = transactions.find((row) =>
+          row.product === 'casino'
+          && CASINO_FINANCIAL_METHODS.has(row.method)
           && row.externalTransactionId === externalTransactionId
         );
         return found ? clone(found) : null;
@@ -235,6 +325,10 @@ export function createMemoryWalletPorts(input: {
     accounting,
     setNow(ms: number) {
       now = ms;
+    },
+    setFailAfter(step) {
+      failAfter = step;
+      ports.failAfter = step;
     },
   };
 }

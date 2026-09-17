@@ -1,12 +1,19 @@
 import type { CanonicalProviderEvent, ProviderAccountingStore } from '../../providerAccounting/types.js';
 
 export type BetConstructProduct = 'sportsbook' | 'casino';
+export type BetConstructTokenKind = 'launch' | 'session';
 export type WalletOperation = 'CASINO_BET' | 'CASINO_WIN' | 'CASINO_REFUND';
 export type TransactionStatus = 'accepted' | 'conflict' | 'rolled_back' | 'ignored';
+export type AtomicFailAfter =
+  | 'sports_bet_persist'
+  | 'casino_withdraw_persist'
+  | 'casino_wad_win'
+  | 'casino_rollback_related_win';
 
 export interface SessionBinding {
   id: string;
   product: BetConstructProduct;
+  tokenKind: BetConstructTokenKind;
   tokenDigest: string;
   playerAuthUserId: string;
   playerPublicId: string;
@@ -27,9 +34,9 @@ export interface SportsBetRecord {
   playerPublicId: string;
   walletId: string;
   displayCurrency: string;
-  stake: number;
+  stakeExact: string;
   placedTransactionId: string;
-  latestResultAmount: number;
+  latestResultAmountExact: string;
   latestResultState: string | null;
   latestResultTransactionId: string | null;
   rolledBackAtMs: number | null;
@@ -49,7 +56,7 @@ export interface ProviderTransactionRecord {
   playerAuthUserId: string;
   walletId: string;
   displayCurrency: string;
-  amount: number;
+  amountExact: string;
   requestFingerprint: string;
   platformTransactionId: number | null;
   status: TransactionStatus;
@@ -76,7 +83,7 @@ export interface CallbackEventRecord {
 export interface WalletLedgerEntry {
   ledgerId: string;
   walletId: string;
-  signedAmount: number;
+  signedAmountExact: string;
   operation: WalletOperation;
   idempotencyKey: string;
   currency: string;
@@ -84,7 +91,7 @@ export interface WalletLedgerEntry {
 
 export interface ApplyWalletEntryInput {
   walletId: string;
-  signedAmount: number;
+  signedAmountExact: string;
   operation: WalletOperation;
   idempotencyKey: string;
   currency: string;
@@ -122,6 +129,7 @@ export interface SportsBetPort {
 export interface TransactionPort {
   insert(row: ProviderTransactionRecord): Promise<ProviderTransactionRecord>;
   find(product: BetConstructProduct, method: string, externalTransactionId: string): Promise<ProviderTransactionRecord | null>;
+  findCasinoFinancial(externalTransactionId: string): Promise<ProviderTransactionRecord | null>;
   listByRelated(product: BetConstructProduct, relatedTransactionId: string): Promise<ProviderTransactionRecord[]>;
   save(row: ProviderTransactionRecord): Promise<void>;
   nextPlatformTransactionId(): Promise<number>;
@@ -145,6 +153,9 @@ export interface BetConstructWalletPorts {
   security: SecurityPort;
   providerAccounting: ProviderAccountingStore;
   ingestProvider: (event: CanonicalProviderEvent) => Promise<void>;
+  runAtomic<T>(fn: () => Promise<T>): Promise<T>;
+  failAfter: AtomicFailAfter | null;
+  trip(step: AtomicFailAfter): void;
 }
 
 export interface SportsCoreResult {
