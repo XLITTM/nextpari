@@ -12,6 +12,8 @@ import { betConstructWalletCallbackPath } from './singleWallet.js';
 import {
   CASINO_ERROR,
   CASINO_SESSION_TOKEN_MAX_LEN,
+  BETCONSTRUCT_CASINO_SESSION_TTL_MS,
+  BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY,
   DISPLAY_SCALE,
   TEST_CASINO_SHARED_KEY,
   TEST_SPORTS_SHARED_KEY,
@@ -28,6 +30,7 @@ import {
   digestAuthToken,
   MemoryWalletLedger,
   ordinalKeySort,
+  parseProviderInt64,
   persistLaunchBinding,
   provePublicIdIntegerUnique,
   providerDisplayCurrency,
@@ -252,7 +255,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     await bindSports(ports);
     const placed = await sportsBetPlaced(ports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'place-1',
+      TransactionId: 1001,
       BetId: 88,
       Amount: 100,
       Created: '2026-01-01',
@@ -264,7 +267,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(placed.balance, 900);
     const replay = await sportsBetPlaced(ports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'place-1',
+      TransactionId: 1001,
       BetId: 88,
       Amount: 100,
       Created: '2026-01-01',
@@ -276,7 +279,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(replay.balance, 900);
     const conflict = await sportsBetPlaced(ports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'place-1',
+      TransactionId: 1001,
       BetId: 88,
       Amount: 50,
       Created: '2026-01-01',
@@ -301,7 +304,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     await bindSports(ports);
     await sportsBetPlaced(ports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'place-delta',
+      TransactionId: 2001,
       BetId: 9,
       Amount: 100,
       Created: '2026-01-01',
@@ -311,7 +314,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     }), TEST_SPORTS_SHARED_KEY);
     const r1 = await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'sports-token',
-      TransactionId: 'res-1',
+      TransactionId: 2002,
       BetId: 9,
       BetState: 2,
       Amount: 180,
@@ -322,7 +325,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(r1.balance, 1080);
     const r2 = await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'sports-token',
-      TransactionId: 'res-2',
+      TransactionId: 2003,
       BetId: 9,
       BetState: 2,
       Amount: 150,
@@ -330,7 +333,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(r2.balance, 1050);
     const r3 = await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'sports-token',
-      TransactionId: 'res-3',
+      TransactionId: 2004,
       BetId: 9,
       BetState: 2,
       Amount: 200,
@@ -338,7 +341,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(r3.balance, 1100);
     const sameTx = await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'sports-token',
-      TransactionId: 'res-3',
+      TransactionId: 2004,
       BetId: 9,
       BetState: 2,
       Amount: 200,
@@ -347,7 +350,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(sameTx.balance, 1100);
     const newTxSameAmount = await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'sports-token',
-      TransactionId: 'res-4',
+      TransactionId: 2005,
       BetId: 9,
       BetState: 3,
       Amount: 200,
@@ -379,7 +382,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     });
     await sportsBetPlaced(ports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'own-1',
+      TransactionId: 3001,
       BetId: 44,
       Amount: 25,
       Created: '2026-01-01',
@@ -389,7 +392,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     }), TEST_SPORTS_SHARED_KEY);
     const stolen = await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'other-sports',
-      TransactionId: 'steal-1',
+      TransactionId: 3002,
       BetId: 44,
       BetState: 2,
       Amount: 80,
@@ -400,7 +403,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(await ports.wallet.balanceOf(WALLET_OTHER), 800);
     const stolenRb = await sportsRollback(ports, signSports('Rollback', {
       AuthToken: 'other-sports',
-      TransactionId: 'own-1',
+      TransactionId: 3001,
     }), TEST_SPORTS_SHARED_KEY);
     assert.equal(stolenRb.ok, false);
     assert.equal(stolenRb.error, 'TOKEN_PLAYER_MISMATCH');
@@ -412,7 +415,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     await bindSports(ports);
     await sportsBetPlaced(ports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'rb-1',
+      TransactionId: 4001,
       BetId: 3,
       Amount: 40,
       Created: '2026-01-01',
@@ -422,19 +425,19 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     }), TEST_SPORTS_SHARED_KEY);
     const first = await sportsRollback(ports, signSports('Rollback', {
       AuthToken: 'sports-token',
-      TransactionId: 'rb-1',
+      TransactionId: 4001,
     }), TEST_SPORTS_SHARED_KEY);
     assert.equal(first.ok, true);
     assert.equal(first.balance, 1000);
     const second = await sportsRollback(ports, signSports('Rollback', {
       AuthToken: 'sports-token',
-      TransactionId: 'rb-1',
+      TransactionId: 4001,
     }), TEST_SPORTS_SHARED_KEY);
     assert.equal(second.replayed, true);
     assert.equal(await ports.wallet.balanceOf(WALLET_USD), 1000);
     const missing = await sportsRollback(ports, signSports('Rollback', {
       AuthToken: 'sports-token',
-      TransactionId: 'never-placed',
+      TransactionId: 4002,
     }), TEST_SPORTS_SHARED_KEY);
     assert.equal(missing.ok, true);
   });
@@ -562,7 +565,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 40,
       Currency: 'USD',
-      RGSTransactionId: 'usd-old',
+      RGSTransactionId: 9001,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(usdWithdraw.ok, true);
     assert.equal(usdWithdraw.balance, 360);
@@ -572,7 +575,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 10,
       Currency: 'TMT',
-      RGSTransactionId: 'tmt-new',
+      RGSTransactionId: 9002,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(tmtWithdraw.ok, true);
     assert.equal(await ports.wallet.balanceOf(WALLET_USD), 360);
@@ -590,7 +593,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       Amount: 40,
       CurrencyId: 'USD',
-      RGSTransactionId: 'legacy-1',
+      RGSTransactionId: 8001,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(legacy.ok, false);
     assert.equal(legacy.errorId, CASINO_ERROR.WRONG_TRANSACTION_AMOUNT);
@@ -602,7 +605,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       WithdrawAmount: 40,
       Currency: 'USD',
       GameId: 'game-1',
-      RGSTransactionId: 'w-1',
+      RGSTransactionId: 8101,
       TypeId: 1,
       BonusDefId: 0,
     }), TEST_CASINO_SHARED_KEY);
@@ -614,7 +617,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 40,
       Currency: 'USD',
-      RGSTransactionId: 'w-1',
+      RGSTransactionId: 8101,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(dup.errorId, CASINO_ERROR.TRANSACTION_ALREADY_COMPLETE);
     assert.equal(dup.platformTransactionId, withdraw.platformTransactionId);
@@ -623,16 +626,16 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       DepositAmount: 10,
       Currency: 'USD',
-      RGSTransactionId: 'd-1',
-      RGSRelatedTransactionId: 'w-1',
+      RGSTransactionId: 8102,
+      RGSRelatedTransactionId: 8101,
     }), TEST_CASINO_SHARED_KEY);
     const d2 = await casinoDeposit(ports, signCasino({
       Token: 'casino-session',
       PlayerId: 6,
       DepositAmount: 15,
       Currency: 'USD',
-      RGSTransactionId: 'd-2',
-      RGSRelatedTransactionId: 'w-1',
+      RGSTransactionId: 8103,
+      RGSRelatedTransactionId: 8101,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(d1.ok, true);
     assert.equal(d2.ok, true);
@@ -649,7 +652,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       WithdrawAmount: 50,
       DepositAmount: 80,
       Currency: 'USD',
-      RGSTransactionId: 'wad-1',
+      RGSTransactionId: 8201,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(result.ok, true);
     assert.equal(result.balance, 230);
@@ -662,7 +665,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       WithdrawAmount: 50,
       DepositAmount: 80,
       Currency: 'USD',
-      RGSTransactionId: 'wad-1',
+      RGSTransactionId: 8201,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(dup.errorId, CASINO_ERROR.TRANSACTION_ALREADY_COMPLETE);
     assert.equal(await ports.wallet.balanceOf(WALLET_USD), 230);
@@ -676,7 +679,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 20,
       Currency: 'USD',
-      RGSTransactionId: 'shared-rgs',
+      RGSTransactionId: 8301,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(withdraw.ok, true);
     const deposit = await casinoDeposit(ports, signCasino({
@@ -684,7 +687,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       DepositAmount: 20,
       Currency: 'USD',
-      RGSTransactionId: 'shared-rgs',
+      RGSTransactionId: 8301,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(deposit.ok, false);
     assert.equal(deposit.errorId, CASINO_ERROR.GENERAL_ERROR);
@@ -695,7 +698,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       WithdrawAmount: 10,
       DepositAmount: 5,
       Currency: 'USD',
-      RGSTransactionId: 'shared-rgs',
+      RGSTransactionId: 8301,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(wad.ok, false);
     assert.equal(await ports.wallet.balanceOf(WALLET_USD), 280);
@@ -709,32 +712,32 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 20,
       Currency: 'USD',
-      RGSTransactionId: 'rb-w',
+      RGSTransactionId: 8401,
     }), TEST_CASINO_SHARED_KEY);
     ports.setNow(NOW_MS + 120_000);
     const first = await casinoRollback(ports, signCasino({
       Token: 'casino-session',
       PlayerId: 6,
-      RGSTransactionId: 'rb-w',
+      RGSTransactionId: 8401,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(first.ok, true);
     assert.equal(first.balance, 100);
     const second = await casinoRollback(ports, signCasino({
       Token: 'casino-session',
       PlayerId: 6,
-      RGSTransactionId: 'rb-w',
+      RGSTransactionId: 8401,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(second.replayed, true);
     const unknownTx = await casinoRollback(ports, signCasino({
       Token: 'casino-session',
       PlayerId: 6,
-      RGSTransactionId: 'missing',
+      RGSTransactionId: 8402,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(unknownTx.errorId, CASINO_ERROR.TRANSACTION_NOT_FOUND);
     const ghost = await casinoRollback(ports, signCasino({
       Token: 'no-such-session',
       PlayerId: 6,
-      RGSTransactionId: 'rb-w',
+      RGSTransactionId: 8401,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(ghost.errorId, CASINO_ERROR.INVALID_TOKEN);
     assert.equal(await ports.wallet.balanceOf(WALLET_USD), 100);
@@ -765,13 +768,13 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       DepositAmount: 12,
       Currency: 'USD',
-      RGSTransactionId: 'dep-only',
+      RGSTransactionId: 8501,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(deposit.ok, true);
     const rbDeposit = await casinoRollback(ports, signCasino({
       Token: 'casino-session',
       PlayerId: 6,
-      RGSTransactionId: 'dep-only',
+      RGSTransactionId: 8501,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(rbDeposit.errorId, CASINO_ERROR.TRANSACTION_NOT_FOUND);
     assert.equal(await ports.wallet.balanceOf(WALLET_USD), 112);
@@ -780,12 +783,12 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 10,
       Currency: 'USD',
-      RGSTransactionId: 'w-own',
+      RGSTransactionId: 8502,
     }), TEST_CASINO_SHARED_KEY);
     const stolen = await casinoRollback(ports, signCasino({
       Token: 'other-session',
       PlayerId: 7,
-      RGSTransactionId: 'w-own',
+      RGSTransactionId: 8502,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(stolen.errorId, CASINO_ERROR.WRONG_PLAYER_ID);
     assert.equal(await ports.wallet.balanceOf(WALLET_USD), 102);
@@ -799,7 +802,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 40,
       Currency: 'USD',
-      RGSTransactionId: 'poor-1',
+      RGSTransactionId: 8601,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(ns.errorId, CASINO_ERROR.NOT_ENOUGH_BALANCE);
     const restricted = casinoWorld({ restricted: true, balance: 80 });
@@ -815,8 +818,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       DepositAmount: 12,
       Currency: 'USD',
-      RGSTransactionId: 'win-old',
-      RGSRelatedTransactionId: 'old-bet',
+      RGSTransactionId: 8602,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(settled.ok, true);
     assert.equal(settled.balance, 92);
@@ -834,7 +836,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 5,
       Currency: 'USD',
-      RGSTransactionId: 'fx-1',
+      RGSTransactionId: 8701,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(mismatch.errorId, CASINO_ERROR.WRONG_TRANSACTION_AMOUNT);
     const ok = await casinoWithdraw(ports, signCasino({
@@ -842,7 +844,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 5,
       Currency: 'TMT',
-      RGSTransactionId: 'tmt-1',
+      RGSTransactionId: 8702,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(ok.ok, true);
     assert.equal(ok.currency, 'TMT');
@@ -859,7 +861,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: '1.005',
       Currency: 'USD',
-      RGSTransactionId: 'usd-scale',
+      RGSTransactionId: 8801,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(usdExcess.errorId, CASINO_ERROR.WRONG_TRANSACTION_AMOUNT);
     assert.equal(await usd.wallet.balanceOf(WALLET_USD), 100);
@@ -870,7 +872,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: '10.999',
       Currency: 'TMT',
-      RGSTransactionId: 'tmt-scale',
+      RGSTransactionId: 8802,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(tmtExcess.errorId, CASINO_ERROR.WRONG_TRANSACTION_AMOUNT);
     const uzs = casinoWorld({ currency: 'UZS', balance: 1000 });
@@ -880,7 +882,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: '100.5',
       Currency: 'UZS',
-      RGSTransactionId: 'uzs-bad',
+      RGSTransactionId: 8803,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(uzsExcess.errorId, CASINO_ERROR.WRONG_TRANSACTION_AMOUNT);
     assert.equal(await uzs.wallet.balanceOf(WALLET_UZS), 1000);
@@ -889,7 +891,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 100,
       Currency: 'UZS',
-      RGSTransactionId: 'uzs-ok',
+      RGSTransactionId: 8804,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(uzsOk.ok, true);
     assert.equal(uzsOk.balance, 900);
@@ -897,7 +899,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     await bindSports(sports);
     const sportsScale = await sportsBetPlaced(sports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'scale-1',
+      TransactionId: 7001,
       BetId: 2,
       Amount: '1.005',
       Created: '2026-01-01',
@@ -916,7 +918,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     sports.setFailAfter('sports_bet_persist');
     const placed = await sportsBetPlaced(sports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'fail-place',
+      TransactionId: 6001,
       BetId: 77,
       Amount: 100,
       Created: '2026-01-01',
@@ -938,7 +940,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 40,
       Currency: 'USD',
-      RGSTransactionId: 'fail-w',
+      RGSTransactionId: 8901,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(withdraw.ok, false);
     assert.equal(await casino.wallet.balanceOf(WALLET_USD), 200);
@@ -952,7 +954,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       WithdrawAmount: 50,
       DepositAmount: 80,
       Currency: 'USD',
-      RGSTransactionId: 'fail-wad',
+      RGSTransactionId: 8902,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(wad.ok, false);
     assert.equal(await casino.wallet.balanceOf(WALLET_USD), 200);
@@ -964,22 +966,22 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
       PlayerId: 6,
       WithdrawAmount: 20,
       Currency: 'USD',
-      RGSTransactionId: 'rb-target',
+      RGSTransactionId: 8903,
     }), TEST_CASINO_SHARED_KEY);
     await casinoDeposit(casino, signCasino({
       Token: 'casino-session',
       PlayerId: 6,
       DepositAmount: 8,
       Currency: 'USD',
-      RGSTransactionId: 'rb-win',
-      RGSRelatedTransactionId: 'rb-target',
+      RGSTransactionId: 8904,
+      RGSRelatedTransactionId: 8903,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(await casino.wallet.balanceOf(WALLET_USD), 188);
     casino.setFailAfter('casino_rollback_related_win');
     const rb = await casinoRollback(casino, signCasino({
       Token: 'casino-session',
       PlayerId: 6,
-      RGSTransactionId: 'rb-target',
+      RGSTransactionId: 8903,
     }), TEST_CASINO_SHARED_KEY);
     assert.equal(rb.ok, false);
     assert.equal(await casino.wallet.balanceOf(WALLET_USD), 188);
@@ -991,7 +993,7 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     await bindSports(ports);
     await sportsBetPlaced(ports, signSports('BetPlaced', {
       AuthToken: 'sports-token',
-      TransactionId: 'acc-1',
+      TransactionId: 5001,
       BetId: 1,
       Amount: 100,
       Created: '2026-01-01',
@@ -1001,13 +1003,13 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     }), TEST_SPORTS_SHARED_KEY);
     await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'sports-token',
-      TransactionId: 'acc-r1',
+      TransactionId: 5002,
       BetId: 1,
       Amount: 180,
     }), TEST_SPORTS_SHARED_KEY);
     await sportsBetResulted(ports, signSports('BetResulted', {
       AuthToken: 'sports-token',
-      TransactionId: 'acc-r2',
+      TransactionId: 5003,
       BetId: 1,
       Amount: 150,
     }), TEST_SPORTS_SHARED_KEY);
@@ -1055,5 +1057,293 @@ describe('BetConstruct wallet core — fail-closed foundation', () => {
     assert.equal(/INSERT INTO private\.wallet_ledger/.test(sql061), false);
     assert.equal(/UPDATE\s+private\.wallet_accounts/.test(sql061), false);
     assert.equal(/COPY private/.test(sql061), false);
+    const issue = functionSql(sql061, 'private.betconstruct_issue_casino_session(p_payload JSONB)');
+    const withdrawFn = functionSql(sql061, 'private.betconstruct_casino_withdraw(p_payload JSONB)');
+    const wadFn = functionSql(sql061, 'private.betconstruct_casino_withdraw_and_deposit(p_payload JSONB)');
+    const depositFn = functionSql(sql061, 'private.betconstruct_casino_deposit(p_payload JSONB)');
+    const casinoRb = functionSql(sql061, 'private.betconstruct_casino_rollback(p_payload JSONB)');
+    assert.match(issue, /require_player_external_casino_allowed/);
+    assert.match(withdrawFn, /require_player_external_casino_allowed/);
+    assert.match(wadFn, /require_player_external_casino_allowed/);
+    assert.equal(depositFn.includes('require_player_external_casino_allowed'), false);
+    assert.equal(casinoRb.includes('require_player_external_casino_allowed'), false);
+    assert.match(issue, /session_expires_at/);
+    assert.equal(issue.includes('v_launch.expires_at'), false);
+    assert.match(sql061, /private\.betconstruct_parse_int64/);
+  });
+
+  it('rejects unsafe JS numbers for provider Int64 ids and accepts canonical decimal strings', () => {
+    assert.equal(parseProviderInt64(9007199254740991), '9007199254740991');
+    assert.throws(() => parseProviderInt64(9007199254740992), /TRANSACTION_ID_INVALID/);
+    assert.equal(parseProviderInt64('9007199254740992'), '9007199254740992');
+    assert.equal(parseProviderInt64('9223372036854775807'), '9223372036854775807');
+    assert.throws(() => parseProviderInt64('9223372036854775808'), /TRANSACTION_ID_INVALID/);
+    assert.throws(() => parseProviderInt64(-1), /TRANSACTION_ID_INVALID/);
+    assert.throws(() => parseProviderInt64('1e2'), /TRANSACTION_ID_INVALID/);
+    assert.throws(() => parseProviderInt64('1.5'), /TRANSACTION_ID_INVALID/);
+  });
+
+  it('rejects unsafe JS numeric BetId/TransactionId/RGSTransactionId before money movement', async () => {
+    const sports = sportsWorld(1000);
+    await bindSports(sports);
+    const unsafeBet = await sportsBetPlaced(sports, signSports('BetPlaced', {
+      AuthToken: 'sports-token',
+      TransactionId: 1001,
+      BetId: 9007199254740992,
+      Amount: 10,
+      Created: '2026-01-01',
+      BetType: 1,
+      SystemMinCount: 0,
+      TotalPrice: 1,
+    }), TEST_SPORTS_SHARED_KEY);
+    assert.equal(unsafeBet.ok, false);
+    assert.equal(unsafeBet.error, 'TRANSACTION_ID_INVALID');
+    assert.equal(await sports.wallet.balanceOf(WALLET_USD), 1000);
+    const stringOk = await sportsBetPlaced(sports, signSports('BetPlaced', {
+      AuthToken: 'sports-token',
+      TransactionId: '9007199254740992',
+      BetId: '9223372036854775807',
+      Amount: 10,
+      Created: '2026-01-01',
+      BetType: 1,
+      SystemMinCount: 0,
+      TotalPrice: 1,
+    }), TEST_SPORTS_SHARED_KEY);
+    assert.equal(stringOk.ok, true);
+    assert.equal(sports.sportsBetRows[0].betId, '9223372036854775807');
+    assert.equal(sports.callbackRows.some((row) => row.providerBetId === '9223372036854775807'), true);
+    const casino = casinoWorld({ balance: 100 });
+    await bindCasinoSession(casino);
+    const unsafeRgs = await casinoWithdraw(casino, signCasino({
+      Token: 'casino-session',
+      PlayerId: 6,
+      WithdrawAmount: 10,
+      Currency: 'USD',
+      RGSTransactionId: 9007199254740992,
+    }), TEST_CASINO_SHARED_KEY);
+    assert.equal(unsafeRgs.ok, false);
+    assert.equal(await casino.wallet.balanceOf(WALLET_USD), 100);
+    const stringRgs = await casinoWithdraw(casino, signCasino({
+      Token: 'casino-session',
+      PlayerId: 6,
+      WithdrawAmount: 10,
+      Currency: 'USD',
+      RGSTransactionId: '9007199254740992',
+    }), TEST_CASINO_SHARED_KEY);
+    assert.equal(stringRgs.ok, true);
+  });
+
+  it('does not let a Casino session inherit remaining launch TTL', async () => {
+    const ports = casinoWorld();
+    await persistLaunchBinding(ports, {
+      product: 'casino',
+      rawToken: 'short-launch',
+      tokenKind: 'launch',
+      playerAuthUserId: PLAYER,
+      playerPublicId: PUBLIC_ID,
+      walletId: WALLET_USD,
+      displayCurrency: 'USD',
+      issuedAtMs: NOW_MS,
+      expiresAtMs: NOW_MS + 5_000,
+    });
+    const auth = await casinoAuthentication(ports, signCasino({
+      Token: 'short-launch',
+      PlayerId: 6,
+    }), TEST_CASINO_SHARED_KEY);
+    assert.equal(auth.ok, true);
+    const session = ports.sessionRows.find((row) => row.tokenKind === 'session');
+    const launch = ports.sessionRows.find((row) => row.tokenKind === 'launch');
+    assert.ok(session);
+    assert.equal(launch!.expiresAtMs, NOW_MS + 5_000);
+    assert.equal(session!.expiresAtMs, NOW_MS + BETCONSTRUCT_CASINO_SESSION_TTL_MS);
+    assert.notEqual(session!.expiresAtMs, launch!.expiresAtMs);
+    assert.ok(session!.expiresAtMs - NOW_MS > 5_000);
+  });
+
+  it('requires related casino deposits to match the original bet player/wallet/currency', async () => {
+    const ports = createMemoryWalletPorts({
+      wallets: [
+        new MemoryWalletLedger({ walletId: WALLET_USD, playerAuthUserId: PLAYER, currency: 'USD', balance: 200 }),
+        new MemoryWalletLedger({ walletId: WALLET_TMT, playerAuthUserId: PLAYER, currency: 'TMTM', balance: 80 }),
+        new MemoryWalletLedger({ walletId: WALLET_OTHER, playerAuthUserId: PLAYER_OTHER, currency: 'USD', balance: 50 }),
+      ],
+      nowMs: NOW_MS,
+    });
+    await bindCasinoSession(ports);
+    await persistLaunchBinding(ports, {
+      product: 'casino',
+      rawToken: 'tmt-session',
+      tokenKind: 'session',
+      playerAuthUserId: PLAYER,
+      playerPublicId: PUBLIC_ID,
+      walletId: WALLET_TMT,
+      displayCurrency: 'TMT',
+      issuedAtMs: NOW_MS,
+      expiresAtMs: NOW_MS + 60_000,
+    });
+    await persistLaunchBinding(ports, {
+      product: 'casino',
+      rawToken: 'other-session',
+      tokenKind: 'session',
+      playerAuthUserId: PLAYER_OTHER,
+      playerPublicId: PUBLIC_OTHER,
+      walletId: WALLET_OTHER,
+      displayCurrency: 'USD',
+      issuedAtMs: NOW_MS,
+      expiresAtMs: NOW_MS + 60_000,
+    });
+    await casinoWithdraw(ports, signCasino({
+      Token: 'casino-session',
+      PlayerId: 6,
+      WithdrawAmount: 20,
+      Currency: 'USD',
+      RGSTransactionId: 9101,
+    }), TEST_CASINO_SHARED_KEY);
+    const missing = await casinoDeposit(ports, signCasino({
+      Token: 'casino-session',
+      PlayerId: 6,
+      DepositAmount: 5,
+      Currency: 'USD',
+      RGSTransactionId: 9102,
+      RGSRelatedTransactionId: 9199,
+    }), TEST_CASINO_SHARED_KEY);
+    assert.equal(missing.errorId, CASINO_ERROR.TRANSACTION_NOT_FOUND);
+    assert.equal(await ports.wallet.balanceOf(WALLET_USD), 180);
+    const crossWallet = await casinoDeposit(ports, signCasino({
+      Token: 'tmt-session',
+      PlayerId: 6,
+      DepositAmount: 5,
+      Currency: 'TMT',
+      RGSTransactionId: 9103,
+      RGSRelatedTransactionId: 9101,
+    }), TEST_CASINO_SHARED_KEY);
+    assert.equal(crossWallet.ok, false);
+    assert.equal(await ports.wallet.balanceOf(WALLET_TMT), 80);
+    assert.equal(await ports.wallet.balanceOf(WALLET_USD), 180);
+    const crossPlayer = await casinoDeposit(ports, signCasino({
+      Token: 'other-session',
+      PlayerId: 7,
+      DepositAmount: 5,
+      Currency: 'USD',
+      RGSTransactionId: 9104,
+      RGSRelatedTransactionId: 9101,
+    }), TEST_CASINO_SHARED_KEY);
+    assert.equal(crossPlayer.errorId, CASINO_ERROR.WRONG_PLAYER_ID);
+    assert.equal(await ports.wallet.balanceOf(WALLET_OTHER), 50);
+    const d1 = await casinoDeposit(ports, signCasino({
+      Token: 'casino-session',
+      PlayerId: 6,
+      DepositAmount: 3,
+      Currency: 'USD',
+      RGSTransactionId: 9105,
+      RGSRelatedTransactionId: 9101,
+    }), TEST_CASINO_SHARED_KEY);
+    const d2 = await casinoDeposit(ports, signCasino({
+      Token: 'casino-session',
+      PlayerId: 6,
+      DepositAmount: 4,
+      Currency: 'USD',
+      RGSTransactionId: 9106,
+      RGSRelatedTransactionId: 9101,
+    }), TEST_CASINO_SHARED_KEY);
+    assert.equal(d1.ok, true);
+    assert.equal(d2.ok, true);
+    assert.equal(await ports.wallet.balanceOf(WALLET_USD), 187);
+  });
+
+  it('denies sports rollback replay that would expose another player wallet', async () => {
+    const ports = createMemoryWalletPorts({
+      wallets: [
+        new MemoryWalletLedger({ walletId: WALLET_USD, playerAuthUserId: PLAYER, currency: 'USD', balance: 1000 }),
+        new MemoryWalletLedger({ walletId: WALLET_OTHER, playerAuthUserId: PLAYER_OTHER, currency: 'USD', balance: 800 }),
+      ],
+      nowMs: NOW_MS,
+    });
+    await bindSports(ports);
+    await persistLaunchBinding(ports, {
+      product: 'sportsbook',
+      rawToken: 'other-sports',
+      tokenKind: 'launch',
+      playerAuthUserId: PLAYER_OTHER,
+      playerPublicId: PUBLIC_OTHER,
+      walletId: WALLET_OTHER,
+      displayCurrency: 'USD',
+      issuedAtMs: NOW_MS,
+      expiresAtMs: NOW_MS + 60_000,
+    });
+    await sportsBetPlaced(ports, signSports('BetPlaced', {
+      AuthToken: 'sports-token',
+      TransactionId: 9201,
+      BetId: 55,
+      Amount: 40,
+      Created: '2026-01-01',
+      BetType: 1,
+      SystemMinCount: 0,
+      TotalPrice: 1.2,
+    }), TEST_SPORTS_SHARED_KEY);
+    const first = await sportsRollback(ports, signSports('Rollback', {
+      AuthToken: 'sports-token',
+      TransactionId: 9201,
+    }), TEST_SPORTS_SHARED_KEY);
+    assert.equal(first.ok, true);
+    assert.equal(first.balance, 1000);
+    const stolen = await sportsRollback(ports, signSports('Rollback', {
+      AuthToken: 'other-sports',
+      TransactionId: 9201,
+    }), TEST_SPORTS_SHARED_KEY);
+    assert.equal(stolen.ok, false);
+    assert.equal(stolen.error, 'TOKEN_PLAYER_MISMATCH');
+    assert.equal(stolen.balance, undefined);
+    assert.equal(await ports.wallet.balanceOf(WALLET_USD), 1000);
+    assert.equal(await ports.wallet.balanceOf(WALLET_OTHER), 800);
+  });
+
+  it('documents BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY fail-closed', async () => {
+    assert.equal(
+      BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY,
+      'BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY',
+    );
+    const ports = sportsWorld(100);
+    await bindSports(ports);
+    await sportsBetPlaced(ports, signSports('BetPlaced', {
+      AuthToken: 'sports-token',
+      TransactionId: 9301,
+      BetId: 11,
+      Amount: 100,
+      Created: '2026-01-01',
+      BetType: 1,
+      SystemMinCount: 0,
+      TotalPrice: 2,
+    }), TEST_SPORTS_SHARED_KEY);
+    const won = await sportsBetResulted(ports, signSports('BetResulted', {
+      AuthToken: 'sports-token',
+      TransactionId: 9302,
+      BetId: 11,
+      BetState: 2,
+      Amount: 180,
+    }), TEST_SPORTS_SHARED_KEY);
+    assert.equal(won.balance, 180);
+    await sportsBetPlaced(ports, signSports('BetPlaced', {
+      AuthToken: 'sports-token',
+      TransactionId: 9303,
+      BetId: 12,
+      Amount: 150,
+      Created: '2026-01-01',
+      BetType: 1,
+      SystemMinCount: 0,
+      TotalPrice: 1.5,
+    }), TEST_SPORTS_SHARED_KEY);
+    assert.equal(await ports.wallet.balanceOf(WALLET_USD), 30);
+    const correction = await sportsBetResulted(ports, signSports('BetResulted', {
+      AuthToken: 'sports-token',
+      TransactionId: 9304,
+      BetId: 11,
+      BetState: 3,
+      Amount: 0,
+    }), TEST_SPORTS_SHARED_KEY);
+    assert.equal(correction.ok, false);
+    assert.equal(correction.error, 'INSUFFICIENT_AVAILABLE_BALANCE');
+    assert.equal(await ports.wallet.balanceOf(WALLET_USD), 30);
+    assert.equal(ports.sportsBetRows.find((row) => row.betId === '11')!.latestResultAmountExact, '180');
   });
 });

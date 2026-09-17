@@ -10,13 +10,22 @@ import {
 } from './exactAmount.js';
 import { providerDisplayCurrency, walletStorageCurrency } from './currency.js';
 import { financialFingerprint, payloadHash, providerEconomicExternalId } from './fingerprint.js';
-import { persistLaunchBinding, resolveBinding, createCasinoSessionToken } from './session.js';
+import { persistLaunchBinding, resolveBinding, createCasinoSessionToken, casinoSessionExpiresAtMs } from './session.js';
+import { parseOptionalProviderInt64, parseProviderInt64 } from './providerInt64.js';
 import type {
   BetConstructWalletPorts,
   CasinoCoreResult,
   ProviderTransactionRecord,
   SessionBinding,
 } from './types.js';
+
+function auditProviderInt64(value: unknown): string | null {
+  try {
+    return parseOptionalProviderInt64(value);
+  } catch {
+    return null;
+  }
+}
 
 function asText(value: unknown): string {
   return String(value ?? '').trim();
@@ -84,7 +93,7 @@ async function recordCallback(
     id: randomUUID(),
     product: 'casino',
     method,
-    externalTransactionId: asText(body.RGSTransactionId) || null,
+    externalTransactionId: auditProviderInt64(body.RGSTransactionId),
     providerBetId: null,
     payloadHash: payloadHash(sanitize(body)),
     correlationId: randomUUID(),
@@ -205,7 +214,7 @@ export async function casinoAuthentication(
       walletId: launch.walletId,
       displayCurrency: launch.displayCurrency,
       issuedAtMs: ports.nowMs(),
-      expiresAtMs: launch.expiresAtMs,
+      expiresAtMs: casinoSessionExpiresAtMs(ports.nowMs()),
     });
     await recordCallback(ports, 'Authentication', body, 'accepted', 0);
     return {
@@ -266,8 +275,7 @@ export async function casinoWithdraw(
       requireCurrency(body, binding.displayCurrency);
       await requireNewCasinoPlay(ports, binding);
       const amount = requireMandatoryAmount(body, 'WithdrawAmount', binding.displayCurrency);
-      const rgsId = asText(body.RGSTransactionId);
-      if (!rgsId) throw new Error('TRANSACTION_ID_INVALID');
+      const rgsId = parseProviderInt64(body.RGSTransactionId);
       const fingerprint = financialFingerprint({
         rgsId,
         amount,
@@ -296,7 +304,7 @@ export async function casinoWithdraw(
         product: 'casino',
         method: 'Withdraw',
         externalTransactionId: rgsId,
-        relatedTransactionId: asText(body.RGSRelatedTransactionId) || null,
+        relatedTransactionId: parseOptionalProviderInt64(body.RGSRelatedTransactionId),
         betId: null,
         providerPlayerId: casinoPlayerIdFromPublicId(binding.playerPublicId).playerId,
         playerAuthUserId: binding.playerAuthUserId,
@@ -347,9 +355,25 @@ export async function casinoDeposit(
       assertPlayerIdMatches(binding.playerPublicId, body.PlayerId);
       requireCurrency(body, binding.displayCurrency);
       const amount = requireMandatoryAmount(body, 'DepositAmount', binding.displayCurrency);
-      const rgsId = asText(body.RGSTransactionId);
-      if (!rgsId) throw new Error('TRANSACTION_ID_INVALID');
-      const related = asText(body.RGSRelatedTransactionId) || null;
+      const rgsId = parseProviderInt64(body.RGSTransactionId);
+      const related = parseOptionalProviderInt64(body.RGSRelatedTransactionId);
+      if (related) {
+        const original = await ports.transactions.findCasinoFinancial(related);
+        if (!original || !rollbackOriginalEligible(original)) {
+          throw new Error('TRANSACTION_NOT_FOUND');
+        }
+        if (
+          original.playerAuthUserId !== binding.playerAuthUserId
+          || original.providerPlayerId != null
+            && binding.providerPlayerId != null
+            && original.providerPlayerId !== binding.providerPlayerId
+        ) {
+          throw new Error('WRONG_PLAYER_ID');
+        }
+        if (original.walletId !== binding.walletId || original.displayCurrency !== binding.displayCurrency) {
+          throw new Error('CURRENCY_MISMATCH');
+        }
+      }
       const fingerprint = financialFingerprint({
         rgsId,
         amount,
@@ -433,8 +457,7 @@ export async function casinoWithdrawAndDeposit(
       const withdrawAmount = requireMandatoryNonNegativeAmount(body, 'WithdrawAmount', binding.displayCurrency);
       const depositAmount = requireMandatoryNonNegativeAmount(body, 'DepositAmount', binding.displayCurrency);
       if (isExactZero(withdrawAmount) && isExactZero(depositAmount)) throw new Error('AMOUNT_INVALID');
-      const rgsId = asText(body.RGSTransactionId);
-      if (!rgsId) throw new Error('TRANSACTION_ID_INVALID');
+      const rgsId = parseProviderInt64(body.RGSTransactionId);
       const fingerprint = financialFingerprint({
         rgsId,
         withdrawAmount,
@@ -476,7 +499,7 @@ export async function casinoWithdrawAndDeposit(
         product: 'casino',
         method: 'WithdrawAndDeposit',
         externalTransactionId: rgsId,
-        relatedTransactionId: asText(body.RGSRelatedTransactionId) || null,
+        relatedTransactionId: parseOptionalProviderInt64(body.RGSRelatedTransactionId),
         betId: null,
         providerPlayerId: casinoPlayerIdFromPublicId(binding.playerPublicId).playerId,
         playerAuthUserId: binding.playerAuthUserId,
@@ -650,8 +673,7 @@ export async function casinoRollback(
       if (binding === 'unknown') {
         throw new Error('INVALID_TOKEN');
       }
-      const rgsId = asText(body.RGSTransactionId);
-      if (!rgsId) throw new Error('TRANSACTION_NOT_FOUND');
+      const rgsId = parseProviderInt64(body.RGSTransactionId);
       const original = await ports.transactions.findCasinoFinancial(rgsId);
       if (!original || !rollbackOriginalEligible(original)) {
         throw new Error('TRANSACTION_NOT_FOUND');

@@ -4,6 +4,11 @@ export const TEST_CASINO_SHARED_KEY = 'TEST_CASINO_SHARED_KEY';
 export const BETCONSTRUCT_SPORTS_TS_MAX_AGE_SEC = 20;
 export const BETCONSTRUCT_SPORTS_TS_FUTURE_SKEW_SEC = 2;
 export const BETCONSTRUCT_SESSION_EXTEND_MS = 20 * 60 * 1000;
+/** Internal casino session TTL. Not a BetConstruct-documented lifetime; finalize with test env. */
+export const BETCONSTRUCT_CASINO_SESSION_TTL_MS = 20 * 60 * 1000;
+export const BETCONSTRUCT_CASINO_SESSION_TTL_MAX_MS = 24 * 60 * 60 * 1000;
+export const BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY =
+  'BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY';
 
 export const BETCONSTRUCT_SPORTS_HASH_FIELDS = {
   GetClientDetails: ['AuthToken', 'TS'],

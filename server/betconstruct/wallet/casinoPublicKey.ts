@@ -16,7 +16,10 @@ function sortJson(value: unknown): unknown {
   return out;
 }
 
-/** Canonical JSON: properties ordered by name, PublicKey excluded. */
+/** Canonical JSON: properties ordered by name, PublicKey excluded.
+ * SHA256(canonicalJson + SharedKey) matches the Casino API description.
+ * Production compatibility is NOT claimed until BetConstruct supplies a test vector.
+ */
 export function casinoCanonicalJson(body: Record<string, unknown>): string {
   return JSON.stringify(sortJson(body));
 }

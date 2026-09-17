@@ -10,6 +10,7 @@ import {
 } from './exactAmount.js';
 import { providerDisplayCurrency, walletStorageCurrency } from './currency.js';
 import { financialFingerprint, payloadHash, providerEconomicExternalId } from './fingerprint.js';
+import { parseOptionalProviderInt64, parseProviderInt64 } from './providerInt64.js';
 import { sportsbookHashIsValid, type SportsHashMethod } from './sportsHash.js';
 import { assertSportsTsFresh } from './sportsTs.js';
 import { resolveBinding, touchBinding } from './session.js';
@@ -21,13 +22,21 @@ import type {
   SportsCoreResult,
 } from './types.js';
 
-function asText(value: unknown): string {
-  return String(value ?? '').trim();
+function auditProviderInt64(value: unknown): string | null {
+  try {
+    return parseOptionalProviderInt64(value);
+  } catch {
+    return null;
+  }
 }
 
 function asExactToken(value: unknown): string {
   if (typeof value !== 'string' || value === '') throw new Error('TOKEN_INVALID');
   return value;
+}
+
+function asText(value: unknown): string {
+  return String(value ?? '').trim();
 }
 
 function sanitizeMeta(params: Record<string, unknown>): Record<string, unknown> {
@@ -50,8 +59,8 @@ async function recordCallback(
     id: randomUUID(),
     product: 'sportsbook',
     method,
-    externalTransactionId: asText(params.TransactionId) || null,
-    providerBetId: params.BetId == null || asText(params.BetId) === '' ? null : Number(params.BetId),
+    externalTransactionId: auditProviderInt64(params.TransactionId),
+    providerBetId: auditProviderInt64(params.BetId),
     payloadHash: payloadHash(sanitizeMeta(params)),
     correlationId: randomUUID(),
     processingStatus: status,
@@ -187,9 +196,8 @@ export async function sportsBetPlaced(
         true,
       );
       const stake = requireSportsAmount(params.Amount, binding.displayCurrency);
-      const txId = asText(params.TransactionId);
-      const betId = Number(params.BetId);
-      if (!txId || !Number.isInteger(betId)) throw new Error('TRANSACTION_ID_INVALID');
+      const txId = parseProviderInt64(params.TransactionId);
+      const betId = parseProviderInt64(params.BetId);
       const fingerprint = financialFingerprint({
         transactionId: txId,
         betId,
@@ -298,9 +306,8 @@ export async function sportsBetResulted(
         'settlement',
         'launch',
       );
-      const txId = asText(params.TransactionId);
-      const betId = Number(params.BetId);
-      if (!txId || !Number.isInteger(betId)) throw new Error('TRANSACTION_ID_INVALID');
+      const txId = parseProviderInt64(params.TransactionId);
+      const betId = parseProviderInt64(params.BetId);
       const bet = await ports.sportsBets.findByBetId(betId);
       if (!bet) throw new Error('BET_NOT_FOUND');
       assertSportsOwnership(binding, bet);
@@ -342,6 +349,10 @@ export async function sportsBetResulted(
           metadata: { phase: 'BetResulted', previous, finalAmount },
         });
       } else if (signedDeltaMinor < 0n) {
+        // BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY:
+        // a decreasing BetResulted delta still goes through Wallet Ledger CASINO_BET.
+        // Canonical ledger forbids negative available balance. Do not clip, ignore,
+        // seize another currency, or use treasury. Live enablement needs a debt policy.
         await ports.wallet.applyEntry({
           walletId: bet.walletId,
           signedAmountExact: delta,
@@ -435,27 +446,16 @@ export async function sportsRollback(
         'settlement',
         'launch',
       );
-      const txId = asText(params.TransactionId);
-      if (!txId) throw new Error('TRANSACTION_ID_INVALID');
+      const txId = parseProviderInt64(params.TransactionId);
       const fingerprint = financialFingerprint({ transactionId: txId });
-      const existing = await ports.transactions.find('sportsbook', 'Rollback', txId);
-      if (existing) {
-        const bet = await ports.sportsBets.findByPlacedTransactionId(txId);
-        await recordCallback(ports, 'Rollback', params, 'ignored', '0');
-        return {
-          ok: true,
-          replayed: true,
-          currency: bet?.displayCurrency,
-          balance: bet ? await ports.wallet.balanceOf(bet.walletId) : undefined,
-        };
-      }
       const bet = await ports.sportsBets.findByPlacedTransactionId(txId);
       if (!bet) {
         await recordCallback(ports, 'Rollback', params, 'ignored', '0');
         return { ok: true, replayed: true };
       }
       assertSportsOwnership(binding, bet);
-      if (bet.rolledBackAtMs != null) {
+      const existing = await ports.transactions.find('sportsbook', 'Rollback', txId);
+      if (existing || bet.rolledBackAtMs != null) {
         await recordCallback(ports, 'Rollback', params, 'ignored', '0');
         return {
           ok: true,

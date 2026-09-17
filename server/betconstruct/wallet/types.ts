@@ -29,7 +29,7 @@ export interface SessionBinding {
 
 export interface SportsBetRecord {
   id: string;
-  betId: number;
+  betId: string;
   playerAuthUserId: string;
   playerPublicId: string;
   walletId: string;
@@ -51,7 +51,7 @@ export interface ProviderTransactionRecord {
   method: string;
   externalTransactionId: string | null;
   relatedTransactionId: string | null;
-  betId: number | null;
+  betId: string | null;
   providerPlayerId: number | null;
   playerAuthUserId: string;
   walletId: string;
@@ -70,7 +70,7 @@ export interface CallbackEventRecord {
   product: BetConstructProduct;
   method: string;
   externalTransactionId: string | null;
-  providerBetId: number | null;
+  providerBetId: string | null;
   payloadHash: string;
   correlationId: string;
   processingStatus: string;
@@ -121,7 +121,7 @@ export interface SessionBindingPort {
 
 export interface SportsBetPort {
   insert(bet: SportsBetRecord): Promise<SportsBetRecord>;
-  findByBetId(betId: number): Promise<SportsBetRecord | null>;
+  findByBetId(betId: string): Promise<SportsBetRecord | null>;
   findByPlacedTransactionId(transactionId: string): Promise<SportsBetRecord | null>;
   save(bet: SportsBetRecord): Promise<void>;
 }

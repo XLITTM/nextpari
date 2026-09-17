@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { BETCONSTRUCT_SESSION_EXTEND_MS } from './constants.js';
+import {
+  BETCONSTRUCT_CASINO_SESSION_TTL_MAX_MS,
+  BETCONSTRUCT_CASINO_SESSION_TTL_MS,
+  BETCONSTRUCT_SESSION_EXTEND_MS,
+} from './constants.js';
 import { casinoPlayerIdFromPublicId } from './casinoPlayerId.js';
 import { providerDisplayCurrency } from './currency.js';
 import { digestAuthToken } from './tokenDigest.js';
@@ -12,6 +16,17 @@ import type {
 
 export { digestAuthToken };
 export { createCasinoSessionToken, CASINO_SESSION_TOKEN_MAX_LEN } from './sessionToken.js';
+
+export function casinoSessionExpiresAtMs(
+  nowMs: number,
+  ttlMs = BETCONSTRUCT_CASINO_SESSION_TTL_MS,
+): number {
+  if (!Number.isSafeInteger(nowMs) || nowMs < 0) throw new Error('SESSION_EXPIRY_INVALID');
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0 || ttlMs > BETCONSTRUCT_CASINO_SESSION_TTL_MAX_MS) {
+    throw new Error('SESSION_EXPIRY_INVALID');
+  }
+  return nowMs + ttlMs;
+}
 
 export function bindingIsRevoked(binding: SessionBinding): boolean {
   return binding.revokedAtMs != null;

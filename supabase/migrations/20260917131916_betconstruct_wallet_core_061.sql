@@ -328,6 +328,35 @@ END;
 $fn$;
 
 
+CREATE OR REPLACE FUNCTION private.betconstruct_parse_int64(p_value JSONB)
+RETURNS TEXT
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_text TEXT;
+    v_kind TEXT;
+BEGIN
+    IF p_value IS NULL OR p_value = 'null'::jsonb THEN
+        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
+    END IF;
+    v_kind := jsonb_typeof(p_value);
+    v_text := p_value #>> '{}';
+    IF v_kind NOT IN ('number', 'string') OR v_text IS NULL OR v_text !~ '^(0|[1-9][0-9]*)$' THEN
+        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
+    END IF;
+    IF v_text::NUMERIC > 9223372036854775807 THEN
+        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
+    END IF;
+    RETURN v_text;
+END;
+$fn$;
+
+COMMENT ON FUNCTION private.betconstruct_parse_int64(JSONB) IS
+'Canonical non-negative signed Int64 as a decimal string. Rejects fractions, scientific notation, and values above 9223372036854775807. Callers cast to BIGINT after validation.';
+
+
 CREATE OR REPLACE FUNCTION private.betconstruct_require_amount_scale(
     p_display TEXT,
     p_amount NUMERIC
@@ -509,10 +538,10 @@ DECLARE
     v_fp TEXT;
     v_balance NUMERIC;
 BEGIN
-    v_tx := NULLIF(p_payload ->> 'transaction_id', '');
-    v_bet_id := (p_payload ->> 'bet_id')::BIGINT;
+    v_tx := private.betconstruct_parse_int64(p_payload -> 'transaction_id');
+    v_bet_id := private.betconstruct_parse_int64(p_payload -> 'bet_id')::BIGINT;
     v_fp := NULLIF(p_payload ->> 'fingerprint', '');
-    IF v_tx IS NULL OR v_bet_id IS NULL OR v_fp IS NULL THEN
+    IF v_fp IS NULL THEN
         RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
     END IF;
     PERFORM private.betconstruct_lock_financial('betconstruct:sportsbook:' || v_tx);
@@ -591,12 +620,9 @@ DECLARE
     v_fp TEXT;
     v_prev_payout TEXT;
 BEGIN
-    v_tx := NULLIF(p_payload ->> 'transaction_id', '');
-    v_bet_id := (p_payload ->> 'bet_id')::BIGINT;
+    v_tx := private.betconstruct_parse_int64(p_payload -> 'transaction_id');
+    v_bet_id := private.betconstruct_parse_int64(p_payload -> 'bet_id')::BIGINT;
     v_fp := NULLIF(p_payload ->> 'fingerprint', '');
-    IF v_tx IS NULL OR v_bet_id IS NULL THEN
-        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
-    END IF;
     PERFORM private.betconstruct_lock_financial('betconstruct:sportsbook:result:' || v_tx);
     v_binding := private.betconstruct_session_by_digest(
         p_payload ->> 'token_digest', 'sportsbook', 'launch', 'settlement'
@@ -643,6 +669,7 @@ BEGIN
             'betconstruct', v_tx, 'betconstruct', jsonb_build_object('phase', 'BetResulted'), TRUE
         );
     ELSIF v_delta < 0 THEN
+        -- BETCONSTRUCT_LIVE_BLOCKER_RESULT_CORRECTION_DEBT_POLICY
         PERFORM private.betconstruct_apply_wallet_entry(
             v_bet.wallet_id, v_delta, 'CASINO_BET', 'bc-sports-result:' || v_tx,
             'betconstruct', v_tx, 'betconstruct', jsonb_build_object('phase', 'BetResulted'), TRUE
@@ -710,23 +737,12 @@ DECLARE
     v_tx TEXT;
     v_fp TEXT;
 BEGIN
-    v_tx := NULLIF(p_payload ->> 'transaction_id', '');
+    v_tx := private.betconstruct_parse_int64(p_payload -> 'transaction_id');
     v_fp := NULLIF(p_payload ->> 'fingerprint', '');
-    IF v_tx IS NULL THEN
-        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
-    END IF;
     PERFORM private.betconstruct_lock_financial('betconstruct:sportsbook:rollback:' || v_tx);
     v_binding := private.betconstruct_session_by_digest(
         p_payload ->> 'token_digest', 'sportsbook', 'launch', 'settlement'
     );
-    SELECT t.*
-    INTO v_existing
-    FROM private.betconstruct_transactions AS t
-    WHERE t.product = 'sportsbook' AND t.method = 'Rollback' AND t.external_transaction_id = v_tx
-    FOR UPDATE;
-    IF FOUND THEN
-        RETURN jsonb_build_object('ok', true, 'replayed', true);
-    END IF;
     SELECT b.*
     INTO v_bet
     FROM private.betconstruct_sports_bets AS b
@@ -739,7 +755,12 @@ BEGIN
        OR v_binding.player_public_id IS DISTINCT FROM v_bet.player_public_id THEN
         RAISE EXCEPTION 'TOKEN_PLAYER_MISMATCH';
     END IF;
-    IF v_bet.rolled_back_at IS NOT NULL THEN
+    SELECT t.*
+    INTO v_existing
+    FROM private.betconstruct_transactions AS t
+    WHERE t.product = 'sportsbook' AND t.method = 'Rollback' AND t.external_transaction_id = v_tx
+    FOR UPDATE;
+    IF FOUND OR v_bet.rolled_back_at IS NOT NULL THEN
         RETURN jsonb_build_object(
             'ok', true, 'replayed', true, 'currency', v_bet.display_currency,
             'balance', private.game_current_balance(v_bet.wallet_id)
@@ -814,15 +835,13 @@ DECLARE
     v_fp TEXT;
     v_platform BIGINT;
 BEGIN
-    v_rgs := NULLIF(p_payload ->> 'rgs_transaction_id', '');
+    v_rgs := private.betconstruct_parse_int64(p_payload -> 'rgs_transaction_id');
     v_fp := NULLIF(p_payload ->> 'fingerprint', '');
-    IF v_rgs IS NULL THEN
-        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
-    END IF;
     PERFORM private.betconstruct_lock_financial('betconstruct:casino:' || v_rgs);
     v_binding := private.betconstruct_session_by_digest(
         p_payload ->> 'token_digest', 'casino', 'session', 'new_play'
     );
+    PERFORM private.require_player_external_casino_allowed(v_binding.player_auth_user_id);
     v_amount := private.betconstruct_require_amount_scale(
         v_binding.display_currency,
         private.betconstruct_parse_exact_amount(p_payload -> 'withdraw_amount')
@@ -879,17 +898,21 @@ AS $fn$
 DECLARE
     v_binding private.betconstruct_session_bindings%ROWTYPE;
     v_existing private.betconstruct_transactions%ROWTYPE;
+    v_related_row private.betconstruct_transactions%ROWTYPE;
     v_rgs TEXT;
     v_related TEXT;
     v_amount NUMERIC;
     v_fp TEXT;
     v_platform BIGINT;
 BEGIN
-    v_rgs := NULLIF(p_payload ->> 'rgs_transaction_id', '');
-    v_related := NULLIF(p_payload ->> 'related_transaction_id', '');
+    v_rgs := private.betconstruct_parse_int64(p_payload -> 'rgs_transaction_id');
     v_fp := NULLIF(p_payload ->> 'fingerprint', '');
-    IF v_rgs IS NULL THEN
-        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
+    IF p_payload -> 'related_transaction_id' IS NULL
+       OR p_payload -> 'related_transaction_id' = 'null'::jsonb
+       OR COALESCE(p_payload ->> 'related_transaction_id', '') = '' THEN
+        v_related := NULL;
+    ELSE
+        v_related := private.betconstruct_parse_int64(p_payload -> 'related_transaction_id');
     END IF;
     PERFORM private.betconstruct_lock_financial('betconstruct:casino:' || v_rgs);
     v_binding := private.betconstruct_session_by_digest(
@@ -901,6 +924,27 @@ BEGIN
     );
     IF v_amount <= 0 THEN
         RAISE EXCEPTION 'AMOUNT_INVALID';
+    END IF;
+    IF v_related IS NOT NULL THEN
+        v_related_row := private.betconstruct_casino_financial_lookup(v_related);
+        IF v_related_row.id IS NULL
+           OR (
+                v_related_row.method IS DISTINCT FROM 'Withdraw'
+                AND NOT (
+                    v_related_row.method = 'WithdrawAndDeposit'
+                    AND COALESCE((v_related_row.metadata ->> 'withdrawAmount')::NUMERIC, 0) > 0
+                )
+              ) THEN
+            RAISE EXCEPTION 'TRANSACTION_NOT_FOUND';
+        END IF;
+        IF v_related_row.player_auth_user_id IS DISTINCT FROM v_binding.player_auth_user_id
+           OR v_related_row.provider_player_id IS DISTINCT FROM v_binding.provider_player_id THEN
+            RAISE EXCEPTION 'WRONG_PLAYER_ID';
+        END IF;
+        IF v_related_row.wallet_id IS DISTINCT FROM v_binding.wallet_id
+           OR v_related_row.display_currency IS DISTINCT FROM v_binding.display_currency THEN
+            RAISE EXCEPTION 'CURRENCY_MISMATCH';
+        END IF;
     END IF;
     v_existing := private.betconstruct_casino_financial_lookup(v_rgs);
     IF v_existing.id IS NOT NULL THEN
@@ -957,15 +1001,13 @@ DECLARE
     v_fp TEXT;
     v_platform BIGINT;
 BEGIN
-    v_rgs := NULLIF(p_payload ->> 'rgs_transaction_id', '');
+    v_rgs := private.betconstruct_parse_int64(p_payload -> 'rgs_transaction_id');
     v_fp := NULLIF(p_payload ->> 'fingerprint', '');
-    IF v_rgs IS NULL THEN
-        RAISE EXCEPTION 'TRANSACTION_ID_INVALID';
-    END IF;
     PERFORM private.betconstruct_lock_financial('betconstruct:casino:' || v_rgs);
     v_binding := private.betconstruct_session_by_digest(
         p_payload ->> 'token_digest', 'casino', 'session', 'new_play'
     );
+    PERFORM private.require_player_external_casino_allowed(v_binding.player_auth_user_id);
     v_withdraw := private.betconstruct_require_amount_scale(
         v_binding.display_currency,
         private.betconstruct_parse_exact_amount(p_payload -> 'withdraw_amount')
@@ -1054,10 +1096,7 @@ DECLARE
     v_withdraw NUMERIC;
     v_deposit NUMERIC;
 BEGIN
-    v_rgs := NULLIF(p_payload ->> 'rgs_transaction_id', '');
-    IF v_rgs IS NULL THEN
-        RAISE EXCEPTION 'TRANSACTION_NOT_FOUND';
-    END IF;
+    v_rgs := private.betconstruct_parse_int64(p_payload -> 'rgs_transaction_id');
     PERFORM private.betconstruct_lock_financial('betconstruct:casino:rollback:' || v_rgs);
     v_binding := private.betconstruct_session_by_digest(
         p_payload ->> 'token_digest', 'casino', 'session', 'settlement'
@@ -1181,10 +1220,19 @@ AS $fn$
 DECLARE
     v_launch private.betconstruct_session_bindings%ROWTYPE;
     v_session UUID;
+    v_expires TIMESTAMPTZ;
 BEGIN
     v_launch := private.betconstruct_session_by_digest(
         p_payload ->> 'launch_token_digest', 'casino', 'launch', 'new_play'
     );
+    PERFORM private.require_player_external_casino_allowed(v_launch.player_auth_user_id);
+    v_expires := (p_payload ->> 'session_expires_at')::TIMESTAMPTZ;
+    IF v_expires IS NULL OR v_expires <= pg_catalog.now() THEN
+        RAISE EXCEPTION 'SESSION_EXPIRY_INVALID';
+    END IF;
+    IF v_expires > pg_catalog.now() + INTERVAL '24 hours' THEN
+        RAISE EXCEPTION 'SESSION_EXPIRY_INVALID';
+    END IF;
     INSERT INTO private.betconstruct_session_bindings (
         product, token_kind, token_digest, player_auth_user_id, player_public_id,
         wallet_id, display_currency, provider_player_id, expires_at, last_seen_at, metadata
@@ -1197,7 +1245,7 @@ BEGIN
         v_launch.wallet_id,
         v_launch.display_currency,
         v_launch.provider_player_id,
-        v_launch.expires_at,
+        v_expires,
         pg_catalog.now(),
         '{}'::jsonb
     )
@@ -1308,6 +1356,9 @@ GRANT EXECUTE ON FUNCTION private.betconstruct_sanitize_metadata(JSONB) TO servi
 
 REVOKE ALL ON FUNCTION private.betconstruct_parse_exact_amount(JSONB) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.betconstruct_parse_exact_amount(JSONB) TO service_role;
+
+REVOKE ALL ON FUNCTION private.betconstruct_parse_int64(JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.betconstruct_parse_int64(JSONB) TO service_role;
 
 REVOKE ALL ON FUNCTION private.betconstruct_require_amount_scale(TEXT, NUMERIC) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.betconstruct_require_amount_scale(TEXT, NUMERIC) TO service_role;
