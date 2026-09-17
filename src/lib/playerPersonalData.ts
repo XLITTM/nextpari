@@ -1,7 +1,3 @@
-export const PLAYER_PERSONAL_DATA_NOTICE =
-  'Заполнение личных данных не является верификацией аккаунта.';
-export const PLAYER_PERSONAL_DATA_NOTICE_EXTRA =
-  'Служба поддержки или владелец сайта могут отдельно запросить подтверждение личности, если это потребуется.';
 export const PLAYER_PERSONAL_DATA_VERIFIED_BADGE = 'Личность подтверждена';
 export const PLAYER_PERSONAL_DATA_IDENTITY_LOCKED_HELP =
   'Для изменения подтверждённых идентификационных данных обратитесь в службу поддержки.';

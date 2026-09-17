@@ -12,8 +12,6 @@ import {
   PLAYER_PERSONAL_DATA_IDENTITY_LOCKED_HELP,
   PLAYER_PERSONAL_DATA_LOADING,
   PLAYER_PERSONAL_DATA_LOAD_ERROR,
-  PLAYER_PERSONAL_DATA_NOTICE,
-  PLAYER_PERSONAL_DATA_NOTICE_EXTRA,
   PLAYER_PERSONAL_DATA_RETRY,
   PLAYER_PERSONAL_DATA_SUPPORT_FALLBACK,
   PLAYER_PERSONAL_DATA_VERIFIED_BADGE,
@@ -138,11 +136,6 @@ export function PersonalDataScreen({ onBack }: PersonalDataScreenProps) {
       </div>
 
       <div className="px-3 space-y-4">
-        <div className="bg-brand-50 dark:bg-brand-600/10 rounded-2xl border border-brand-100 dark:border-brand-600/20 p-4 space-y-2">
-          <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{PLAYER_PERSONAL_DATA_NOTICE}</p>
-          <p className="text-xs text-gray-600 dark:text-gray-300">{PLAYER_PERSONAL_DATA_NOTICE_EXTRA}</p>
-        </div>
-
         {loadState.kind === 'loading' ? (
           <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-4">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">{PLAYER_PERSONAL_DATA_LOADING}</p>
