@@ -584,8 +584,11 @@ describe('phase 059 owner UI and money safety', () => {
     assert.match(panel, /Лимиты настроены/);
     assert.match(panel, /Не настроены/);
     assert.match(panel, /Спорт \{row\?\.sportsEnabled \? 'включён' : 'выключен'\}/);
-    assert.match(panel, /Будет доступно после завершения настройки математики собственных игр/);
-    assert.equal(panel.includes('setOwnerCurrencyOwnedGamesEnabled'), false);
+    assert.match(panel, /Собственные игры: \{row\?\.ownedGamesReady \? 'Ready' : 'Not ready'\}/);
+    assert.match(panel, /Ready games:/);
+    assert.match(panel, /Blocked games:/);
+    assert.match(panel, /setOwnerCurrencyOwnedGamesEnabled/);
+    assert.equal(panel.includes('Будет доступно после завершения настройки математики собственных игр'), false);
     for (const code of PLAYER_DISPLAY_CURRENCIES) {
       assert.match(panel, new RegExp(`'${code}'`));
     }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   fetchOwnerCurrencyLimits,
   saveOwnerCurrencyLimits,
+  setOwnerCurrencyOwnedGamesEnabled,
   setOwnerCurrencySportsEnabled,
   type OwnerCurrencyLimitRow,
 } from './services';
@@ -82,6 +83,18 @@ export function OwnerCurrencyLimitsPanel() {
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось изменить спорт');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleOwnedGames = async (code: string, enabled: boolean) => {
+    setBusy(true);
+    try {
+      await setOwnerCurrencyOwnedGamesEnabled({ currency: code, enabled });
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось изменить собственные игры');
     } finally {
       setBusy(false);
     }
@@ -175,11 +188,31 @@ export function OwnerCurrencyLimitsPanel() {
                   {row?.sportsEnabled ? 'Выключить спорт' : 'Включить спорт'}
                 </button>
               </div>
-              <p className="mt-3 text-xs text-gray-600">
-                {code === 'TMT'
-                  ? 'Собственные игры: текущее поведение TMT сохраняется.'
-                  : 'Будет доступно после завершения настройки математики собственных игр.'}
+              <p className="mt-3 text-xs font-semibold text-gray-700">
+                Собственные игры: {row?.ownedGamesReady ? 'Ready' : 'Not ready'}
+                {' · '}
+                {row?.ownedGamesEnabled ? 'включены' : 'выключены'}
               </p>
+              <p className="mt-1 text-xs text-gray-600">
+                Ready games: {(row?.readyGames ?? []).join(', ') || '—'}
+              </p>
+              <p className="mt-1 text-xs text-gray-600">
+                Blocked games: {(row?.blockedGames ?? []).join(', ') || '—'}
+              </p>
+              {code === 'TMT' ? (
+                <p className="mt-2 text-xs text-gray-600">
+                  Собственные игры: текущее поведение TMT сохраняется.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy || row?.ownedGamesReady !== true}
+                  onClick={() => void toggleOwnedGames(code, !(row?.ownedGamesEnabled === true))}
+                  className="mt-2 text-xs font-semibold text-gray-700"
+                >
+                  {row?.ownedGamesEnabled ? 'Выключить собственные игры' : 'Включить собственные игры'}
+                </button>
+              )}
             </article>
           );
         })}

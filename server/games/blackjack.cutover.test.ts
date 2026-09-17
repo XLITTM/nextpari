@@ -8,6 +8,7 @@ import {
   BLACKJACK_V2_MATH_VERSION,
   BLACKJACK_V3_MATH_VERSION,
   BLACKJACK_V4_MATH_VERSION,
+  BLACKJACK_V5_MATH_VERSION,
   parseDealerCards,
   parsePlayerCards,
 } from '../../src/games/blackjack/parseHands.js';
@@ -32,6 +33,12 @@ describe('blackjack v2/v3/v4 cutover', () => {
 
   it('shows the v4 dealer hole card face-up even when the server flags it hidden', () => {
     const dealer = parseDealerCards(hiddenHole, BLACKJACK_V4_MATH_VERSION);
+    assert.equal(dealer[0]?.isHidden, false);
+    assert.equal(dealer[1]?.isHidden, false);
+  });
+
+  it('shows the v5 dealer hole card face-up even when the server flags it hidden', () => {
+    const dealer = parseDealerCards(hiddenHole, BLACKJACK_V5_MATH_VERSION);
     assert.equal(dealer[0]?.isHidden, false);
     assert.equal(dealer[1]?.isHidden, false);
   });
@@ -68,6 +75,13 @@ describe('blackjack v2/v3/v4 cutover', () => {
     assert.equal(blackjackPayoutForVersion(10, 'golden', BLACKJACK_V4_MATH_VERSION), 20);
     assert.equal(blackjackPayoutForVersion(10, 'push', BLACKJACK_V4_MATH_VERSION), 10);
     assert.equal(blackjackPayoutForVersion(10, 'lose', BLACKJACK_V4_MATH_VERSION), 0);
+  });
+
+  it('pays v5 ×1.94 with golden ×2.00 and push ×1.00', () => {
+    assert.equal(blackjackPayoutForVersion(10, 'win', BLACKJACK_V5_MATH_VERSION), 19.4);
+    assert.equal(blackjackPayoutForVersion(10, 'golden', BLACKJACK_V5_MATH_VERSION), 20);
+    assert.equal(blackjackPayoutForVersion(10, 'push', BLACKJACK_V5_MATH_VERSION), 10);
+    assert.equal(blackjackPayoutForVersion(10, 'lose', BLACKJACK_V5_MATH_VERSION), 0);
   });
 
   it('does not silently use a catalog payout for unknown or null versions', () => {

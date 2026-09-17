@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { APPLES_LEVELS, APPLES_MATH_UNCHANGED, APPLES_MATH_VERSION, APPLES_MODEL } from './rtp/applesMath.js';
 import {
+  BLACKJACK_EVAL_ROUNDS,
+  BLACKJACK_EVAL_SEED,
   BLACKJACK_GOLDEN_PAYOUT,
   BLACKJACK_MATH_VERSION,
   BLACKJACK_METHOD,
@@ -13,6 +15,10 @@ import {
   BLACKJACK_V3_WIN_PAYOUT,
   BLACKJACK_V4_EXACT_RTP,
   BLACKJACK_V4_HOUSE_EDGE,
+  BLACKJACK_V4_MATH_VERSION,
+  BLACKJACK_V4_WIN_PAYOUT,
+  BLACKJACK_V5_EXACT_RTP,
+  BLACKJACK_V5_HOUSE_EDGE,
   BLACKJACK_VISIBLE_EXACT_RTP,
   BLACKJACK_VISIBLE_THEORETICAL_WIN_PAYOUT,
   BLACKJACK_WIN_PAYOUT,
@@ -36,6 +42,15 @@ import {
   DICE_V2_WIN_PAYOUT,
   DICE_V3_EXACT_RTP,
   DICE_V3_HOUSE_EDGE,
+  DICE_V3_WIN_PAYOUT,
+  DICE_V4_EXACT_RTP,
+  DICE_V4_HOUSE_EDGE,
+  DICE_V4_RTP_DENOMINATOR,
+  DICE_V4_RTP_NUMERATOR,
+  DICE_WIN_COUNT,
+  DICE_DRAW_COUNT,
+  DICE_LOSS_COUNT,
+  DICE_OUTCOME_TOTAL,
   DICE_WIN_PAYOUT,
   diceExactRtp,
 } from './rtp/diceMath.js';
@@ -68,21 +83,37 @@ describe('audited RTP harness', () => {
     assertBand(row.rtp, 'dice v2');
   });
 
-  it('prints DICE v3 exact RTP 1296/1296', () => {
+  it('prints DICE v3 historical RTP 1296/1296', () => {
+    const row = diceExactRtp(DICE_V3_WIN_PAYOUT);
+    console.log('DICE_V3_HISTORICAL');
+    console.log('winPayout:', DICE_V3_WIN_PAYOUT);
+    console.log('exactRtp:', row.rtp);
+    assert.equal(DICE_V3_WIN_PAYOUT, 2);
+    assert.equal(row.numerator, 129600);
+    assert.equal(row.denominator, 129600);
+    assert.equal(row.rtp, DICE_V3_EXACT_RTP);
+    assert.equal(row.houseEdge, DICE_V3_HOUSE_EDGE);
+    assert.equal(row.rtp, 1);
+  });
+
+  it('prints DICE v4 exact house-edge RTP 1273/1296', () => {
     const row = diceExactRtp();
     console.log('DICE');
     console.log('mathVersion:', DICE_MATH_VERSION);
     console.log('winPayout:', DICE_WIN_PAYOUT);
     console.log('exactRtp:', row.rtp);
     console.log('houseEdge:', row.houseEdge);
-    assert.equal(DICE_MATH_VERSION, 'dice-v3-win2');
-    assert.equal(DICE_WIN_PAYOUT, 2);
-    assert.equal(row.numerator, 129600);
-    assert.equal(row.denominator, 129600);
-    assert.equal(row.rtp, DICE_V3_EXACT_RTP);
-    assert.equal(row.houseEdge, DICE_V3_HOUSE_EDGE);
-    assert.equal(row.rtp, 1);
-    assert.equal(row.houseEdge, 0);
+    assert.equal(DICE_MATH_VERSION, 'dice-v4-house-edge');
+    assert.equal(DICE_WIN_PAYOUT, 1.96);
+    assert.equal(DICE_WIN_COUNT + DICE_DRAW_COUNT + DICE_LOSS_COUNT, DICE_OUTCOME_TOTAL);
+    assert.equal(DICE_WIN_COUNT, DICE_LOSS_COUNT);
+    assert.equal(row.numerator / 100, DICE_V4_RTP_NUMERATOR);
+    assert.equal(row.denominator / 100, DICE_V4_RTP_DENOMINATOR);
+    assert.equal(row.rtp, DICE_V4_EXACT_RTP);
+    assert.equal(row.houseEdge, DICE_V4_HOUSE_EDGE);
+    assert.ok(row.rtp < 1);
+    assert.ok(row.houseEdge > 0);
+    assert.equal(row.rtp, DICE_V4_RTP_NUMERATOR / DICE_V4_RTP_DENOMINATOR);
   });
 
   it('documents historical BLACKJACK v2 hidden-hole RTP', () => {
@@ -113,6 +144,21 @@ describe('audited RTP harness', () => {
   });
 
   it('prints BLACKJACK v4 visible-dealer ×2.00 exact RTP', () => {
+    const exact = evaluateBlackjackExactVisibleDealer(BLACKJACK_V4_WIN_PAYOUT);
+    const sim = simulateBlackjackOptimal(BLACKJACK_EVAL_ROUNDS, BLACKJACK_EVAL_SEED, BLACKJACK_V4_WIN_PAYOUT);
+    console.log('BLACKJACK_V4_HISTORICAL');
+    console.log('mathVersion:', BLACKJACK_V4_MATH_VERSION);
+    console.log('optimalPlayerRtp:', exact.rtp);
+    assert.equal(BLACKJACK_V4_MATH_VERSION, 'blackjack-v4-visible-dealer-win2');
+    assert.equal(BLACKJACK_V4_WIN_PAYOUT, 2);
+    assert.equal(exact.winPayout, 2);
+    assert.ok(exact.rtp > 1, `v4 RTP ${exact.rtp} must exceed 1.0 under the product ×2.00 table`);
+    assert.ok(Math.abs(exact.rtp - BLACKJACK_V4_EXACT_RTP) < 1e-12, 'v4 exact RTP baked constant');
+    assert.ok(Math.abs(exact.houseEdge - BLACKJACK_V4_HOUSE_EDGE) < 1e-12);
+    assert.ok(Math.abs(exact.rtp - sim.rtp) < 0.03, 'sim should track exact RTP');
+  });
+
+  it('prints BLACKJACK v5 visible-dealer house-edge exact RTP', () => {
     const exact = evaluateBlackjackExactVisibleDealer();
     const sim = simulateBlackjackOptimal();
     console.log('BLACKJACK');
@@ -126,15 +172,16 @@ describe('audited RTP harness', () => {
     console.log('houseEdge:', exact.houseEdge);
     console.log('simRtp:', sim.rtp);
     console.log('paytable:', `win=${BLACKJACK_WIN_PAYOUT} golden=${BLACKJACK_GOLDEN_PAYOUT} push=${BLACKJACK_PUSH_PAYOUT}`);
-    console.log('RTP_EXCEEDS_ONE:', exact.rtp > 1);
-    assert.equal(BLACKJACK_MATH_VERSION, 'blackjack-v4-visible-dealer-win2');
-    assert.equal(BLACKJACK_WIN_PAYOUT, 2);
+    assert.equal(BLACKJACK_MATH_VERSION, 'blackjack-v5-visible-dealer-house-edge');
+    assert.equal(BLACKJACK_WIN_PAYOUT, 1.94);
     assert.equal(BLACKJACK_GOLDEN_PAYOUT, 2);
     assert.equal(BLACKJACK_PUSH_PAYOUT, 1);
-    assert.equal(exact.winPayout, 2);
-    assert.ok(exact.rtp > 1, `v4 RTP ${exact.rtp} must exceed 1.0 under the product ×2.00 table`);
-    assert.ok(Math.abs(exact.rtp - BLACKJACK_V4_EXACT_RTP) < 1e-12, 'v4 exact RTP baked constant');
-    assert.ok(Math.abs(exact.houseEdge - BLACKJACK_V4_HOUSE_EDGE) < 1e-12);
+    assert.equal(exact.winPayout, 1.94);
+    assert.ok(exact.rtp >= 0.98, `v5 RTP ${exact.rtp} below 0.980`);
+    assert.ok(exact.rtp <= 0.99, `v5 RTP ${exact.rtp} above 0.990`);
+    assert.ok(exact.rtp < 1);
+    assert.ok(Math.abs(exact.rtp - BLACKJACK_V5_EXACT_RTP) < 1e-12, 'v5 exact RTP baked constant');
+    assert.ok(Math.abs(exact.houseEdge - BLACKJACK_V5_HOUSE_EDGE) < 1e-12);
     assert.ok(Math.abs(exact.rtp - sim.rtp) < 0.03, 'sim should track exact RTP');
   });
 

@@ -1,6 +1,6 @@
 import { CONTROLLED_GAME_CODES, THEORETICAL_CONTROLLED_GAME_RTP } from './registry.js';
-import { BLACKJACK_V4_EXACT_RTP } from './rtp/blackjackMath.js';
-import { DICE_V3_EXACT_RTP } from './rtp/diceMath.js';
+import { BLACKJACK_V5_EXACT_RTP } from './rtp/blackjackMath.js';
+import { DICE_V4_EXACT_RTP } from './rtp/diceMath.js';
 
 export const DEFAULT_REPORT_TIMEZONE = 'Asia/Ashgabat';
 
@@ -36,10 +36,10 @@ export function gameRtpReportingMeta(gameCode: string): {
     return { theoreticalRtpTarget: null, rtpModel: 'progressive' };
   }
   if (gameCode === 'dice') {
-    return { theoreticalRtpTarget: DICE_V3_EXACT_RTP, rtpModel: 'fixed-target' };
+    return { theoreticalRtpTarget: DICE_V4_EXACT_RTP, rtpModel: 'fixed-target' };
   }
   if (gameCode === 'blackjack') {
-    return { theoreticalRtpTarget: BLACKJACK_V4_EXACT_RTP, rtpModel: 'fixed-target' };
+    return { theoreticalRtpTarget: BLACKJACK_V5_EXACT_RTP, rtpModel: 'fixed-target' };
   }
   if ((CONTROLLED_GAME_CODES as readonly string[]).includes(gameCode)) {
     return {
