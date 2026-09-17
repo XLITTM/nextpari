@@ -9,7 +9,6 @@ import {
   PLAYER_PERSONAL_DATA_IDENTITY_LOCKED_ERROR,
   PLAYER_PERSONAL_DATA_IDENTITY_LOCKED_HELP,
   PLAYER_PERSONAL_DATA_LOAD_ERROR,
-  PLAYER_PERSONAL_DATA_NOTICE,
   PLAYER_PERSONAL_DATA_SUPPORT_FALLBACK,
   PLAYER_PERSONAL_DATA_VERIFIED_BADGE,
   canSavePlayerPersonalData,
@@ -22,11 +21,11 @@ import {
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe('player personal data UI contract', () => {
-  it('explains that filling personal data is not verification', () => {
+  it('does not show a personal-data-is-not-verification banner', () => {
     const screen = readFileSync(join(here, '../screens/PersonalDataScreen.tsx'), 'utf8');
-    assert.equal(PLAYER_PERSONAL_DATA_NOTICE, 'Заполнение личных данных не является верификацией аккаунта.');
-    assert.match(screen, /PLAYER_PERSONAL_DATA_NOTICE/);
-    assert.match(screen, /PLAYER_PERSONAL_DATA_NOTICE_EXTRA/);
+    assert.equal(screen.includes('PLAYER_PERSONAL_DATA_NOTICE'), false);
+    assert.equal(screen.includes('PLAYER_PERSONAL_DATA_NOTICE_EXTRA'), false);
+    assert.equal(screen.includes('Заполнение личных данных не является верификацией'), false);
     assert.match(screen, /PLAYER_PERSONAL_DATA_VERIFIED_BADGE/);
     assert.equal(PLAYER_PERSONAL_DATA_VERIFIED_BADGE, 'Личность подтверждена');
     assert.equal(
