@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, redactForLog } from '../staff/errors.js';
 import {
   parseJsonPayload,
@@ -115,6 +116,12 @@ export async function handlePlayerGamesRequest(
     log.error('player_games_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'player_games',
+      route: path,
+      method,
+      eventName: 'player_games_unhandled',
+    });
     return playerGameHttpError(error, secure);
   }
 }
@@ -154,6 +161,12 @@ export async function attachPlayerGamesHttp(
     log.error('player_games_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
       extra: redactForLog({}),
+    });
+    await reportServerException(error, {
+      subsystem: 'player_games',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'player_games_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }

@@ -7,6 +7,7 @@ import {
   type StaffHttpResult,
   type StaffJsonResponse,
 } from '../staff/httpHandler.js';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, staffError } from '../staff/errors.js';
 import {
   liveOwnerAuthPorts,
@@ -1129,6 +1130,12 @@ export async function handleOwnerControlRequest(
     log.error('owner_control_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'owner',
+      route: path,
+      method,
+      eventName: 'owner_control_unhandled',
+    });
     return { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' }, cookies: sessionCookies };
   }
 }
@@ -1182,6 +1189,12 @@ export async function attachOwnerControlHttp(
   } catch (error) {
     log.error('owner_control_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
+    });
+    await reportServerException(error, {
+      subsystem: 'owner',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'owner_control_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }

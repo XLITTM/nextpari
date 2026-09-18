@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, redactForLog, staffError } from './errors.js';
 import { loadStaffOnboardingEnv } from './env.js';
 import { liveOwnerAuthPorts, resolveOwnerSession, type OwnerAuthGatewayPorts } from './ownerAuthService.js';
@@ -228,6 +229,12 @@ export async function handleOwnerStaffRequest(
     log.error('staff_onboarding_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'staff_onboarding',
+      route: input.pathname,
+      method: input.method,
+      eventName: 'staff_onboarding_unhandled',
+    });
     return { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } };
   }
 }
@@ -276,6 +283,12 @@ export async function attachOwnerStaffHttp(
     }
     log.error('staff_onboarding_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
+    });
+    await reportServerException(error, {
+      subsystem: 'staff_onboarding',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'staff_onboarding_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }

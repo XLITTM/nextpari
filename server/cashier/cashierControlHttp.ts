@@ -7,6 +7,7 @@ import {
   type StaffHttpResult,
   type StaffJsonResponse,
 } from '../staff/httpHandler.js';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, staffError } from '../staff/errors.js';
 import {
   liveCashierAuthPorts,
@@ -446,6 +447,12 @@ export async function handleCashierControlRequest(
     log.error('cashier_control_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'cashier',
+      route: path,
+      method,
+      eventName: 'cashier_control_unhandled',
+    });
     return { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' }, cookies: sessionCookies };
   }
 }
@@ -499,6 +506,12 @@ export async function attachCashierControlHttp(
   } catch (error) {
     log.error('cashier_control_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
+    });
+    await reportServerException(error, {
+      subsystem: 'cashier',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'cashier_control_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }

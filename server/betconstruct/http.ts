@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, redactForLog } from '../staff/errors.js';
 import {
   readJsonBody,
@@ -137,6 +138,12 @@ export async function handleBetConstructRequest(
     log.error('betconstruct_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'betconstruct',
+      route: path,
+      method,
+      eventName: 'betconstruct_unhandled',
+    });
     return toStaffResult({ status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }
 }
@@ -166,6 +173,12 @@ export async function attachBetConstructHttp(
     log.error('betconstruct_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
       extra: redactForLog({}),
+    });
+    await reportServerException(error, {
+      subsystem: 'betconstruct',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'betconstruct_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }

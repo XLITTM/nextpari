@@ -7,6 +7,7 @@ import {
   type StaffHttpResult,
   type StaffJsonResponse,
 } from '../staff/httpHandler.js';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, staffError } from '../staff/errors.js';
 import {
   liveManagerAuthPorts,
@@ -397,6 +398,12 @@ export async function handleManagerControlRequest(
     log.error('manager_control_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'manager',
+      route: path,
+      method,
+      eventName: 'manager_control_unhandled',
+    });
     return { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' }, cookies: sessionCookies };
   }
 }
@@ -450,6 +457,12 @@ export async function attachManagerControlHttp(
   } catch (error) {
     log.error('manager_control_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
+    });
+    await reportServerException(error, {
+      subsystem: 'manager',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'manager_control_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }
