@@ -13,19 +13,22 @@ import { requestIsSecure } from './playerCookies.js';
 import { playerGameHttpError, type PlayerGameGatewayPorts } from './playerGamesService.js';
 import {
   createPlayerWithdrawal,
+  listPlayerCashPayoutDestinations,
   listPlayerWithdrawals,
   livePlayerWithdrawalPorts,
 } from './playerWithdrawalService.js';
 import type { StaffLog } from '../staff/types.js';
 
 export const PLAYER_WITHDRAWALS_PATH = '/api/player/withdrawals';
+export const PLAYER_PAYOUT_DESTINATIONS_PATH = '/api/player/payout-destinations';
 
 function normalizePath(pathname: string): string {
   return pathname.replace(/\/$/, '') || '/';
 }
 
 export function isPlayerWithdrawalsPath(pathname: string): boolean {
-  return normalizePath(pathname) === PLAYER_WITHDRAWALS_PATH;
+  const path = normalizePath(pathname);
+  return path === PLAYER_WITHDRAWALS_PATH || path === PLAYER_PAYOUT_DESTINATIONS_PATH;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -65,6 +68,12 @@ export async function handlePlayerWithdrawalsRequest(
   const secure = input.cookieSecure === true;
 
   try {
+    if (path === PLAYER_PAYOUT_DESTINATIONS_PATH) {
+      if (method === 'GET') {
+        return await listPlayerCashPayoutDestinations(ports, input.cookie, secure);
+      }
+      throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
+    }
     if (path !== PLAYER_WITHDRAWALS_PATH) {
       throw new StaffOnboardingError('NOT_FOUND', 404);
     }

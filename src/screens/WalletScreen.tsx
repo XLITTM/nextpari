@@ -11,10 +11,10 @@ import { RestrictionModal } from '../components/RestrictionModal';
 import { DepositModal } from '../components/games/DepositModal';
 import { playerCreateCashPayout, type PlayerCashPayout } from '../lib/playerCashPayout';
 import {
-  MOBCASH_CITIES,
   MOBCASH_MIN_WITHDRAWAL,
+  MOBCASH_PICKUP_POINTS,
   formatMobcashWithdrawalLabel,
-  pointsForCity,
+  type MobcashPickupPoint,
 } from '../lib/mobcashPickupPoints';
 import { createWithdrawalRequest, listWithdrawalRequests } from '../lib/withdrawalRequests';
 
@@ -49,6 +49,7 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
   const [detail, setDetail] = useState('');
   const [cashCity, setCashCity] = useState('');
   const [cashPointId, setCashPointId] = useState('');
+  const [serverDestinations, setServerDestinations] = useState<MobcashPickupPoint[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   const handleMethodChange = (next: WalletWithdrawMethod) => {
@@ -58,11 +59,20 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
     setCashPointId('');
   };
 
+  const pickupCatalog = serverDestinations.length > 0 ? serverDestinations : MOBCASH_PICKUP_POINTS;
+  const pickupCities = Array.from(new Set(pickupCatalog.map((point) => point.city))).sort((a, b) => a.localeCompare(b, 'ru'));
+
   const fetchWithdrawals = useCallback(async () => {
     setLoading(true);
     try {
       setWithdrawals(await listWithdrawalRequests());
       setCashPayouts([]);
+      const destRes = await fetch('/api/player/payout-destinations', { credentials: 'same-origin' });
+      const destJson = await destRes.json().catch(() => ({})) as { ok?: boolean; data?: { rows?: Array<{ id: string; city: string; label: string }> }; rows?: Array<{ id: string; city: string; label: string }> };
+      const rows = destJson.data?.rows ?? destJson.rows ?? [];
+      if (destRes.ok && Array.isArray(rows)) {
+        setServerDestinations(rows.map((row) => ({ id: row.id, city: row.city, label: row.label })));
+      }
     } catch {
       setWithdrawals([]);
       setCashPayouts([]);
@@ -91,7 +101,7 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         showToast(`Минимальная сумма вывода — ${MOBCASH_MIN_WITHDRAWAL.toFixed(2)} TMTM`);
         return;
       }
-      const point = pointsForCity(cashCity).find((item) => item.id === cashPointId);
+      const point = pickupCatalog.filter((item) => item.city === cashCity).find((item) => item.id === cashPointId);
       if (!cashCity || !point) {
         showToast('Выберите город и точку выдачи');
         return;
@@ -102,8 +112,13 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         const result = await playerCreateCashPayout(numAmount, {
           city: cashCity,
           point: point.label,
+          destinationId: serverDestinations.length > 0 ? point.id : undefined,
         });
-        showToast(`Заявка создана · PIN ${result.code}`);
+        if (result.playerNoticeCode === 'under_review' || !result.code) {
+          showToast('Заявка на вывод находится на рассмотрении.');
+        } else {
+          showToast(`Заявка создана · PIN ${result.code}`);
+        }
         setAmount('');
         setCashCity('');
         setCashPointId('');
@@ -222,6 +237,8 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
           submitting={submitting}
           onClose={() => setShowWithdrawForm(false)}
           onSubmit={handleRequestWithdrawal}
+          pickupCatalog={pickupCatalog}
+          pickupCities={pickupCities}
         />
       )}
 
@@ -258,7 +275,7 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
 function WithdrawForm({
   method, setMethod, amount, setAmount, detail, setDetail,
   cashCity, setCashCity, cashPointId, setCashPointId,
-  balance, submitting, onClose, onSubmit,
+  balance, submitting, onClose, onSubmit, pickupCatalog, pickupCities,
 }: {
   method: WalletWithdrawMethod;
   setMethod: (m: WalletWithdrawMethod) => void;
@@ -274,11 +291,16 @@ function WithdrawForm({
   submitting: boolean;
   onClose: () => void;
   onSubmit: () => void;
+  pickupCatalog: MobcashPickupPoint[];
+  pickupCities: string[];
 }) {
   const cfg = methodConfig[method];
   const MethodIcon = cfg.icon;
   const numAmount = parseFloat(amount);
-  const cityPoints = useMemo(() => pointsForCity(cashCity), [cashCity]);
+  const cityPoints = useMemo(
+    () => pickupCatalog.filter((point) => point.city === cashCity),
+    [pickupCatalog, cashCity],
+  );
   const selectedPoint = cityPoints.find((point) => point.id === cashPointId);
   const cashReady =
     method === 'cash' &&
@@ -371,7 +393,7 @@ function WithdrawForm({
             label="Город"
             placeholder="Выберите город"
             value={cashCity}
-            options={MOBCASH_CITIES.map((city) => ({ id: city, label: city }))}
+            options={pickupCities.map((city) => ({ id: city, label: city }))}
             onChange={setCashCity}
           />
           <SearchableSelect
@@ -671,16 +693,25 @@ function WithdrawalCard({ withdrawal }: { withdrawal: WithdrawalRequest }) {
           {status.label}
         </span>
       </div>
-      {withdrawal.pin_code && withdrawal.status === 'pending' && (
+      {withdrawal.pin_code && withdrawal.status === 'pending' && withdrawal.player_notice_code !== 'under_review' && (
         <PinBadge pinCode={withdrawal.pin_code} />
+      )}
+      {withdrawal.player_notice_code === 'under_review' && withdrawal.status === 'pending' && (
+        <p className="mt-2 text-xs font-semibold text-amber-600">
+          Заявка на вывод находится на рассмотрении.
+        </p>
       )}
       <div className="mt-2 flex items-end justify-between">
         <p className="text-xl font-extrabold text-red-500 tabular-nums leading-none">
           − {withdrawal.amount.toLocaleString('ru-RU')} TMTM
         </p>
       </div>
-      {withdrawal.status === 'rejected' && withdrawal.rejection_reason && (
-        <p className="mt-2 text-xs font-semibold text-red-500">Причина: {withdrawal.rejection_reason}</p>
+      {withdrawal.status === 'rejected' && (
+        <p className="mt-2 text-xs font-semibold text-red-500">
+          {withdrawal.player_notice_code === 'rejected_cashier_proportion'
+            ? 'Вывод отклонён. Сумма вывода должна быть пропорциональна сумме пополнений через выбранную кассу. Для дополнительной информации обратитесь в поддержку.'
+            : `Причина: ${withdrawal.rejection_reason || 'Отклонено'}`}
+        </p>
       )}
     </div>
   );

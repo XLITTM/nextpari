@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, History, LogOut, RefreshCw, Shield, User, Users,
+  AlertTriangle, Banknote, History, LogOut, RefreshCw, Shield, User, Users,
 } from 'lucide-react';
 import { useSecurityAuth } from './auth/SecurityAuthProvider';
+import type { SecurityStaffContext } from './auth/securityAuth';
 import {
   OWNER_SECURITY_RESTRICTION_POLICY,
   ownerSecurityAccountStatusLabel,
@@ -35,9 +36,9 @@ import {
   type SecurityActivityRow,
 } from './services';
 import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
-import type { SecurityStaffContext } from './auth/securityAuth';
+import { WithdrawalAttributionReviewPanel, createWithdrawalReviewApi, type WithdrawalReviewSummary } from '../shared/staff/WithdrawalAttributionReviewPanel';
 
-type SecurityTab = 'flags' | 'players' | 'sports' | 'activity';
+type SecurityTab = 'flags' | 'players' | 'sports' | 'activity' | 'withdrawalReviews';
 
 export function SecurityDashboard() {
   const { loading, staff, deniedMessage, signOut } = useSecurityAuth();
@@ -144,6 +145,17 @@ function SecurityShell({
 }) {
   const [tab, setTab] = useState<SecurityTab>('flags');
   const [playerId, setPlayerId] = useState('');
+  const [reviewSummary, setReviewSummary] = useState<WithdrawalReviewSummary | null>(null);
+  const reviewApi = useMemo(() => createWithdrawalReviewApi('/api/security'), []);
+
+  useEffect(() => {
+    const load = () => {
+      void reviewApi.summary().then(setReviewSummary).catch(() => setReviewSummary(null));
+    };
+    load();
+    const timer = window.setInterval(load, 15000);
+    return () => window.clearInterval(timer);
+  }, [reviewApi]);
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
@@ -161,6 +173,13 @@ function SecurityShell({
           <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="Игроки риска" />
           <NavBtn active={tab === 'sports'} onClick={() => setTab('sports')} icon={Shield} label="Спортивные ставки" />
           <NavBtn active={tab === 'activity'} onClick={() => setTab('activity')} icon={History} label="История действий" />
+          <NavBtn
+            active={tab === 'withdrawalReviews'}
+            onClick={() => setTab('withdrawalReviews')}
+            icon={Banknote}
+            label="Выводы на проверке"
+            badge={reviewSummary?.active ?? 0}
+          />
         </nav>
         <div className="mt-auto p-3">
           <button
@@ -178,18 +197,22 @@ function SecurityShell({
         {tab === 'players' && <PlayersPanel playerId={playerId} onPlayerId={setPlayerId} onOpenSports={() => setTab('sports')} />}
         {tab === 'sports' && <SportsPanel playerId={playerId} onPlayerId={setPlayerId} />}
         {tab === 'activity' && <ActivityPanel />}
+        {tab === 'withdrawalReviews' && (
+          <WithdrawalAttributionReviewPanel base="/api/security" />
+        )}
       </main>
     </div>
   );
 }
 
 function NavBtn({
-  active, onClick, icon: Icon, label,
+  active, onClick, icon: Icon, label, badge,
 }: {
   active: boolean;
   onClick: () => void;
   icon: typeof Shield;
   label: string;
+  badge?: number;
 }) {
   return (
     <button
@@ -199,8 +222,15 @@ function NavBtn({
         active ? 'bg-brand-600 text-white' : 'text-ink-300 hover:bg-white/5'
       }`}
     >
-      <Icon className="w-4 h-4" />
-      {label}
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="flex-1 text-left leading-snug">{label}</span>
+      {(badge ?? 0) > 0 && (
+        <span className={`min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[10px] font-extrabold text-center ${
+          active ? 'bg-white/20 text-white' : 'bg-brand-600 text-white'
+        }`}>
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

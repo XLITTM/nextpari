@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Ban, BarChart3, Building2, CheckCircle2, Download, Landmark,
+  AlertTriangle, Ban, Banknote, BarChart3, Building2, CheckCircle2, Download, Landmark,
   LayoutDashboard, LogOut, Mail, RefreshCw, Scale, Shield, Snowflake,
   TrendingUp, User, UserCog, Users, Wallet, X,
 } from 'lucide-react';
@@ -17,6 +17,7 @@ import { OwnerCurrencyLimitsPanel } from './OwnerCurrencyLimitsPanel';
 import { GameRtpReportPanel } from './GameRtpReport';
 import { ProviderSettlementsPanel } from './ProviderSettlementsPanel';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
+import { WithdrawalAttributionReviewPanel, createWithdrawalReviewApi, type WithdrawalReviewSummary } from '../shared/staff/WithdrawalAttributionReviewPanel';
 import {
   fetchOwnerCashierLedger,
   fetchOwnerCashiers,
@@ -76,7 +77,7 @@ import {
   requireOwnerSecurityAccountReason,
 } from './securityAccountActions';
 
-type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk' | 'winPattern';
+type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk' | 'winPattern' | 'withdrawalReviews';
 
 export function ManagerDashboardScreen() {
   const { loading, staff, deniedMessage, signOut } = useOwnerAuth();
@@ -188,6 +189,17 @@ function BackofficeShell({
   onLogout: () => void;
 }) {
   const [tab, setTab] = useState<CabinetTab>('finance');
+  const [reviewSummary, setReviewSummary] = useState<WithdrawalReviewSummary | null>(null);
+  const reviewApi = useMemo(() => createWithdrawalReviewApi('/api/owner'), []);
+
+  useEffect(() => {
+    const load = () => {
+      void reviewApi.summary().then(setReviewSummary).catch(() => setReviewSummary(null));
+    };
+    load();
+    const timer = window.setInterval(load, 15000);
+    return () => window.clearInterval(timer);
+  }, [reviewApi]);
 
   return (
     <div className="min-h-screen bg-slate-100 flex">
@@ -210,6 +222,13 @@ function BackofficeShell({
           <NavBtn active={tab === 'messages'} onClick={() => setTab('messages')} icon={Mail} label="Сообщения" />
           <NavBtn active={tab === 'risk'} onClick={() => setTab('risk')} icon={AlertTriangle} label="Риски" />
           <NavBtn active={tab === 'winPattern'} onClick={() => setTab('winPattern')} icon={TrendingUp} label="Анализ выигрышей" />
+          <NavBtn
+            active={tab === 'withdrawalReviews'}
+            onClick={() => setTab('withdrawalReviews')}
+            icon={Banknote}
+            label="Выводы на проверке"
+            badge={reviewSummary?.active ?? 0}
+          />
         </nav>
         <div className="mt-auto p-3">
           <button
@@ -233,18 +252,22 @@ function BackofficeShell({
         {tab === 'messages' && <MessagesPanel />}
         {tab === 'risk' && <RiskPanel />}
         {tab === 'winPattern' && <OwnerWinPatternPanel />}
+        {tab === 'withdrawalReviews' && (
+          <WithdrawalAttributionReviewPanel base="/api/owner" />
+        )}
       </main>
     </div>
   );
 }
 
 function NavBtn({
-  active, onClick, icon: Icon, label,
+  active, onClick, icon: Icon, label, badge,
 }: {
   active: boolean;
   onClick: () => void;
   icon: typeof LayoutDashboard;
   label: string;
+  badge?: number;
 }) {
   return (
     <button
@@ -254,8 +277,15 @@ function NavBtn({
         active ? 'bg-brand-600 text-white' : 'text-ink-300 hover:bg-white/5'
       }`}
     >
-      <Icon className="w-4 h-4" />
-      {label}
+      <Icon className="w-4 h-4 shrink-0" />
+      <span className="flex-1 text-left leading-snug">{label}</span>
+      {(badge ?? 0) > 0 && (
+        <span className={`min-w-[1.25rem] px-1.5 py-0.5 rounded-full text-[10px] font-extrabold text-center ${
+          active ? 'bg-white/20 text-white' : 'bg-brand-600 text-white'
+        }`}>
+          {badge}
+        </span>
+      )}
     </button>
   );
 }

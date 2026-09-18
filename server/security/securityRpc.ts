@@ -24,6 +24,13 @@ export const SECURITY_ALLOWED_RPCS = [
   'security_player_sports_summary',
   'security_win_pattern_settings',
   'security_evaluate_player_win_pattern',
+  'security_withdrawal_review_summary',
+  'security_list_withdrawal_reviews',
+  'security_get_withdrawal_review',
+  'security_start_withdrawal_review',
+  'security_approve_withdrawal_review',
+  'security_reject_withdrawal_review',
+  'security_fund_attribution_reconciliation',
 ] as const;
 
 export const SECURITY_DENIED_RPCS = [
@@ -42,6 +49,8 @@ export const SECURITY_DENIED_RPCS = [
   'player_save_personal_data',
   'manager_provision_cashier',
   'cashier_deposit_player',
+  'cashier_confirm_player_payout',
+  'cashier_lookup_player_payout',
   'apply_operational_transfer',
   'apply_wallet_entry',
   'sports_settle_bet',

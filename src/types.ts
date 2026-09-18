@@ -232,6 +232,7 @@ export interface WithdrawalRequest {
   city?: string | null;
   point?: string | null;
   player_id?: string | null;
+  player_notice_code?: string | null;
 }
 
 export interface PersonalData {

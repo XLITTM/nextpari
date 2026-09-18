@@ -14,13 +14,14 @@ export interface PlayerCashPayout {
 
 export async function playerCreateCashPayout(
   amount: number,
-  pickup?: { city: string; point: string },
+  pickup?: { city: string; point: string; destinationId?: string },
 ): Promise<{
-  code: string;
+  code: string | null;
   amount: number;
   playerPublicId: string;
   city?: string;
   point?: string;
+  playerNoticeCode?: string | null;
 }> {
   if (!pickup?.city || !pickup.point) {
     throw new Error('Выберите город и точку выдачи');
@@ -31,16 +32,15 @@ export async function playerCreateCashPayout(
     amount,
     city: pickup.city,
     point: pickup.point,
+    payoutDestinationId: pickup.destinationId,
   });
-  if (!row.pin_code) {
-    throw new Error('Вывод через кассу временно недоступен.');
-  }
   return {
-    code: row.pin_code,
+    code: row.pin_code ?? null,
     amount: row.amount,
     playerPublicId: row.player_id ?? '',
     city: pickup.city,
     point: pickup.point,
+    playerNoticeCode: row.player_notice_code ?? null,
   };
 }
 
