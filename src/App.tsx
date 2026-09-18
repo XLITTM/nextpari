@@ -600,7 +600,9 @@ function AppContent() {
       : `relative mx-auto flex h-screen max-w-[720px] flex-col overflow-hidden ${
           screen.name === 'history' || screen.name === 'bet-details'
             ? 'bg-[var(--np-bg)]'
-            : 'bg-[#f0f2f5] dark:bg-gray-900'
+            : screen.name === 'vip-cashback'
+              ? 'bg-[#05090C]'
+              : 'bg-[#f0f2f5] dark:bg-gray-900'
         }`
     }>
       {showHeader && (
