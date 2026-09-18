@@ -23,6 +23,8 @@ type VipTab = 'levels' | 'cashback';
 interface VipTier {
   id: number;
   name: string;
+  cashbackLabel: string;
+  cashbackPeriod: string | null;
   from: string;
   mid: string;
   to: string;
@@ -31,14 +33,14 @@ interface VipTier {
 }
 
 export const VIP_LEVELS: VipTier[] = [
-  { id: 1, name: 'Медный', from: '#3A1E15', mid: '#9A4F2C', to: '#D08554', glow: '#D08554', icon: Award },
-  { id: 2, name: 'Бронзовый', from: '#352313', mid: '#8C5A29', to: '#C18A48', glow: '#C18A48', icon: Star },
-  { id: 3, name: 'Серебряный', from: '#242A31', mid: '#737F8C', to: '#D9E0E6', glow: '#D9E0E6', icon: Shield },
-  { id: 4, name: 'Золотой', from: '#17130B', mid: '#A77A1B', to: '#F3D36F', glow: '#F3D36F', icon: Crown },
-  { id: 5, name: 'Рубиновый', from: '#22090C', mid: '#761927', to: '#E23852', glow: '#E23852', icon: Gem },
-  { id: 6, name: 'Сапфировый', from: '#071426', mid: '#123A72', to: '#398CFF', glow: '#398CFF', icon: Sparkles },
-  { id: 7, name: 'Бриллиантовый', from: '#121A1E', mid: '#9AB8C4', to: '#E9FAFF', glow: '#E9FAFF', icon: Trophy },
-  { id: 8, name: 'Статус VIP', from: '#06110D', mid: '#126844', to: '#D5AE54', glow: '#D5AE54', icon: Crown },
+  { id: 1, name: 'Медный', cashbackLabel: '5%', cashbackPeriod: 'Раз в 7 дней', from: '#3A1E15', mid: '#9A4F2C', to: '#D08554', glow: '#D08554', icon: Award },
+  { id: 2, name: 'Бронзовый', cashbackLabel: '6%', cashbackPeriod: 'Раз в 6 дней', from: '#352313', mid: '#8C5A29', to: '#C18A48', glow: '#C18A48', icon: Star },
+  { id: 3, name: 'Серебряный', cashbackLabel: '7%', cashbackPeriod: 'Раз в 5 дней', from: '#242A31', mid: '#737F8C', to: '#D9E0E6', glow: '#D9E0E6', icon: Shield },
+  { id: 4, name: 'Золотой', cashbackLabel: '8%', cashbackPeriod: 'Раз в 4 дня', from: '#17130B', mid: '#A77A1B', to: '#F3D36F', glow: '#F3D36F', icon: Crown },
+  { id: 5, name: 'Рубиновый', cashbackLabel: '9%', cashbackPeriod: 'Раз в 3 дня', from: '#22090C', mid: '#761927', to: '#E23852', glow: '#E23852', icon: Gem },
+  { id: 6, name: 'Сапфировый', cashbackLabel: '10%', cashbackPeriod: 'Раз в 2 дня', from: '#071426', mid: '#123A72', to: '#398CFF', glow: '#398CFF', icon: Sparkles },
+  { id: 7, name: 'Бриллиантовый', cashbackLabel: '11%', cashbackPeriod: 'Ежедневно', from: '#121A1E', mid: '#9AB8C4', to: '#E9FAFF', glow: '#E9FAFF', icon: Trophy },
+  { id: 8, name: 'Статус VIP', cashbackLabel: '0.05–0.25%', cashbackPeriod: null, from: '#06110D', mid: '#126844', to: '#D5AE54', glow: '#D5AE54', icon: Crown },
 ];
 
 const PAGE_BG: CSSProperties = {
@@ -247,7 +249,7 @@ function LevelsPanel({
               onClick={() => onSelect(tier.id)}
               className="relative shrink-0 snap-start overflow-hidden rounded-[20px] px-2 pb-3 pt-3.5 text-center"
               style={{
-                width: 108,
+                width: 118,
                 background: `linear-gradient(180deg, ${hexToRgba(tier.mid, 0.55)} 0%, ${tier.from} 48%, #07090C 100%)`,
                 boxShadow: active
                   ? `0 0 0 1.5px ${tier.glow}, 0 12px 26px ${hexToRgba(tier.glow, 0.3)}, 0 10px 18px rgba(0,0,0,.5)`
@@ -268,6 +270,9 @@ function LevelsPanel({
               </div>
               <p className="text-[10px] font-bold text-white/65">{tier.id}</p>
               <p className="text-[12px] font-extrabold leading-tight text-white">{tier.name}</p>
+              <p className="mt-1 text-[10px] font-bold leading-tight text-[#E9C66A]">
+                {tier.cashbackLabel} кешбэк
+              </p>
             </button>
           );
         })}
@@ -318,6 +323,25 @@ function LevelsPanel({
           >
             Уровень {selected.id}
           </span>
+        </div>
+
+        <div
+          className="mt-4 grid gap-3 rounded-[18px] px-3 py-3"
+          style={{
+            background: 'linear-gradient(135deg, rgba(233,198,106,0.08), rgba(34,229,138,0.08))',
+            border: '1px solid rgba(233,198,106,0.28)',
+          }}
+        >
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">Кешбэк</p>
+            <p className="mt-0.5 text-[22px] font-black leading-none text-[#F3D36F]">{selected.cashbackLabel}</p>
+          </div>
+          {selected.cashbackPeriod ? (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">Начисление</p>
+              <p className="mt-0.5 text-[15px] font-bold text-[#22E58A]">{selected.cashbackPeriod}</p>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4">
@@ -403,6 +427,29 @@ function CashbackPanel() {
         </span>
       </section>
 
+      <section
+        className="mt-3 overflow-hidden rounded-[20px] px-3 py-2"
+        style={{
+          background: 'rgba(12,18,22,0.94)',
+          border: '1px solid rgba(233,198,106,0.22)',
+        }}
+      >
+        {VIP_LEVELS.map((tier, index) => (
+          <div
+            key={tier.id}
+            className={`flex items-start justify-between gap-3 py-2.5 ${index === VIP_LEVELS.length - 1 ? '' : 'border-b border-white/[0.06]'}`}
+          >
+            <p className="text-[13px] font-bold text-white">{tier.name}</p>
+            <div className="text-right">
+              <p className="text-[13px] font-extrabold text-[#F3D36F]">{tier.cashbackLabel}</p>
+              {tier.cashbackPeriod ? (
+                <p className="mt-0.5 text-[11px] font-medium text-white/50">{tier.cashbackPeriod}</p>
+              ) : null}
+            </div>
+          </div>
+        ))}
+      </section>
+
       <div className="mt-3 grid grid-cols-3 gap-2">
         <FeatureCard
           icon={<Crown className="h-4 w-4" />}
@@ -471,6 +518,7 @@ function PreviewNotice() {
       </span>
       <p className="text-[12px] font-medium leading-relaxed text-white/70">
         VIP-программа пока находится в режиме предварительного просмотра.
+        Проценты и график начисления описывают планируемую программу и пока не зачисляются автоматически.
         Уровни, кешбэк и награды начнут работать только после официального запуска.
       </p>
     </section>
