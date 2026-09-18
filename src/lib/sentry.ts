@@ -101,6 +101,13 @@ export function maybeTriggerSentryTest(
   return true;
 }
 
+const URL_DATA_KEY_PATTERN = /^(url|from|to|href)$/i;
+const ASSIGNMENT_PATTERN =
+  /\b(password|passwd|token|access[_-]?token|refresh[_-]?token|auth[_-]?token|session[_-]?token|email|phone)\s*([=:])\s*[^\s&;,"']+/gi;
+const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
+const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
+const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
+
 export function scrubSentryEvent(event: ErrorEvent): ErrorEvent | null {
   if (event.request) {
     delete event.request.data;
@@ -112,6 +119,8 @@ export function scrubSentryEvent(event: ErrorEvent): ErrorEvent | null {
     event.request = scrubDeep(event.request) as ErrorEvent['request'];
   }
   delete event.user;
+  if (typeof event.message === 'string') event.message = sanitizeSensitiveText(event.message);
+  if (event.exception) event.exception = scrubDeep(event.exception) as ErrorEvent['exception'];
   if (event.extra) event.extra = scrubDeep(event.extra) as ErrorEvent['extra'];
   if (event.contexts) event.contexts = scrubDeep(event.contexts) as ErrorEvent['contexts'];
   if (event.tags) event.tags = scrubDeep(event.tags) as ErrorEvent['tags'];
@@ -123,25 +132,69 @@ export function scrubSentryEvent(event: ErrorEvent): ErrorEvent | null {
   return event;
 }
 
+function sanitizeCapturedUrl(raw: string): string {
+  const value = raw.trim();
+  if (!value) return value;
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    const cut = value.search(/[?#]/);
+    return cut === -1 ? value : value.slice(0, cut);
+  }
+}
+
+function isUrlLike(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/^(?:https?:)?\/\//i.test(trimmed)) return true;
+  if (trimmed.startsWith('/')) return true;
+  try {
+    const parsed = new URL(trimmed);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeSensitiveText(value: string): string {
+  BEARER_PATTERN.lastIndex = 0;
+  JWT_PATTERN.lastIndex = 0;
+  EMAIL_PATTERN.lastIndex = 0;
+  ASSIGNMENT_PATTERN.lastIndex = 0;
+  return value
+    .replace(BEARER_PATTERN, 'Bearer [Redacted]')
+    .replace(JWT_PATTERN, '[Redacted]')
+    .replace(EMAIL_PATTERN, '[Redacted]')
+    .replace(ASSIGNMENT_PATTERN, (_full, key: string, sep: string) => `${key}${sep}[Redacted]`);
+}
+
 function scrubBreadcrumb(crumb: Breadcrumb): Breadcrumb | null {
   const next: Breadcrumb = { ...crumb };
   if (next.data) next.data = scrubDeep(next.data) as Breadcrumb['data'];
-  if (typeof next.message === 'string' && SENSITIVE_KEY_PATTERN.test(next.message)) {
-    next.message = '[Redacted]';
-  }
+  if (typeof next.message === 'string') next.message = sanitizeSensitiveText(next.message);
   return next;
 }
 
 function scrubRecord(input: Record<string, unknown> | Record<string, string>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(input)) {
-    out[key] = SENSITIVE_KEY_PATTERN.test(key) ? '[Redacted]' : scrubDeep(value);
+    if (SENSITIVE_KEY_PATTERN.test(key)) {
+      out[key] = '[Redacted]';
+      continue;
+    }
+    if (typeof value === 'string' && URL_DATA_KEY_PATTERN.test(key) && isUrlLike(value)) {
+      out[key] = sanitizeSensitiveText(sanitizeCapturedUrl(value));
+      continue;
+    }
+    out[key] = scrubDeep(value);
   }
   return out;
 }
 
 function scrubDeep(input: unknown, depth = 0): unknown {
   if (depth > 8) return '[Truncated]';
+  if (typeof input === 'string') return sanitizeSensitiveText(input);
   if (Array.isArray(input)) return input.map((item) => scrubDeep(item, depth + 1));
   if (input && typeof input === 'object') {
     return scrubRecord(input as Record<string, unknown>);

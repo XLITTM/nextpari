@@ -95,6 +95,62 @@ describe('Sentry frontend monitoring', () => {
     assert.equal((scrubbed?.breadcrumbs?.[0]?.data as { authToken?: string }).authToken, '[Redacted]');
   });
 
+  it('strips query, hash, and free-text secrets from captured telemetry', () => {
+    const event = {
+      request: {
+        url: 'https://nextpari.net/test?token=SECRET&email=x@example.com#fragment',
+        query_string: 'token=SECRET&email=x@example.com',
+      },
+      message: 'Auth failed Bearer SECRET for player@example.com password=SECRET token=SECRET',
+      extra: {
+        note: 'Failed to render account screen',
+        detail: 'Bearer SECRET player@example.com password=SECRET token=SECRET',
+      },
+      exception: {
+        values: [{ type: 'Error', value: 'Bearer SECRET player@example.com password=SECRET token=SECRET' }],
+      },
+      breadcrumbs: [
+        {
+          message: 'open page Bearer SECRET player@example.com password=SECRET token=SECRET',
+          data: {
+            url: 'https://nextpari.net/page?access_token=SECRET',
+            href: 'https://nextpari.net/page?access_token=SECRET#frag',
+            from: '/home',
+            to: 'https://nextpari.net/page?access_token=SECRET',
+            label: 'account navigation',
+          },
+        },
+      ],
+    } as unknown as ErrorEvent;
+
+    const scrubbed = scrubSentryEvent(event);
+    assert.equal(scrubbed?.request?.url, 'https://nextpari.net/test');
+    assert.equal(scrubbed?.request?.query_string, undefined);
+
+    const crumbData = scrubbed?.breadcrumbs?.[0]?.data as Record<string, string>;
+    assert.equal(crumbData.url, 'https://nextpari.net/page');
+    assert.equal(crumbData.href, 'https://nextpari.net/page');
+    assert.equal(crumbData.to, 'https://nextpari.net/page');
+    assert.equal(crumbData.from, '/home');
+    assert.equal(crumbData.label, 'account navigation');
+    assert.equal(String(crumbData.url).includes('?'), false);
+    assert.equal(String(crumbData.url).includes('SECRET'), false);
+
+    const extra = scrubbed?.extra as Record<string, string>;
+    assert.equal(extra.note, 'Failed to render account screen');
+
+    const serialized = JSON.stringify(scrubbed);
+    assert.equal(serialized.includes('SECRET'), false);
+    assert.equal(serialized.includes('player@example.com'), false);
+    assert.equal(serialized.includes('x@example.com'), false);
+    assert.equal(serialized.includes('Bearer SECRET'), false);
+    assert.equal(serialized.includes('password=SECRET'), false);
+    assert.equal(serialized.includes('token=SECRET'), false);
+    assert.equal(serialized.includes('access_token=SECRET'), false);
+    assert.match(serialized, /Failed to render account screen/);
+    assert.match(serialized, /account navigation/);
+  });
+
   it('exposes a preview-only test hook and does not commit secrets', () => {
     assert.equal(isSentryTestRequest(`?${SENTRY_TEST_QUERY}=${SENTRY_TEST_VALUE}`, 'preview'), true);
     assert.equal(isSentryTestRequest(`?${SENTRY_TEST_QUERY}=${SENTRY_TEST_VALUE}`, 'production'), false);
