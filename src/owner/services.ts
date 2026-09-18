@@ -102,7 +102,23 @@ function parseCashier(raw: Record<string, unknown>): BackofficeCashier {
     dailyTurnover: num(raw.daily_turnover ?? raw.dailyTurnover),
     networkId: raw.network_id == null && raw.networkId == null ? null : str(raw.network_id ?? raw.networkId),
     managerId: raw.manager_id == null && raw.managerId == null ? null : str(raw.manager_id ?? raw.managerId),
+    operationalBalance: raw.operational_balance == null && raw.operationalBalance == null
+      ? null
+      : num(raw.operational_balance ?? raw.operationalBalance),
+    operationalStatus: raw.operational_status == null && raw.operationalStatus == null
+      ? null
+      : str(raw.operational_status ?? raw.operationalStatus),
+    operationalMigrationState: raw.operational_migration_state == null && raw.operationalMigrationState == null
+      ? null
+      : str(raw.operational_migration_state ?? raw.operationalMigrationState),
+    operationalCurrency: raw.operational_currency == null && raw.operationalCurrency == null
+      ? null
+      : str(raw.operational_currency ?? raw.operationalCurrency),
   };
+}
+
+export function parseOwnerCashier(raw: unknown): BackofficeCashier {
+  return parseCashier(asRecord(raw));
 }
 
 function parseOpType(value: string): CashierOpType {
@@ -1738,6 +1754,33 @@ export function formatTmtmCompact(value: number | null | undefined): string {
   const n = Number(value);
   const safe = Number.isFinite(n) ? n : 0;
   return `${safe.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} TMT`;
+}
+
+export function ownerCashierHasOperationalAccount(
+  row: Pick<
+    BackofficeCashier,
+    'operationalBalance' | 'operationalStatus' | 'operationalMigrationState' | 'operationalCurrency'
+  >,
+): boolean {
+  return row.operationalBalance != null
+    || (row.operationalStatus != null && String(row.operationalStatus).trim() !== '')
+    || (row.operationalMigrationState != null && String(row.operationalMigrationState).trim() !== '')
+    || (row.operationalCurrency != null && String(row.operationalCurrency).trim() !== '');
+}
+
+export function ownerCashierOperationalDisplay(
+  row: Pick<
+    BackofficeCashier,
+    'operationalBalance' | 'operationalStatus' | 'operationalMigrationState' | 'operationalCurrency'
+  >,
+): { balanceLabel: string; pendingActivation: boolean } {
+  if (!ownerCashierHasOperationalAccount(row)) {
+    return { balanceLabel: 'недоступен', pendingActivation: false };
+  }
+  return {
+    balanceLabel: formatTmtmCompact(row.operationalBalance),
+    pendingActivation: String(row.operationalMigrationState ?? '').toLowerCase() !== 'active',
+  };
 }
 
 export function formatOperationalAmount(value: number | null | undefined, currency: string | null | undefined): string {

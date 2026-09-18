@@ -54,6 +54,10 @@ export interface BackofficeCashier {
   dailyTurnover: number;
   networkId: string | null;
   managerId: string | null;
+  operationalBalance: number | null;
+  operationalStatus: string | null;
+  operationalMigrationState: string | null;
+  operationalCurrency: string | null;
 }
 
 export interface RiskBet {
