@@ -91,7 +91,7 @@ const sections: Record<SubTabId, CardItem[]> = {
   ],
   misc: [
     { icon: ShieldCheck, label: 'Повысьте безопасность!', desc: 'Получите надежную защиту вашего аккаунта!', iconBg: '', iconColor: 'text-white', special: 'security', ...soon },
-    { icon: Star, label: 'Акции', desc: 'Информация об акции Непобедимый', iconBg: '', iconColor: 'text-white', special: 'orange', route: { name: 'promo-unbeatable' } },
+    { icon: Star, label: 'Акции', desc: 'Все акции, бонусы и специальные предложения', iconBg: '', iconColor: 'text-white', special: 'orange', route: { name: 'promo' } },
     { icon: Wallet, label: 'Управление счетом', desc: 'Пополнение, вывод, история', ...grayIcon, route: { name: 'wallet' } },
     { icon: Ticket, label: 'Promo', desc: 'Акции и бонусная программа', ...grayIcon, route: { name: 'promo' } },
     { icon: KeyRound, label: 'Аутентификатор', desc: 'Двухфакторная аутентификация', ...grayIcon, ...soon },
