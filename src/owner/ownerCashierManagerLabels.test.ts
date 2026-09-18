@@ -67,7 +67,7 @@ describe('owner cashier manager labels', () => {
     assert.equal(ui.includes("{row.managerId || 'Владелец (Прямой)'}"), false);
     assert.equal(ui.includes('{id}\n            </option>'), false);
     assert.match(ui, /Все менеджеры \(Все кассы\)/);
-    assert.match(ui, /fetchOwnerCashierOperationalMap\(list\)/);
+    assert.match(ui, /fetchOwnerCashiers/);
   });
 
   it('keeps cashier filtering keyed by managerId', () => {

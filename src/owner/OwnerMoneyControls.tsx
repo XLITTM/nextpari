@@ -336,9 +336,9 @@ export function OwnerMoneyDialog({
               cashierId: row.id,
               fullName: row.fullName,
               login: row.login,
-              operationalBalance: null,
-              operationalStatus: row.isActive ? 'active' : 'blocked',
-              operationalMigrationState: '',
+              operationalBalance: row.operationalBalance,
+              operationalStatus: row.operationalStatus ?? '',
+              operationalMigrationState: row.operationalMigrationState ?? '',
             })));
           }
         } catch {

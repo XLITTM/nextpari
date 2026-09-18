@@ -19,7 +19,6 @@ import { ProviderSettlementsPanel } from './ProviderSettlementsPanel';
 import { WithdrawalsPanel } from './WithdrawalsPanel';
 import {
   fetchOwnerCashierLedger,
-  fetchOwnerCashierOperationalMap,
   fetchOwnerCashiers,
   fetchOwnerDashboard,
   fetchOwnerManagers,
@@ -47,13 +46,13 @@ import {
   filterOwnerCashiersByManager,
   ownerCashierManagerDisplay,
   ownerCashierManagerFilterLabel,
+  ownerCashierOperationalDisplay,
   ownerManagerLookup,
   setOwnerCashierFrozen,
   type BackofficeCashier,
   type CashierLedgerEntry,
   type DashboardKpis,
   type LedgerPeriod,
-  type OwnerManagerCashierRow,
   type OwnerManagerRow,
   type OwnerStaffContext,
   type RiskBet,
@@ -498,6 +497,20 @@ function TrendChart({
   );
 }
 
+function CashierOperationalBalance({ cashier }: { cashier: BackofficeCashier }) {
+  const operational = ownerCashierOperationalDisplay(cashier);
+  return (
+    <span className="inline-flex flex-col items-end gap-1">
+      <span>{operational.balanceLabel}</span>
+      {operational.pendingActivation ? (
+        <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
+          Ожидает активации
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function CashierManagerBadge({
   managerId,
   lookup,
@@ -522,7 +535,6 @@ function CashierManagerBadge({
 function AgentsPanel() {
   const [rows, setRows] = useState<BackofficeCashier[]>([]);
   const [managers, setManagers] = useState<OwnerManagerRow[]>([]);
-  const [opsMap, setOpsMap] = useState<Record<string, OwnerManagerCashierRow>>({});
   const [treasuryActive, setTreasuryActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -534,19 +546,13 @@ function AgentsPanel() {
     setLoading(true);
     setError('');
     try {
-      const managersPromise = fetchOwnerManagers().catch(() => [] as OwnerManagerRow[]);
-      const opsPromise = managersPromise
-        .then((list) => fetchOwnerCashierOperationalMap(list))
-        .catch(() => ({}) as Record<string, OwnerManagerCashierRow>);
-      const [cashiers, managerRows, ops, treasury] = await Promise.all([
+      const [cashiers, managerRows, treasury] = await Promise.all([
         fetchOwnerCashiers(),
-        managersPromise,
-        opsPromise,
+        fetchOwnerManagers().catch(() => [] as OwnerManagerRow[]),
         fetchOwnerTreasury().catch(() => null),
       ]);
       setRows(cashiers);
       setManagers(managerRows);
-      setOpsMap(ops);
       setTreasuryActive(ownerTreasuryIsActive(treasury));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось загрузить кассы');
@@ -643,9 +649,7 @@ function AgentsPanel() {
                   <CashierManagerBadge managerId={row.managerId} lookup={managerLookup} />
                 </td>
                 <td className="px-4 py-3 align-top text-right font-extrabold tabular-nums whitespace-nowrap">
-                  {opsMap[row.id]?.operationalBalance == null
-                    ? 'недоступен'
-                    : formatTmtmCompact(opsMap[row.id].operationalBalance)}
+                  <CashierOperationalBalance cashier={row} />
                 </td>
                 <td className="px-4 py-3 align-top text-right font-semibold tabular-nums text-brand-700 whitespace-nowrap">
                   {formatTmtmCompact(row.commissionEarned)}
@@ -664,15 +668,15 @@ function AgentsPanel() {
                       disabled={
                         !treasuryActive
                         || !isOperationalAccountActive({
-                          status: opsMap[row.id]?.operationalStatus,
-                          migrationState: opsMap[row.id]?.operationalMigrationState,
+                          status: row.operationalStatus,
+                          migrationState: row.operationalMigrationState,
                         })
                       }
                       title={
                         treasuryActive
                           && isOperationalAccountActive({
-                            status: opsMap[row.id]?.operationalStatus,
-                            migrationState: opsMap[row.id]?.operationalMigrationState,
+                            status: row.operationalStatus,
+                            migrationState: row.operationalMigrationState,
                           })
                           ? 'Пополнить напрямую из казны'
                           : 'Казна или касса не активны'
@@ -685,9 +689,9 @@ function AgentsPanel() {
                             cashierId: row.id,
                             fullName: row.fullName,
                             login: row.login,
-                            operationalBalance: opsMap[row.id]?.operationalBalance ?? null,
-                            operationalStatus: opsMap[row.id]?.operationalStatus ?? '',
-                            operationalMigrationState: opsMap[row.id]?.operationalMigrationState ?? '',
+                            operationalBalance: row.operationalBalance,
+                            operationalStatus: row.operationalStatus ?? '',
+                            operationalMigrationState: row.operationalMigrationState ?? '',
                           },
                         });
                       }}
@@ -740,7 +744,6 @@ function AgentsPanel() {
       {profile && (
         <CashierProfileDrawer
           cashier={profile}
-          ops={opsMap[profile.id] ?? null}
           treasuryActive={treasuryActive}
           onClose={() => setProfileId(null)}
           onChanged={async () => {
@@ -752,9 +755,9 @@ function AgentsPanel() {
               cashierId: profile.id,
               fullName: profile.fullName,
               login: profile.login,
-              operationalBalance: opsMap[profile.id]?.operationalBalance ?? null,
-              operationalStatus: opsMap[profile.id]?.operationalStatus ?? '',
-              operationalMigrationState: opsMap[profile.id]?.operationalMigrationState ?? '',
+              operationalBalance: profile.operationalBalance,
+              operationalStatus: profile.operationalStatus ?? '',
+              operationalMigrationState: profile.operationalMigrationState ?? '',
             },
           })}
         />
@@ -775,14 +778,12 @@ function AgentsPanel() {
 
 function CashierProfileDrawer({
   cashier,
-  ops,
   treasuryActive,
   onClose,
   onChanged,
   onFund,
 }: {
   cashier: BackofficeCashier;
-  ops: OwnerManagerCashierRow | null;
   treasuryActive: boolean;
   onClose: () => void;
   onChanged: () => Promise<void>;
@@ -834,7 +835,7 @@ function CashierProfileDrawer({
             <InfoCell label="Город / точка" value={`${cashier.city} · ${cashier.pointName}`} />
             <InfoCell
               label="Операционный остаток"
-              value={ops?.operationalBalance == null ? 'недоступен' : formatTmtmCompact(ops.operationalBalance)}
+              value={ownerCashierOperationalDisplay(cashier).balanceLabel}
             />
             <InfoCell label="Комиссия" value={`${cashier.commissionRate.toFixed(2)}%`} />
             <div>
@@ -844,6 +845,9 @@ function CashierProfileDrawer({
               }`}>
                 {cashier.isActive ? 'Активен' : 'Заблокирован'}
               </span>
+              {ownerCashierOperationalDisplay(cashier).pendingActivation ? (
+                <p className="text-[10px] font-bold uppercase tracking-wide text-amber-700 mt-1">Ожидает активации</p>
+              ) : null}
             </div>
           </div>
 
@@ -856,14 +860,14 @@ function CashierProfileDrawer({
               disabled={
                 !treasuryActive
                 || !isOperationalAccountActive({
-                  status: ops?.operationalStatus,
-                  migrationState: ops?.operationalMigrationState,
+                  status: cashier.operationalStatus,
+                  migrationState: cashier.operationalMigrationState,
                 })
               }
               title={
                 treasuryActive && isOperationalAccountActive({
-                  status: ops?.operationalStatus,
-                  migrationState: ops?.operationalMigrationState,
+                  status: cashier.operationalStatus,
+                  migrationState: cashier.operationalMigrationState,
                 })
                   ? 'Пополнить напрямую из казны'
                   : 'Казна или касса не активны'

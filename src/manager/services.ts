@@ -96,6 +96,10 @@ function parseCashier(raw: Record<string, unknown>): BackofficeCashier {
     dailyTurnover: num(raw.daily_turnover ?? raw.dailyTurnover),
     networkId: raw.network_id == null && raw.networkId == null ? null : str(raw.network_id ?? raw.networkId),
     managerId: raw.manager_id == null && raw.managerId == null ? null : str(raw.manager_id ?? raw.managerId),
+    operationalBalance: null,
+    operationalStatus: null,
+    operationalMigrationState: null,
+    operationalCurrency: null,
   };
 }
 
