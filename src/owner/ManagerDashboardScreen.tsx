@@ -22,6 +22,7 @@ import {
   fetchOwnerCashierOperationalMap,
   fetchOwnerCashiers,
   fetchOwnerDashboard,
+  fetchOwnerManagers,
   fetchOwnerRiskBets,
   fetchOwnerSecurityFlags,
   fetchOwnerSecurityOverview,
@@ -43,12 +44,17 @@ import {
   formatBackofficeDateTime,
   formatDayLabel,
   formatTmtmCompact,
+  filterOwnerCashiersByManager,
+  ownerCashierManagerDisplay,
+  ownerCashierManagerFilterLabel,
+  ownerManagerLookup,
   setOwnerCashierFrozen,
   type BackofficeCashier,
   type CashierLedgerEntry,
   type DashboardKpis,
   type LedgerPeriod,
   type OwnerManagerCashierRow,
+  type OwnerManagerRow,
   type OwnerStaffContext,
   type RiskBet,
   type OwnerSecurityFlag,
@@ -492,8 +498,30 @@ function TrendChart({
   );
 }
 
+function CashierManagerBadge({
+  managerId,
+  lookup,
+}: {
+  managerId: string | null;
+  lookup: ReturnType<typeof ownerManagerLookup>;
+}) {
+  const manager = ownerCashierManagerDisplay(managerId, lookup);
+  return (
+    <span className="inline-flex items-start gap-1.5 bg-blue-50 text-blue-700 font-medium px-2.5 py-1 rounded-lg text-xs">
+      <User className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+      <span className="min-w-0">
+        <span className="block font-semibold leading-tight">{manager.primary}</span>
+        {manager.secondary ? (
+          <span className="block text-[10px] font-medium text-blue-600/80 mt-0.5">{manager.secondary}</span>
+        ) : null}
+      </span>
+    </span>
+  );
+}
+
 function AgentsPanel() {
   const [rows, setRows] = useState<BackofficeCashier[]>([]);
+  const [managers, setManagers] = useState<OwnerManagerRow[]>([]);
   const [opsMap, setOpsMap] = useState<Record<string, OwnerManagerCashierRow>>({});
   const [treasuryActive, setTreasuryActive] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -506,12 +534,18 @@ function AgentsPanel() {
     setLoading(true);
     setError('');
     try {
-      const [cashiers, ops, treasury] = await Promise.all([
+      const managersPromise = fetchOwnerManagers().catch(() => [] as OwnerManagerRow[]);
+      const opsPromise = managersPromise
+        .then((list) => fetchOwnerCashierOperationalMap(list))
+        .catch(() => ({}) as Record<string, OwnerManagerCashierRow>);
+      const [cashiers, managerRows, ops, treasury] = await Promise.all([
         fetchOwnerCashiers(),
-        fetchOwnerCashierOperationalMap().catch(() => ({}) as Record<string, OwnerManagerCashierRow>),
+        managersPromise,
+        opsPromise,
         fetchOwnerTreasury().catch(() => null),
       ]);
       setRows(cashiers);
+      setManagers(managerRows);
       setOpsMap(ops);
       setTreasuryActive(ownerTreasuryIsActive(treasury));
     } catch (err) {
@@ -526,13 +560,18 @@ function AgentsPanel() {
     void load();
   }, [load]);
 
+  const managerLookup = useMemo(() => ownerManagerLookup(managers), [managers]);
+
   const managerOptions = useMemo(() => {
     const ids = [...new Set(rows.map((row) => row.managerId).filter((id): id is string => Boolean(id)))];
-    return ids;
-  }, [rows]);
+    return ids.map((id) => ({
+      id,
+      label: ownerCashierManagerFilterLabel(id, managerLookup),
+    }));
+  }, [rows, managerLookup]);
 
   const visibleRows = useMemo(
-    () => (managerFilter ? rows.filter((row) => row.managerId === managerFilter) : rows),
+    () => filterOwnerCashiersByManager(rows, managerFilter),
     [rows, managerFilter],
   );
   const profile = rows.find((row) => row.id === profileId) ?? null;
@@ -556,9 +595,9 @@ function AgentsPanel() {
           aria-label="Фильтр по менеджеру"
         >
           <option value="">Все менеджеры (Все кассы)</option>
-          {managerOptions.map((id) => (
-            <option key={id} value={id}>
-              {id}
+          {managerOptions.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
             </option>
           ))}
         </select>
@@ -601,10 +640,7 @@ function AgentsPanel() {
                   {row.pointName ? <p className="text-xs text-gray-500 mt-0.5">{row.pointName}</p> : null}
                 </td>
                 <td className="px-4 py-3 align-top">
-                  <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 font-medium px-2.5 py-1 rounded-lg text-xs">
-                    <User className="w-3.5 h-3.5 shrink-0" />
-                    {row.managerId || 'Владелец (Прямой)'}
-                  </span>
+                  <CashierManagerBadge managerId={row.managerId} lookup={managerLookup} />
                 </td>
                 <td className="px-4 py-3 align-top text-right font-extrabold tabular-nums whitespace-nowrap">
                   {opsMap[row.id]?.operationalBalance == null

@@ -1660,9 +1660,11 @@ export async function postOwnerPlayerDebit(input: {
   return parseOwnerMoneyResult(asRecord(data));
 }
 
-export async function fetchOwnerCashierOperationalMap(): Promise<Record<string, OwnerManagerCashierRow>> {
-  const managers = await fetchOwnerManagers();
-  const entries = await Promise.all(managers.map(async (row) => {
+export async function fetchOwnerCashierOperationalMap(
+  managers?: OwnerManagerRow[],
+): Promise<Record<string, OwnerManagerCashierRow>> {
+  const list = managers ?? await fetchOwnerManagers();
+  const entries = await Promise.all(list.map(async (row) => {
     try {
       const detail = await fetchOwnerManagerDetail(row.managerId);
       return detail.cashiers;
@@ -1675,6 +1677,61 @@ export async function fetchOwnerCashierOperationalMap(): Promise<Record<string, 
     if (cashier.cashierId) map[cashier.cashierId] = cashier;
   }
   return map;
+}
+
+export type OwnerManagerLabel = {
+  fullName: string;
+  login: string;
+};
+
+export function ownerManagerLookup(
+  managers: Array<Pick<OwnerManagerRow, 'managerId' | 'fullName' | 'login'>>,
+): Record<string, OwnerManagerLabel> {
+  const map: Record<string, OwnerManagerLabel> = {};
+  for (const row of managers) {
+    const id = String(row.managerId ?? '').trim();
+    if (!id) continue;
+    map[id] = {
+      fullName: String(row.fullName ?? '').trim(),
+      login: String(row.login ?? '').trim().replace(/^@/, ''),
+    };
+  }
+  return map;
+}
+
+export function ownerCashierManagerDisplay(
+  managerId: string | null | undefined,
+  lookup: Record<string, OwnerManagerLabel>,
+): { primary: string; secondary: string | null } {
+  if (managerId == null || String(managerId).trim() === '') {
+    return { primary: 'Владелец (Прямой)', secondary: null };
+  }
+  const manager = lookup[managerId];
+  if (!manager) {
+    return { primary: 'Менеджер', secondary: null };
+  }
+  const primary = manager.fullName || manager.login || 'Менеджер';
+  const secondary = manager.login ? `@${manager.login}` : null;
+  return { primary, secondary };
+}
+
+export function ownerCashierManagerFilterLabel(
+  managerId: string,
+  lookup: Record<string, OwnerManagerLabel>,
+): string {
+  const manager = lookup[managerId];
+  if (!manager) return 'Менеджер';
+  if (manager.fullName && manager.login) return `${manager.fullName} · @${manager.login}`;
+  if (manager.fullName) return manager.fullName;
+  if (manager.login) return `@${manager.login}`;
+  return 'Менеджер';
+}
+
+export function filterOwnerCashiersByManager<T extends { managerId: string | null }>(
+  rows: T[],
+  managerFilter: string,
+): T[] {
+  return managerFilter ? rows.filter((row) => row.managerId === managerFilter) : rows;
 }
 
 export function formatTmtmCompact(value: number | null | undefined): string {
