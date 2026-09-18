@@ -60,6 +60,24 @@ const GOLD_TEXT: CSSProperties = {
   color: 'transparent',
 };
 
+const TIER_CARD_CSS = `
+.vip-tier-card {
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  width: clamp(102px, 29vw, 118px);
+}
+.vip-tier-card-selected {
+  transform: translateY(-2px);
+  box-shadow: 0 0 0 1.5px var(--vip-glow), 0 5px 10px color-mix(in srgb, var(--vip-glow) 20%, transparent), 0 5px 8px rgba(0,0,0,.4);
+}
+@media (min-width: 480px) {
+  .vip-tier-card-selected {
+    transform: translateY(-4px);
+    box-shadow: 0 0 0 1.5px var(--vip-glow), 0 12px 26px color-mix(in srgb, var(--vip-glow) 30%, transparent), 0 10px 18px rgba(0,0,0,.5);
+  }
+}
+`;
+
 interface VipCashbackScreenProps {
   onBack: () => void;
   onNavigate: (screen: Screen) => void;
@@ -82,6 +100,7 @@ export function VipCashbackScreen({ onBack }: VipCashbackScreenProps) {
 
   return (
     <div className="relative min-h-full overflow-x-hidden pb-6 text-white" style={PAGE_BG}>
+      <style>{TIER_CARD_CSS}</style>
       <header className="relative z-20 flex items-center px-2 pt-2">
         <button
           type="button"
@@ -152,7 +171,7 @@ function Hero() {
       <img
         src={VIP_TIGER_ASSET}
         alt=""
-        className="pointer-events-none absolute -right-5 top-[-6px] z-0 h-[228px] w-[58%] max-w-[240px] object-contain object-right sm:h-[248px]"
+        className="pointer-events-none absolute -right-5 top-[-6px] z-0 h-[228px] w-[50%] max-w-[240px] object-contain object-right min-[360px]:w-[58%] sm:h-[248px]"
         style={{
           filter: 'drop-shadow(0 0 28px rgba(34,229,138,0.32))',
           WebkitMaskImage: 'linear-gradient(90deg, transparent 0%, #000 16%, #000 100%)',
@@ -236,7 +255,7 @@ function LevelsPanel({
     <>
       <div
         ref={scrollerRef}
-        className="mt-4 flex gap-2 overflow-x-auto px-4 pb-1 snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="mt-4 flex snap-x snap-mandatory gap-2.5 overflow-x-auto overflow-y-visible px-3 pb-3 min-[480px]:px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {VIP_LEVELS.map((tier) => {
           const active = tier.id === selected.id;
@@ -247,30 +266,29 @@ function LevelsPanel({
               ref={active ? selectedRef : undefined}
               type="button"
               onClick={() => onSelect(tier.id)}
-              className="relative shrink-0 snap-start overflow-hidden rounded-[20px] px-2 pb-3 pt-3.5 text-center"
+              className={`vip-tier-card relative overflow-hidden rounded-[20px] px-1.5 pb-2.5 pt-3 text-center ${active ? 'vip-tier-card-selected' : ''}`}
               style={{
-                width: 118,
+                ['--vip-glow']: tier.glow,
                 background: `linear-gradient(180deg, ${hexToRgba(tier.mid, 0.55)} 0%, ${tier.from} 48%, #07090C 100%)`,
                 boxShadow: active
-                  ? `0 0 0 1.5px ${tier.glow}, 0 12px 26px ${hexToRgba(tier.glow, 0.3)}, 0 10px 18px rgba(0,0,0,.5)`
+                  ? undefined
                   : `inset 0 1px 0 ${hexToRgba('#ffffff', 0.08)}, 0 8px 16px rgba(0,0,0,.38)`,
-                transform: active ? 'translateY(-4px)' : undefined,
                 border: `1px solid ${hexToRgba(tier.glow, active ? 0.7 : 0.22)}`,
-              }}
+              } as CSSProperties}
             >
               <div
-                className="mx-auto mb-2.5 flex h-[54px] w-[54px] items-center justify-center rounded-full"
+                className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full min-[390px]:h-[50px] min-[390px]:w-[50px] min-[430px]:h-[54px] min-[430px]:w-[54px]"
                 style={{
                   background: `radial-gradient(circle at 32% 28%, ${tier.to}, ${tier.mid} 48%, ${tier.from})`,
                   boxShadow: `0 8px 14px rgba(0,0,0,.4), inset 0 1px 1px ${hexToRgba('#ffffff', 0.38)}`,
                   border: `1px solid ${hexToRgba(tier.to, 0.7)}`,
                 }}
               >
-                <Icon className="h-6 w-6 text-white drop-shadow" strokeWidth={1.8} />
+                <Icon className="h-5 w-5 text-white drop-shadow min-[430px]:h-6 min-[430px]:w-6" strokeWidth={1.8} />
               </div>
               <p className="text-[10px] font-bold text-white/65">{tier.id}</p>
-              <p className="text-[12px] font-extrabold leading-tight text-white">{tier.name}</p>
-              <p className="mt-1 text-[10px] font-bold leading-tight text-[#E9C66A]">
+              <p className="text-[11px] font-extrabold leading-tight text-white min-[390px]:text-[12px]">{tier.name}</p>
+              <p className="mt-1 px-0.5 text-[9px] font-bold leading-tight text-[#E9C66A] break-words min-[390px]:text-[10px]">
                 {tier.cashbackLabel} кешбэк
               </p>
             </button>
@@ -298,9 +316,9 @@ function LevelsPanel({
           boxShadow: `0 0 28px ${hexToRgba(selected.glow, 0.12)}, 0 12px 28px rgba(0,0,0,.35)`,
         }}
       >
-        <div className="flex items-start gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <div
-            className="flex h-[58px] w-[58px] shrink-0 items-center justify-center rounded-full"
+            className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full min-[390px]:h-[58px] min-[390px]:w-[58px]"
             style={{
               background: `radial-gradient(circle at 32% 28%, ${selected.to}, ${selected.mid} 50%, ${selected.from})`,
               boxShadow: `0 0 18px ${hexToRgba(selected.glow, 0.35)}`,
@@ -309,8 +327,8 @@ function LevelsPanel({
           >
             <SelectedIcon className="h-7 w-7 text-white" strokeWidth={1.8} />
           </div>
-          <div className="min-w-0 flex-1 pt-0.5">
-            <h3 className="text-[26px] font-black leading-none text-white">{selected.name}</h3>
+          <div className="min-w-0 flex-1 basis-[132px] pt-0.5">
+            <h3 className="text-[22px] font-black leading-tight text-white min-[390px]:text-[26px] min-[390px]:leading-none">{selected.name}</h3>
             <p className="mt-1.5 text-[12px] font-medium text-white/55">Привилегии уровня</p>
           </div>
           <span

@@ -54,6 +54,16 @@ describe('VIP cashback approved UI', () => {
     assert.match(screen, /\{tier\.cashbackPeriod\}/);
   });
 
+  it('uses responsive VIP card width and tighter mobile selected glow', () => {
+    assert.match(screen, /width: clamp\(102px, 29vw, 118px\)/);
+    assert.match(screen, /vip-tier-card-selected/);
+    assert.match(screen, /translateY\(-2px\)/);
+    assert.match(screen, /gap-2\.5/);
+    assert.match(screen, /px-3 pb-3 min-\[480px\]:px-4/);
+    assert.equal(screen.includes('width: 118'), false);
+    assert.equal(screen.includes("transform: active ? 'translateY(-4px)'"), false);
+  });
+
   it('renders VIP and cashback tabs with approved artwork and no live claim', () => {
     assert.match(screen, /VIP уровни/);
     assert.match(screen, /Кешбэк/);
