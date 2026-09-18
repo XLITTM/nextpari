@@ -1,11 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import * as Sentry from '@sentry/react';
 import App from './App.tsx';
 import './index.css';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { SentryRootFallback } from './components/SentryRootFallback';
+import { initSentry, maybeTriggerSentryTest } from './lib/sentry';
 import { initPwa } from './lib/pwa';
 import { preloadGameAssets } from './lib/preloadGameAssets';
 
+initSentry();
 initPwa();
 preloadGameAssets();
 
@@ -19,10 +22,12 @@ if ('serviceWorker' in navigator) {
   else window.addEventListener('load', registerSw);
 }
 
+maybeTriggerSentryTest();
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ErrorBoundary>
+    <Sentry.ErrorBoundary fallback={<SentryRootFallback />}>
       <App />
-    </ErrorBoundary>
+    </Sentry.ErrorBoundary>
   </StrictMode>
 );
