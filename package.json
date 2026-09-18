@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
+    "server:sentry:test": "tsx --tsconfig tsconfig.server.json --test server/observability/sentry.test.ts",
     "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts server/staff/esmImportSmoke.test.ts",
     "owner:auth:test": "tsx --tsconfig tsconfig.server.json --test src/owner/auth/ownerAuth.test.ts server/staff/ownerAuthGateway.test.ts src/security/auth/securityAuth.test.ts server/staff/securityAuthGateway.test.ts",
     "owner:control:test": "tsx --tsconfig tsconfig.server.json --test server/owner/ownerControl.test.ts server/owner/ownerPlayerDebit.test.ts server/owner/ownerDashboardAuth.test.ts server/owner/ownerListCashiers.test.ts src/owner/ownerCashierManagerLabels.test.ts src/owner/ownerDirectCashierOperational.test.ts server/staff/staffHierarchy.test.ts src/owner/securityReview.test.ts server/owner/securitySportsInvestigation.test.ts server/owner/securityStaffPortal.test.ts server/security/securityControl.test.ts server/player/playerWinPattern.test.ts",
@@ -59,6 +60,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@sentry/node": "^10.75.0",
     "@sentry/react": "^10.75.0",
     "@supabase/supabase-js": "^2.112.3",
     "@vercel/functions": "^3.9.7",

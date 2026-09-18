@@ -7,6 +7,7 @@ import {
   type StaffHttpResult,
   type StaffJsonResponse,
 } from '../staff/httpHandler.js';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, staffError } from '../staff/errors.js';
 import {
   liveSecurityAuthPorts,
@@ -387,6 +388,12 @@ export async function handleSecurityControlRequest(
     log.error('security_control_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'security',
+      route: path,
+      method,
+      eventName: 'security_control_unhandled',
+    });
     return { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' }, cookies: sessionCookies };
   }
 }
@@ -440,6 +447,12 @@ export async function attachSecurityControlHttp(
   } catch (error) {
     log.error('security_control_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
+    });
+    await reportServerException(error, {
+      subsystem: 'security',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'security_control_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }

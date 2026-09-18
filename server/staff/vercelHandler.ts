@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError } from './errors.js';
 import {
   handleOwnerStaffRequest,
@@ -62,6 +63,12 @@ export async function handleVercelOwnerStaff(
     }
     log.error('staff_onboarding_vercel_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
+    });
+    await reportServerException(error, {
+      subsystem: 'staff_onboarding',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'staff_onboarding_vercel_unhandled',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, error: 'INTERNAL_ERROR' } });
   }

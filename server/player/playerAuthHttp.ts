@@ -1,5 +1,6 @@
 import type { StaffLog } from '../staff/types.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, redactForLog, staffError } from '../staff/errors.js';
 import {
   parseJsonPayload,
@@ -447,6 +448,12 @@ export async function handlePlayerAuthRequest(
     log.error('player_auth_unhandled', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
     });
+    await reportServerException(error, {
+      subsystem: 'player_auth',
+      route: path,
+      method,
+      eventName: 'player_auth_unhandled',
+    });
     return finish({ status: 500, body: { ok: false, authenticated: false, error: 'INTERNAL_ERROR' } });
   }
 }
@@ -490,6 +497,12 @@ export async function attachPlayerAuthHttp(
     log.error('player_auth_http_failed', {
       message: error instanceof Error ? error.message : 'UNHANDLED',
       extra: redactForLog({}),
+    });
+    await reportServerException(error, {
+      subsystem: 'player_auth',
+      route: pathname,
+      method: req.method ?? 'GET',
+      eventName: 'player_auth_http_failed',
     });
     writeStaffJson(res, { status: 500, body: { ok: false, authenticated: false, error: 'INTERNAL_ERROR' } });
   }
