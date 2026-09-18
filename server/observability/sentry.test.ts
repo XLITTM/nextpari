@@ -6,11 +6,14 @@ import { fileURLToPath } from 'node:url';
 import type { ErrorEvent } from '@sentry/core';
 import { staffError } from '../staff/errors.js';
 import { handleOwnerControlRequest } from '../owner/ownerControlHttp.js';
+import { handleCashierControlRequest } from '../cashier/cashierControlHttp.js';
 import { handlePlayerAuthRequest, PLAYER_AUTH_LOGIN_PATH } from '../player/playerAuthHttp.js';
 import { handleBetConstructRequest } from '../betconstruct/http.js';
 import { BETCONSTRUCT_NOT_CONFIGURED } from '../betconstruct/config.js';
 import { OWNER_ACCESS_COOKIE, OWNER_REFRESH_COOKIE } from '../staff/ownerCookies.js';
+import { CASHIER_ACCESS_COOKIE, CASHIER_REFRESH_COOKIE } from '../staff/cashierCookies.js';
 import type { OwnerAuthGatewayPorts } from '../staff/ownerAuthService.js';
+import type { CashierAuthGatewayPorts } from '../staff/cashierAuthService.js';
 import {
   INTERNAL_SENTRY_TEST_PATH,
   handleSentryTestRequest,
@@ -83,6 +86,27 @@ function ownerSession(): OwnerAuthGatewayPorts {
         auth_user_id: 'owner-uid',
         display_name: 'Owner',
         network_id: null,
+      };
+    },
+  };
+}
+
+function cashierSession(): CashierAuthGatewayPorts {
+  return {
+    async signInWithPassword() {
+      return { accessToken: 'cashier-access', refreshToken: 'cashier-refresh' };
+    },
+    async refreshSession() {
+      return { accessToken: 'cashier-access', refreshToken: 'cashier-refresh' };
+    },
+    async currentStaffContext() {
+      return {
+        role: 'cashier',
+        status: 'active',
+        auth_user_id: 'cashier-sentry-uid',
+        display_name: 'agent02',
+        network_id: '11111111-1111-1111-1111-111111111111',
+        legacy_cashier_id: '0393d651-e13a-4f04-ba7d-352f63bc62a5',
       };
     },
   };
@@ -218,6 +242,113 @@ describe('server Sentry monitoring', () => {
     assert.match(serialized, /INSUFFICIENT_BALANCE/);
     assert.match(serialized, /AUTH_REQUIRED|INSUFFICIENT_BALANCE/);
     assert.equal(sentryRouteTag('/api/player/games/11111111-2222-4333-8444-555555555555/action?x=1'), '/api/player/games/:id/action');
+  });
+
+  it('masks high-cardinality route identifiers without destroying static routes', () => {
+    assert.equal(
+      sentryRouteTag('/api/cashier/payouts/abcdef0123456789'),
+      '/api/cashier/payouts/:id',
+    );
+    assert.equal(
+      sentryRouteTag('/api/cashier/payouts/abcdef0123456789/confirm'),
+      '/api/cashier/payouts/:id/confirm',
+    );
+    assert.equal(
+      sentryRouteTag('/api/player/games/11111111-2222-4333-8444-555555555555/action'),
+      '/api/player/games/:id/action',
+    );
+    assert.equal(
+      sentryRouteTag('/api/owner/players/110790'),
+      '/api/owner/players/:id',
+    );
+    assert.equal(sentryRouteTag('/api/player/password-recovery/start'), '/api/player/password-recovery/start');
+    assert.equal(sentryRouteTag('/api/betconstruct/wallet'), '/api/betconstruct/wallet');
+    assert.equal(sentryRouteTag('/api/owner/cashiers'), '/api/owner/cashiers');
+  });
+
+  it('strips query strings and hashes from free-text URLs', () => {
+    const event = {
+      message: 'request failed https://example.com/path?foo=bar&token=secret#x',
+      exception: {
+        values: [{
+          type: 'Error',
+          value: 'boom https://example.com/api/player/me?foo=bar&token=secret#x',
+        }],
+      },
+      breadcrumbs: [
+        { message: 'retry https://example.com/path?foo=bar#x' },
+      ],
+    } as unknown as ErrorEvent;
+    const scrubbed = scrubServerSentryEvent(event);
+    const serialized = JSON.stringify(scrubbed);
+    assert.equal(serialized.includes('foo=bar'), false);
+    assert.equal(serialized.includes('token=secret'), false);
+    assert.equal(serialized.includes('#x'), false);
+    assert.match(String(scrubbed?.message), /https:\/\/example\.com\/path/);
+    assert.equal(String(scrubbed?.message).includes('?'), false);
+  });
+
+  it('redacts obvious identifiers in unexpected exception text without breaking diagnostic codes', () => {
+    const event = {
+      message: [
+        'INSUFFICIENT_BALANCE AUTH_REQUIRED BETCONSTRUCT_NOT_CONFIGURED',
+        'uuid=11111111-2222-4333-8444-555555555555',
+        'hex abcdef0123456789',
+        'token eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9',
+      ].join(' '),
+    } as unknown as ErrorEvent;
+    const scrubbed = scrubServerSentryEvent(event);
+    const serialized = JSON.stringify(scrubbed);
+    assert.match(serialized, /INSUFFICIENT_BALANCE/);
+    assert.match(serialized, /AUTH_REQUIRED/);
+    assert.match(serialized, /BETCONSTRUCT_NOT_CONFIGURED/);
+    assert.equal(serialized.includes('11111111-2222-4333-8444-555555555555'), false);
+    assert.equal(serialized.includes('abcdef0123456789'), false);
+    assert.equal(serialized.includes('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9'), false);
+  });
+
+  it('does not leak a cashier payout code in the Sentry route tag or scrubbed event', async () => {
+    const payoutCode = 'abcdef0123456789';
+    const payoutPath = `/api/cashier/payouts/${payoutCode}`;
+    assert.equal(sentryRouteTag(payoutPath), '/api/cashier/payouts/:id');
+    assert.equal(sentryRouteTag(`${payoutPath}/confirm`), '/api/cashier/payouts/:id/confirm');
+
+    const ports = mockPorts();
+    configureServerSentryForTests({ env: previewEnv(), ports });
+    const boom = new Error(`payout lookup failed ${payoutPath}?foo=bar#x`);
+    const failed = await handleCashierControlRequest(
+      {
+        method: 'GET',
+        pathname: payoutPath,
+        cookie: `${CASHIER_ACCESS_COOKIE}=cashier-access; ${CASHIER_REFRESH_COOKIE}=cashier-refresh`,
+        cookieSecure: true,
+      },
+      {
+        sessionPorts: cashierSession(),
+        rpcFactory: () => ({
+          async invoke() {
+            throw boom;
+          },
+        }),
+      },
+    );
+    assert.equal(failed.status, 500);
+    assert.equal(failed.body.error, 'INTERNAL_ERROR');
+    assert.equal(ports.captured.length, 1);
+    const tags = (ports.captured[0]?.context?.tags ?? {}) as Record<string, string>;
+    assert.equal(tags.route, '/api/cashier/payouts/:id');
+    assert.equal(tags.subsystem, 'cashier');
+    assert.equal(JSON.stringify(ports.captured[0]?.context).includes(payoutCode), false);
+
+    const scrubbed = scrubServerSentryEvent({
+      message: boom.message,
+      tags: { route: payoutPath },
+      exception: { values: [{ type: 'Error', value: boom.message }] },
+    } as unknown as ErrorEvent);
+    const serialized = JSON.stringify(scrubbed);
+    assert.equal(serialized.includes(payoutCode), false);
+    assert.equal(serialized.includes('foo=bar'), false);
+    assert.equal(scrubbed?.tags?.route, '/api/cashier/payouts/:id');
   });
 
   it('keeps ordinary diagnostic codes useful', () => {

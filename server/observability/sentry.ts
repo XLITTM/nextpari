@@ -43,6 +43,14 @@ const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const JWT_PATTERN = /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g;
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
+const LONG_HEX_PATTERN = /\b[0-9a-f]{12,}\b/gi;
+const INLINE_URL_PATTERN = /https?:\/\/[^\s<>'"]+|\/[^\s<>'"]*[?#][^\s<>'"]+/gi;
+const TOKEN_LIKE_PATTERN = /\b[A-Za-z0-9_-]{16,}\b/g;
+const UUID_SEGMENT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LONG_HEX_SEGMENT_PATTERN = /^[0-9a-f]{12,}$/i;
+const NUMERIC_ID_SEGMENT_PATTERN = /^\d{6,}$/;
+const DIAGNOSTIC_CODE_PATTERN = /^[A-Z][A-Z0-9_]{2,}$/;
+const HYPHENATED_WORDS_PATTERN = /^[A-Za-z]+(?:-[A-Za-z]+)+$/;
 
 let sentryStarted = false;
 let testHook: ServerSentryTestHook = {};
@@ -137,11 +145,41 @@ function ensureServerSentry(env: ServerSentryEnv): boolean {
   return sentryStarted;
 }
 
+function isDiagnosticCode(value: string): boolean {
+  return DIAGNOSTIC_CODE_PATTERN.test(value);
+}
+
+function isHyphenatedWords(value: string): boolean {
+  return HYPHENATED_WORDS_PATTERN.test(value);
+}
+
+function isDynamicPathSegment(segment: string): boolean {
+  if (!segment) return false;
+  if (UUID_SEGMENT_PATTERN.test(segment)) return true;
+  if (NUMERIC_ID_SEGMENT_PATTERN.test(segment)) return true;
+  if (LONG_HEX_SEGMENT_PATTERN.test(segment)) return true;
+  if (isHyphenatedWords(segment) || isDiagnosticCode(segment)) return false;
+  if (/^[A-Za-z0-9_-]{16,}$/.test(segment) && /[0-9_]/.test(segment)) return true;
+  if (/^[A-Za-z0-9_-]{22,}$/.test(segment)) return true;
+  return false;
+}
+
+function maskPathname(pathname: string): string {
+  return pathname
+    .split('/')
+    .map((segment) => (isDynamicPathSegment(segment) ? ':id' : segment))
+    .join('/');
+}
+
 export function sentryRouteTag(pathname: string | undefined): string | undefined {
   if (!pathname) return undefined;
-  return sanitizeCapturedUrl(pathname)
-    .replace(UUID_PATTERN, ':id')
-    .replace(/\/\d{4,}(?=\/|$)/g, '/:id');
+  const stripped = sanitizeCapturedUrl(pathname);
+  try {
+    const parsed = new URL(stripped);
+    return `${parsed.origin}${maskPathname(parsed.pathname)}`;
+  } catch {
+    return maskPathname(stripped);
+  }
 }
 
 function captureContextFrom(context: ServerSentryReportContext): Record<string, unknown> {
@@ -203,7 +241,13 @@ export function scrubServerSentryEvent(event: ErrorEvent): ErrorEvent | null {
   if (event.exception) event.exception = scrubDeep(event.exception) as ErrorEvent['exception'];
   if (event.extra) event.extra = scrubDeep(event.extra) as ErrorEvent['extra'];
   if (event.contexts) event.contexts = scrubDeep(event.contexts) as ErrorEvent['contexts'];
-  if (event.tags) event.tags = scrubDeep(event.tags) as ErrorEvent['tags'];
+  if (event.tags) {
+    const nextTags = { ...event.tags } as Record<string, unknown>;
+    if (typeof nextTags.route === 'string') {
+      nextTags.route = sentryRouteTag(nextTags.route) ?? nextTags.route;
+    }
+    event.tags = scrubDeep(nextTags) as ErrorEvent['tags'];
+  }
   if (event.breadcrumbs) {
     event.breadcrumbs = event.breadcrumbs
       .map((crumb) => scrubServerBreadcrumb(crumb))
@@ -237,16 +281,31 @@ function isUrlLike(value: string): boolean {
   }
 }
 
+function redactTokenLike(token: string): string {
+  if (isDiagnosticCode(token) || isHyphenatedWords(token) || /^[A-Za-z]+$/.test(token)) {
+    return token;
+  }
+  return '[Redacted]';
+}
+
 function sanitizeSensitiveText(value: string): string {
   BEARER_PATTERN.lastIndex = 0;
   JWT_PATTERN.lastIndex = 0;
   EMAIL_PATTERN.lastIndex = 0;
   ASSIGNMENT_PATTERN.lastIndex = 0;
+  INLINE_URL_PATTERN.lastIndex = 0;
+  UUID_PATTERN.lastIndex = 0;
+  LONG_HEX_PATTERN.lastIndex = 0;
+  TOKEN_LIKE_PATTERN.lastIndex = 0;
   return value
+    .replace(INLINE_URL_PATTERN, (url) => sanitizeCapturedUrl(url))
     .replace(BEARER_PATTERN, 'Bearer [Redacted]')
     .replace(JWT_PATTERN, '[Redacted]')
     .replace(EMAIL_PATTERN, '[Redacted]')
-    .replace(ASSIGNMENT_PATTERN, (_full, key: string, sep: string) => `${key}${sep}[Redacted]`);
+    .replace(ASSIGNMENT_PATTERN, (_full, key: string, sep: string) => `${key}${sep}[Redacted]`)
+    .replace(UUID_PATTERN, '[Redacted]')
+    .replace(LONG_HEX_PATTERN, '[Redacted]')
+    .replace(TOKEN_LIKE_PATTERN, redactTokenLike);
 }
 
 function scrubServerBreadcrumb(crumb: Breadcrumb): Breadcrumb | null {
