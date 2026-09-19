@@ -860,6 +860,23 @@ describe('Phase 067 wallet_ledger idempotency_key hotfix', () => {
     assert.equal(sql067.includes('ALTER TABLE private.player_fund_attribution_ledger'), false);
     assert.equal(sql067.includes('CREATE OR REPLACE FUNCTION private.apply_fund_attribution_delta'), false);
   });
+
+  it('allows Security WITHDRAWAL_RELEASE by adding security to wallet_ledger_actor_type_check', () => {
+    const actorCheck = sql067.slice(
+      sql067.indexOf('ALTER TABLE private.wallet_ledger'),
+      sql067.indexOf('COMMIT;'),
+    );
+    assert.match(actorCheck, /DROP CONSTRAINT wallet_ledger_actor_type_check/);
+    assert.match(actorCheck, /ADD CONSTRAINT wallet_ledger_actor_type_check/);
+    assert.match(actorCheck, /actor_type IS NULL/);
+    for (const actor of ['player', 'cashier', 'manager', 'service', 'system', 'migration', 'owner', 'security']) {
+      assert.match(actorCheck, new RegExp(`'${actor}'`));
+    }
+    assert.equal(actorCheck.includes("'staff'"), false);
+    assert.equal(sql067.includes('DROP CONSTRAINT wallet_ledger_operation_type_check'), false);
+    assert.equal(sql067.includes('DROP CONSTRAINT wallet_ledger_source_module_check'), false);
+    assert.equal((sql067.match(/DROP CONSTRAINT /g) || []).length, 1);
+  });
 });
 
 describe('isolated SQL migration execution', () => {

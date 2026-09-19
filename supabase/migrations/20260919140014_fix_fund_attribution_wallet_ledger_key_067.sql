@@ -19,6 +19,10 @@ SET LOCAL statement_timeout = '10min';
 -- This hotfix replaces only those wallet-ledger field references.
 -- Attribution-ledger entry_key / p_entry_key / wallet_ledger_entry_key
 -- remain unchanged.
+--
+-- Security rejection writes WITHDRAWAL_RELEASE with actor_type = 'security'.
+-- wallet_ledger_actor_type_check currently omits that value, so the
+-- HOLD release fails. Add 'security' without removing existing actors.
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION private.fund_attribution_on_wallet_ledger()
@@ -294,5 +298,23 @@ $fn$;
 
 REVOKE ALL ON FUNCTION private.fund_attribution_on_wallet_ledger() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION private.fund_attribution_on_wallet_ledger() TO service_role;
+
+ALTER TABLE private.wallet_ledger
+    DROP CONSTRAINT wallet_ledger_actor_type_check;
+ALTER TABLE private.wallet_ledger
+    ADD CONSTRAINT wallet_ledger_actor_type_check
+    CHECK (
+        actor_type IS NULL
+        OR actor_type IN (
+            'player',
+            'cashier',
+            'manager',
+            'service',
+            'system',
+            'migration',
+            'owner',
+            'security'
+        )
+    );
 
 COMMIT;
