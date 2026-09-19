@@ -32,7 +32,9 @@ import {
   classifyCashWithdrawal,
   consumeAvailable,
   creditFromSnapshot,
+  decideAttributionLedgerReplay,
   reserveWithdrawal,
+  type AttributionLedgerIdentity,
   type AttributionWeight,
 } from './fundAttributionMath.js';
 
@@ -336,6 +338,21 @@ describe('fund attribution math A-M', () => {
     assert.match(sql, /ATTRIBUTION_IDEMPOTENCY_CONFLICT/);
     assert.match(sql, /player_fund_attribution_ledger_key_uidx/);
     assert.match(sql, /owner_require_idempotency_key/);
+    const deltaFn = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION private.apply_fund_attribution_delta'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION private.mark_fund_attribution_inconsistent'),
+    );
+    assert.match(deltaFn, /l\.wallet_id IS NOT DISTINCT FROM p_wallet_id/);
+    assert.match(deltaFn, /l\.currency IS NOT DISTINCT FROM p_currency/);
+    assert.match(deltaFn, /l\.source_kind IS NOT DISTINCT FROM p_source_kind/);
+    assert.match(deltaFn, /l\.source_cashier_id IS NOT DISTINCT FROM p_source_cashier_id/);
+    assert.match(deltaFn, /l\.available_delta_minor IS NOT DISTINCT FROM p_available_delta/);
+    assert.match(deltaFn, /l\.reserved_delta_minor IS NOT DISTINCT FROM p_reserved_delta/);
+    assert.match(deltaFn, /l\.reference_type IS NOT DISTINCT FROM p_reference_type/);
+    assert.match(deltaFn, /l\.reference_id IS NOT DISTINCT FROM p_reference_id/);
+    assert.match(deltaFn, /l\.wallet_ledger_entry_key IS NOT DISTINCT FROM p_wallet_ledger_entry_key/);
+    assert.match(deltaFn, /Metadata is informational and is not part of this bind/);
+    assert.equal(deltaFn.includes('UPDATE private.player_fund_attribution_ledger'), false);
   });
 
   it('L. legacy funds are not assigned to last cashier; withdrawal needs review', () => {
@@ -382,6 +399,67 @@ describe('fund attribution math A-M', () => {
     ], 500_00);
     assert.equal(byCashier(consumed, CASHIER_A), 400_00);
     assert.equal(byCashier(consumed, CASHIER_B), 100_00);
+  });
+});
+
+describe('attribution ledger entry_key payload binding', () => {
+  const stored: AttributionLedgerIdentity = {
+    entryKey: 'attr:entry-1:cashier',
+    walletId: 'wallet-1',
+    currency: 'TMTM',
+    sourceKind: 'cashier',
+    sourceCashierId: CASHIER_A,
+    availableDeltaMinor: 4000n,
+    reservedDeltaMinor: 0n,
+    referenceType: 'sports_bet',
+    referenceId: 'bet-1',
+    walletLedgerEntryKey: 'sports-bet:bet-1',
+  };
+
+  it('1. same entry key and complete immutable payload is an idempotent replay', () => {
+    assert.equal(decideAttributionLedgerReplay(stored, { ...stored }), 'replay');
+  });
+
+  it('2. same entry key with different available delta is a conflict', () => {
+    assert.equal(
+      decideAttributionLedgerReplay(stored, { ...stored, availableDeltaMinor: 5000n }),
+      'conflict',
+    );
+  });
+
+  it('3. same entry key with different reserved delta is a conflict', () => {
+    assert.equal(
+      decideAttributionLedgerReplay(stored, { ...stored, reservedDeltaMinor: 4000n }),
+      'conflict',
+    );
+  });
+
+  it('4. same entry key with different source cashier is a conflict', () => {
+    assert.equal(
+      decideAttributionLedgerReplay(stored, { ...stored, sourceCashierId: CASHIER_B }),
+      'conflict',
+    );
+  });
+
+  it('5. same entry key with different reference_type is a conflict', () => {
+    assert.equal(
+      decideAttributionLedgerReplay(stored, { ...stored, referenceType: 'casino_round' }),
+      'conflict',
+    );
+  });
+
+  it('6. same entry key with different reference_id is a conflict', () => {
+    assert.equal(
+      decideAttributionLedgerReplay(stored, { ...stored, referenceId: 'bet-2' }),
+      'conflict',
+    );
+  });
+
+  it('7. same entry key with different wallet_ledger_entry_key is a conflict', () => {
+    assert.equal(
+      decideAttributionLedgerReplay(stored, { ...stored, walletLedgerEntryKey: 'sports-bet:bet-2' }),
+      'conflict',
+    );
   });
 });
 

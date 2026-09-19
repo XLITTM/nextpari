@@ -501,16 +501,22 @@ BEGIN
     WHERE l.entry_key = p_entry_key;
 
     IF FOUND THEN
+        -- Replay is valid only when the immutable accounting identity matches.
+        -- Metadata is informational and is not part of this bind.
+        -- Do not update or overwrite the original ledger row.
         IF EXISTS (
             SELECT 1
             FROM private.player_fund_attribution_ledger AS l
             WHERE l.entry_key = p_entry_key
-              AND l.wallet_id = p_wallet_id
-              AND l.currency = p_currency
-              AND l.source_kind = p_source_kind
+              AND l.wallet_id IS NOT DISTINCT FROM p_wallet_id
+              AND l.currency IS NOT DISTINCT FROM p_currency
+              AND l.source_kind IS NOT DISTINCT FROM p_source_kind
               AND l.source_cashier_id IS NOT DISTINCT FROM p_source_cashier_id
-              AND l.available_delta_minor = p_available_delta
-              AND l.reserved_delta_minor = p_reserved_delta
+              AND l.available_delta_minor IS NOT DISTINCT FROM p_available_delta
+              AND l.reserved_delta_minor IS NOT DISTINCT FROM p_reserved_delta
+              AND l.reference_type IS NOT DISTINCT FROM p_reference_type
+              AND l.reference_id IS NOT DISTINCT FROM p_reference_id
+              AND l.wallet_ledger_entry_key IS NOT DISTINCT FROM p_wallet_ledger_entry_key
         ) THEN
             RETURN;
         END IF;

@@ -200,3 +200,43 @@ export function applyHoldParts(
 export const PLAYER_REVIEW_NOTICE = 'Заявка на вывод находится на рассмотрении.';
 export const PLAYER_REJECT_PROPORTION_NOTICE =
   'Вывод отклонён. Сумма вывода должна быть пропорциональна сумме пополнений через выбранную кассу. Для дополнительной информации обратитесь в поддержку.';
+
+export interface AttributionLedgerIdentity {
+  entryKey: string;
+  walletId: string;
+  currency: string;
+  sourceKind: AttributionKind;
+  sourceCashierId: string | null;
+  availableDeltaMinor: bigint;
+  reservedDeltaMinor: bigint;
+  referenceType: string | null;
+  referenceId: string | null;
+  walletLedgerEntryKey: string | null;
+}
+
+export type AttributionLedgerReplayDecision = 'insert' | 'replay' | 'conflict';
+
+function notDistinctFrom(left: string | bigint | null, right: string | bigint | null): boolean {
+  return left === right;
+}
+
+/** Mirrors private.apply_fund_attribution_delta entry_key replay. Metadata is not bound. */
+export function decideAttributionLedgerReplay(
+  existing: AttributionLedgerIdentity | null,
+  incoming: AttributionLedgerIdentity,
+): AttributionLedgerReplayDecision {
+  if (existing == null || existing.entryKey !== incoming.entryKey) {
+    return 'insert';
+  }
+  const samePayload =
+    notDistinctFrom(existing.walletId, incoming.walletId)
+    && notDistinctFrom(existing.currency, incoming.currency)
+    && notDistinctFrom(existing.sourceKind, incoming.sourceKind)
+    && notDistinctFrom(existing.sourceCashierId, incoming.sourceCashierId)
+    && notDistinctFrom(existing.availableDeltaMinor, incoming.availableDeltaMinor)
+    && notDistinctFrom(existing.reservedDeltaMinor, incoming.reservedDeltaMinor)
+    && notDistinctFrom(existing.referenceType, incoming.referenceType)
+    && notDistinctFrom(existing.referenceId, incoming.referenceId)
+    && notDistinctFrom(existing.walletLedgerEntryKey, incoming.walletLedgerEntryKey);
+  return samePayload ? 'replay' : 'conflict';
+}
