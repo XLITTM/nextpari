@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -876,6 +876,91 @@ describe('Phase 067 wallet_ledger idempotency_key hotfix', () => {
     assert.equal(sql067.includes('DROP CONSTRAINT wallet_ledger_operation_type_check'), false);
     assert.equal(sql067.includes('DROP CONSTRAINT wallet_ledger_source_module_check'), false);
     assert.equal((sql067.match(/DROP CONSTRAINT /g) || []).length, 1);
+  });
+});
+
+describe('Phase 068 cash withdrawal UI fail-closed + review action hardening', () => {
+  const wallet = readFileSync(join(root, 'src/screens/WalletScreen.tsx'), 'utf8');
+  const review = readFileSync(
+    join(root, 'src/shared/staff/WithdrawalAttributionReviewPanel.tsx'),
+    'utf8',
+  );
+  const cashSubmit = wallet.slice(
+    wallet.indexOf("if (method === 'cash') {"),
+    wallet.indexOf('if (!isProfileComplete)'),
+  );
+  const fetchWithdrawalsFn = wallet.slice(
+    wallet.indexOf('const fetchWithdrawals'),
+    wallet.indexOf('const fetchCashDestinations'),
+  );
+  const fetchCashDestinationsFn = wallet.slice(
+    wallet.indexOf('const fetchCashDestinations'),
+    wallet.indexOf('useEffect(() => {\n    void fetchWithdrawals()'),
+  );
+
+  it('A. WalletScreen does not contain the old serverDestinations fallback', () => {
+    assert.equal(wallet.includes('serverDestinations.length > 0'), false);
+    assert.equal(wallet.includes('serverDestinations.length > 0\n    ? serverDestinations\n    : MOBCASH_PICKUP_POINTS'), false);
+    assert.match(wallet, /const pickupCatalog = cashDestinations;/);
+  });
+
+  it('B. WalletScreen cash withdrawal does not fall back to MOBCASH_PICKUP_POINTS', () => {
+    assert.equal(wallet.includes('MOBCASH_PICKUP_POINTS'), false);
+    assert.equal(wallet.includes(': MOBCASH_PICKUP_POINTS'), false);
+    assert.match(wallet, /\/api\/player\/payout-destinations/);
+    assert.match(wallet, /const \[cashDestinations,/);
+    assert.match(wallet, /const \[cashDestinationsLoading,/);
+    assert.match(wallet, /const \[cashDestinationsLoaded,/);
+    assert.match(wallet, /const \[cashDestinationsError,/);
+  });
+
+  it('C. cash withdrawal submission always uses a server destination id', () => {
+    assert.match(cashSubmit, /destinationId:\s*point\.id/);
+    assert.equal(cashSubmit.includes('destinationId: undefined'), false);
+    assert.equal(cashSubmit.includes('destinationId:\n          undefined'), false);
+    assert.equal(/destinationId:\s*\n\s*serverDestinations/.test(cashSubmit), false);
+    assert.equal(cashSubmit.includes('? point.id'), false);
+    assert.equal(cashSubmit.includes(': undefined'), false);
+    assert.match(cashSubmit, /if \(!cashDestinationsReady\)/);
+  });
+
+  it('D. destination API failure and empty list are fail-closed', () => {
+    assert.match(wallet, /Загрузка доступных касс\.\.\./);
+    assert.match(wallet, /Не удалось загрузить доступные кассы\. Попробуйте обновить\./);
+    assert.match(wallet, /Сейчас нет доступных касс для выдачи\./);
+    assert.match(wallet, /disabled=\{cashSubmitDisabled\}/);
+    assert.match(wallet, /destinationsLoaded && !destinationsLoading && !destinationsError && pickupCatalog\.length > 0/);
+    assert.match(wallet, /pickupCatalog\.length === 0/);
+    assert.match(wallet, /onRetryDestinations/);
+  });
+
+  it('E. withdrawal history loading is independent of payout-destination loading', () => {
+    assert.equal(fetchWithdrawalsFn.includes('/api/player/payout-destinations'), false);
+    assert.equal(fetchWithdrawalsFn.includes('setCashDestinations'), false);
+    assert.match(fetchWithdrawalsFn, /listWithdrawalRequests/);
+    assert.match(fetchCashDestinationsFn, /\/api\/player\/payout-destinations/);
+    assert.equal(fetchCashDestinationsFn.includes('setWithdrawals'), false);
+    assert.equal(fetchCashDestinationsFn.includes('listWithdrawalRequests'), false);
+    assert.match(wallet, /void fetchWithdrawals\(\);\s*\n\s*void fetchCashDestinations\(\);/);
+  });
+
+  it('F. WithdrawalAttributionReviewPanel requires reason, max 500, and busy protection', () => {
+    assert.match(review, /reason\.trim\(\)\.length < 1/);
+    assert.match(review, /reasonReady = reason\.trim\(\)\.length >= 1/);
+    assert.match(review, /maxLength=\{500\}/);
+    assert.match(review, /busyAction/);
+    assert.match(review, /busyRef\.current/);
+    assert.equal((review.match(/disabled=\{actionBusy \|\| !reasonReady\}/g) || []).length, 2);
+    assert.match(review, /disabled=\{actionBusy\}/);
+    assert.match(review, /if \(!selected \|\| busyAction \|\| busyRef\.current\) return;/);
+    assert.match(review, /if \(\(kind === 'approve' \|\| kind === 'reject'\) && reason\.trim\(\)\.length < 1\) return;/);
+  });
+
+  it('does not add a Phase 068 migration or change 066/067 SQL', () => {
+    const migrations = readdirSync(join(root, 'supabase/migrations'));
+    assert.equal(migrations.some((name) => /068/.test(name)), false);
+    assert.match(sql, /enforcement_enabled/);
+    assert.match(sql067, /NEW\.idempotency_key/);
   });
 });
 
