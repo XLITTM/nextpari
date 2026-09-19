@@ -55,6 +55,9 @@ function mapRow(raw: unknown): WithdrawalRequest {
     city: item.cash_pickup_city == null && item.city == null ? null : str(item.cash_pickup_city ?? item.city),
     point: item.cash_pickup_point == null && item.point == null ? null : str(item.cash_pickup_point ?? item.point),
     player_id: item.player_public_id == null ? null : str(item.player_public_id),
+    player_notice_code: item.player_notice_code == null && item.playerNoticeCode == null
+      ? null
+      : str(item.player_notice_code ?? item.playerNoticeCode),
   };
 }
 
@@ -67,7 +70,10 @@ function mapError(code: string): string {
   }
   if (code === 'CASH_WITHDRAWAL_BELOW_MIN') return 'Минимальная сумма вывода — 40.00 TMTM';
   if (code === 'INSUFFICIENT_AVAILABLE_BALANCE') return 'Недостаточно средств на балансе';
-  if (code === 'CASH_PICKUP_REQUIRED') return 'Выберите город и точку выдачи';
+  if (code === 'CASH_PICKUP_REQUIRED' || code === 'PAYOUT_DESTINATION_REQUIRED') return 'Выберите город и точку выдачи';
+  if (code === 'PAYOUT_DESTINATION_NOT_FOUND' || code === 'PAYOUT_DESTINATION_NOT_ACTIVE') {
+    return 'Выбранная касса недоступна';
+  }
   if (code === 'DESTINATION_REQUIRED') return 'Заполните реквизиты для вывода';
   if (code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE') return 'Вывод через кассу временно недоступен.';
   if (code === 'IDEMPOTENCY_KEY_CONFLICT') return 'Повтор запроса с другими данными отклонён';
@@ -105,6 +111,7 @@ export async function createWithdrawalRequest(params: {
   destinationRef?: string;
   city?: string;
   point?: string;
+  payoutDestinationId?: string;
 }): Promise<WithdrawalRequest> {
   const fingerprint = JSON.stringify({
     method: params.method,
@@ -112,6 +119,7 @@ export async function createWithdrawalRequest(params: {
     destinationRef: params.destinationRef ?? '',
     city: params.city ?? '',
     point: params.point ?? '',
+    payoutDestinationId: params.payoutDestinationId ?? '',
   });
   createSlot = retainIdempotencyKey(createSlot, fingerprint);
   const rec = await playerWithdrawalJson({
@@ -123,6 +131,7 @@ export async function createWithdrawalRequest(params: {
       destinationRef: params.destinationRef ?? null,
       cashPickupCity: params.city ?? null,
       cashPickupPoint: params.point ?? null,
+      payoutDestinationId: params.payoutDestinationId ?? null,
       idempotencyKey: createSlot.key,
     }),
   });

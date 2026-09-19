@@ -82,6 +82,7 @@ export async function createPlayerWithdrawal(
     p_cash_pickup_city: rec.cashPickupCity ?? rec.cash_pickup_city ?? rec.city ?? null,
     p_cash_pickup_point: rec.cashPickupPoint ?? rec.cash_pickup_point ?? rec.point ?? null,
     p_metadata: {},
+    p_payout_destination_id: rec.payoutDestinationId ?? rec.payout_destination_id ?? rec.destinationId ?? null,
   }));
 }
 
@@ -91,6 +92,14 @@ export async function listPlayerWithdrawals(
   secure: boolean,
 ): Promise<PlayerAuthHttpResult> {
   return wrapOk(await runPlayerGameRpc(ports, cookieHeader, secure, 'player_list_withdrawals', {}));
+}
+
+export async function listPlayerCashPayoutDestinations(
+  ports: PlayerGameGatewayPorts,
+  cookieHeader: string | undefined,
+  secure: boolean,
+): Promise<PlayerAuthHttpResult> {
+  return wrapOk(await runPlayerGameRpc(ports, cookieHeader, secure, 'player_list_cash_payout_destinations', {}));
 }
 
 export function livePlayerWithdrawalPorts(): PlayerGameGatewayPorts {

@@ -437,7 +437,13 @@ type ControlAction =
   | { kind: 'currencyLimitsGet' }
   | { kind: 'currencyLimitsSet' }
   | { kind: 'currencySportsSet' }
-  | { kind: 'currencyOwnedGamesSet' };
+  | { kind: 'currencyOwnedGamesSet' }
+  | { kind: 'withdrawalReviewSummary' }
+  | { kind: 'withdrawalReviews' }
+  | { kind: 'withdrawalReviewGet'; reviewId: string }
+  | { kind: 'withdrawalReviewStart'; reviewId: string }
+  | { kind: 'withdrawalReviewApprove'; reviewId: string }
+  | { kind: 'withdrawalReviewReject'; reviewId: string };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -558,6 +564,20 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
     return m === 'POST' ? { kind: 'withdrawalPaid', withdrawalId: withdrawalPaid[1] } : 'method';
   }
   if (path === '/api/owner/withdrawals') return m === 'GET' ? { kind: 'withdrawals' } : 'method';
+  if (path === '/api/owner/withdrawal-reviews/summary') {
+    return m === 'GET' ? { kind: 'withdrawalReviewSummary' } : 'method';
+  }
+  const reviewApprove = path.match(/^\/api\/owner\/withdrawal-reviews\/([^/]+)\/approve$/);
+  if (reviewApprove) return m === 'POST' ? { kind: 'withdrawalReviewApprove', reviewId: reviewApprove[1] } : 'method';
+  const reviewReject = path.match(/^\/api\/owner\/withdrawal-reviews\/([^/]+)\/reject$/);
+  if (reviewReject) return m === 'POST' ? { kind: 'withdrawalReviewReject', reviewId: reviewReject[1] } : 'method';
+  const reviewStart = path.match(/^\/api\/owner\/withdrawal-reviews\/([^/]+)\/start$/);
+  if (reviewStart) return m === 'POST' ? { kind: 'withdrawalReviewStart', reviewId: reviewStart[1] } : 'method';
+  const reviewGet = path.match(/^\/api\/owner\/withdrawal-reviews\/([^/]+)$/);
+  if (reviewGet) return m === 'GET' ? { kind: 'withdrawalReviewGet', reviewId: reviewGet[1] } : 'method';
+  if (path === '/api/owner/withdrawal-reviews') {
+    return m === 'GET' ? { kind: 'withdrawalReviews' } : 'method';
+  }
   if (path === '/api/owner/messages') return m === 'POST' ? { kind: 'message' } : 'method';
   if (path === '/api/owner/treasury/capital-in') {
     return m === 'POST' ? { kind: 'capitalInCurrency' } : 'method';
@@ -808,6 +828,34 @@ async function runControl(
     case 'withdrawalPaid':
       return rpc.invoke('owner_mark_withdrawal_paid', {
         p_withdrawal_id: requireId(decodeURIComponent(action.withdrawalId), 'WITHDRAWAL_ID_REQUIRED'),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+      });
+    case 'withdrawalReviewSummary':
+      return rpc.invoke('owner_withdrawal_review_summary');
+    case 'withdrawalReviews':
+      return rpc.invoke('owner_list_withdrawal_reviews', {
+        p_status: query.get('status')?.trim() || null,
+        p_limit: parseLimit(query.get('limit'), 50),
+        p_offset: parseOffset(query.get('offset')),
+      });
+    case 'withdrawalReviewGet':
+      return rpc.invoke('owner_get_withdrawal_review', {
+        p_review_id: requireId(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED'),
+      });
+    case 'withdrawalReviewStart':
+      return rpc.invoke('owner_start_withdrawal_review', {
+        p_review_id: requireId(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED'),
+      });
+    case 'withdrawalReviewApprove':
+      return rpc.invoke('owner_approve_withdrawal_review', {
+        p_review_id: requireId(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED'),
+        p_reason: requireReason(rec.reason),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+      });
+    case 'withdrawalReviewReject':
+      return rpc.invoke('owner_reject_withdrawal_review', {
+        p_review_id: requireId(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED'),
+        p_reason: requireReason(rec.reason),
         p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
       });
     case 'message': {

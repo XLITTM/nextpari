@@ -32,6 +32,7 @@
     "operational:multi-currency:test": "tsx --tsconfig tsconfig.server.json --test server/owner/operationalMultiCurrency.test.ts",
     "currency:limits:test": "tsx --tsconfig tsconfig.server.json --test server/owner/currencyLimits.test.ts",
     "player:withdrawals:test": "tsx --tsconfig tsconfig.server.json --test server/player/playerWithdrawals.test.ts",
+    "player:fund-attribution:test": "tsx --tsconfig tsconfig.server.json --test server/player/fundAttribution.test.ts",
     "provider:settlement:test": "tsx --tsconfig tsconfig.server.json --test server/providerAccounting/providerAccounting.test.ts server/providerAccounting/providerAccounting.sql.test.ts src/owner/providerSettlementDisplay.test.ts",
     "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts server/games/dice.cutover.test.ts",
     "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts",

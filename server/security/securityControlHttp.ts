@@ -70,6 +70,13 @@ function requireReason(value: unknown): string {
   return reason;
 }
 
+function requireIdempotencyKey(value: unknown): string {
+  const key = String(value ?? '').trim();
+  if (!key) throw staffError('IDEMPOTENCY_KEY_REQUIRED', 400);
+  if (key.length > 250) throw staffError('IDEMPOTENCY_KEY_TOO_LONG', 400);
+  return key;
+}
+
 function requireBoolean(value: unknown, code: string): boolean {
   if (typeof value === 'boolean') return value;
   throw staffError(code, 400);
@@ -131,7 +138,13 @@ type ControlAction =
   | { kind: 'sportsBet'; playerId: string; betId: string }
   | { kind: 'activity' }
   | { kind: 'winPatternSettings' }
-  | { kind: 'evaluateWinPattern'; playerId: string };
+  | { kind: 'evaluateWinPattern'; playerId: string }
+  | { kind: 'withdrawalReviewSummary' }
+  | { kind: 'withdrawalReviews' }
+  | { kind: 'withdrawalReviewGet'; reviewId: string }
+  | { kind: 'withdrawalReviewStart'; reviewId: string }
+  | { kind: 'withdrawalReviewApprove'; reviewId: string }
+  | { kind: 'withdrawalReviewReject'; reviewId: string };
 
 function matchControl(method: string, pathname: string): ControlAction | 'method' | null {
   const path = normalizePath(pathname);
@@ -143,6 +156,20 @@ function matchControl(method: string, pathname: string): ControlAction | 'method
   if (path === '/api/security/activity') return m === 'GET' ? { kind: 'activity' } : 'method';
   if (path === '/api/security/win-pattern-settings') {
     return m === 'GET' ? { kind: 'winPatternSettings' } : 'method';
+  }
+  if (path === '/api/security/withdrawal-reviews/summary') {
+    return m === 'GET' ? { kind: 'withdrawalReviewSummary' } : 'method';
+  }
+  const reviewApprove = path.match(/^\/api\/security\/withdrawal-reviews\/([^/]+)\/approve$/);
+  if (reviewApprove) return m === 'POST' ? { kind: 'withdrawalReviewApprove', reviewId: reviewApprove[1] } : 'method';
+  const reviewReject = path.match(/^\/api\/security\/withdrawal-reviews\/([^/]+)\/reject$/);
+  if (reviewReject) return m === 'POST' ? { kind: 'withdrawalReviewReject', reviewId: reviewReject[1] } : 'method';
+  const reviewStart = path.match(/^\/api\/security\/withdrawal-reviews\/([^/]+)\/start$/);
+  if (reviewStart) return m === 'POST' ? { kind: 'withdrawalReviewStart', reviewId: reviewStart[1] } : 'method';
+  const reviewGet = path.match(/^\/api\/security\/withdrawal-reviews\/([^/]+)$/);
+  if (reviewGet) return m === 'GET' ? { kind: 'withdrawalReviewGet', reviewId: reviewGet[1] } : 'method';
+  if (path === '/api/security/withdrawal-reviews') {
+    return m === 'GET' ? { kind: 'withdrawalReviews' } : 'method';
   }
 
   const flagReview = path.match(/^\/api\/security\/flags\/([^/]+)\/review$/);
@@ -314,6 +341,34 @@ async function runControl(
       return rpc.invoke('security_evaluate_player_win_pattern', {
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
         p_source: optionalFilter(rec.source == null ? null : String(rec.source), 'WIN_PATTERN_SOURCE_INVALID'),
+      });
+    case 'withdrawalReviewSummary':
+      return rpc.invoke('security_withdrawal_review_summary');
+    case 'withdrawalReviews':
+      return rpc.invoke('security_list_withdrawal_reviews', {
+        p_status: optionalFilter(query.get('status'), 'STATUS_INVALID'),
+        p_limit: parseLimit(query.get('limit'), 50),
+        p_offset: parseOffset(query.get('offset')),
+      });
+    case 'withdrawalReviewGet':
+      return rpc.invoke('security_get_withdrawal_review', {
+        p_review_id: requireUuid(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED', 'REVIEW_ID_INVALID'),
+      });
+    case 'withdrawalReviewStart':
+      return rpc.invoke('security_start_withdrawal_review', {
+        p_review_id: requireUuid(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED', 'REVIEW_ID_INVALID'),
+      });
+    case 'withdrawalReviewApprove':
+      return rpc.invoke('security_approve_withdrawal_review', {
+        p_review_id: requireUuid(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED', 'REVIEW_ID_INVALID'),
+        p_reason: requireReason(rec.reason),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
+      });
+    case 'withdrawalReviewReject':
+      return rpc.invoke('security_reject_withdrawal_review', {
+        p_review_id: requireUuid(decodeURIComponent(action.reviewId), 'REVIEW_ID_REQUIRED', 'REVIEW_ID_INVALID'),
+        p_reason: requireReason(rec.reason),
+        p_idempotency_key: requireIdempotencyKey(rec.idempotencyKey ?? rec.idempotency_key),
       });
     default:
       throw staffError('NOT_FOUND', 404);
