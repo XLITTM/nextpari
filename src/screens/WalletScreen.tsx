@@ -12,7 +12,6 @@ import { DepositModal } from '../components/games/DepositModal';
 import { playerCreateCashPayout, type PlayerCashPayout } from '../lib/playerCashPayout';
 import {
   MOBCASH_MIN_WITHDRAWAL,
-  MOBCASH_PICKUP_POINTS,
   formatMobcashWithdrawalLabel,
   type MobcashPickupPoint,
 } from '../lib/mobcashPickupPoints';
@@ -49,7 +48,10 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
   const [detail, setDetail] = useState('');
   const [cashCity, setCashCity] = useState('');
   const [cashPointId, setCashPointId] = useState('');
-  const [serverDestinations, setServerDestinations] = useState<MobcashPickupPoint[]>([]);
+  const [cashDestinations, setCashDestinations] = useState<MobcashPickupPoint[]>([]);
+  const [cashDestinationsLoading, setCashDestinationsLoading] = useState(true);
+  const [cashDestinationsLoaded, setCashDestinationsLoaded] = useState(false);
+  const [cashDestinationsError, setCashDestinationsError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleMethodChange = (next: WalletWithdrawMethod) => {
@@ -59,20 +61,15 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
     setCashPointId('');
   };
 
-  const pickupCatalog = serverDestinations.length > 0 ? serverDestinations : MOBCASH_PICKUP_POINTS;
+  const pickupCatalog = cashDestinations;
   const pickupCities = Array.from(new Set(pickupCatalog.map((point) => point.city))).sort((a, b) => a.localeCompare(b, 'ru'));
+  const cashDestinationsReady = cashDestinationsLoaded && !cashDestinationsLoading && !cashDestinationsError && cashDestinations.length > 0;
 
   const fetchWithdrawals = useCallback(async () => {
     setLoading(true);
     try {
       setWithdrawals(await listWithdrawalRequests());
       setCashPayouts([]);
-      const destRes = await fetch('/api/player/payout-destinations', { credentials: 'same-origin' });
-      const destJson = await destRes.json().catch(() => ({})) as { ok?: boolean; data?: { rows?: Array<{ id: string; city: string; label: string }> }; rows?: Array<{ id: string; city: string; label: string }> };
-      const rows = destJson.data?.rows ?? destJson.rows ?? [];
-      if (destRes.ok && Array.isArray(rows)) {
-        setServerDestinations(rows.map((row) => ({ id: row.id, city: row.city, label: row.label })));
-      }
     } catch {
       setWithdrawals([]);
       setCashPayouts([]);
@@ -81,9 +78,48 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
     }
   }, []);
 
+  const fetchCashDestinations = useCallback(async () => {
+    setCashDestinationsLoading(true);
+    setCashDestinationsError('');
+    try {
+      const destRes = await fetch('/api/player/payout-destinations', { credentials: 'same-origin' });
+      const destJson = await destRes.json().catch(() => ({})) as {
+        ok?: boolean;
+        data?: { rows?: Array<{ id: string; city: string; label: string }> };
+        rows?: Array<{ id: string; city: string; label: string }>;
+      };
+      const rows = destJson.data?.rows ?? destJson.rows ?? [];
+      if (!destRes.ok || destJson.ok === false || !Array.isArray(rows)) {
+        throw new Error('DESTINATIONS_FAILED');
+      }
+      setCashDestinations(rows.map((row) => ({ id: row.id, city: row.city, label: row.label })));
+      setCashDestinationsLoaded(true);
+    } catch {
+      setCashDestinations([]);
+      setCashDestinationsLoaded(true);
+      setCashDestinationsError('Не удалось загрузить доступные кассы. Попробуйте обновить.');
+    } finally {
+      setCashDestinationsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchWithdrawals();
-  }, [fetchWithdrawals]);
+    void fetchWithdrawals();
+    void fetchCashDestinations();
+  }, [fetchWithdrawals, fetchCashDestinations]);
+
+  useEffect(() => {
+    if (!cashCity && !cashPointId) return;
+    const cityStillValid = cashDestinations.some((point) => point.city === cashCity);
+    if (!cityStillValid) {
+      setCashCity('');
+      setCashPointId('');
+      return;
+    }
+    if (cashPointId && !cashDestinations.some((point) => point.city === cashCity && point.id === cashPointId)) {
+      setCashPointId('');
+    }
+  }, [cashDestinations, cashCity, cashPointId]);
 
   const handleRequestWithdrawal = async () => {
     const numAmount = parseFloat(amount);
@@ -101,7 +137,11 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         showToast(`Минимальная сумма вывода — ${MOBCASH_MIN_WITHDRAWAL.toFixed(2)} TMTM`);
         return;
       }
-      const point = pickupCatalog.filter((item) => item.city === cashCity).find((item) => item.id === cashPointId);
+      if (!cashDestinationsReady) {
+        showToast(cashDestinationsError || 'Сейчас нет доступных касс для выдачи.');
+        return;
+      }
+      const point = cashDestinations.find((item) => item.city === cashCity && item.id === cashPointId);
       if (!cashCity || !point) {
         showToast('Выберите город и точку выдачи');
         return;
@@ -112,7 +152,7 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
         const result = await playerCreateCashPayout(numAmount, {
           city: cashCity,
           point: point.label,
-          destinationId: serverDestinations.length > 0 ? point.id : undefined,
+          destinationId: point.id,
         });
         if (result.playerNoticeCode === 'under_review' || !result.code) {
           showToast('Заявка на вывод находится на рассмотрении.');
@@ -239,6 +279,10 @@ export function WalletScreen({ balance, onBack, onNavigate }: WalletScreenProps)
           onSubmit={handleRequestWithdrawal}
           pickupCatalog={pickupCatalog}
           pickupCities={pickupCities}
+          destinationsLoading={cashDestinationsLoading}
+          destinationsLoaded={cashDestinationsLoaded}
+          destinationsError={cashDestinationsError}
+          onRetryDestinations={() => void fetchCashDestinations()}
         />
       )}
 
@@ -276,6 +320,7 @@ function WithdrawForm({
   method, setMethod, amount, setAmount, detail, setDetail,
   cashCity, setCashCity, cashPointId, setCashPointId,
   balance, submitting, onClose, onSubmit, pickupCatalog, pickupCities,
+  destinationsLoading, destinationsLoaded, destinationsError, onRetryDestinations,
 }: {
   method: WalletWithdrawMethod;
   setMethod: (m: WalletWithdrawMethod) => void;
@@ -293,6 +338,10 @@ function WithdrawForm({
   onSubmit: () => void;
   pickupCatalog: MobcashPickupPoint[];
   pickupCities: string[];
+  destinationsLoading: boolean;
+  destinationsLoaded: boolean;
+  destinationsError: string;
+  onRetryDestinations: () => void;
 }) {
   const cfg = methodConfig[method];
   const MethodIcon = cfg.icon;
@@ -302,14 +351,17 @@ function WithdrawForm({
     [pickupCatalog, cashCity],
   );
   const selectedPoint = cityPoints.find((point) => point.id === cashPointId);
+  const destinationsReady =
+    destinationsLoaded && !destinationsLoading && !destinationsError && pickupCatalog.length > 0;
   const cashReady =
     method === 'cash' &&
+    destinationsReady &&
     Boolean(cashCity) &&
     Boolean(selectedPoint) &&
     Number.isFinite(numAmount) &&
     numAmount >= MOBCASH_MIN_WITHDRAWAL &&
     numAmount <= balance;
-  const canSubmit = method === 'cash' ? cashReady : !submitting;
+  const cashSubmitDisabled = submitting || (method === 'cash' && !cashReady);
 
   return (
     <div className="mx-3 mt-3 bg-white dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 p-4 transition-colors">
@@ -389,22 +441,44 @@ function WithdrawForm({
         </>
       ) : (
         <div className="mb-4 space-y-3">
-          <SearchableSelect
-            label="Город"
-            placeholder="Выберите город"
-            value={cashCity}
-            options={pickupCities.map((city) => ({ id: city, label: city }))}
-            onChange={setCashCity}
-          />
-          <SearchableSelect
-            label="Улица / Касса"
-            placeholder={cashCity ? 'Выберите точку выдачи' : 'Сначала выберите город'}
-            value={cashPointId}
-            displayValue={selectedPoint?.label}
-            options={cityPoints.map((point) => ({ id: point.id, label: point.label }))}
-            onChange={setCashPointId}
-            disabled={!cashCity}
-          />
+          {destinationsLoading && (
+            <p className="text-sm font-medium text-gray-600 dark:text-gray-300">Загрузка доступных касс...</p>
+          )}
+          {!destinationsLoading && destinationsError && (
+            <div className="space-y-2">
+              <p className="text-sm font-semibold text-red-600">{destinationsError}</p>
+              <button
+                type="button"
+                onClick={onRetryDestinations}
+                className="text-xs font-bold text-brand-600 hover:text-brand-700"
+              >
+                Обновить
+              </button>
+            </div>
+          )}
+          {!destinationsLoading && !destinationsError && destinationsLoaded && pickupCatalog.length === 0 && (
+            <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">Сейчас нет доступных касс для выдачи.</p>
+          )}
+          {destinationsReady && (
+            <>
+              <SearchableSelect
+                label="Город"
+                placeholder="Выберите город"
+                value={cashCity}
+                options={pickupCities.map((city) => ({ id: city, label: city }))}
+                onChange={setCashCity}
+              />
+              <SearchableSelect
+                label="Улица / Касса"
+                placeholder={cashCity ? 'Выберите точку выдачи' : 'Сначала выберите город'}
+                value={cashPointId}
+                displayValue={selectedPoint?.label}
+                options={cityPoints.map((point) => ({ id: point.id, label: point.label }))}
+                onChange={setCashPointId}
+                disabled={!cashCity}
+              />
+            </>
+          )}
           <p className="text-xs text-gray-500 dark:text-gray-300 leading-relaxed">
             Паспортные данные для наличных не нужны. Минимальная сумма — {MOBCASH_MIN_WITHDRAWAL.toFixed(2)} TMTM.
           </p>
@@ -415,7 +489,7 @@ function WithdrawForm({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={submitting || (method === 'cash' ? !cashReady : false)}
+        disabled={cashSubmitDisabled}
         className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
       >
         {submitting ? (
@@ -430,7 +504,7 @@ function WithdrawForm({
           </>
         )}
       </button>
-      {method === 'cash' && !canSubmit && !submitting && (
+      {method === 'cash' && destinationsReady && !cashReady && !submitting && (
         <p className="mt-2 text-center text-[11px] font-medium text-gray-500 dark:text-gray-400">
           Выберите город, кассу и сумму от {MOBCASH_MIN_WITHDRAWAL.toFixed(2)} TMTM
         </p>

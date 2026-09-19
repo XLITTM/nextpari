@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 
 export interface WithdrawalReviewSummary {
@@ -111,6 +111,10 @@ export function WithdrawalAttributionReviewPanel({
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [busyAction, setBusyAction] = useState<'start' | 'approve' | 'reject' | null>(null);
+  const busyRef = useRef(false);
+  const reasonReady = reason.trim().length >= 1;
+  const actionBusy = busyAction !== null;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -133,7 +137,11 @@ export function WithdrawalAttributionReviewPanel({
   }, [load]);
 
   const act = async (kind: 'start' | 'approve' | 'reject') => {
-    if (!selected) return;
+    if (!selected || busyAction || busyRef.current) return;
+    if ((kind === 'approve' || kind === 'reject') && reason.trim().length < 1) return;
+    busyRef.current = true;
+    setBusyAction(kind);
+    setError('');
     try {
       if (kind === 'start') await api.start(selected.id);
       if (kind === 'approve') await api.approve(selected.id, reason);
@@ -143,6 +151,9 @@ export function WithdrawalAttributionReviewPanel({
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка');
+    } finally {
+      busyRef.current = false;
+      setBusyAction(null);
     }
   };
 
@@ -207,21 +218,38 @@ export function WithdrawalAttributionReviewPanel({
               <>
                 <textarea
                   value={reason}
-                  onChange={(e) => setReason(e.target.value)}
+                  onChange={(e) => setReason(e.target.value.slice(0, 500))}
+                  maxLength={500}
                   placeholder="Внутренняя причина"
                   className="w-full bg-slate-50 rounded-xl p-3 text-sm"
                 />
+                {actionBusy && <p className="text-xs font-semibold text-gray-500">Обработка...</p>}
                 <div className="flex gap-2">
                   {selected.status === 'required' && (
-                    <button type="button" onClick={() => void act('start')} className="px-3 py-2 rounded-xl bg-slate-200 text-sm font-bold">
-                      На рассмотрении
+                    <button
+                      type="button"
+                      onClick={() => void act('start')}
+                      disabled={actionBusy}
+                      className="px-3 py-2 rounded-xl bg-slate-200 text-sm font-bold disabled:opacity-50"
+                    >
+                      {busyAction === 'start' ? 'Обработка...' : 'На рассмотрении'}
                     </button>
                   )}
-                  <button type="button" onClick={() => void act('approve')} className="px-3 py-2 rounded-xl bg-green-600 text-white text-sm font-bold">
-                    Одобрить
+                  <button
+                    type="button"
+                    onClick={() => void act('approve')}
+                    disabled={actionBusy || !reasonReady}
+                    className="px-3 py-2 rounded-xl bg-green-600 text-white text-sm font-bold disabled:opacity-50"
+                  >
+                    {busyAction === 'approve' ? 'Обработка...' : 'Одобрить'}
                   </button>
-                  <button type="button" onClick={() => void act('reject')} className="px-3 py-2 rounded-xl bg-red-600 text-white text-sm font-bold">
-                    Отклонить
+                  <button
+                    type="button"
+                    onClick={() => void act('reject')}
+                    disabled={actionBusy || !reasonReady}
+                    className="px-3 py-2 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-50"
+                  >
+                    {busyAction === 'reject' ? 'Обработка...' : 'Отклонить'}
                   </button>
                 </div>
               </>
