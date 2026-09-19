@@ -12,10 +12,23 @@ export interface AttributionAllocation {
   allocatedMinor: number;
 }
 
+export interface AttributionWeightExact {
+  sourceKind: AttributionKind;
+  sourceCashierId: string | null;
+  weightMinor: bigint;
+}
+
+export interface AttributionAllocationExact {
+  sourceKind: AttributionKind;
+  sourceCashierId: string | null;
+  allocatedMinor: bigint;
+}
+
 function sortKey(part: { sourceKind: string; sourceCashierId: string | null }): string {
   return `${part.sourceKind}:${part.sourceCashierId ?? ''}`;
 }
 
+/** Fixture-scale helper only. Production minor-unit arithmetic is PostgreSQL NUMERIC(40,0). */
 export function amountToMinor(amount: string, scale: 0 | 2): number {
   if (!/^-?\d+(\.\d+)?$/.test(amount)) {
     throw new Error('CURRENCY_AMOUNT_SCALE_INVALID');
@@ -26,6 +39,9 @@ export function amountToMinor(amount: string, scale: 0 | 2): number {
   }
   const padded = (frac + '0'.repeat(scale)).slice(0, scale);
   const text = scale === 0 ? whole : `${whole}${padded}`;
+  if (!/^-?\d+$/.test(text) || text.replace('-', '').length > 15) {
+    throw new Error('CURRENCY_AMOUNT_SCALE_INVALID');
+  }
   const minor = Number(text);
   if (!Number.isSafeInteger(minor)) {
     throw new Error('CURRENCY_AMOUNT_SCALE_INVALID');
@@ -33,37 +49,69 @@ export function amountToMinor(amount: string, scale: 0 | 2): number {
   return minor;
 }
 
+/**
+ * Exact Hamilton allocation in integer minor units.
+ * Mirrors private.attribution_allocate_largest_remainder (NUMERIC, trunc, no float).
+ * JS Number is not used and is not production money safety.
+ */
+export function allocateLargestRemainderExact(
+  parts: AttributionWeightExact[],
+  amountMinor: bigint,
+): AttributionAllocationExact[] {
+  if (amountMinor <= 0n) return [];
+  const total = parts.reduce((sum, part) => sum + part.weightMinor, 0n);
+  if (total <= 0n) {
+    throw new Error('ATTRIBUTION_NO_SOURCE');
+  }
+  const ranked = parts
+    .map((part) => {
+      const product = amountMinor * part.weightMinor;
+      const floorMinor = product / total;
+      const remainderMinor = product - floorMinor * total;
+      return { ...part, floorMinor, remainderMinor };
+    })
+    .sort((a, b) => {
+      if (b.remainderMinor !== a.remainderMinor) {
+        return b.remainderMinor > a.remainderMinor ? 1 : -1;
+      }
+      return sortKey(a).localeCompare(sortKey(b));
+    });
+  let extra = amountMinor - ranked.reduce((sum, part) => sum + part.floorMinor, 0n);
+  return ranked
+    .map((part) => {
+      const bonus = extra > 0n ? 1n : 0n;
+      if (extra > 0n) extra -= 1n;
+      return {
+        sourceKind: part.sourceKind,
+        sourceCashierId: part.sourceCashierId,
+        allocatedMinor: part.floorMinor + bonus,
+      };
+    })
+    .filter((part) => part.allocatedMinor > 0n)
+    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+}
+
+/** Small-fixture wrapper. Do not use JS Number for values that can exceed 2^53-1. */
 export function allocateLargestRemainder(
   parts: AttributionWeight[],
   amountMinor: number,
 ): AttributionAllocation[] {
   if (!Number.isInteger(amountMinor) || amountMinor <= 0) return [];
-  const total = parts.reduce((sum, part) => sum + part.weightMinor, 0);
-  if (total <= 0) {
-    throw new Error('ATTRIBUTION_NO_SOURCE');
+  if (!parts.every((part) => Number.isSafeInteger(part.weightMinor))) {
+    throw new Error('ATTRIBUTION_JS_NUMBER_UNSAFE');
   }
-  const ranked = parts
-    .map((part) => {
-      const floorMinor = Math.trunc((amountMinor * part.weightMinor) / total);
-      const remainderMinor = (amountMinor * part.weightMinor) % total;
-      return { ...part, floorMinor, remainderMinor };
-    })
-    .sort((a, b) => {
-      if (b.remainderMinor !== a.remainderMinor) return b.remainderMinor - a.remainderMinor;
-      return sortKey(a).localeCompare(sortKey(b));
-    });
-  const extra = amountMinor - ranked.reduce((sum, part) => sum + part.floorMinor, 0);
-  return ranked
-    .map((part, index) => {
-      const allocatedMinor = part.floorMinor + (index < extra ? 1 : 0);
-      return {
-        sourceKind: part.sourceKind,
-        sourceCashierId: part.sourceCashierId,
-        allocatedMinor,
-      };
-    })
-    .filter((part) => part.allocatedMinor > 0)
-    .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+  return allocateLargestRemainderExact(
+    parts.map((part) => ({
+      sourceKind: part.sourceKind,
+      sourceCashierId: part.sourceCashierId,
+      weightMinor: BigInt(part.weightMinor),
+    })),
+    BigInt(amountMinor),
+  ).map((part) => ({
+    sourceKind: part.sourceKind,
+    sourceCashierId: part.sourceCashierId,
+    allocatedMinor: Number(part.allocatedMinor),
+  }));
 }
 
 export function consumeAvailable(
@@ -103,8 +151,14 @@ export function classifyCashWithdrawal(args: {
 export function reserveWithdrawal(args: {
   buckets: AttributionWeight[];
   requestedMinor: number;
-  selectedCashierId: string;
+  selectedCashierId: string | null;
 }): AttributionAllocation[] {
+  if (args.selectedCashierId == null) {
+    return allocateLargestRemainder(
+      args.buckets.filter((part) => part.weightMinor > 0),
+      args.requestedMinor,
+    );
+  }
   const selected = args.buckets.find(
     (part) => part.sourceKind === 'cashier' && part.sourceCashierId === args.selectedCashierId,
   );
@@ -124,6 +178,23 @@ export function reserveWithdrawal(args: {
     });
   }
   return [...parts, ...restParts].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+}
+
+export function applyHoldParts(
+  available: AttributionWeight[],
+  parts: AttributionAllocation[],
+): { available: AttributionWeight[]; reserved: AttributionAllocation[] } {
+  const next = available.map((bucket) => ({ ...bucket }));
+  for (const part of parts) {
+    const bucket = next.find(
+      (row) => row.sourceKind === part.sourceKind && row.sourceCashierId === part.sourceCashierId,
+    );
+    if (!bucket || bucket.weightMinor < part.allocatedMinor) {
+      throw new Error('ATTRIBUTION_BUCKET_UNDERFLOW');
+    }
+    bucket.weightMinor -= part.allocatedMinor;
+  }
+  return { available: next, reserved: parts };
 }
 
 export const PLAYER_REVIEW_NOTICE = 'Заявка на вывод находится на рассмотрении.';

@@ -78,8 +78,8 @@ CREATE TABLE IF NOT EXISTS private.player_fund_attribution (
     source_cashier_id UUID
         REFERENCES public.cashiers (id)
         ON DELETE RESTRICT,
-    available_minor BIGINT NOT NULL DEFAULT 0,
-    reserved_minor BIGINT NOT NULL DEFAULT 0,
+    available_minor NUMERIC(40, 0) NOT NULL DEFAULT 0,
+    reserved_minor NUMERIC(40, 0) NOT NULL DEFAULT 0,
     version BIGINT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
@@ -118,8 +118,8 @@ CREATE TABLE IF NOT EXISTS private.player_fund_attribution_ledger (
     currency TEXT NOT NULL,
     source_kind TEXT NOT NULL,
     source_cashier_id UUID,
-    available_delta_minor BIGINT NOT NULL,
-    reserved_delta_minor BIGINT NOT NULL,
+    available_delta_minor NUMERIC(40, 0) NOT NULL,
+    reserved_delta_minor NUMERIC(40, 0) NOT NULL,
     entry_key TEXT NOT NULL,
     reference_type TEXT,
     reference_id TEXT,
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS private.player_stake_attribution (
     stake_ref TEXT NOT NULL,
     source_kind TEXT NOT NULL,
     source_cashier_id UUID,
-    stake_minor BIGINT NOT NULL,
+    stake_minor NUMERIC(40, 0) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
     CONSTRAINT player_stake_attribution_kind_check
         CHECK (source_kind IN ('cashier', 'treasury', 'house', 'legacy', 'bonus')),
@@ -189,7 +189,7 @@ CREATE TABLE IF NOT EXISTS private.player_fund_hold_parts (
     currency TEXT NOT NULL,
     source_kind TEXT NOT NULL,
     source_cashier_id UUID,
-    reserved_minor BIGINT NOT NULL,
+    reserved_minor NUMERIC(40, 0) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT pg_catalog.now(),
     CONSTRAINT player_fund_hold_parts_positive CHECK (reserved_minor > 0),
     CONSTRAINT player_fund_hold_parts_kind_check
@@ -397,7 +397,7 @@ GRANT EXECUTE ON FUNCTION private.set_fund_attribution_enforcement(BOOLEAN) TO s
 
 
 CREATE OR REPLACE FUNCTION private.currency_amount_to_minor(p_display TEXT, p_amount NUMERIC)
-RETURNS BIGINT
+RETURNS NUMERIC
 LANGUAGE plpgsql
 STABLE
 SET search_path = ''
@@ -406,6 +406,7 @@ DECLARE
     v_code TEXT;
     v_scale INTEGER;
     v_factor NUMERIC;
+    v_minor NUMERIC(40, 0);
 BEGIN
     v_code := private.require_supported_display_currency(p_display);
     PERFORM private.require_currency_amount_scale(v_code, p_amount);
@@ -414,7 +415,11 @@ BEGIN
     WHERE c.code = v_code;
     v_scale := COALESCE(v_scale, 2);
     v_factor := 10::NUMERIC ^ v_scale;
-    RETURN (p_amount * v_factor)::BIGINT;
+    v_minor := trunc(p_amount * v_factor);
+    IF v_minor IS DISTINCT FROM (p_amount * v_factor) THEN
+        RAISE EXCEPTION 'CURRENCY_AMOUNT_SCALE_INVALID';
+    END IF;
+    RETURN v_minor;
 END;
 $fn$;
 
@@ -422,7 +427,7 @@ REVOKE ALL ON FUNCTION private.currency_amount_to_minor(TEXT, NUMERIC) FROM PUBL
 GRANT EXECUTE ON FUNCTION private.currency_amount_to_minor(TEXT, NUMERIC) TO service_role;
 
 
-CREATE OR REPLACE FUNCTION private.currency_minor_to_amount(p_display TEXT, p_minor BIGINT)
+CREATE OR REPLACE FUNCTION private.currency_minor_to_amount(p_display TEXT, p_minor NUMERIC)
 RETURNS NUMERIC
 LANGUAGE plpgsql
 STABLE
@@ -439,12 +444,15 @@ BEGIN
     WHERE c.code = v_code;
     v_scale := COALESCE(v_scale, 2);
     v_factor := 10::NUMERIC ^ v_scale;
-    RETURN ROUND((COALESCE(p_minor, 0)::NUMERIC / v_factor), v_scale);
+    IF p_minor IS NULL OR trunc(p_minor) IS DISTINCT FROM p_minor THEN
+        RAISE EXCEPTION 'CURRENCY_AMOUNT_SCALE_INVALID';
+    END IF;
+    RETURN trunc(COALESCE(p_minor, 0)) / v_factor;
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION private.currency_minor_to_amount(TEXT, BIGINT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.currency_minor_to_amount(TEXT, BIGINT) TO service_role;
+REVOKE ALL ON FUNCTION private.currency_minor_to_amount(TEXT, NUMERIC) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.currency_minor_to_amount(TEXT, NUMERIC) TO service_role;
 
 
 CREATE OR REPLACE FUNCTION private.attribution_bucket_key(p_kind TEXT, p_cashier UUID)
@@ -465,8 +473,8 @@ CREATE OR REPLACE FUNCTION private.apply_fund_attribution_delta(
     p_currency TEXT,
     p_source_kind TEXT,
     p_source_cashier_id UUID,
-    p_available_delta BIGINT,
-    p_reserved_delta BIGINT,
+    p_available_delta NUMERIC,
+    p_reserved_delta NUMERIC,
     p_entry_key TEXT,
     p_reference_type TEXT,
     p_reference_id TEXT,
@@ -480,8 +488,8 @@ SET search_path = ''
 AS $fn$
 DECLARE
     v_existing TEXT;
-    v_avail BIGINT;
-    v_res BIGINT;
+    v_avail NUMERIC(40, 0);
+    v_res NUMERIC(40, 0);
 BEGIN
     IF p_available_delta = 0 AND p_reserved_delta = 0 THEN
         RETURN;
@@ -559,8 +567,8 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION private.apply_fund_attribution_delta(UUID, TEXT, TEXT, UUID, BIGINT, BIGINT, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.apply_fund_attribution_delta(UUID, TEXT, TEXT, UUID, BIGINT, BIGINT, TEXT, TEXT, TEXT, TEXT, JSONB) TO service_role;
+REVOKE ALL ON FUNCTION private.apply_fund_attribution_delta(UUID, TEXT, TEXT, UUID, NUMERIC, NUMERIC, TEXT, TEXT, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.apply_fund_attribution_delta(UUID, TEXT, TEXT, UUID, NUMERIC, NUMERIC, TEXT, TEXT, TEXT, TEXT, JSONB) TO service_role;
 
 
 CREATE OR REPLACE FUNCTION private.mark_fund_attribution_inconsistent(p_wallet_id UUID, p_currency TEXT)
@@ -594,10 +602,10 @@ DECLARE
     v_available NUMERIC;
     v_locked NUMERIC;
     v_display TEXT;
-    v_sum_avail BIGINT;
-    v_sum_res BIGINT;
-    v_need_avail BIGINT;
-    v_need_res BIGINT;
+    v_sum_avail NUMERIC(40, 0);
+    v_sum_res NUMERIC(40, 0);
+    v_need_avail NUMERIC(40, 0);
+    v_need_res NUMERIC(40, 0);
     v_state TEXT;
 BEGIN
     SELECT a.currency, a.available_balance, a.locked_balance
@@ -663,8 +671,8 @@ DECLARE
     v_currency TEXT;
     v_display TEXT;
     v_state TEXT;
-    v_avail BIGINT;
-    v_locked BIGINT;
+    v_avail NUMERIC(40, 0);
+    v_locked NUMERIC(40, 0);
     v_entry BIGINT;
 BEGIN
     SELECT a.currency
@@ -751,20 +759,21 @@ GRANT EXECUTE ON FUNCTION private.attribution_part_cashier_id(JSONB) TO service_
 
 CREATE OR REPLACE FUNCTION private.attribution_allocate_largest_remainder(
     p_parts JSONB,
-    p_amount_minor BIGINT
+    p_amount_minor NUMERIC
 )
 RETURNS JSONB
 LANGUAGE sql
 STABLE
 SET search_path = ''
 AS $fn$
-    -- Deterministic largest-remainder (Hamilton) in integer minor units.
+    -- Deterministic largest-remainder (Hamilton) in exact integer NUMERIC minor units.
+    -- Intermediates stay NUMERIC so amount × weight cannot overflow BIGINT.
     -- Same input always yields the same attribution output. No floating point.
     WITH src AS (
         SELECT
             t.value ->> 'source_kind' AS source_kind,
             private.attribution_part_cashier_id(t.value) AS source_cashier_id,
-            COALESCE((t.value ->> 'weight_minor')::BIGINT, 0) AS weight_minor
+            trunc(COALESCE((t.value ->> 'weight_minor')::NUMERIC, 0)) AS weight_minor
         FROM jsonb_array_elements(COALESCE(p_parts, '[]'::jsonb)) AS t(value)
     ),
     tot AS (
@@ -777,18 +786,19 @@ AS $fn$
             s.source_cashier_id,
             s.weight_minor,
             CASE
-                WHEN t.total_weight <= 0 OR COALESCE(p_amount_minor, 0) <= 0 THEN 0::BIGINT
-                ELSE (p_amount_minor * s.weight_minor) / t.total_weight
+                WHEN t.total_weight <= 0 OR COALESCE(p_amount_minor, 0) <= 0 THEN 0::NUMERIC
+                ELSE trunc((trunc(p_amount_minor) * s.weight_minor) / t.total_weight)
             END AS floor_minor,
             CASE
-                WHEN t.total_weight <= 0 OR COALESCE(p_amount_minor, 0) <= 0 THEN 0::BIGINT
-                ELSE (p_amount_minor * s.weight_minor) % t.total_weight
+                WHEN t.total_weight <= 0 OR COALESCE(p_amount_minor, 0) <= 0 THEN 0::NUMERIC
+                ELSE (trunc(p_amount_minor) * s.weight_minor)
+                     - trunc((trunc(p_amount_minor) * s.weight_minor) / t.total_weight) * t.total_weight
             END AS remainder_minor
         FROM src AS s
         CROSS JOIN tot AS t
     ),
     leftover AS (
-        SELECT COALESCE(p_amount_minor, 0) - COALESCE(SUM(floor_minor), 0) AS extra
+        SELECT trunc(COALESCE(p_amount_minor, 0)) - COALESCE(SUM(floor_minor), 0) AS extra
         FROM floors
     ),
     ranked AS (
@@ -819,8 +829,8 @@ AS $fn$
     WHERE a.allocated_minor > 0;
 $fn$;
 
-REVOKE ALL ON FUNCTION private.attribution_allocate_largest_remainder(JSONB, BIGINT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.attribution_allocate_largest_remainder(JSONB, BIGINT) TO service_role;
+REVOKE ALL ON FUNCTION private.attribution_allocate_largest_remainder(JSONB, NUMERIC) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.attribution_allocate_largest_remainder(JSONB, NUMERIC) TO service_role;
 
 
 CREATE OR REPLACE FUNCTION private.current_attribution_weights(
@@ -861,7 +871,7 @@ GRANT EXECUTE ON FUNCTION private.current_attribution_weights(UUID, TEXT, UUID) 
 CREATE OR REPLACE FUNCTION private.attribution_consume_available(
     p_wallet_id UUID,
     p_currency TEXT,
-    p_amount_minor BIGINT,
+    p_amount_minor NUMERIC,
     p_entry_prefix TEXT,
     p_reference_type TEXT,
     p_reference_id TEXT,
@@ -879,7 +889,7 @@ DECLARE
     v_item JSONB;
     v_kind TEXT;
     v_cashier UUID;
-    v_amt BIGINT;
+    v_amt NUMERIC(40, 0);
     v_parts JSONB := '[]'::jsonb;
 BEGIN
     IF p_amount_minor IS NULL OR p_amount_minor <= 0 THEN
@@ -898,7 +908,7 @@ BEGIN
     LOOP
         v_kind := v_item->>'source_kind';
         v_cashier := private.attribution_part_cashier_id(v_item);
-        v_amt := (v_item->>'allocated_minor')::BIGINT;
+        v_amt := trunc((v_item->>'allocated_minor')::NUMERIC);
         PERFORM private.apply_fund_attribution_delta(
             p_wallet_id, p_currency, v_kind, v_cashier,
             -v_amt, 0,
@@ -927,14 +937,14 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION private.attribution_consume_available(UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TEXT, BOOLEAN) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.attribution_consume_available(UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO service_role;
+REVOKE ALL ON FUNCTION private.attribution_consume_available(UUID, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT, BOOLEAN) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.attribution_consume_available(UUID, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO service_role;
 
 
 CREATE OR REPLACE FUNCTION private.attribution_credit_from_snapshot(
     p_wallet_id UUID,
     p_currency TEXT,
-    p_amount_minor BIGINT,
+    p_amount_minor NUMERIC,
     p_stake_scope TEXT,
     p_stake_ref TEXT,
     p_entry_prefix TEXT,
@@ -951,7 +961,7 @@ DECLARE
     v_item JSONB;
     v_kind TEXT;
     v_cashier UUID;
-    v_amt BIGINT;
+    v_amt NUMERIC(40, 0);
 BEGIN
     IF p_amount_minor IS NULL OR p_amount_minor <= 0 THEN
         RETURN;
@@ -984,7 +994,7 @@ BEGIN
     LOOP
         v_kind := v_item->>'source_kind';
         v_cashier := private.attribution_part_cashier_id(v_item);
-        v_amt := (v_item->>'allocated_minor')::BIGINT;
+        v_amt := trunc((v_item->>'allocated_minor')::NUMERIC);
         PERFORM private.apply_fund_attribution_delta(
             p_wallet_id, p_currency, v_kind, v_cashier,
             v_amt, 0,
@@ -996,14 +1006,80 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION private.attribution_credit_from_snapshot(UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.attribution_credit_from_snapshot(UUID, TEXT, BIGINT, TEXT, TEXT, TEXT, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION private.attribution_credit_from_snapshot(UUID, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.attribution_credit_from_snapshot(UUID, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT) TO service_role;
+
+
+CREATE OR REPLACE FUNCTION private.attribution_consume_from_snapshot(
+    p_wallet_id UUID,
+    p_currency TEXT,
+    p_amount_minor NUMERIC,
+    p_stake_scope TEXT,
+    p_stake_ref TEXT,
+    p_entry_prefix TEXT,
+    p_wallet_ledger_entry_key TEXT
+)
+RETURNS VOID
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_weights JSONB;
+    v_alloc JSONB;
+    v_item JSONB;
+    v_kind TEXT;
+    v_cashier UUID;
+    v_amt NUMERIC(40, 0);
+BEGIN
+    IF p_amount_minor IS NULL OR p_amount_minor <= 0 THEN
+        RETURN;
+    END IF;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+        'source_kind', s.source_kind,
+        'source_cashier_id', to_jsonb(s.source_cashier_id),
+        'weight_minor', s.stake_minor
+    ) ORDER BY s.source_kind, COALESCE(s.source_cashier_id::TEXT, '')), '[]'::jsonb)
+    INTO v_weights
+    FROM private.player_stake_attribution AS s
+    WHERE s.stake_scope = p_stake_scope
+      AND s.stake_ref = p_stake_ref;
+
+    IF v_weights = '[]'::jsonb THEN
+        PERFORM private.attribution_consume_available(
+            p_wallet_id, p_currency, p_amount_minor,
+            p_entry_prefix, p_stake_scope, p_stake_ref, p_wallet_ledger_entry_key, FALSE
+        );
+        PERFORM private.mark_fund_attribution_inconsistent(p_wallet_id, p_currency);
+        RETURN;
+    END IF;
+
+    v_alloc := private.attribution_allocate_largest_remainder(v_weights, p_amount_minor);
+    FOR v_item IN SELECT value FROM jsonb_array_elements(v_alloc)
+    LOOP
+        v_kind := v_item->>'source_kind';
+        v_cashier := private.attribution_part_cashier_id(v_item);
+        v_amt := trunc((v_item->>'allocated_minor')::NUMERIC);
+        PERFORM private.apply_fund_attribution_delta(
+            p_wallet_id, p_currency, v_kind, v_cashier,
+            -v_amt, 0,
+            p_entry_prefix || ':' || private.attribution_bucket_key(v_kind, v_cashier),
+            p_stake_scope, p_stake_ref, p_wallet_ledger_entry_key,
+            jsonb_build_object('phase', 'consume_from_snapshot')
+        );
+    END LOOP;
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.attribution_consume_from_snapshot(UUID, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.attribution_consume_from_snapshot(UUID, TEXT, NUMERIC, TEXT, TEXT, TEXT, TEXT) TO service_role;
 
 
 CREATE OR REPLACE FUNCTION private.attribution_reserve_withdrawal(
     p_wallet_id UUID,
     p_currency TEXT,
-    p_amount_minor BIGINT,
+    p_amount_minor NUMERIC,
     p_selected_cashier UUID,
     p_hold_ref TEXT,
     p_entry_prefix TEXT,
@@ -1015,15 +1091,15 @@ VOLATILE
 SET search_path = ''
 AS $fn$
 DECLARE
-    v_selected BIGINT := 0;
-    v_take BIGINT;
-    v_rest BIGINT;
+    v_selected NUMERIC(40, 0) := 0;
+    v_take NUMERIC(40, 0);
+    v_rest NUMERIC(40, 0);
     v_weights JSONB;
     v_alloc JSONB;
     v_item JSONB;
     v_kind TEXT;
     v_cashier UUID;
-    v_amt BIGINT;
+    v_amt NUMERIC(40, 0);
     v_parts JSONB := '[]'::jsonb;
 BEGIN
     IF p_amount_minor IS NULL OR p_amount_minor <= 0 THEN
@@ -1072,7 +1148,7 @@ BEGIN
         LOOP
             v_kind := v_item->>'source_kind';
             v_cashier := private.attribution_part_cashier_id(v_item);
-            v_amt := (v_item->>'allocated_minor')::BIGINT;
+            v_amt := trunc((v_item->>'allocated_minor')::NUMERIC);
             PERFORM private.apply_fund_attribution_delta(
                 p_wallet_id, p_currency, v_kind, v_cashier,
                 -v_amt, v_amt,
@@ -1101,8 +1177,8 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION private.attribution_reserve_withdrawal(UUID, TEXT, BIGINT, UUID, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION private.attribution_reserve_withdrawal(UUID, TEXT, BIGINT, UUID, TEXT, TEXT, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION private.attribution_reserve_withdrawal(UUID, TEXT, NUMERIC, UUID, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.attribution_reserve_withdrawal(UUID, TEXT, NUMERIC, UUID, TEXT, TEXT, TEXT) TO service_role;
 
 
 CREATE OR REPLACE FUNCTION private.attribution_release_hold(
@@ -1175,10 +1251,275 @@ REVOKE ALL ON FUNCTION private.attribution_complete_hold(TEXT, TEXT, TEXT) FROM 
 GRANT EXECUTE ON FUNCTION private.attribution_complete_hold(TEXT, TEXT, TEXT) TO service_role;
 
 
+CREATE OR REPLACE FUNCTION private.attribution_resolve_hold_ref(
+    p_reference_type TEXT,
+    p_reference_id TEXT,
+    p_entry_key TEXT,
+    p_metadata JSONB
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+STABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_ref TEXT;
+    v_type TEXT;
+    v_meta_payout TEXT;
+    v_payout TEXT;
+    v_transfer UUID;
+BEGIN
+    v_type := NULLIF(BTRIM(COALESCE(p_reference_type, '')), '');
+    v_ref := NULLIF(BTRIM(COALESCE(p_reference_id, '')), '');
+
+    IF v_type = 'cashier_player_payout' AND v_ref IS NOT NULL THEN
+        RETURN v_ref;
+    END IF;
+    IF v_type = 'player_withdrawal' AND v_ref IS NOT NULL THEN
+        RETURN v_ref;
+    END IF;
+
+    v_meta_payout := NULLIF(BTRIM(COALESCE(p_metadata->>'payout_id', '')), '');
+    IF v_meta_payout IS NOT NULL THEN
+        RETURN v_meta_payout;
+    END IF;
+
+    IF v_type = 'operational_transfer' AND v_ref IS NOT NULL THEN
+        BEGIN
+            v_transfer := v_ref::UUID;
+            SELECT NULLIF(BTRIM(COALESCE(t.metadata->>'payout_id', '')), '')
+            INTO v_payout
+            FROM private.operational_transfers AS t
+            WHERE t.id = v_transfer;
+            IF v_payout IS NOT NULL THEN
+                RETURN v_payout;
+            END IF;
+            SELECT p.id::TEXT
+            INTO v_payout
+            FROM private.cashier_player_payout_requests AS p
+            WHERE p.operational_transfer_id = v_transfer
+            LIMIT 1;
+            IF v_payout IS NOT NULL THEN
+                RETURN v_payout;
+            END IF;
+        EXCEPTION
+            WHEN invalid_text_representation THEN
+                NULL;
+        END;
+    END IF;
+
+    IF v_ref IS NOT NULL AND EXISTS (
+        SELECT 1 FROM private.player_fund_hold_parts AS h WHERE h.hold_ref = v_ref
+    ) THEN
+        RETURN v_ref;
+    END IF;
+
+    IF p_entry_key IS NOT NULL AND EXISTS (
+        SELECT 1 FROM private.player_fund_hold_parts AS h WHERE h.hold_ref = p_entry_key
+    ) THEN
+        RETURN p_entry_key;
+    END IF;
+
+    RETURN COALESCE(v_ref, p_entry_key);
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.attribution_resolve_hold_ref(TEXT, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.attribution_resolve_hold_ref(TEXT, TEXT, TEXT, JSONB) TO service_role;
+
 
 -- ============================================================
 -- 6. WALLET LEDGER DUAL-WRITE (no apply_wallet_entry rewrite)
+-- Native sports CASINO_* rows with reference_type sports_bet are stored
+-- as SPORTS_BET / SPORTS_WIN / SPORTS_REFUND before CHECK / AFTER trigger.
 -- ============================================================
+
+DO $sports_ops$
+DECLARE
+    v_vals TEXT[];
+    v_tok TEXT;
+    v_sql TEXT;
+    v_cons TEXT := 'wallet_ledger_operation_type_check';
+    v_defaults TEXT[] := ARRAY[
+        'CASH_DEPOSIT',
+        'TREASURY_FUNDING',
+        'WITHDRAWAL_HOLD',
+        'WITHDRAWAL_RELEASE',
+        'WITHDRAWAL_COMPLETE',
+        'CASINO_BET',
+        'CASINO_WIN',
+        'CASINO_REFUND',
+        'OPENING_BALANCE',
+        'OWNER_DEBIT',
+        'CASH_DEPOSIT_REVERSAL'
+    ];
+BEGIN
+    PERFORM pg_catalog.set_config('search_path', '', true);
+    SELECT COALESCE((
+        SELECT ARRAY(
+            SELECT (pg_catalog.regexp_matches(pg_catalog.pg_get_constraintdef(c.oid), '''([A-Z_]+)''', 'g'))[1]
+            FROM pg_catalog.pg_constraint AS c
+            INNER JOIN pg_catalog.pg_class AS t ON t.oid = c.conrelid
+            INNER JOIN pg_catalog.pg_namespace AS n ON n.oid = t.relnamespace
+            WHERE n.nspname = 'private'
+              AND t.relname = 'wallet_ledger'
+              AND c.conname = v_cons
+        )
+    ), v_defaults)
+    INTO v_vals;
+
+    IF v_vals IS NULL OR pg_catalog.array_length(v_vals, 1) IS NULL THEN
+        v_vals := v_defaults;
+    END IF;
+
+    FOREACH v_tok IN ARRAY ARRAY['SPORTS_BET', 'SPORTS_WIN', 'SPORTS_REFUND']
+    LOOP
+        IF NOT v_tok = ANY (v_vals) THEN
+            v_vals := pg_catalog.array_append(v_vals, v_tok);
+        END IF;
+    END LOOP;
+
+    v_sql := pg_catalog.format('ALTER TABLE private.wallet_ledger DROP CONSTRAINT IF EXISTS %I', v_cons);
+    EXECUTE v_sql;
+    v_sql := pg_catalog.format(
+        'ALTER TABLE private.wallet_ledger ADD CONSTRAINT %I CHECK (operation_type IN (%s))',
+        v_cons,
+        (
+            SELECT pg_catalog.string_agg(pg_catalog.quote_literal(x), ', ' ORDER BY x)
+            FROM pg_catalog.unnest(v_vals) AS x
+        )
+    );
+    EXECUTE v_sql;
+END
+$sports_ops$;
+
+
+CREATE OR REPLACE FUNCTION private.wallet_ledger_native_sports_operation()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = ''
+AS $fn$
+BEGIN
+    IF NEW.reference_type IS DISTINCT FROM 'sports_bet' THEN
+        RETURN NEW;
+    END IF;
+    IF NEW.operation_type = 'CASINO_BET' THEN
+        NEW.operation_type := 'SPORTS_BET';
+    ELSIF NEW.operation_type = 'CASINO_WIN' THEN
+        NEW.operation_type := 'SPORTS_WIN';
+    ELSIF NEW.operation_type = 'CASINO_REFUND' THEN
+        NEW.operation_type := 'SPORTS_REFUND';
+    END IF;
+    RETURN NEW;
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.wallet_ledger_native_sports_operation() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.wallet_ledger_native_sports_operation() TO service_role;
+
+DROP TRIGGER IF EXISTS wallet_ledger_native_sports_operation ON private.wallet_ledger;
+CREATE TRIGGER wallet_ledger_native_sports_operation
+    BEFORE INSERT ON private.wallet_ledger
+    FOR EACH ROW
+    EXECUTE FUNCTION private.wallet_ledger_native_sports_operation();
+
+
+CREATE OR REPLACE FUNCTION private.sports_credit(
+    p_wallet UUID,
+    p_amount NUMERIC,
+    p_op TEXT,
+    p_idempotency TEXT,
+    p_bet UUID,
+    p_actor TEXT,
+    p_meta JSONB
+)
+RETURNS UUID
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_ledger UUID;
+    v_amount NUMERIC(20, 2);
+    v_op TEXT;
+BEGIN
+    v_amount := private.game_money(p_amount);
+    IF v_amount <= 0 THEN
+        RETURN NULL;
+    END IF;
+    v_op := CASE p_op
+        WHEN 'CASINO_WIN' THEN 'SPORTS_WIN'
+        WHEN 'CASINO_REFUND' THEN 'SPORTS_REFUND'
+        ELSE p_op
+    END;
+    IF v_op NOT IN ('SPORTS_WIN', 'SPORTS_REFUND') THEN
+        RAISE EXCEPTION 'SPORTS_CREDIT_OPERATION_INVALID';
+    END IF;
+    SELECT e.ledger_id
+    INTO v_ledger
+    FROM private.apply_wallet_entry(
+        p_wallet,
+        v_amount,
+        0,
+        v_op,
+        'casino',
+        p_idempotency,
+        'sports_bet',
+        p_bet::TEXT,
+        'system',
+        p_actor,
+        p_meta
+    ) AS e;
+    RETURN v_ledger;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION private.sports_debit(
+    p_wallet UUID,
+    p_amount NUMERIC,
+    p_idempotency TEXT,
+    p_bet UUID,
+    p_actor TEXT,
+    p_meta JSONB
+)
+RETURNS UUID
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = ''
+AS $fn$
+DECLARE
+    v_ledger UUID;
+    v_amount NUMERIC(20, 2);
+BEGIN
+    v_amount := private.game_money(p_amount);
+    IF v_amount <= 0 THEN
+        RETURN NULL;
+    END IF;
+    SELECT e.ledger_id
+    INTO v_ledger
+    FROM private.apply_wallet_entry(
+        p_wallet,
+        -v_amount,
+        0,
+        'SPORTS_BET',
+        'casino',
+        p_idempotency,
+        'sports_bet',
+        p_bet::TEXT,
+        'system',
+        p_actor,
+        p_meta
+    ) AS e;
+    RETURN v_ledger;
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION private.sports_credit(UUID, NUMERIC, TEXT, TEXT, UUID, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.sports_credit(UUID, NUMERIC, TEXT, TEXT, UUID, TEXT, JSONB) TO service_role;
+REVOKE ALL ON FUNCTION private.sports_debit(UUID, NUMERIC, TEXT, UUID, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION private.sports_debit(UUID, NUMERIC, TEXT, UUID, TEXT, JSONB) TO service_role;
+
 
 CREATE OR REPLACE FUNCTION private.fund_attribution_on_wallet_ledger()
 RETURNS TRIGGER
@@ -1194,30 +1535,82 @@ DECLARE
     v_avail NUMERIC;
     v_locked NUMERIC;
     v_op TEXT;
-    v_minor BIGINT;
+    v_minor NUMERIC(40, 0);
     v_cashier UUID;
     v_scope TEXT;
     v_ref TEXT;
     v_related TEXT;
+    v_hold_ref TEXT;
+    v_state TEXT;
+    v_has_snapshot BOOLEAN;
 BEGIN
     v_op := NEW.operation_type;
     IF v_op IS NULL THEN
         RETURN NEW;
     END IF;
-    IF v_op IN ('WITHDRAWAL_HOLD', 'WITHDRAWAL_RELEASE', 'WITHDRAWAL_COMPLETE', 'OPENING_BALANCE') THEN
+
+    IF v_op = 'OPENING_BALANCE' THEN
+        RETURN NEW;
+    END IF;
+
+    IF v_op IN ('WITHDRAWAL_HOLD', 'WITHDRAWAL_RELEASE', 'WITHDRAWAL_COMPLETE') THEN
+        SELECT a.currency, a.available_balance, a.locked_balance
+        INTO v_currency, v_avail, v_locked
+        FROM private.wallet_accounts AS a
+        WHERE a.wallet_id = NEW.wallet_id;
+        IF v_currency IS NULL THEN
+            RETURN NEW;
+        END IF;
+        v_display := COALESCE(private.wallet_display_currency(v_currency), 'TMT');
+        v_pre_avail := v_avail - COALESCE(NEW.available_delta, 0);
+        v_pre_locked := v_locked - COALESCE(NEW.locked_delta, 0);
+        PERFORM private.ensure_fund_attribution_initialized(NEW.wallet_id, v_pre_avail, v_pre_locked);
+
+        SELECT s.state INTO v_state
+        FROM private.player_fund_attribution_state AS s
+        WHERE s.wallet_id = NEW.wallet_id
+          AND s.currency = v_currency;
+        IF v_state IS DISTINCT FROM 'active' AND v_state IS DISTINCT FROM 'inconsistent' THEN
+            RETURN NEW;
+        END IF;
+
+        v_hold_ref := private.attribution_resolve_hold_ref(
+            NEW.reference_type, NEW.reference_id, NEW.entry_key, NEW.metadata
+        );
+        IF v_hold_ref IS NULL THEN
+            RETURN NEW;
+        END IF;
+
+        IF v_op = 'WITHDRAWAL_HOLD' THEN
+            -- Cash selected-cashier-first reserve runs BEFORE this HOLD.
+            -- Existing parts make this trigger idempotent (no double reserve).
+            IF EXISTS (
+                SELECT 1 FROM private.player_fund_hold_parts AS h WHERE h.hold_ref = v_hold_ref
+            ) THEN
+                RETURN NEW;
+            END IF;
+            v_minor := private.currency_amount_to_minor(v_display, ABS(COALESCE(NEW.available_delta, 0)));
+            PERFORM private.attribution_reserve_withdrawal(
+                NEW.wallet_id, v_currency, v_minor, NULL,
+                v_hold_ref, 'attr-hold:' || v_hold_ref, NEW.entry_key
+            );
+            RETURN NEW;
+        END IF;
+
         IF v_op = 'WITHDRAWAL_RELEASE' THEN
             PERFORM private.attribution_release_hold(
-                COALESCE(NEW.reference_id, NEW.entry_key),
+                v_hold_ref,
                 'attr-release:' || NEW.entry_key,
                 NEW.entry_key
             );
-        ELSIF v_op = 'WITHDRAWAL_COMPLETE' THEN
-            PERFORM private.attribution_complete_hold(
-                COALESCE(NEW.reference_id, NEW.entry_key),
-                'attr-complete:' || NEW.entry_key,
-                NEW.entry_key
-            );
+            RETURN NEW;
         END IF;
+
+        PERFORM private.attribution_complete_hold(
+            v_hold_ref,
+            'attr-complete:' || NEW.entry_key,
+            NEW.entry_key
+        );
         RETURN NEW;
     END IF;
 
@@ -1298,6 +1691,46 @@ BEGIN
             NEW.wallet_id, v_currency, v_minor,
             'attr:' || NEW.entry_key,
             v_scope, v_ref, NEW.entry_key, FALSE
+        );
+        RETURN NEW;
+    END IF;
+
+    -- Native sports place: consume current mix and freeze an immutable stake snapshot.
+    -- Native sports re-settlement debit (existing snapshot): consume using that snapshot,
+    -- never current wallet percentages.
+    IF v_op = 'SPORTS_BET' AND COALESCE(NEW.available_delta, 0) < 0 THEN
+        v_minor := private.currency_amount_to_minor(v_display, ABS(NEW.available_delta));
+        SELECT EXISTS (
+            SELECT 1
+            FROM private.player_stake_attribution AS s
+            WHERE s.stake_scope = v_scope
+              AND s.stake_ref = v_ref
+        ) INTO v_has_snapshot;
+        IF v_has_snapshot THEN
+            PERFORM private.attribution_consume_from_snapshot(
+                NEW.wallet_id, v_currency, v_minor,
+                v_scope, v_ref,
+                'attr:' || NEW.entry_key,
+                NEW.entry_key
+            );
+        ELSE
+            PERFORM private.attribution_consume_available(
+                NEW.wallet_id, v_currency, v_minor,
+                'attr:' || NEW.entry_key,
+                v_scope, v_ref, NEW.entry_key, TRUE
+            );
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    -- Native sports settlement/refund credits the ORIGINAL stake snapshot.
+    IF v_op IN ('SPORTS_WIN', 'SPORTS_REFUND') AND COALESCE(NEW.available_delta, 0) > 0 THEN
+        v_minor := private.currency_amount_to_minor(v_display, NEW.available_delta);
+        PERFORM private.attribution_credit_from_snapshot(
+            NEW.wallet_id, v_currency, v_minor,
+            v_scope, v_ref,
+            'attr:' || NEW.entry_key,
+            NEW.entry_key
         );
         RETURN NEW;
     END IF;
@@ -1563,7 +1996,7 @@ CREATE OR REPLACE FUNCTION private.cashier_attribution_available_minor(
     p_currency TEXT,
     p_cashier_id UUID
 )
-RETURNS BIGINT
+RETURNS NUMERIC
 LANGUAGE sql
 STABLE
 SET search_path = ''
@@ -1613,7 +2046,7 @@ DECLARE
     v_existing private.cashier_player_payout_requests%ROWTYPE;
     v_code TEXT;
     v_id UUID;
-    v_minor BIGINT;
+    v_minor NUMERIC(40, 0);
     v_hold JSONB;
     v_pre_avail NUMERIC;
     v_pre_locked NUMERIC;
@@ -1672,17 +2105,19 @@ BEGIN
     )
     RETURNING id INTO v_id;
 
-    PERFORM 1 FROM private.apply_wallet_entry(
-        v_wallet, -v_amount, v_amount, 'WITHDRAWAL_HOLD', 'mobcash', v_hold_key,
-        'cashier_player_payout', v_id::TEXT, 'player', v_uid::TEXT,
-        jsonb_build_object('phase', 'hold')
-    );
-
+    -- Reserve attribution BEFORE Wallet Ledger HOLD so the AFTER trigger
+    -- sees existing hold_parts and does not double-reserve the same cash HOLD.
     v_minor := private.currency_amount_to_minor(v_display, v_amount);
     PERFORM private.ensure_fund_attribution_initialized(v_wallet, v_pre_avail, v_pre_locked);
     v_hold := private.attribution_reserve_withdrawal(
         v_wallet, v_currency, v_minor, p_selected_cashier_id,
         v_id::TEXT, 'attr-hold:' || v_id::TEXT, v_hold_key
+    );
+
+    PERFORM 1 FROM private.apply_wallet_entry(
+        v_wallet, -v_amount, v_amount, 'WITHDRAWAL_HOLD', 'mobcash', v_hold_key,
+        'cashier_player_payout', v_id::TEXT, 'player', v_uid::TEXT,
+        jsonb_build_object('phase', 'hold')
     );
 
     IF p_issue_code IS TRUE THEN
@@ -1805,9 +2240,10 @@ DECLARE
     v_display TEXT;
     v_limits_configured BOOLEAN;
     v_enforce BOOLEAN;
-    v_destination RECORD;
-    v_minor BIGINT;
-    v_selected_avail BIGINT := 0;
+    v_dest_id UUID := NULL;
+    v_dest_cashier UUID := NULL;
+    v_minor NUMERIC(40, 0);
+    v_selected_avail NUMERIC(40, 0) := 0;
     v_need_review BOOLEAN := FALSE;
     v_issue_code BOOLEAN := TRUE;
     v_notice TEXT;
@@ -1880,10 +2316,9 @@ BEGIN
 
     IF v_method = 'cash' THEN
         IF v_enforce THEN
-            SELECT * INTO v_destination
-            FROM private.resolve_live_payout_destination(p_payout_destination_id, v_player.currency);
-            v_city := v_destination.city;
-            v_point := v_destination.label;
+            SELECT d.destination_id, d.legacy_cashier_id, d.city, d.label
+            INTO v_dest_id, v_dest_cashier, v_city, v_point
+            FROM private.resolve_live_payout_destination(p_payout_destination_id, v_player.currency) AS d;
             PERFORM private.ensure_fund_attribution_initialized(
                 v_player.wallet_id,
                 (SELECT a.available_balance FROM private.wallet_accounts AS a WHERE a.wallet_id = v_player.wallet_id),
@@ -1891,7 +2326,7 @@ BEGIN
             );
             v_state := private.assert_attribution_matches_wallet(v_player.wallet_id);
             v_selected_avail := private.cashier_attribution_available_minor(
-                v_player.wallet_id, v_player.currency, v_destination.legacy_cashier_id
+                v_player.wallet_id, v_player.currency, v_dest_cashier
             );
             SELECT COALESCE(jsonb_agg(jsonb_build_object(
                 'source_kind', b.source_kind,
@@ -1923,29 +2358,25 @@ BEGIN
                 );
             END IF;
         ELSE
+            -- Enforcement OFF: preserve legacy city/point cash flow. Destination
+            -- and selected cashier stay NULL unless an optional destination token
+            -- is supplied. Never dereference an unassigned RECORD.
             IF v_city IS NULL OR v_point IS NULL THEN RAISE EXCEPTION 'CASH_PICKUP_REQUIRED'; END IF;
             IF NULLIF(BTRIM(COALESCE(p_payout_destination_id, '')), '') IS NOT NULL THEN
-                SELECT * INTO v_destination
-                FROM private.resolve_live_payout_destination(p_payout_destination_id, v_player.currency);
-                v_city := v_destination.city;
-                v_point := v_destination.label;
+                SELECT d.destination_id, d.legacy_cashier_id, d.city, d.label
+                INTO v_dest_id, v_dest_cashier, v_city, v_point
+                FROM private.resolve_live_payout_destination(p_payout_destination_id, v_player.currency) AS d;
             END IF;
         END IF;
 
         v_hold := public.player_request_cashier_payout(
-            v_amount, v_key, v_destination.legacy_cashier_id, v_destination.destination_id, v_issue_code
+            v_amount, v_key, v_dest_cashier, v_dest_id, v_issue_code
         );
         SELECT p.* INTO v_payout
         FROM private.cashier_player_payout_requests AS p
         WHERE p.id = (v_hold ->> 'id')::uuid
         FOR UPDATE;
         IF NOT FOUND THEN RAISE EXCEPTION 'PAYOUT_NOT_FOUND'; END IF;
-    ELSE
-        PERFORM 1 FROM private.apply_wallet_entry(
-            v_player.wallet_id, -v_amount, v_amount, 'WITHDRAWAL_HOLD', 'withdrawal',
-            'wd-hold:' || v_uid::TEXT || ':' || v_key, 'player_withdrawal', v_uid::TEXT,
-            'player', v_uid::TEXT, jsonb_build_object('phase', 'hold', 'method', v_method)
-        );
     END IF;
 
     INSERT INTO private.player_withdrawal_requests (
@@ -1958,9 +2389,20 @@ BEGIN
         'pending', v_city, v_point, v_payout.id, v_dest, v_key,
         COALESCE(p_metadata, '{}'::jsonb) - 'wallet_id' - 'walletId' - 'auth_user_id' - 'player_id'
             - 'balance' - 'status' - 'cashier_id' - 'network_id' - 'manager_id',
-        v_destination.destination_id, v_destination.legacy_cashier_id, v_notice
+        v_dest_id, v_dest_cashier, v_notice
     )
     RETURNING * INTO v_existing;
+
+    IF v_method <> 'cash' THEN
+        -- Non-cash HOLD uses the withdrawal id as hold identity so RELEASE/COMPLETE
+        -- restore/consume the same parts. Attribution trigger reserves proportionally.
+        -- Do not open cashier review merely because attribution exists.
+        PERFORM 1 FROM private.apply_wallet_entry(
+            v_player.wallet_id, -v_amount, v_amount, 'WITHDRAWAL_HOLD', 'withdrawal',
+            'wd-hold:' || v_existing.id::TEXT, 'player_withdrawal', v_existing.id::TEXT,
+            'player', v_uid::TEXT, jsonb_build_object('phase', 'hold', 'method', v_method)
+        );
+    END IF;
 
     IF v_need_review THEN
         INSERT INTO private.withdrawal_attribution_reviews (
@@ -1969,7 +2411,7 @@ BEGIN
             review_status, signal_details, attribution_snapshot
         )
         VALUES (
-            v_existing.id, v_payout.id, v_destination.destination_id, v_destination.legacy_cashier_id,
+            v_existing.id, v_payout.id, v_dest_id, v_dest_cashier,
             v_player.currency, v_amount,
             private.currency_minor_to_amount(v_display, COALESCE(v_selected_avail, 0)),
             private.currency_minor_to_amount(v_display, GREATEST(v_minor - COALESCE(v_selected_avail, 0), 0)),

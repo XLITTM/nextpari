@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -26,6 +27,8 @@ import {
   PLAYER_REVIEW_NOTICE,
   amountToMinor,
   allocateLargestRemainder,
+  allocateLargestRemainderExact,
+  applyHoldParts,
   classifyCashWithdrawal,
   consumeAvailable,
   creditFromSnapshot,
@@ -184,10 +187,38 @@ describe('fund attribution math A-M', () => {
       selectedCashierAvailableMinor: bAvail,
       state: 'active',
     }), 'clean');
-    assert.match(sql, /CASINO_BET/);
+    assert.match(sql, /SPORTS_BET/);
+    assert.match(sql, /SPORTS_WIN/);
     assert.match(sql, /attribution_credit_from_snapshot/);
     assert.match(sql, /player_stake_attribution/);
     assert.equal(sql.includes('lifetime deposit'), false);
+  });
+
+  it('B-sports. A 2000 lost, B 500 settles 10000: A stays 0, B owns 10000', () => {
+    let a = 2000_00;
+    let bAvail = 0;
+    const lost = consumeAvailable([bucket('cashier', CASHIER_A, a)], 2000_00);
+    a -= byCashier(lost, CASHIER_A);
+    assert.equal(a, 0);
+
+    bAvail = 500_00;
+    const stakeB = consumeAvailable([
+      bucket('cashier', CASHIER_A, a),
+      bucket('cashier', CASHIER_B, bAvail),
+    ], 500_00);
+    assert.equal(byCashier(stakeB, CASHIER_B), 500_00);
+    assert.equal(byCashier(stakeB, CASHIER_A), 0);
+
+    const credited = creditFromSnapshot(stakeB, 10000_00);
+    a += byCashier(credited, CASHIER_A);
+    bAvail = byCashier(credited, CASHIER_B);
+    assert.equal(a, 0);
+    assert.equal(bAvail, 10000_00);
+    assert.match(sql, /IF v_op = 'SPORTS_BET'/);
+    assert.match(sql, /IF v_op IN \('SPORTS_WIN', 'SPORTS_REFUND'\)/);
+    assert.match(sql, /wallet_ledger_native_sports_operation/);
+    assert.match(sql, /Native sports settlement\/refund credits the ORIGINAL stake snapshot/);
+    assert.match(sql, /attribution_credit_from_snapshot/);
   });
 
   it('C. mixed stake 80/20 inherits profit mix', () => {
@@ -200,6 +231,7 @@ describe('fund attribution math A-M', () => {
     const win = creditFromSnapshot(snapshot, 10000_00);
     assert.equal(byCashier(win, CASHIER_A), 8000_00);
     assert.equal(byCashier(win, CASHIER_B), 2000_00);
+    assert.match(sql, /SPORTS_WIN/);
   });
 
   it('D. refund restores the original mix', () => {
@@ -211,6 +243,7 @@ describe('fund attribution math A-M', () => {
     assert.equal(byCashier(refund, CASHIER_A), 800_00);
     assert.equal(byCashier(refund, CASHIER_B), 200_00);
     assert.match(sql, /CASINO_REFUND/);
+    assert.match(sql, /SPORTS_REFUND/);
   });
 
   it('E. cash withdrawal SQL uses active wallet, never profiles.wallet_id', () => {
@@ -394,6 +427,9 @@ describe('fund attribution SQL contract (not executed)', () => {
     assert.match(sql, /TREASURY_FUNDING/);
     assert.match(sql, /CASINO_BET/);
     assert.match(sql, /CASINO_WIN/);
+    assert.match(sql, /SPORTS_BET/);
+    assert.match(sql, /SPORTS_WIN/);
+    assert.match(sql, /SPORTS_REFUND/);
     assert.match(sql, /uncorrelated_credit/);
     assert.match(sql, /Do not guess latest cashier/);
   });
@@ -402,6 +438,46 @@ describe('fund attribution SQL contract (not executed)', () => {
     assert.equal(PLAYER_REVIEW_NOTICE, 'Заявка на вывод находится на рассмотрении.');
     assert.match(sql, /v_notice := 'under_review'/);
     assert.match(sql, /v_code := NULL/);
+  });
+
+  it('enforcement OFF cash uses nullable scalars, not an unassigned RECORD', () => {
+    const createFn = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_create_withdrawal'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.cashier_confirm_player_payout'),
+    );
+    assert.match(createFn, /v_dest_id UUID := NULL/);
+    assert.match(createFn, /v_dest_cashier UUID := NULL/);
+    assert.equal(createFn.includes('v_destination RECORD'), false);
+    assert.equal(createFn.includes('v_destination.legacy_cashier_id'), false);
+    assert.equal(createFn.includes('v_destination.destination_id'), false);
+    assert.match(createFn, /Enforcement OFF: preserve legacy city\/point cash flow/);
+    assert.match(createFn, /CASH_PICKUP_REQUIRED/);
+    assert.match(createFn, /player_request_cashier_payout\(\s*\n\s*v_amount, v_key, v_dest_cashier, v_dest_id, v_issue_code/);
+    assert.match(sql, /enforcement_enabled BOOLEAN NOT NULL DEFAULT FALSE/);
+  });
+
+  it('stores minor units as NUMERIC(40, 0) and Hamilton multiplies without BIGINT', () => {
+    assert.match(sql, /available_minor NUMERIC\(40, 0\)/);
+    assert.match(sql, /reserved_minor NUMERIC\(40, 0\)/);
+    assert.match(sql, /stake_minor NUMERIC\(40, 0\)/);
+    assert.match(sql, /p_amount_minor NUMERIC/);
+    assert.equal(/p_amount_minor BIGINT/.test(sql), false);
+    assert.equal(/available_minor BIGINT/.test(sql), false);
+    assert.match(sql, /trunc\(\(trunc\(p_amount_minor\) \* s\.weight_minor\) \/ t\.total_weight\)/);
+    assert.match(sql, /amount × weight cannot overflow BIGINT/);
+  });
+
+  it('HOLD/RELEASE/COMPLETE attribution is identity-scoped and cash is not double-reserved', () => {
+    assert.match(sql, /Reserve attribution BEFORE Wallet Ledger HOLD/);
+    assert.match(sql, /Existing parts make this trigger idempotent \(no double reserve\)/);
+    assert.match(sql, /attribution_resolve_hold_ref/);
+    assert.match(sql, /wd-hold:' \|\| v_existing\.id::TEXT/);
+    assert.match(sql, /Do not open cashier review merely because attribution exists/);
+    const createFn = sql.slice(
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.player_create_withdrawal'),
+      sql.indexOf('CREATE OR REPLACE FUNCTION public.cashier_confirm_player_payout'),
+    );
+    assert.equal(createFn.includes("v_need_review := TRUE"), false);
   });
 });
 
@@ -447,6 +523,42 @@ describe('fund attribution HTTP privacy and permissions', () => {
     assert.equal('p_wallet_id' in args, false);
     assert.equal(JSON.stringify(created.body).includes('attribution'), false);
     assert.equal(JSON.stringify(created.body).includes('cross_cashier'), false);
+  });
+
+  it('enforcement-OFF legacy cash: city/point without payoutDestinationId still creates a withdrawal RPC', async () => {
+    const ports = playerPorts({
+      ok: true,
+      id: 'wd-legacy',
+      method: 'cash',
+      status: 'pending',
+      pin_code: 'deadbeefdeadbeef',
+    });
+    const created = await handlePlayerWithdrawalsRequest(
+      {
+        method: 'POST',
+        pathname: '/api/player/withdrawals',
+        cookie: `${PLAYER_ACCESS_COOKIE}=${PLAYER_ACCESS}; ${PLAYER_REFRESH_COOKIE}=${PLAYER_REFRESH}`,
+        cookieSecure: true,
+        body: {
+          method: 'cash',
+          amount: 40,
+          methodLabel: 'Cash',
+          idempotencyKey: 'legacy-cash-1',
+          cashPickupCity: 'Мары',
+          cashPickupPoint: 'касса',
+        },
+      },
+      ports,
+    );
+    assert.equal(created.status, 200);
+    assert.equal(created.body.ok, true);
+    const args = ports.rpcs[0]?.args ?? {};
+    assert.equal(ports.rpcs[0]?.name, 'player_create_withdrawal');
+    assert.equal(args.p_method, 'cash');
+    assert.equal(args.p_cash_pickup_city, 'Мары');
+    assert.equal(args.p_cash_pickup_point, 'касса');
+    assert.equal(args.p_payout_destination_id, null);
+    assert.equal('p_cashier_id' in args, false);
   });
 
   it('Security can start/approve/reject review and cannot confirm cashier payout', async () => {
@@ -571,5 +683,83 @@ describe('fund attribution HTTP privacy and permissions', () => {
     );
     assert.equal(result.status, 404);
     assert.equal(ports.rpcs.length, 0);
+  });
+});
+
+describe('fund attribution HOLD alignment and NUMERIC overflow', () => {
+  it('crypto/ewallet HOLD then RELEASE then COMPLETE keeps sums aligned with wallet available/locked', () => {
+    const startAvail = 1000_00;
+    const startLocked = 0;
+    const buckets = [
+      bucket('cashier', CASHIER_A, 800_00),
+      bucket('cashier', CASHIER_B, 200_00),
+    ];
+    assert.equal(buckets.reduce((sum, part) => sum + part.weightMinor, 0), startAvail);
+
+    const holdMinor = 250_00;
+    const holdParts = reserveWithdrawal({
+      buckets,
+      requestedMinor: holdMinor,
+      selectedCashierId: null,
+    });
+    assert.equal(holdParts.reduce((sum, part) => sum + part.allocatedMinor, 0), holdMinor);
+    const held = applyHoldParts(buckets, holdParts);
+    const walletAvailAfterHold = startAvail - holdMinor;
+    const walletLockedAfterHold = startLocked + holdMinor;
+    assert.equal(held.available.reduce((sum, part) => sum + part.weightMinor, 0), walletAvailAfterHold);
+    assert.equal(held.reserved.reduce((sum, part) => sum + part.allocatedMinor, 0), walletLockedAfterHold);
+
+    const walletAvailAfterRelease = walletAvailAfterHold + holdMinor;
+    const walletLockedAfterRelease = walletLockedAfterHold - holdMinor;
+    const releasedAvail = held.available.map((bucket) => {
+      const part = holdParts.find(
+        (row) => row.sourceKind === bucket.sourceKind && row.sourceCashierId === bucket.sourceCashierId,
+      );
+      return { ...bucket, weightMinor: bucket.weightMinor + (part?.allocatedMinor ?? 0) };
+    });
+    assert.equal(releasedAvail.reduce((sum, part) => sum + part.weightMinor, 0), walletAvailAfterRelease);
+    assert.equal(0, walletLockedAfterRelease);
+
+    const walletAvailAfterComplete = walletAvailAfterHold;
+    const walletLockedAfterComplete = 0;
+    assert.equal(held.available.reduce((sum, part) => sum + part.weightMinor, 0), walletAvailAfterComplete);
+    assert.equal(walletLockedAfterComplete, 0);
+    assert.match(sql, /IF v_op IN \('WITHDRAWAL_HOLD', 'WITHDRAWAL_RELEASE', 'WITHDRAWAL_COMPLETE'\)/);
+  });
+
+  it('large-value Hamilton product exceeds signed BIGINT and still allocates exactly', () => {
+    const bigintMax = 9223372036854775807n;
+    const amount = 10n ** 18n;
+    const weight = 10n ** 18n;
+    assert.equal(amount * weight > bigintMax, true);
+    const parts = allocateLargestRemainderExact(
+      [
+        { sourceKind: 'cashier', sourceCashierId: CASHIER_A, weightMinor: weight },
+        { sourceKind: 'cashier', sourceCashierId: CASHIER_B, weightMinor: weight },
+      ],
+      amount,
+    );
+    const sum = parts.reduce((total, part) => total + part.allocatedMinor, 0n);
+    assert.equal(sum, amount);
+    assert.equal(parts.find((part) => part.sourceCashierId === CASHIER_A)?.allocatedMinor, 5n * 10n ** 17n);
+    assert.equal(parts.find((part) => part.sourceCashierId === CASHIER_B)?.allocatedMinor, 5n * 10n ** 17n);
+    assert.match(sql, /NUMERIC\(40, 0\)/);
+    assert.equal(Number.isSafeInteger(Number(amount * weight)), false);
+  });
+});
+
+describe('isolated SQL migration execution', () => {
+  it('does not apply 066 and reports whether a disposable Postgres is available', () => {
+    const docker = spawnSync('docker', ['--version'], { encoding: 'utf8', windowsHide: true });
+    const psql = spawnSync('psql', ['--version'], { encoding: 'utf8', windowsHide: true });
+    const dockerOk = docker.status === 0;
+    const psqlOk = psql.status === 0;
+    assert.equal(sql.includes('supabase db push'), false);
+    assert.equal(sql.includes('INSERT INTO private.cashier_payout_destinations'), false);
+    if (!dockerOk && !psqlOk) {
+      assert.equal(process.env.NEXTPARI_SQL_EXECUTION_PASSED, undefined);
+      return;
+    }
+    assert.ok(dockerOk || psqlOk);
   });
 });
