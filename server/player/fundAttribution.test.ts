@@ -44,6 +44,10 @@ const sql = readFileSync(
   join(root, 'supabase/migrations/20260918190000_cashier_fund_attribution_review.sql'),
   'utf8',
 );
+const sql067 = readFileSync(
+  join(root, 'supabase/migrations/20260919140014_fix_fund_attribution_wallet_ledger_key_067.sql'),
+  'utf8',
+);
 const REVIEW_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const PLAYER_ACCESS = 'player-access-token';
 const PLAYER_REFRESH = 'player-refresh-token';
@@ -823,6 +827,55 @@ describe('fund attribution HOLD alignment and NUMERIC overflow', () => {
     assert.equal(parts.find((part) => part.sourceCashierId === CASHIER_B)?.allocatedMinor, 5n * 10n ** 17n);
     assert.match(sql, /NUMERIC\(40, 0\)/);
     assert.equal(Number.isSafeInteger(Number(amount * weight)), false);
+  });
+});
+
+describe('Phase 067 wallet_ledger idempotency_key hotfix', () => {
+  const trigger067 = sql067.slice(
+    sql067.indexOf('CREATE OR REPLACE FUNCTION private.fund_attribution_on_wallet_ledger()'),
+    sql067.indexOf('REVOKE ALL ON FUNCTION private.fund_attribution_on_wallet_ledger()'),
+  );
+
+  it('replaces NEW.entry_key with NEW.idempotency_key in the live trigger function', () => {
+    assert.match(trigger067, /NEW\.idempotency_key/);
+    assert.equal((trigger067.match(/NEW\.idempotency_key/g) || []).length, 31);
+    assert.equal((trigger067.match(/NEW\.entry_key/g) || []).length, 0);
+    assert.equal(trigger067.includes('NEW.entry_key'), false);
+  });
+
+  it('binds wallet_ledger integration to idempotency_key, not entry_key', () => {
+    assert.match(sql067, /private\.wallet_ledger has idempotency_key, not entry_key/);
+    assert.match(trigger067, /attribution_resolve_hold_ref\(\s*\n\s*NEW\.reference_type, NEW\.reference_id, NEW\.idempotency_key, NEW\.metadata/);
+    assert.match(trigger067, /v_ref := COALESCE\(NULLIF\(BTRIM\(NEW\.reference_id\), ''\), NEW\.idempotency_key\)/);
+    assert.equal(trigger067.includes('wallet_ledger.entry_key'), false);
+    assert.equal(sql067.includes('CREATE OR REPLACE FUNCTION private.apply_wallet_entry'), false);
+    assert.equal(sql067.includes('enforcement_enabled = TRUE'), false);
+  });
+
+  it('does not rename attribution-ledger entry_key identity', () => {
+    assert.match(sql, /player_fund_attribution_ledger_key_uidx/);
+    assert.match(sql, /l\.entry_key = p_entry_key/);
+    assert.match(sql, /l\.wallet_ledger_entry_key IS NOT DISTINCT FROM p_wallet_ledger_entry_key/);
+    assert.equal(sql067.includes('DROP TABLE IF EXISTS private.player_fund_attribution_ledger'), false);
+    assert.equal(sql067.includes('ALTER TABLE private.player_fund_attribution_ledger'), false);
+    assert.equal(sql067.includes('CREATE OR REPLACE FUNCTION private.apply_fund_attribution_delta'), false);
+  });
+
+  it('allows Security WITHDRAWAL_RELEASE by adding security to wallet_ledger_actor_type_check', () => {
+    const actorCheck = sql067.slice(
+      sql067.indexOf('ALTER TABLE private.wallet_ledger'),
+      sql067.indexOf('COMMIT;'),
+    );
+    assert.match(actorCheck, /DROP CONSTRAINT wallet_ledger_actor_type_check/);
+    assert.match(actorCheck, /ADD CONSTRAINT wallet_ledger_actor_type_check/);
+    assert.match(actorCheck, /actor_type IS NULL/);
+    for (const actor of ['player', 'cashier', 'manager', 'service', 'system', 'migration', 'owner', 'security']) {
+      assert.match(actorCheck, new RegExp(`'${actor}'`));
+    }
+    assert.equal(actorCheck.includes("'staff'"), false);
+    assert.equal(sql067.includes('DROP CONSTRAINT wallet_ledger_operation_type_check'), false);
+    assert.equal(sql067.includes('DROP CONSTRAINT wallet_ledger_source_module_check'), false);
+    assert.equal((sql067.match(/DROP CONSTRAINT /g) || []).length, 1);
   });
 });
 
