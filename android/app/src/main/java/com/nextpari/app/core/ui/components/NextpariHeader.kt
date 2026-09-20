@@ -14,6 +14,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -26,10 +32,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.nextpari.app.R
-import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
-import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.feature.wallets.WalletsUiState
 
 @Composable
@@ -73,7 +75,7 @@ fun NextpariHeader(
                         .clickable(onClick = onDeposit),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(NextpariIcons.Add, contentDescription = "Пополнить", tint = Color.White, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.Add, contentDescription = "Пополнить", tint = Color.White, modifier = Modifier.size(16.dp))
                 }
                 HeaderWalletSwitcher(
                     balanceLabel = balanceLabel,
@@ -98,9 +100,9 @@ fun NextpariHeader(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                HeaderIcon("service_light_theme".takeIf { darkTheme } ?: "service_dark_theme", "Переключить тему", if (darkTheme) NextpariIcons.ThemeLight else NextpariIcons.ThemeDark, NextpariIconPalette.Header.Theme, onToggleTheme)
-                HeaderIcon("menu_settings", "Настройки", NextpariIcons.Settings, NextpariIconPalette.Header.Settings, onSettings)
-                HeaderIcon("service_search", "Поиск", NextpariIcons.Search, NextpariIconPalette.Header.Search, onSearch)
+                HeaderIcon(if (darkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, "Переключить тему", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onToggleTheme)
+                HeaderIcon(Icons.Outlined.Settings, "Настройки", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onSettings)
+                HeaderIcon(Icons.Outlined.Search, "Поиск", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onSearch)
             }
         }
     }
@@ -108,9 +110,8 @@ fun NextpariHeader(
 
 @Composable
 private fun HeaderIcon(
-    referenceKey: String,
+    icon: ImageVector,
     description: String,
-    fallback: ImageVector,
     tint: Color,
     onClick: () -> Unit,
 ) {
@@ -120,14 +121,6 @@ private fun HeaderIcon(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        if (isPremiumIcons()) {
-            NextpariReferenceIcon(
-                key = referenceKey,
-                contentDescription = description,
-                size = 24.dp,
-            )
-        } else {
-            Icon(fallback, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
-        }
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
     }
 }

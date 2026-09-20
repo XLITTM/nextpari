@@ -18,6 +18,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,9 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.components.ProductSectionHeader
-import com.nextpari.app.core.ui.icons.NextpariGlyph
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.sportsbook.CountPill
@@ -128,7 +130,7 @@ private fun HomeCountryCard(
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(NextpariIcons.Language, contentDescription = null, tint = NextpariIconPalette.Action.Globe, modifier = Modifier.size(20.dp))
+            Icon(Icons.Outlined.Language, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(
                 group.country.ifBlank { "Международные" },
@@ -141,12 +143,11 @@ private fun HomeCountryCard(
             )
             CountPill(group.count)
             Spacer(Modifier.width(8.dp))
-            NextpariGlyph(
-                imageVector = NextpariIcons.ChevronDown,
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
                 contentDescription = null,
-                tint = NextpariIconPalette.Action.Chevron,
-                size = 18.dp,
-                modifier = Modifier.rotate(rotation),
+                tint = Color(0xFF9CA3AF),
+                modifier = Modifier.size(18.dp).rotate(rotation),
             )
         }
         AnimatedVisibility(visible = expanded && group.leagues.isNotEmpty(), enter = expandVertically(), exit = shrinkVertically()) {
@@ -173,9 +174,9 @@ private fun HomeCountryCard(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (league.name in favorites) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
+                                if (league.name in favorites) Icons.Outlined.Star else Icons.Outlined.StarBorder,
                                 contentDescription = "Добавить чемпионат в избранное",
-                                tint = if (league.name in favorites) NextpariIconPalette.Action.Star else NextpariIconPalette.Action.Star.copy(alpha = 0.5f),
+                                tint = if (league.name in favorites) Color(0xFF16A34A) else colors.textSecondary,
                                 modifier = Modifier.size(18.dp),
                             )
                         }

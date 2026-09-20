@@ -13,6 +13,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ConfirmationNumber
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,15 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.BottomNavItem
 import com.nextpari.app.core.navigation.BottomNavSpec
 import com.nextpari.app.core.navigation.Destinations
-import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
-import com.nextpari.app.core.ui.icons.NextpariReferenceIconAssets
-import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -59,13 +62,7 @@ fun NextpariBottomNav(
                     } else {
                         val selected = activeRoute == item.route ||
                             (item.route == Destinations.HOME && activeRoute == Destinations.HOME)
-                        NavItem(
-                            item.label,
-                            NextpariReferenceIconAssets.bottomNavKey(item.route),
-                            selected,
-                            colors.accent,
-                            colors.textMuted,
-                        ) {
+                        NavItem(item.label, navIcon(item.route), selected, colors.accent, colors.textMuted) {
                             onSelect(item)
                         }
                     }
@@ -87,37 +84,19 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = (-20).dp)
-                .size(58.dp),
+                .size(58.dp)
+                .shadow(12.dp, CircleShape)
+                .clip(CircleShape)
+                .background(colors.accent)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
         ) {
-            if (isPremiumIcons()) {
-                NextpariReferenceIcon(
-                    key = "bottom_betslip",
-                    contentDescription = "Купон",
-                    size = 58.dp,
-                    modifier = Modifier
-                        .size(58.dp)
-                        .shadow(12.dp, CircleShape)
-                        .clip(CircleShape)
-                        .clickable(onClick = onClick),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .size(58.dp)
-                        .shadow(12.dp, CircleShape)
-                        .clip(CircleShape)
-                        .background(colors.accent)
-                        .clickable(onClick = onClick),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        NextpariIcons.Betslip,
-                        contentDescription = "Купон",
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
+            Icon(
+                Icons.Outlined.ConfirmationNumber,
+                contentDescription = "Купон",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp),
+            )
             if (betCount > 0) {
                 Box(
                     modifier = Modifier
@@ -144,7 +123,7 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
 @Composable
 private fun NavItem(
     label: String,
-    referenceKey: String,
+    icon: ImageVector,
     active: Boolean,
     accent: Color,
     muted: Color,
@@ -157,28 +136,7 @@ private fun NavItem(
             .padding(top = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (isPremiumIcons()) {
-            NextpariReferenceIcon(
-                key = referenceKey,
-                contentDescription = label,
-                size = 22.dp,
-                active = active,
-            )
-        } else {
-            Icon(
-                NextpariIcons.bottomNav(
-                    when (referenceKey) {
-                        "bottom_popular" -> Destinations.HOME
-                        "bottom_favorites" -> Destinations.FAVORITES
-                        "bottom_history" -> Destinations.HISTORY
-                        else -> Destinations.MENU
-                    },
-                ),
-                contentDescription = label,
-                tint = if (active) accent else muted,
-                modifier = Modifier.size(18.dp),
-            )
-        }
+        Icon(icon, contentDescription = label, tint = if (active) accent else muted, modifier = Modifier.size(18.dp))
         Text(
             label,
             color = if (active) accent else muted,
@@ -186,4 +144,11 @@ private fun NavItem(
             fontWeight = if (active) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
         )
     }
+}
+
+private fun navIcon(route: String): ImageVector = when (route) {
+    Destinations.HOME -> Icons.Outlined.LocalFireDepartment
+    Destinations.FAVORITES -> Icons.Outlined.StarBorder
+    Destinations.HISTORY -> Icons.Outlined.History
+    else -> Icons.Outlined.GridView
 }

@@ -164,17 +164,74 @@ class NextpariIconsTest {
     }
 
     @Test
-    fun playerScreensDoNotImportMaterialIconsDirectly() {
-        val roots = listOf(
-            moduleFile("src/main/java/com/nextpari/app/feature"),
-            moduleFile("src/main/java/com/nextpari/app/core/ui/components"),
-        )
-        roots.filter { it.exists() }.forEach { root ->
-            root.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
-                val text = file.readText()
-                assertThat(text).doesNotContain("import androidx.compose.material.icons")
-            }
+    fun homeSportsSelectorKeepsCurrentGlossyAssets() {
+        val home = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
+        val selector = home.substringAfter("private fun SportsSelector(").substringBefore("private fun PromoRow(")
+        assertThat(selector).contains("NextpariSportIconBadge(")
+        assertThat(selector).doesNotContain("SportIconRes.drawable")
+        assertThat(home).contains("Icons.Outlined.SportsEsports")
+        listOf(
+            "football", "tennis", "basketball", "hockey", "volleyball",
+            "ufc", "mma", "mk", "polybet",
+        ).forEach { id ->
+            val key = NextpariReferenceIconAssets.sportKey(id)
+            assertThat(NextpariReferenceIconAssets.contains(key)).isTrue()
+            val spec = NextpariReferenceIconAssets.spec(key)
+            assertThat(drawableFile("np_ref_dark_${key}.png").exists()).isTrue()
+            assertThat(drawableFile("np_ref_light_${key}.png").exists()).isTrue()
+            assertThat(spec.darkRes).isNotEqualTo(spec.lightRes)
         }
+        assertThat(NextpariReferenceIconAssets.sportKey("football")).isEqualTo("sport_football")
+        assertThat(NextpariReferenceIconAssets.sportKey("tennis")).isEqualTo("sport_tennis")
+        assertThat(NextpariReferenceIconAssets.sportKey("basketball")).isEqualTo("sport_basketball")
+        assertThat(NextpariReferenceIconAssets.sportKey("hockey")).isEqualTo("sport_hockey")
+        assertThat(NextpariReferenceIconAssets.sportKey("volleyball")).isEqualTo("sport_volleyball")
+        assertThat(NextpariReferenceIconAssets.sportKey("ufc")).isEqualTo("sport_ufc_mma")
+        assertThat(NextpariReferenceIconAssets.sportKey("mma")).isEqualTo("sport_ufc_mma")
+        assertThat(NextpariReferenceIconAssets.sportKey("mk")).isEqualTo("sport_mk")
+        assertThat(NextpariReferenceIconAssets.sportKey("polybet")).isEqualTo("sport_polybet")
+    }
+
+    @Test
+    fun chromeAndServiceScreensNoLongerUseGlossyReferencePngPack() {
+        val bottomNav = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariBottomNav.kt").readText()
+        val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
+        val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
+        val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
+        val settings = moduleFile("src/main/java/com/nextpari/app/feature/settings/SettingsScreen.kt").readText()
+        val wallet = moduleFile("src/main/java/com/nextpari/app/feature/wallet/WalletScreen.kt").readText()
+        val info = moduleFile("src/main/java/com/nextpari/app/feature/info/InfoScreen.kt").readText()
+        val profile = moduleFile("src/main/java/com/nextpari/app/feature/profile/PersonalDataScreen.kt").readText()
+        val sportsbook = moduleFile("src/main/java/com/nextpari/app/feature/sportsbook/SportsbookChrome.kt").readText()
+        listOf(bottomNav, tabs, header, menu, settings, wallet, info, profile, sportsbook).forEach { source ->
+            assertThat(source).doesNotContain("NextpariReferenceIcon")
+            assertThat(source).doesNotContain("NextpariReferenceIconAssets")
+            assertThat(source).doesNotContain("NextpariGlyph")
+            assertThat(source).doesNotContain("np_ref_")
+        }
+        assertThat(bottomNav).contains("Icons.Outlined.LocalFireDepartment")
+        assertThat(bottomNav).contains("Icons.Outlined.ConfirmationNumber")
+        assertThat(bottomNav).contains(".size(58.dp)")
+        assertThat(tabs).contains("Icons.Outlined.EmojiEvents")
+        assertThat(tabs).contains("Icons.Outlined.SportsEsports")
+        assertThat(header).contains("Icons.Outlined.Add")
+        assertThat(header).contains("Icons.Outlined.Search")
+        assertThat(header).contains("Icons.Outlined.Settings")
+        assertThat(menu).contains("Icons.Outlined.LocalFireDepartment")
+        assertThat(moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText())
+            .contains("NextpariSportIconBadge(")
+    }
+
+    @Test
+    fun restoredChromeUsesOriginalMaterialIconsLikeA64629() {
+        val bottomNav = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariBottomNav.kt").readText()
+        val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
+        val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
+        val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
+        assertThat(bottomNav).contains("import androidx.compose.material.icons")
+        assertThat(tabs).contains("import androidx.compose.material.icons")
+        assertThat(header).contains("import androidx.compose.material.icons")
+        assertThat(menu).contains("import androidx.compose.material.icons")
         val legacy = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariLegacyIcons.kt").readText()
         assertThat(legacy).contains("import androidx.compose.material.icons")
     }
@@ -195,41 +252,23 @@ class NextpariIconsTest {
     }
 
     @Test
-    fun chromeScreensUseCentralizedRegistry() {
-        val bottomNav = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariBottomNav.kt").readText()
-        val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
+    fun walletDropdownAndNavigationStayUnchanged() {
+        assertThat(Destinations.HOME).isEqualTo("home")
+        assertThat(Destinations.FAVORITES).isEqualTo("favorites")
+        assertThat(Destinations.BETSLIP).isEqualTo("betslip")
+        assertThat(Destinations.HISTORY).isEqualTo("history")
+        assertThat(Destinations.MENU).isEqualTo("menu")
+        assertThat(Destinations.WALLET).isEqualTo("wallet")
+        assertThat(Destinations.SETTINGS).isEqualTo("settings")
         val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
+        val switcher = moduleFile("src/main/java/com/nextpari/app/core/ui/components/HeaderWalletSwitcher.kt").readText()
         val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
-        assertThat(bottomNav).contains("NextpariReferenceIconAssets.bottomNavKey")
-        assertThat(bottomNav).contains("NextpariReferenceIcon")
-        assertThat(bottomNav).contains("bottom_betslip")
-        assertThat(bottomNav).contains("NextpariIcons.Betslip")
-        assertThat(bottomNav).doesNotContain("Icons.Outlined.LocalFireDepartment")
-        assertThat(bottomNav).doesNotContain("Icons.Outlined.ConfirmationNumber")
-        assertThat(tabs).contains("NextpariReferenceIconAssets.mainTabKey")
-        assertThat(tabs).contains("NextpariIcons.mainTab(tab.id)")
-        assertThat(tabs).doesNotContain("Icons.Outlined.EmojiEvents")
-        assertThat(header).contains("NextpariIcons.Add")
-        assertThat(header).contains("NextpariIcons.ThemeLight")
-        assertThat(header).contains("NextpariIcons.Settings")
-        assertThat(header).contains("NextpariIcons.Search")
-        assertThat(header).contains("service_search")
-        assertThat(header).contains("menu_settings")
-        assertThat(header).doesNotContain("Icons.Outlined.Add")
-        assertThat(menu).contains("NextpariReferenceIconAssets.menuTabKey")
-        assertThat(menu).contains("NextpariReferenceIconAssets.menuRowKey")
-        assertThat(menu).contains("NextpariIcons.menuTab(label)")
-        assertThat(menu).contains("NextpariIcons.menuRow(label)")
-        assertThat(menu).contains("menu_profile")
-        assertThat(menu).contains("service_logout")
-        assertThat(menu).contains("NextpariIcons.Wallet")
-        assertThat(menu).contains("NextpariIcons.ChevronDown")
-        assertThat(menu).doesNotContain("Icons.Outlined.LocalFireDepartment")
-        assertThat(NextpariIcons.bottomNav(Destinations.HOME).name).isEqualTo(NextpariIcons.Popular.name)
-        assertThat(NextpariIcons.mainTab("sport").name).isEqualTo(NextpariIcons.Sport.name)
-        assertThat(NextpariIcons.menuTab("Топ").name).isEqualTo(NextpariIcons.Top.name)
-        assertThat(NextpariIcons.menuRow("LIVE").name).isEqualTo(NextpariIcons.Live.name)
-        assertThat(NextpariIcons.menuRow("Аутентификатор").name).isEqualTo(NextpariIcons.Authenticator.name)
+        assertThat(header).contains("HeaderWalletSwitcher(")
+        assertThat(header).contains("clickable(onClick = onDeposit)")
+        assertThat(switcher).contains("fun WalletDropdownMenu(")
+        assertThat(switcher).contains("nextWalletDropdownOpen")
+        assertThat(menu).contains("WalletDropdownMenu(")
+        assertThat(menu).contains("nextWalletDropdownOpen(walletsOpen, onRefreshWallets)")
     }
 
     @Test
@@ -441,23 +480,21 @@ class NextpariIconsTest {
     }
 
     @Test
-    fun premiumCoveredKeysUseExactPngNotPhosphorOrMaterialAndLegacyRemains() {
+    fun glossyPngPackRemainsForHomeSelectorHistory() {
         val reference = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariReferenceIcon.kt").readText()
         val sports = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariSportIcons.kt").readText()
         val badge = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariPremiumIcon.kt").readText()
+        val home = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
         val bottomNav = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariBottomNav.kt").readText()
         val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
         val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
         assertThat(reference).contains("painterResource")
-        assertThat(reference).doesNotContain("ColorFilter")
         assertThat(sports).contains("NextpariReferenceIcon")
-        assertThat(badge).contains("NextpariReferenceIcon")
-        assertThat(bottomNav).contains("isPremiumIcons()")
-        assertThat(bottomNav).contains("NextpariReferenceIcon")
-        assertThat(tabs).contains("NextpariReferenceIcon")
-        assertThat(menu).contains("NextpariReferenceIcon")
-        assertThat(menu).doesNotContain("NextpariPremiumIcon(")
-        assertThat(bottomNav).doesNotContain("import androidx.compose.material.icons")
+        assertThat(badge).contains("fun NextpariSportIconBadge")
+        assertThat(home).contains("NextpariSportIconBadge(")
+        assertThat(bottomNav).doesNotContain("NextpariReferenceIcon")
+        assertThat(tabs).doesNotContain("NextpariReferenceIcon")
+        assertThat(menu).doesNotContain("NextpariReferenceIcon")
         assertThat(NextpariIconConfig.defaultVariant).isEqualTo(NextpariIconVariant.Premium)
         assertThat(NextpariIconVariant.entries).contains(NextpariIconVariant.Legacy)
         assertThat(NextpariIcons.pack(NextpariIconVariant.Legacy)).isSameInstanceAs(NextpariLegacyIcons)

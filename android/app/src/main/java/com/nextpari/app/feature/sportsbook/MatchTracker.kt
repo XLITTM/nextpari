@@ -20,6 +20,13 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Bolt
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.WifiTethering
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,9 +46,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nextpari.app.core.ui.icons.NextpariGlyph
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.feature.home.MatchCardModel
 
 private val TrackerSlides = listOf("Счёт", "Таймы", "H2H", "Статистика", "Хронология", "Стадион")
@@ -67,12 +71,11 @@ fun MatchTracker(
                 Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                NextpariGlyph(
-                    imageVector = NextpariIcons.Back,
+                Icon(
+                    Icons.AutoMirrored.Outlined.ArrowBack,
                     contentDescription = "Назад",
                     tint = Color.White,
-                    size = 20.dp,
-                    modifier = Modifier.clickable(onClick = onBack),
+                    modifier = Modifier.size(20.dp).clickable(onClick = onBack),
                 )
                 Text(
                     "$sportLabel. ${match.league}",
@@ -84,14 +87,14 @@ fun MatchTracker(
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 )
                 Icon(
-                    NextpariIcons.Bolt,
+                    Icons.Outlined.Bolt,
                     contentDescription = "Live",
-                    tint = NextpariIconPalette.Action.Live,
+                    tint = Color(0xFF4ADE80),
                     modifier = Modifier.size(20.dp).clickable(onClick = onLiveClick),
                 )
                 Spacer(Modifier.width(12.dp))
                 Icon(
-                    NextpariIcons.More,
+                    Icons.Outlined.MoreVert,
                     contentDescription = "Меню",
                     tint = Color.White,
                     modifier = Modifier.size(20.dp).clickable { menuOpen = !menuOpen },
@@ -180,9 +183,9 @@ private fun ScoreSlide(match: MatchCardModel, favorite: Boolean, onToggleFavorit
             TeamBlock(match.team2, match.team2LogoRes, Modifier.weight(1f))
         }
         Icon(
-            if (favorite) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
+            if (favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
             contentDescription = null,
-            tint = if (favorite) NextpariIconPalette.Action.Star else NextpariIconPalette.Action.Star.copy(alpha = 0.55f),
+            tint = if (favorite) Color(0xFF4ADE80) else Color.White,
             modifier = Modifier.padding(top = 8.dp).size(18.dp).clickable(onClick = onToggleFavorite),
         )
     }
@@ -219,7 +222,7 @@ fun StreamPanel() {
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(NextpariIcons.Wifi, contentDescription = null, tint = NextpariIconPalette.Action.Stream, modifier = Modifier.size(40.dp))
+        Icon(Icons.Outlined.WifiTethering, contentDescription = null, tint = Color(0xFF22C55E), modifier = Modifier.size(40.dp))
         Text("Трансляция недоступна", color = Color(0xFF1A1A1A), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
         Text("Стрим появится после подключения провайдера", color = Color(0xFF666666), fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp, bottom = 80.dp))
     }

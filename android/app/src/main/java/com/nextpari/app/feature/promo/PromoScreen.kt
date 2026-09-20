@@ -16,6 +16,16 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.CardGiftcard
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.Paid
+import androidx.compose.material.icons.outlined.ShoppingCart
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,9 +38,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nextpari.app.core.ui.icons.NextpariGlyph
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -60,7 +67,7 @@ fun PromoScreen(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                NextpariGlyph(NextpariIcons.Back, contentDescription = "Назад", tint = NextpariIconPalette.Action.Chevron, size = 20.dp)
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = colors.text, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(12.dp))
             Text("Promo", color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -79,7 +86,7 @@ fun PromoScreen(
                     Modifier.size(48.dp).clip(CircleShape).background(Color.White),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(NextpariIcons.ShoppingCart, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(24.dp))
+                    Icon(Icons.Outlined.ShoppingCart, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(24.dp))
                 }
                 Column(Modifier.padding(start = 12.dp)) {
                     Text("Промо", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
@@ -114,7 +121,7 @@ private fun PromoMenuRow(item: PromoMenuItem, dark: Boolean, onClick: () -> Unit
             Modifier.size(44.dp).clip(CircleShape).background(Color(item.iconBg)),
             contentAlignment = Alignment.Center,
         ) {
-            NextpariGlyph(promoIcon(item.label), contentDescription = null, tint = Color.White, size = 20.dp)
+            Icon(promoIcon(item.label), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(item.label, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -123,16 +130,16 @@ private fun PromoMenuRow(item: PromoMenuItem, dark: Boolean, onClick: () -> Unit
         if (item.soon) {
             Text("Скоро", color = colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         } else {
-            Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
         }
     }
 }
 
 private fun promoIcon(label: String): ImageVector = when (label) {
-    "Бонусные игры" -> NextpariIcons.Games
-    "Проверка промокода" -> NextpariIcons.Eye
-    "Кешбэк" -> NextpariIcons.Cashback
-    "VIP кешбэк" -> NextpariIcons.Vip
-    "Участие в акциях" -> NextpariIcons.Trophy
-    else -> NextpariIcons.Gift
+    "Бонусные игры" -> Icons.Outlined.Gamepad
+    "Проверка промокода" -> Icons.Outlined.Visibility
+    "Кешбэк" -> Icons.Outlined.Paid
+    "VIP кешбэк" -> Icons.Outlined.WorkspacePremium
+    "Участие в акциях" -> Icons.Outlined.EmojiEvents
+    else -> Icons.Outlined.CardGiftcard
 }

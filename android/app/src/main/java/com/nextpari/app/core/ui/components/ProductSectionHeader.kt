@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -18,7 +20,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -65,7 +66,7 @@ fun ProductSectionHeader(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(filterLabel ?: "Спорт", color = colors.text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = colors.text, modifier = Modifier.size(12.dp))
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.text, modifier = Modifier.size(12.dp))
             }
         }
         if (count != null && count > 0) {
@@ -81,7 +82,7 @@ fun ProductSectionHeader(
             Spacer(Modifier.weight(1f))
             Row(Modifier.clickable(onClick = onSeeAll), verticalAlignment = Alignment.CenterVertically) {
                 Text("Все", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = colors.accent, modifier = Modifier.size(12.dp))
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.accent, modifier = Modifier.size(12.dp))
             }
         }
     }

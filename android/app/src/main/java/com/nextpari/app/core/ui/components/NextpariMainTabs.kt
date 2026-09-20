@@ -8,6 +8,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Casino
+import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,14 +21,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.MainTabSpec
 import com.nextpari.app.core.navigation.MainTabsSpec
-import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
-import com.nextpari.app.core.ui.icons.NextpariReferenceIconAssets
-import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
 
@@ -35,13 +38,8 @@ fun NextpariMainTabs(
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         MainTabsSpec.tabs.forEach { tab ->
             val active = tab.id == activeId
-            val icon = NextpariIcons.mainTab(tab.id)
+            val icon = tabIcon(tab.id)
             val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
-            val iconTint = if (active) {
-                TabActiveGold
-            } else {
-                if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF)
-            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -56,21 +54,12 @@ fun NextpariMainTabs(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                if (isPremiumIcons()) {
-                    NextpariReferenceIcon(
-                        key = NextpariReferenceIconAssets.mainTabKey(tab.id),
-                        contentDescription = tab.label,
-                        size = 22.dp,
-                        active = active,
-                    )
-                } else {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = tab.label,
-                        tint = iconTint,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = tab.label,
+                    tint = if (active) TabActiveGold else if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF),
+                    modifier = Modifier.size(20.dp),
+                )
                 Text(
                     text = tab.label,
                     fontSize = 11.sp,
@@ -84,4 +73,12 @@ fun NextpariMainTabs(
             }
         }
     }
+}
+
+private fun tabIcon(id: String): ImageVector = when (id) {
+    "top" -> Icons.Outlined.LocalFireDepartment
+    "sport" -> Icons.Outlined.EmojiEvents
+    "esports" -> Icons.Outlined.SportsEsports
+    "casino" -> Icons.Outlined.Casino
+    else -> Icons.Outlined.Gamepad
 }

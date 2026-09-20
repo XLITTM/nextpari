@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,10 +34,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nextpari.app.core.ui.icons.NextpariGlyph
-import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsUiState
@@ -191,13 +189,13 @@ fun HeaderWalletSwitcher(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
             )
-            NextpariGlyph(
-                imageVector = NextpariIcons.ChevronDown,
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
                 contentDescription = WalletsCatalog.SWITCHER_LABEL,
-                tint = if (isPremiumIcons()) NextpariIconPalette.Header.WalletChevron else Color(0xFF6B7280),
-                size = 16.dp,
+                tint = Color(0xFF6B7280),
                 modifier = Modifier
                     .padding(start = 4.dp)
+                    .size(16.dp)
                     .graphicsLayer { rotationZ = rotation },
             )
         }

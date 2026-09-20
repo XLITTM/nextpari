@@ -21,6 +21,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Casino
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.LiveTv
+import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,10 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.components.ProductSectionHeader
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariPremiumIcon
-import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -59,11 +61,11 @@ fun CasinoHomeContent(
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
         ProductSectionHeader(title = "Казино")
-        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", NextpariIcons.Casino) {
+        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", Icons.Outlined.Casino) {
             onNavigate(Destinations.SLOTS)
         }
         Spacer(Modifier.height(8.dp))
-        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", NextpariIcons.Live) {
+        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", Icons.Outlined.LiveTv) {
             onNavigate(Destinations.LIVE_CASINO)
         }
         if (features.isNotEmpty()) {
@@ -129,23 +131,12 @@ private fun CasinoEntry(title: String, desc: String, icon: ImageVector, onClick:
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val semantic = if (title == "Слоты") NextpariIconPalette.Menu.Slots else NextpariIconPalette.Menu.LiveCasino
-        if (isPremiumIcons()) {
-            NextpariPremiumIcon(
-                imageVector = icon,
-                semantic = semantic,
-                containerSize = 36.dp,
-                iconSize = 22.dp,
-                showContainer = true,
-            )
-        } else {
-            Icon(icon, contentDescription = null, tint = Color(0xFF4ADE80), modifier = Modifier.size(24.dp))
-        }
+        Icon(icon, contentDescription = null, tint = Color(0xFF4ADE80), modifier = Modifier.size(24.dp))
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(title, fontWeight = FontWeight.ExtraBold, color = colors.text, fontSize = 14.sp)
             Text(desc, color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
-        Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -229,10 +220,10 @@ fun CasinoTournamentCard(model: CasinoTournament, onOpen: () -> Unit) {
 @Composable
 private fun CasinoCategoryTile(card: CasinoCategoryCard, onOpen: () -> Unit) {
     val icon = when (card.id) {
-        "live" -> NextpariIcons.Live
-        "tv" -> NextpariIcons.Tv
-        "bingo" -> NextpariIcons.Trophy
-        else -> NextpariIcons.Casino
+        "live" -> Icons.Outlined.LiveTv
+        "tv" -> Icons.Outlined.Tv
+        "bingo" -> Icons.Outlined.EmojiEvents
+        else -> Icons.Outlined.Casino
     }
     Box(
         Modifier

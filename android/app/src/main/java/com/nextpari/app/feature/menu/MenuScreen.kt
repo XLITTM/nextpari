@@ -16,6 +16,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Casino
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.MailOutline
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,10 +56,6 @@ import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.ui.components.WalletDropdownMenu
 import com.nextpari.app.core.ui.components.WalletSwitcherEffects
 import com.nextpari.app.core.ui.components.nextWalletDropdownOpen
-import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
-import com.nextpari.app.core.ui.icons.NextpariReferenceIconAssets
-import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.wallets.WalletsUiState
@@ -88,11 +98,7 @@ fun MenuScreen(
                     Modifier.size(56.dp).clip(CircleShape).background(colors.surfaceMuted),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (isPremiumIcons()) {
-                        NextpariReferenceIcon(key = "menu_profile", contentDescription = null, size = 28.dp)
-                    } else {
-                        Icon(NextpariIcons.Profile, contentDescription = null, tint = colors.textSecondary)
-                    }
+                    Icon(Icons.Outlined.Person, contentDescription = null, tint = colors.textSecondary)
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(session.displayName.ifBlank { "Игрок" }, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -103,8 +109,8 @@ fun MenuScreen(
                         Text("Кошелёк и валюты →", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onNavigate(Destinations.WALLETS) })
                     }
                 }
-                IconButtonBox("Входящие", "menu_messages", NextpariIcons.Mail, onInbox)
-                IconButtonBox("Настройки", "menu_settings", NextpariIcons.Settings) { onNavigate(Destinations.SETTINGS) }
+                IconButtonBox("Входящие", Icons.Outlined.MailOutline, onInbox)
+                IconButtonBox("Настройки", Icons.Outlined.Settings) { onNavigate(Destinations.SETTINGS) }
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -118,30 +124,17 @@ fun MenuScreen(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        if (isPremiumIcons()) {
-                            NextpariReferenceIcon(key = "menu_account", contentDescription = null, size = 22.dp)
-                        } else {
-                            Icon(NextpariIcons.Wallet, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
-                        }
+                        Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
                         Column(Modifier.padding(start = 8.dp).weight(1f)) {
                             Text("Баланс", color = colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                             Text(balanceLabel, color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                         }
-                        if (isPremiumIcons()) {
-                            NextpariReferenceIcon(
-                                key = "service_down",
-                                contentDescription = "Кошелёк и валюты",
-                                size = 16.dp,
-                                modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
-                            )
-                        } else {
-                            Icon(
-                                NextpariIcons.ChevronDown,
-                                contentDescription = "Кошелёк и валюты",
-                                tint = colors.textMuted,
-                                modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = chevronRotation },
-                            )
-                        }
+                        Icon(
+                            Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = "Кошелёк и валюты",
+                            tint = colors.textMuted,
+                            modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = chevronRotation },
+                        )
                     }
                     WalletDropdownMenu(
                         expanded = walletsOpen,
@@ -160,7 +153,7 @@ fun MenuScreen(
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(NextpariIcons.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                     Text("Пополнить", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp))
                 }
             }
@@ -181,17 +174,8 @@ fun MenuScreen(
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    if (isPremiumIcons()) {
-                        val tabKey = NextpariReferenceIconAssets.menuTabKey(label)
-                        if (tabKey != null) {
-                            NextpariReferenceIcon(key = tabKey, contentDescription = label, size = 22.dp, active = active)
-                        } else {
-                            Icon(menuTabIcon(label), contentDescription = label, tint = colors.textMuted, modifier = Modifier.size(24.dp))
-                        }
-                    } else {
-                        Icon(menuTabIcon(label), contentDescription = label, tint = if (active) Color(0xFF4ADE80) else colors.textMuted, modifier = Modifier.size(24.dp))
-                    }
-                    Text(label, color = if (active) colors.text else colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Icon(menuTabIcon(label), contentDescription = label, tint = Color(0xFF4ADE80).copy(alpha = if (active) 1f else 0.7f), modifier = Modifier.size(24.dp))
+                    Text(label, color = Color(0xFF4ADE80).copy(alpha = if (active) 1f else 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -210,22 +194,13 @@ fun MenuScreen(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(40.dp),
+                    Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFFEE2E2)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (isPremiumIcons()) {
-                        NextpariReferenceIcon(key = "service_logout", contentDescription = null, size = 24.dp)
-                    } else {
-                        Box(
-                            Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFFEE2E2)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(NextpariIcons.Logout, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
-                        }
-                    }
+                    Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
                 }
                 Text("Выйти из аккаунта", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 12.dp).weight(1f))
-                Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(20.dp))
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(20.dp))
             }
         }
         Text("nextpari v2.0.1 · © 2026", color = colors.textMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -251,17 +226,12 @@ private fun MenuRow(item: MenuItem, onNavigate: (String) -> Unit) {
         .then(if (click != null) Modifier.clickable(onClick = click) else Modifier)
         .padding(16.dp)
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        val rowKey = NextpariReferenceIconAssets.menuRowKey(item.label)
-        if (isPremiumIcons() && rowKey != null) {
-            NextpariReferenceIcon(key = rowKey, contentDescription = null, size = 22.dp)
-        } else {
-            Icon(
-                menuRowIcon(item.label),
-                contentDescription = null,
-                tint = if (specialBrush != null) Color.White else Color(0xFF4ADE80),
-                modifier = Modifier.size(24.dp).padding(end = 4.dp),
-            )
-        }
+        Icon(
+            menuRowIcon(item.label),
+            contentDescription = null,
+            tint = if (specialBrush != null) Color.White else Color(0xFF4ADE80),
+            modifier = Modifier.size(24.dp).padding(end = 4.dp),
+        )
         Column(Modifier.weight(1f).padding(start = 8.dp)) {
             Text(item.label, color = if (specialBrush != null) Color.White else colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
             Text(item.desc, color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textSecondary, fontSize = 12.sp)
@@ -269,13 +239,13 @@ private fun MenuRow(item: MenuItem, onNavigate: (String) -> Unit) {
         if (item.soon) {
             Text("Скоро", color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         } else {
-            Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = if (specialBrush != null) Color.White else colors.textMuted, modifier = Modifier.size(20.dp))
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (specialBrush != null) Color.White else colors.textMuted, modifier = Modifier.size(20.dp))
         }
     }
 }
 
 @Composable
-private fun IconButtonBox(description: String, referenceKey: String, fallback: ImageVector, onClick: () -> Unit) {
+private fun IconButtonBox(description: String, icon: ImageVector, onClick: () -> Unit) {
     val colors = NextpariTheme.colors
     val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
     Box(
@@ -286,19 +256,26 @@ private fun IconButtonBox(description: String, referenceKey: String, fallback: I
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        if (isPremiumIcons()) {
-            NextpariReferenceIcon(key = referenceKey, contentDescription = description, size = 22.dp)
-        } else {
-            Icon(
-                fallback,
-                contentDescription = description,
-                tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF4B5563),
-                modifier = Modifier.size(20.dp),
-            )
-        }
+        Icon(icon, contentDescription = description, tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF4B5563), modifier = Modifier.size(20.dp))
     }
 }
 
-private fun menuTabIcon(label: String): ImageVector = NextpariIcons.menuTab(label)
+private fun menuTabIcon(label: String): ImageVector = when (label) {
+    "Топ" -> Icons.Outlined.LocalFireDepartment
+    "Спорт" -> Icons.Outlined.EmojiEvents
+    "Казино" -> Icons.Outlined.Casino
+    "Games" -> Icons.Outlined.Gamepad
+    else -> Icons.Outlined.AutoAwesome
+}
 
-private fun menuRowIcon(label: String): ImageVector = NextpariIcons.menuRow(label)
+private fun menuRowIcon(label: String): ImageVector = when (label) {
+    "LIVE" -> Icons.Outlined.LocalFireDepartment
+    "Линия", "Непобедимый", "Турниры" -> Icons.Outlined.EmojiEvents
+    "Киберспорт", "Games" -> Icons.Outlined.Gamepad
+    "Слоты", "Лайв казино", "My casino", "Категории", "Провайдеры" -> Icons.Outlined.Casino
+    "Промокоды", "Промо", "Promo", "Акции" -> Icons.Outlined.AutoAwesome
+    "Поддержка", "Инфо" -> Icons.Outlined.Person
+    "Управление счетом" -> Icons.Outlined.AccountBalanceWallet
+    "Aviator" -> Icons.Outlined.LocalFireDepartment
+    else -> Icons.Outlined.Settings
+}
