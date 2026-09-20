@@ -3,10 +3,15 @@ package com.nextpari.app.feature.home
 interface HomeCatalogRepository {
     fun sports(): List<HomeSport>
     fun promos(): List<HomePromo>
-    fun liveTitles(): List<String>
-    fun lineTitles(): List<String>
-    fun championships(): List<String>
+    fun liveMatches(): List<MatchCardModel>
+    fun lineMatches(): List<MatchCardModel>
+    fun esportsLiveMatches(): List<MatchCardModel>
+    fun esportsLineMatches(): List<MatchCardModel>
+    fun esportsTournaments(): List<EsportsTournament>
     fun esportsDisciplines(): List<EsportsDiscipline>
+    fun casinoFeatures(): List<CasinoFeatureCard>
+    fun casinoTournaments(): List<CasinoTournament>
+    fun casinoCategories(): List<CasinoCategoryCard>
 }
 
 class FakeHomeCatalogRepository : HomeCatalogRepository {
@@ -36,8 +41,13 @@ class FakeHomeCatalogRepository : HomeCatalogRepository {
     )
 
     override fun promos(): List<HomePromo> = HomePromoCatalog.items
-    override fun liveTitles(): List<String> = emptyList()
-    override fun lineTitles(): List<String> = emptyList()
-    override fun championships(): List<String> = emptyList()
+    override fun liveMatches(): List<MatchCardModel> = emptyList()
+    override fun lineMatches(): List<MatchCardModel> = emptyList()
+    override fun esportsLiveMatches(): List<MatchCardModel> = emptyList()
+    override fun esportsLineMatches(): List<MatchCardModel> = emptyList()
+    override fun esportsTournaments(): List<EsportsTournament> = emptyList()
     override fun esportsDisciplines(): List<EsportsDiscipline> = EsportsCatalog.disciplines
+    override fun casinoFeatures(): List<CasinoFeatureCard> = CasinoHomeCatalog.features
+    override fun casinoTournaments(): List<CasinoTournament> = CasinoHomeCatalog.tournaments
+    override fun casinoCategories(): List<CasinoCategoryCard> = CasinoHomeCatalog.categories
 }

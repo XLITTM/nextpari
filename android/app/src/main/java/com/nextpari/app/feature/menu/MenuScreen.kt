@@ -65,9 +65,9 @@ fun MenuScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(colors.bg)
+            .background(if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) Color(0xFF111827) else Color(0xFFF3F4F6))
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 32.dp),
+            .padding(bottom = 112.dp),
     ) {
         Column(Modifier.background(colors.surface).padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -188,7 +188,13 @@ private fun MenuRow(item: MenuItem, onNavigate: (String) -> Unit) {
         .then(if (click != null) Modifier.clickable(onClick = click) else Modifier)
         .padding(16.dp)
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+        Icon(
+            menuRowIcon(item.label),
+            contentDescription = null,
+            tint = if (specialBrush != null) Color.White else Color(0xFF4ADE80),
+            modifier = Modifier.size(24.dp).padding(end = 4.dp),
+        )
+        Column(Modifier.weight(1f).padding(start = 8.dp)) {
             Text(item.label, color = if (specialBrush != null) Color.White else colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
             Text(item.desc, color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textSecondary, fontSize = 12.sp)
         }
@@ -222,4 +228,16 @@ private fun menuTabIcon(label: String): ImageVector = when (label) {
     "Казино" -> Icons.Outlined.Casino
     "Games" -> Icons.Outlined.Gamepad
     else -> Icons.Outlined.AutoAwesome
+}
+
+private fun menuRowIcon(label: String): ImageVector = when (label) {
+    "LIVE" -> Icons.Outlined.LocalFireDepartment
+    "Линия", "Непобедимый", "Турниры" -> Icons.Outlined.EmojiEvents
+    "Киберспорт", "Games" -> Icons.Outlined.Gamepad
+    "Слоты", "Лайв казино", "My casino", "Категории", "Провайдеры" -> Icons.Outlined.Casino
+    "Промокоды", "Промо", "Promo", "Акции" -> Icons.Outlined.AutoAwesome
+    "Поддержка", "Инфо" -> Icons.Outlined.Person
+    "Управление счетом" -> Icons.Outlined.AccountBalanceWallet
+    "Aviator" -> Icons.Outlined.LocalFireDepartment
+    else -> Icons.Outlined.Settings
 }

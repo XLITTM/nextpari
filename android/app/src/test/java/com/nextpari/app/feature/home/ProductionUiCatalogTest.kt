@@ -100,8 +100,11 @@ class ProductionUiCatalogTest {
             appendLine("Игры появятся после подключения провайдера")
             appendLine("Столы появятся после подключения провайдера")
             appendLine("Матчи появятся скоро")
+            CasinoHomeCatalog.features.forEach { appendLine("${it.title} ${it.subtitle}") }
+            CasinoHomeCatalog.tournaments.forEach { appendLine(it.title) }
+            CasinoHomeCatalog.categories.forEach { appendLine(it.name) }
         }
-        listOf("DEV/mock", "A002", "A003", "Production API", "Движки в", "backend", "repository").forEach { token ->
+        listOf("DEV/mock", "A002", "A003", "Production API", "Движки в", "backend", "repository", "YOHOHO", "Yohoho", "YohohoGames").forEach { token ->
             assertThat(blob).doesNotContain(token)
         }
     }
