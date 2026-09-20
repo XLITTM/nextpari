@@ -24,3 +24,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Android local/build artifacts (sources under android/ are tracked)
+android/local.properties
+android/.gradle/
+android/**/build/
+android/captures/
+android/.cxx/

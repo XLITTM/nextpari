@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="np_bg">#031522</color>
+    <color name="np_accent">#22F39A</color>
+    <color name="np_accent_ink">#04261A</color>
+    <color name="np_launcher_bg">#031522</color>
+</resources>
