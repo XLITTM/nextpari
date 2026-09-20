@@ -1,5 +1,6 @@
 package com.nextpari.app.core.ui.icons
 
+import androidx.compose.ui.graphics.Color
 import com.google.common.truth.Truth.assertThat
 import com.nextpari.app.R
 import com.nextpari.app.core.navigation.Destinations
@@ -29,7 +30,8 @@ class NextpariIconsTest {
             val premium = NextpariIcons.vector(key, NextpariIconVariant.Premium)
             assertThat(legacy.name).isNotEmpty()
             assertThat(premium.name).isNotEmpty()
-            assertThat(premium.name).startsWith("premium.")
+            assertThat(premium.name).startsWith("professional.")
+            assertThat(legacy.name).doesNotContain("professional.")
             assertThat(legacy.name).doesNotContain("premium.")
         }
         assertThat(NextpariIcons.Home.name).isEqualTo(
@@ -46,13 +48,20 @@ class NextpariIconsTest {
             assertThat(NextpariSportIcons.resolves(id, NextpariIconVariant.Premium)).isTrue()
             assertThat(NextpariSportIcons.legacyDrawable(id)).isEqualTo(SportIconRes.drawable(id))
             assertThat(NextpariSportIcons.legacyDrawable(id)).isNotEqualTo(R.drawable.ic_sport_default)
-            assertThat(NextpariSportIcons.vector(id).name).isNotEqualTo("premium.sport.default")
+            assertThat(NextpariSportIcons.vector(id).name).isNotEqualTo("professional.SportDefault")
+            assertThat(NextpariSportIcons.vector(id).name).startsWith("professional.Sport")
         }
         assertThat(NextpariSportIcons.legacyDrawable("unknown-sport")).isEqualTo(R.drawable.ic_sport_default)
-        assertThat(NextpariSportIcons.vector("unknown-sport").name).isEqualTo("premium.sport.default")
+        assertThat(NextpariSportIcons.vector("unknown-sport").name).isEqualTo("professional.SportDefault")
         assertThat(NextpariSportIcons.canonicalId("futsal")).isEqualTo("football")
         assertThat(NextpariSportIcons.canonicalId("beach-volleyball")).isEqualTo("volleyball")
-        assertThat(NextpariSportIcons.vector("futsal").name).isEqualTo("premium.sport.football")
+        assertThat(NextpariSportIcons.vector("futsal").name).isEqualTo("professional.SportFutsal")
+        assertThat(NextpariSportIcons.vector("beach-volleyball").name)
+            .isEqualTo("professional.SportBeachVolleyball")
+        assertThat(NextpariSportIcons.vector("futsal").name)
+            .isNotEqualTo(NextpariSportIcons.vector("football").name)
+        assertThat(NextpariSportIcons.vector("beach-volleyball").name)
+            .isNotEqualTo(NextpariSportIcons.vector("volleyball").name)
     }
 
     @Test
@@ -63,17 +72,32 @@ class NextpariIconsTest {
         val hockey = NextpariSportIcons.vector("hockey")
         val volleyball = NextpariSportIcons.vector("volleyball")
         val esports = NextpariSportIcons.vector("esports")
-        assertThat(football.name).isEqualTo("premium.sport.football")
-        assertThat(tennis.name).isEqualTo("premium.sport.tennis")
-        assertThat(basketball.name).isEqualTo("premium.sport.basketball")
-        assertThat(hockey.name).isEqualTo("premium.sport.hockey")
-        assertThat(volleyball.name).isEqualTo("premium.sport.volleyball")
-        assertThat(esports.name).isEqualTo("premium.sport.esports")
+        assertThat(football.name).isEqualTo("professional.SportFootball")
+        assertThat(tennis.name).isEqualTo("professional.SportTennis")
+        assertThat(basketball.name).isEqualTo("professional.SportBasketball")
+        assertThat(hockey.name).isEqualTo("professional.SportHockey")
+        assertThat(volleyball.name).isEqualTo("professional.SportVolleyball")
+        assertThat(esports.name).isEqualTo("professional.SportEsports")
         val names = listOf(football, tennis, basketball, hockey, volleyball, esports).map { it.name }
         assertThat(names.toSet()).hasSize(6)
         names.forEach { name ->
-            assertThat(name).isNotEqualTo("premium.sport.default")
+            assertThat(name).isNotEqualTo("professional.SportDefault")
         }
+    }
+
+    @Test
+    fun premiumSportTintPaletteMatchesApprovedColors() {
+        assertThat(NextpariSportIcons.premiumTint("all", true)).isEqualTo(Color(0xFF16D982))
+        assertThat(NextpariSportIcons.premiumTint("football", true)).isEqualTo(Color.White)
+        assertThat(NextpariSportIcons.premiumTint("football", false)).isEqualTo(Color(0xFF0F172A))
+        assertThat(NextpariSportIcons.premiumTint("tennis", true)).isEqualTo(Color(0xFFC7F000))
+        assertThat(NextpariSportIcons.premiumTint("basketball", false)).isEqualTo(Color(0xFFFF7A1A))
+        assertThat(NextpariSportIcons.premiumTint("hockey", true)).isEqualTo(Color.White)
+        assertThat(NextpariSportIcons.premiumTint("hockey", false)).isEqualTo(Color(0xFF0F172A))
+        assertThat(NextpariSportIcons.premiumTint("volleyball", true)).isEqualTo(Color.White)
+        assertThat(NextpariSportIcons.premiumTint("volleyball", false)).isEqualTo(Color(0xFF0F172A))
+        assertThat(NextpariSportIcons.premiumTint("esports", true)).isEqualTo(Color(0xFF22F39A))
+        assertThat(NextpariSportIcons.premiumTint("cricket", true)).isEqualTo(NextpariSportIconTint)
     }
 
     @Test
@@ -146,6 +170,52 @@ class NextpariIconsTest {
         assertThat(File(moduleFile("src/main/res/drawable").path, "ic_sport_football.xml").exists()).isTrue()
         assertThat(File(moduleFile("src/main/res/drawable").path, "ic_sport_hockey.xml").exists()).isTrue()
         assertThat(File(moduleFile("src/main/res/drawable").path, "ic_sport_volleyball.xml").exists()).isTrue()
+    }
+
+    @Test
+    fun premiumUsesProfessionalPhosphorPackNotCursorDrawnGeometry() {
+        assertThat(NextpariIcons.pack(NextpariIconVariant.Premium))
+            .isSameInstanceAs(NextpariProfessionalIcons)
+        assertThat(NextpariIcons.pack(NextpariIconVariant.Premium))
+            .isNotSameInstanceAs(NextpariPremiumIcons)
+        val registry = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariIcons.kt").readText()
+        assertThat(registry).contains("NextpariProfessionalIcons")
+        assertThat(registry).doesNotContain("NextpariIconVariant.Premium -> NextpariPremiumIcons")
+        assertThat(moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariPremiumIcons.kt").exists()).isTrue()
+        val generated = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/ProfessionalPremiumIcons.kt")
+        assertThat(generated.exists()).isTrue()
+        val text = generated.readText()
+        assertThat(text).contains("AUTO-GENERATED")
+        assertThat(text).contains("Phosphor Icons")
+        assertThat(Regex("""val \w+: ImageVector""").findAll(text).count()).isEqualTo(73)
+    }
+
+    @Test
+    fun bottomNavAndMainTabsUseApprovedProfessionalVectors() {
+        assertThat(NextpariIcons.bottomNav(Destinations.HOME).name).isEqualTo("professional.BottomPopular")
+        assertThat(NextpariIcons.bottomNav(Destinations.FAVORITES).name).isEqualTo("professional.BottomFavorites")
+        assertThat(NextpariIcons.bottomNav(Destinations.BETSLIP).name).isEqualTo("professional.BottomBetslip")
+        assertThat(NextpariIcons.bottomNav(Destinations.HISTORY).name).isEqualTo("professional.BottomHistory")
+        assertThat(NextpariIcons.bottomNav(Destinations.MENU).name).isEqualTo("professional.BottomMenu")
+        assertThat(NextpariIcons.mainTab("top").name).isEqualTo("professional.TabTop")
+        assertThat(NextpariIcons.mainTab("sport").name).isEqualTo("professional.TabSport")
+        assertThat(NextpariIcons.mainTab("esports").name).isEqualTo("professional.TabEsports")
+        assertThat(NextpariIcons.mainTab("casino").name).isEqualTo("professional.TabCasino")
+        assertThat(NextpariIcons.mainTab("games").name).isEqualTo("professional.TabGames")
+    }
+
+    @Test
+    fun phosphorLicenseIsPresent() {
+        val assets = moduleFile("src/main/assets/third_party/PHOSPHOR_LICENSE.txt")
+        assertThat(assets.exists()).isTrue()
+        assertThat(assets.readText()).contains("MIT")
+        val pack = listOf(
+            File("../design/nextpari_professional_icon_pack/PHOSPHOR_LICENSE.txt"),
+            File("android/design/nextpari_professional_icon_pack/PHOSPHOR_LICENSE.txt"),
+            File("design/nextpari_professional_icon_pack/PHOSPHOR_LICENSE.txt"),
+        ).firstOrNull { it.exists() }
+        assertThat(pack).isNotNull()
+        assertThat(pack!!.readText()).contains("MIT")
     }
 
     private fun moduleFile(relative: String): File {

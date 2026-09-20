@@ -7,8 +7,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.painterResource
-import com.nextpari.app.feature.home.SportIconRes
 import com.nextpari.app.core.ui.icons.PremiumIconBuilder.stroke
+import com.nextpari.app.core.ui.theme.NextpariColors
+import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.home.SportIconRes
 
 val NextpariSportIconTint = Color(0xFF4ADE80)
 
@@ -21,7 +23,41 @@ object NextpariSportIcons {
         else -> sportId
     }
 
-    fun vector(sportId: String): ImageVector = NextpariPremiumSportIcons.vector(sportId)
+    fun vector(sportId: String): ImageVector = when (sportId) {
+        "all" -> ProfessionalPremiumIcons.SportAll
+        "football" -> ProfessionalPremiumIcons.SportFootball
+        "futsal" -> ProfessionalPremiumIcons.SportFutsal
+        "tennis" -> ProfessionalPremiumIcons.SportTennis
+        "basketball" -> ProfessionalPremiumIcons.SportBasketball
+        "hockey" -> ProfessionalPremiumIcons.SportHockey
+        "volleyball" -> ProfessionalPremiumIcons.SportVolleyball
+        "beach-volleyball" -> ProfessionalPremiumIcons.SportBeachVolleyball
+        "esports" -> ProfessionalPremiumIcons.SportEsports
+        "table-tennis" -> ProfessionalPremiumIcons.SportTableTennis
+        "badminton" -> ProfessionalPremiumIcons.SportBadminton
+        "baseball" -> ProfessionalPremiumIcons.SportBaseball
+        "cricket" -> ProfessionalPremiumIcons.SportCricket
+        "polo" -> ProfessionalPremiumIcons.SportPolo
+        "snooker" -> ProfessionalPremiumIcons.SportSnooker
+        "pickleball" -> ProfessionalPremiumIcons.SportPickleball
+        "ufc" -> ProfessionalPremiumIcons.SportUfc
+        "fifa" -> ProfessionalPremiumIcons.SportFifa
+        "mk" -> ProfessionalPremiumIcons.SportMk
+        "polybet" -> ProfessionalPremiumIcons.SportPolybet
+        "elections" -> ProfessionalPremiumIcons.SportElections
+        "filter" -> ProfessionalPremiumIcons.SportFilter
+        else -> ProfessionalPremiumIcons.SportDefault
+    }
+
+    fun premiumTint(sportId: String, isDark: Boolean): Color = when (sportId) {
+        "all" -> Color(0xFF16D982)
+        "football" -> if (isDark) Color.White else Color(0xFF0F172A)
+        "tennis" -> Color(0xFFC7F000)
+        "basketball" -> Color(0xFFFF7A1A)
+        "hockey", "volleyball" -> if (isDark) Color.White else Color(0xFF0F172A)
+        "esports" -> Color(0xFF22F39A)
+        else -> NextpariSportIconTint
+    }
 
     fun resolves(sportId: String, variant: NextpariIconVariant): Boolean = when (variant) {
         NextpariIconVariant.Legacy -> legacyDrawable(sportId) != 0
@@ -52,15 +88,23 @@ fun NextpariSportIcon(
             contentDescription = contentDescription,
             modifier = modifier,
         )
-        NextpariIconVariant.Premium -> Icon(
-            imageVector = NextpariPremiumSportIcons.vector(sportId),
-            contentDescription = contentDescription,
-            modifier = modifier,
-            tint = if (tint == Color.Unspecified) NextpariSportIconTint else tint,
-        )
+        NextpariIconVariant.Premium -> {
+            val isDark = NextpariTheme.colors.bg == NextpariColors.Dark.bg
+            Icon(
+                imageVector = NextpariSportIcons.vector(sportId),
+                contentDescription = contentDescription,
+                modifier = modifier,
+                tint = if (tint == Color.Unspecified) {
+                    NextpariSportIcons.premiumTint(sportId, isDark)
+                } else {
+                    tint
+                },
+            )
+        }
     }
 }
 
+/** Cursor-drawn sport geometry kept for rollback comparison. Not used by active UI. */
 internal object NextpariPremiumSportIcons {
     private val cache = mutableMapOf<String, ImageVector>()
 

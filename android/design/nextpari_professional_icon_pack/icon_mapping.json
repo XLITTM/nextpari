@@ -1,0 +1,294 @@
+{
+  "BottomPopular": [
+    "fill",
+    "fire"
+  ],
+  "BottomFavorites": [
+    "fill",
+    "star"
+  ],
+  "BottomBetslip": [
+    "fill",
+    "ticket"
+  ],
+  "BottomHistory": [
+    "bold",
+    "clock-counter-clockwise"
+  ],
+  "BottomMenu": [
+    "fill",
+    "squares-four"
+  ],
+  "TabTop": [
+    "fill",
+    "fire"
+  ],
+  "TabSport": [
+    "fill",
+    "soccer-ball"
+  ],
+  "TabEsports": [
+    "fill",
+    "game-controller"
+  ],
+  "TabCasino": [
+    "fill",
+    "cards-three"
+  ],
+  "TabGames": [
+    "fill",
+    "dice-five"
+  ],
+  "SportAll": [
+    "fill",
+    "squares-four"
+  ],
+  "SportFootball": [
+    "fill",
+    "soccer-ball"
+  ],
+  "SportFutsal": [
+    "bold",
+    "soccer-ball"
+  ],
+  "SportTennis": [
+    "fill",
+    "tennis-ball"
+  ],
+  "SportBasketball": [
+    "fill",
+    "basketball"
+  ],
+  "SportHockey": [
+    "fill",
+    "hockey"
+  ],
+  "SportVolleyball": [
+    "fill",
+    "volleyball"
+  ],
+  "SportBeachVolleyball": [
+    "bold",
+    "volleyball"
+  ],
+  "SportEsports": [
+    "fill",
+    "game-controller"
+  ],
+  "SportTableTennis": [
+    "bold",
+    "ping-pong"
+  ],
+  "SportBadminton": [
+    "bold",
+    "racquet"
+  ],
+  "SportBaseball": [
+    "fill",
+    "baseball"
+  ],
+  "SportCricket": [
+    "bold",
+    "cricket"
+  ],
+  "SportPolo": [
+    "bold",
+    "horse"
+  ],
+  "SportSnooker": [
+    "bold",
+    "number-eight"
+  ],
+  "SportPickleball": [
+    "bold",
+    "racquet"
+  ],
+  "SportUfc": [
+    "bold",
+    "boxing-glove"
+  ],
+  "SportFifa": [
+    "bold",
+    "soccer-ball"
+  ],
+  "SportMk": [
+    "bold",
+    "boxing-glove"
+  ],
+  "SportPolybet": [
+    "bold",
+    "hexagon"
+  ],
+  "SportElections": [
+    "fill",
+    "chart-bar"
+  ],
+  "SportFilter": [
+    "fill",
+    "funnel"
+  ],
+  "SportDefault": [
+    "fill",
+    "soccer-ball"
+  ],
+  "MenuProfile": [
+    "bold",
+    "user"
+  ],
+  "MenuMessages": [
+    "bold",
+    "envelope-simple"
+  ],
+  "MenuSettings": [
+    "bold",
+    "gear"
+  ],
+  "MenuWallet": [
+    "bold",
+    "wallet"
+  ],
+  "MenuDeposit": [
+    "bold",
+    "download-simple"
+  ],
+  "MenuLive": [
+    "bold",
+    "broadcast"
+  ],
+  "MenuLine": [
+    "bold",
+    "list-bullets"
+  ],
+  "MenuEsports": [
+    "bold",
+    "game-controller"
+  ],
+  "MenuSlots": [
+    "bold",
+    "number-square-seven"
+  ],
+  "MenuLiveCasino": [
+    "bold",
+    "cards-three"
+  ],
+  "MenuGames": [
+    "fill",
+    "dice-five"
+  ],
+  "MenuPromo": [
+    "bold",
+    "gift"
+  ],
+  "MenuVip": [
+    "fill",
+    "crown"
+  ],
+  "MenuCashback": [
+    "fill",
+    "coins"
+  ],
+  "MenuSupport": [
+    "bold",
+    "headset"
+  ],
+  "MenuSecurity": [
+    "bold",
+    "lock"
+  ],
+  "MenuAuthenticator": [
+    "bold",
+    "key"
+  ],
+  "MenuInfo": [
+    "bold",
+    "info"
+  ],
+  "MenuLogout": [
+    "bold",
+    "sign-out"
+  ],
+  "Search": [
+    "bold",
+    "magnifying-glass"
+  ],
+  "Notifications": [
+    "fill",
+    "bell"
+  ],
+  "ThemeLight": [
+    "fill",
+    "sun"
+  ],
+  "ThemeDark": [
+    "fill",
+    "moon"
+  ],
+  "Back": [
+    "bold",
+    "arrow-left"
+  ],
+  "ChevronDown": [
+    "bold",
+    "caret-down"
+  ],
+  "Close": [
+    "bold",
+    "x"
+  ],
+  "Share": [
+    "bold",
+    "share-network"
+  ],
+  "Info": [
+    "bold",
+    "info"
+  ],
+  "Security": [
+    "bold",
+    "lock"
+  ],
+  "Authenticator": [
+    "bold",
+    "key"
+  ],
+  "Logout": [
+    "bold",
+    "sign-out"
+  ],
+  "Copy": [
+    "bold",
+    "copy"
+  ],
+  "Eye": [
+    "bold",
+    "eye"
+  ],
+  "EyeOff": [
+    "bold",
+    "eye-slash"
+  ],
+  "Add": [
+    "bold",
+    "plus"
+  ],
+  "Trophy": [
+    "fill",
+    "trophy"
+  ],
+  "Pin": [
+    "fill",
+    "push-pin"
+  ],
+  "Wallet": [
+    "bold",
+    "wallet"
+  ],
+  "Upload": [
+    "bold",
+    "upload-simple"
+  ],
+  "Download": [
+    "bold",
+    "download-simple"
+  ]
+}

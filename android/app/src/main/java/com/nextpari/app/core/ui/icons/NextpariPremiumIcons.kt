@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.nextpari.app.core.ui.icons.PremiumIconBuilder.fill
 import com.nextpari.app.core.ui.icons.PremiumIconBuilder.stroke
 
+/** Cursor-drawn Premium geometry kept for rollback comparison. Not used by active UI. */
 object NextpariPremiumIcons : NextpariIconPack {
     private val cache = mutableMapOf<NextpariIconKey, ImageVector>()
 

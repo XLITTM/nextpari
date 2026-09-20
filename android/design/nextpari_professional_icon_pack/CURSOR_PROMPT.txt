@@ -1,0 +1,146 @@
+A004 — APPLY THE APPROVED PROFESSIONAL NEXTPARI ICON PACK
+
+Continue SAME branch:
+cursor/android-pixel-parity-a004
+
+Continue SAME PR:
+#75
+
+DO NOT MERGE.
+
+IMPORTANT:
+Cursor is NOT allowed to draw new icon geometry in this task.
+
+The user approved the visual direction in:
+NEXTPARI_ICON_REFERENCE_BOARD.png
+
+Use the supplied professional pack:
+- NEXTPARI_ICON_REFERENCE_BOARD.png
+- icon_mapping.json
+- import_nextpari_professional_icons.py
+- PHOSPHOR_LICENSE.txt
+- README_RU.md
+
+Primary icon source:
+official Phosphor Icons SVG assets (MIT).
+
+1. Place the pack at:
+   android/design/nextpari_professional_icon_pack/
+
+2. Place the importer at:
+   android/tools/import_nextpari_professional_icons.py
+
+3. Run:
+   python android/tools/import_nextpari_professional_icons.py
+
+4. Confirm generated file:
+   android/app/src/main/java/com/nextpari/app/core/ui/icons/ProfessionalPremiumIcons.kt
+
+5. DO NOT redraw or reinterpret those icons.
+   Use the generated ProfessionalPremiumIcons vectors exactly.
+
+6. Keep existing:
+   NextpariIconVariant.Legacy
+   NextpariIconVariant.Premium
+   NextpariIconConfig
+   Legacy rollback.
+
+7. Premium remains default.
+
+8. Rewire current Premium semantic mappings to the professional vectors.
+
+BottomNav:
+- Popular -> BottomPopular
+- Favorites -> BottomFavorites
+- Betslip -> BottomBetslip
+- History -> BottomHistory
+- Menu -> BottomMenu
+
+MainTabs:
+- Top -> TabTop
+- Sport -> TabSport
+- Esports -> TabEsports
+- Casino -> TabCasino
+- Games -> TabGames
+
+Sports:
+- all -> SportAll
+- football -> SportFootball
+- futsal -> SportFutsal
+- tennis -> SportTennis
+- basketball -> SportBasketball
+- hockey -> SportHockey
+- volleyball -> SportVolleyball
+- beach-volleyball -> SportBeachVolleyball
+- esports -> SportEsports
+- table-tennis -> SportTableTennis
+- badminton -> SportBadminton
+- baseball -> SportBaseball
+- cricket -> SportCricket
+- polo -> SportPolo
+- snooker -> SportSnooker
+- pickleball -> SportPickleball
+- ufc -> SportUfc
+- fifa -> SportFifa
+- mk -> SportMk
+- polybet -> SportPolybet
+- elections -> SportElections
+- filter -> SportFilter
+- unknown -> SportDefault
+
+Menu/service:
+use matching Menu*/Search/Notifications/Theme*/Back/ChevronDown/Close/Share/
+Info/Security/Authenticator/Logout/Copy/Eye/EyeOff/Add/Trophy/Pin/Wallet/
+Upload/Download properties from ProfessionalPremiumIcons.
+
+9. Premium sport tint palette:
+- all #16D982
+- football white on dark / #0F172A on light
+- tennis #C7F000
+- basketball #FF7A1A
+- hockey white on dark / #0F172A on light
+- volleyball white on dark / #0F172A on light
+- esports #22F39A
+- other sports current Nextpari green
+
+Legacy colors unchanged.
+
+10. Keep current screen layouts and navigation completely unchanged.
+Do NOT touch:
+backend
+web
+Supabase
+migrations
+wallet logic
+wallet dropdown
+Mobcash
+auth
+sportsbook business logic
+provider integrations
+BetConstruct
+money logic
+
+11. Add the supplied PHOSPHOR_LICENSE.txt to an Android third-party notices/design
+location. Do not remove attribution/license.
+
+12. The existing custom Cursor-drawn Premium geometry may remain in source for
+rollback comparison, but it must no longer be the Premium vectors used by UI.
+
+13. Run:
+./gradlew test
+./gradlew assembleDebug
+
+Return:
+A old SHA
+B new SHA
+C exact changed files
+D importer result / generated icon count
+E BottomNav mappings
+F MainTabs mappings
+G sport mappings
+H Premium sport colors
+I Legacy rollback preserved
+J no Cursor-drawn icon geometry used in active Premium mapping
+K tests
+L assembleDebug
+M PR #75 OPEN / NOT MERGED

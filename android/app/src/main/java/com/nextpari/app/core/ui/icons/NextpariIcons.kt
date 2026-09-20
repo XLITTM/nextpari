@@ -104,7 +104,7 @@ object NextpariIcons {
     fun pack(variant: NextpariIconVariant = NextpariIconConfig.defaultVariant): NextpariIconPack =
         when (variant) {
             NextpariIconVariant.Legacy -> NextpariLegacyIcons
-            NextpariIconVariant.Premium -> NextpariPremiumIcons
+            NextpariIconVariant.Premium -> NextpariProfessionalIcons
         }
 
     fun vector(
@@ -227,24 +227,29 @@ object NextpariIcons {
         else -> Promo
     }
 
-    fun menuRow(label: String): ImageVector = when (label) {
-        "LIVE", "Aviator" -> Live
-        "Линия", "Непобедимый", "Турниры", "Экспресс дня", "Результаты", "Ставь на своих" -> Trophy
-        "Киберспорт" -> Esports
-        "Games" -> Games
-        "Слоты", "Лайв казино", "My casino", "Категории", "Провайдеры" -> Casino
-        "Промокоды", "Промо", "Promo", "Акции" -> Promo
-        "Поддержка" -> Support
-        "Инфо" -> Info
-        "Управление счетом" -> Wallet
-        "Аутентификатор", "Повысьте безопасность!" -> Authenticator
-        "ТОТО" -> Trophy
-        "Финставки" -> Currencies
-        "Бетконструктор" -> Betslip
-        "Сканер купонов" -> Search
-        "Уведомления" -> Notifications
-        "Стрим" -> Tv
-        "Спортбук провайдера" -> Sport
-        else -> Settings
+    fun menuRow(label: String): ImageVector {
+        val premium = NextpariIconConfig.defaultVariant == NextpariIconVariant.Premium
+        return when (label) {
+            "LIVE", "Aviator" -> Live
+            "Линия" -> if (premium) ProfessionalPremiumIcons.MenuLine else Trophy
+            "Непобедимый", "Турниры", "Экспресс дня", "Результаты", "Ставь на своих", "ТОТО" -> Trophy
+            "Киберспорт" -> if (premium) ProfessionalPremiumIcons.MenuEsports else Esports
+            "Games" -> Games
+            "Слоты" -> if (premium) ProfessionalPremiumIcons.MenuSlots else Casino
+            "Лайв казино" -> if (premium) ProfessionalPremiumIcons.MenuLiveCasino else Casino
+            "My casino", "Категории", "Провайдеры" -> Casino
+            "Промокоды", "Промо", "Promo", "Акции" -> Promo
+            "Поддержка" -> Support
+            "Инфо" -> Info
+            "Управление счетом" -> Wallet
+            "Аутентификатор", "Повысьте безопасность!" -> Authenticator
+            "Финставки" -> Currencies
+            "Бетконструктор" -> Betslip
+            "Сканер купонов" -> Search
+            "Уведомления" -> Notifications
+            "Стрим" -> Tv
+            "Спортбук провайдера" -> Sport
+            else -> Settings
+        }
     }
 }
