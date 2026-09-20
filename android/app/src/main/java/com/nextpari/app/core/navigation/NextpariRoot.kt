@@ -236,6 +236,12 @@ private fun AuthenticatedShell(
                     onNavigate = { navController.navigateTo(it) },
                     onLogout = { authViewModel.logout() },
                     onInbox = { navController.navigateTo(Destinations.INBOX_PLACEHOLDER) },
+                    walletsState = walletsState,
+                    onRefreshWallets = walletsViewModel::refresh,
+                    onSelectWallet = walletsViewModel::activate,
+                    onAddWallet = walletsViewModel::addCurrency,
+                    onConsumeWalletNotice = walletsViewModel::consumeNotice,
+                    closeKey = current,
                 )
             }
             composable(Destinations.WALLET) {

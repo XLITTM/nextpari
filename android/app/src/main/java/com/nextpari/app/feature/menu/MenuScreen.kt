@@ -35,8 +35,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,13 +46,19 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.session.AuthSession
+import com.nextpari.app.core.ui.components.WalletDropdownMenu
+import com.nextpari.app.core.ui.components.WalletSwitcherEffects
+import com.nextpari.app.core.ui.components.nextWalletDropdownOpen
+import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.wallets.WalletsUiState
 
 @Composable
 fun MenuScreen(
@@ -59,9 +67,24 @@ fun MenuScreen(
     onNavigate: (String) -> Unit,
     onLogout: () -> Unit,
     onInbox: () -> Unit,
+    walletsState: WalletsUiState,
+    onRefreshWallets: () -> Unit,
+    onSelectWallet: (String) -> Boolean,
+    onAddWallet: (String) -> Boolean,
+    onConsumeWalletNotice: () -> Unit,
+    closeKey: String? = Destinations.MENU,
 ) {
     val colors = NextpariTheme.colors
+    val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(MenuCatalog.subTabs.first()) }
+    var walletsOpen by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(targetValue = if (walletsOpen) 180f else 0f, label = "menuWalletChevron")
+    WalletSwitcherEffects(
+        closeKey = closeKey,
+        notice = walletsState.notice,
+        onClose = { walletsOpen = false },
+        onConsumeNotice = onConsumeWalletNotice,
+    )
     Column(
         Modifier
             .fillMaxSize()
@@ -91,21 +114,36 @@ fun MenuScreen(
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(
-                    Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(colors.surfaceMuted)
-                        .clickable { onNavigate(Destinations.WALLET) }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
-                    Column(Modifier.padding(start = 8.dp).weight(1f)) {
-                        Text("Баланс", color = colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                        Text(balanceLabel, color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                Box(Modifier.weight(1f)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surfaceMuted)
+                            .clickable { walletsOpen = nextWalletDropdownOpen(walletsOpen, onRefreshWallets) }
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
+                        Column(Modifier.padding(start = 8.dp).weight(1f)) {
+                            Text("Баланс", color = colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(balanceLabel, color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                        }
+                        Icon(
+                            Icons.Outlined.KeyboardArrowDown,
+                            contentDescription = "Кошелёк и валюты",
+                            tint = colors.textMuted,
+                            modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = chevronRotation },
+                        )
                     }
-                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(16.dp))
+                    WalletDropdownMenu(
+                        expanded = walletsOpen,
+                        state = walletsState,
+                        darkTheme = dark,
+                        onDismiss = { walletsOpen = false },
+                        onSelect = onSelectWallet,
+                        onAdd = onAddWallet,
+                    )
                 }
                 Row(
                     Modifier

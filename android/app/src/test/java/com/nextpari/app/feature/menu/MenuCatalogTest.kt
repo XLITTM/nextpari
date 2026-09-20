@@ -73,6 +73,12 @@ class MenuCatalogTest {
         val afterBalance = screen.substringAfter("Пополнить")
         assertThat(afterBalance).contains("MenuCatalog.subTabs")
         assertThat(afterBalance.substringBefore("MenuCatalog.subTabs")).doesNotContain("QuickAccess")
+        val balanceCard = screen.substringAfter("nextWalletDropdownOpen(walletsOpen, onRefreshWallets)")
+            .substringBefore("Color(0xFF16A34A)")
+        assertThat(balanceCard).doesNotContain("Destinations.WALLET")
+        assertThat(balanceCard).contains("WalletDropdownMenu")
+        assertThat(screen.split("onNavigate(Destinations.WALLET)").size - 1).isEqualTo(1)
+        assertThat(screen).doesNotContain("WalletsViewModel")
     }
 
     private fun moduleFile(relative: String): java.io.File {

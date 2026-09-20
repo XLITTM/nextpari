@@ -24,11 +24,13 @@ class HeaderWalletSwitcherTest {
         assertThat(switcher).doesNotContain("DepositModal")
         assertThat(root).contains("onDeposit = { navController.navigateTo(Destinations.WALLET) }")
         assertThat(root).doesNotContain("onWallet")
-        assertThat(switcher).contains("DropdownMenu(")
-        assertThat(switcher).contains("if (next) onRefresh()")
-        assertThat(switcher).contains("if (onSelect(row.currency)) open = false")
-        assertThat(switcher).contains("if (onAdd(option.value)) open = false")
-        assertThat(switcher).contains("LaunchedEffect(closeKey) { open = false }")
+        assertThat(switcher).contains("WalletDropdownMenu(")
+        assertThat(switcher).contains("nextWalletDropdownOpen")
+        assertThat(switcher).contains("LaunchedEffect(closeKey) { onClose() }")
+        val dropdown = moduleFile("src/main/java/com/nextpari/app/core/ui/components/HeaderWalletSwitcher.kt").readText()
+        assertThat(dropdown).contains("fun WalletDropdownMenu(")
+        assertThat(dropdown).contains("if (onSelect(row.currency)) onDismiss()")
+        assertThat(dropdown).contains("if (onAdd(option.value)) onDismiss()")
     }
 
     @Test
@@ -99,7 +101,40 @@ class HeaderWalletSwitcherTest {
         assertThat(root).contains("onAddWallet = walletsViewModel::addCurrency")
         assertThat(root).contains("viewModel = walletsViewModel")
         assertThat(root).contains("WalletsCatalog.headerBalanceLabel")
+        assertThat(root).contains("onRefreshWallets = walletsViewModel::refresh")
+        assertThat(moduleFile("src/main/java/com/nextpari/app/core/navigation/NextpariRoot.kt").readText()
+            .substringAfter("composable(Destinations.MENU)")
+            .substringBefore("composable(Destinations.WALLET)"))
+            .contains("walletsState = walletsState")
         assertThat(Destinations.WALLET).isEqualTo("wallet")
+    }
+
+    @Test
+    fun menuBalanceOpensSharedDropdownWhileDepositNavigatesWallet() {
+        val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
+        val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
+        val switcher = moduleFile("src/main/java/com/nextpari/app/core/ui/components/HeaderWalletSwitcher.kt").readText()
+        val balanceBlock = menu.substringAfter("nextWalletDropdownOpen(walletsOpen, onRefreshWallets)")
+            .substringBefore("Color(0xFF16A34A)")
+        assertThat(balanceBlock).doesNotContain("Destinations.WALLET")
+        assertThat(balanceBlock).contains("WalletDropdownMenu(")
+        assertThat(menu).contains("nextWalletDropdownOpen(walletsOpen, onRefreshWallets)")
+        assertThat(menu).contains("clickable { onNavigate(Destinations.WALLET) }")
+        assertThat(menu.split("onNavigate(Destinations.WALLET)").size - 1).isEqualTo(1)
+        assertThat(menu).doesNotContain("WalletsViewModel")
+        assertThat(menu).doesNotContain("viewModel(")
+        assertThat(menu).contains("walletsState: WalletsUiState")
+        assertThat(header).contains("HeaderWalletSwitcher(")
+        assertThat(header).contains("clickable(onClick = onDeposit)")
+        assertThat(header).doesNotContain("onWallet")
+        assertThat(switcher).contains("fun WalletDropdownMenu(")
+        assertThat(switcher).contains("fun HeaderWalletSwitcher(")
+        assertThat(nextWalletDropdownOpen(false) { }).isTrue()
+        var refreshed = false
+        assertThat(nextWalletDropdownOpen(true) { refreshed = true }).isFalse()
+        assertThat(refreshed).isFalse()
+        assertThat(nextWalletDropdownOpen(false) { refreshed = true }).isTrue()
+        assertThat(refreshed).isTrue()
     }
 
     private class RecordingWalletsRepository(
