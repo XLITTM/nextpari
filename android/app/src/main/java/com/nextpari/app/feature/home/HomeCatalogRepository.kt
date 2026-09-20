@@ -1,5 +1,8 @@
 package com.nextpari.app.feature.home
 
+import com.nextpari.app.feature.sportsbook.MarketGroup
+import com.nextpari.app.feature.sportsbook.SportsbookCatalog
+
 interface HomeCatalogRepository {
     fun sports(): List<HomeSport>
     fun promos(): List<HomePromo>
@@ -12,6 +15,8 @@ interface HomeCatalogRepository {
     fun casinoFeatures(): List<CasinoFeatureCard>
     fun casinoTournaments(): List<CasinoTournament>
     fun casinoCategories(): List<CasinoCategoryCard>
+    fun matchById(id: String): MatchCardModel?
+    fun marketsFor(eventId: String): List<MarketGroup>
 }
 
 class FakeHomeCatalogRepository : HomeCatalogRepository {
@@ -50,4 +55,9 @@ class FakeHomeCatalogRepository : HomeCatalogRepository {
     override fun casinoFeatures(): List<CasinoFeatureCard> = CasinoHomeCatalog.features
     override fun casinoTournaments(): List<CasinoTournament> = CasinoHomeCatalog.tournaments
     override fun casinoCategories(): List<CasinoCategoryCard> = CasinoHomeCatalog.categories
+    override fun matchById(id: String): MatchCardModel? = SportsbookCatalog.matchById(
+        SportsbookCatalog.allMatches(liveMatches(), lineMatches(), esportsLiveMatches(), esportsLineMatches()),
+        id,
+    )
+    override fun marketsFor(eventId: String): List<MarketGroup> = emptyList()
 }

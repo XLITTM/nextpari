@@ -24,6 +24,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.nextpari.app.BuildConfig
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.ui.components.NextpariBottomNav
 import com.nextpari.app.core.ui.components.NextpariHeader
@@ -43,6 +44,13 @@ import com.nextpari.app.feature.home.HomeScreen
 import com.nextpari.app.feature.home.HomeViewModel
 import com.nextpari.app.feature.menu.MenuScreen
 import com.nextpari.app.feature.settings.SettingsScreen
+import com.nextpari.app.feature.sportsbook.ChampionshipsScreen
+import com.nextpari.app.feature.sportsbook.GameListScreen
+import com.nextpari.app.feature.sportsbook.MatchDetailsScreen
+import com.nextpari.app.feature.sportsbook.SportsListScreen
+import com.nextpari.app.feature.sportsbook.SportsbookPreviewData
+import com.nextpari.app.feature.sportsbook.SportsbookViewModel
+import com.nextpari.app.feature.sportsbook.LeagueScreen
 import com.nextpari.app.feature.wallet.WalletScreen
 
 @Composable
@@ -131,6 +139,7 @@ private fun AuthenticatedShell(
     val navController = rememberNavController()
     val session by authViewModel.session.collectAsStateWithLifecycle()
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory)
+    val sportsbookViewModel: SportsbookViewModel = viewModel(factory = SportsbookViewModel.Factory)
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
@@ -211,7 +220,16 @@ private fun AuthenticatedShell(
             }
             composable(Destinations.WALLET) { WalletScreen() }
             composable(Destinations.SETTINGS) {
-                SettingsScreen(darkTheme = darkTheme, onToggleTheme = onToggleTheme, onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    darkTheme = darkTheme,
+                    onToggleTheme = onToggleTheme,
+                    onBack = { navController.popBackStack() },
+                    onDebugPreview = if (BuildConfig.DEBUG) {
+                        { navController.navigateTo(Destinations.DEBUG_SPORTSBOOK_PREVIEW) }
+                    } else {
+                        null
+                    },
+                )
             }
             composable(Destinations.GAMES) {
                 GamesHubScreen(
@@ -221,17 +239,87 @@ private fun AuthenticatedShell(
                     onNavigate = { navController.navigateTo(it) },
                 )
             }
-            placeholder(navController, Destinations.MATCH, "Матч")
             placeholder(navController, Destinations.BET_DETAILS, "Детали ставки")
             placeholder(navController, Destinations.PROMO, "Акции")
             placeholder(navController, Destinations.PERSONAL_DATA, "Личные данные")
             placeholder(navController, Destinations.WALLETS, "Кошелёк и валюты")
-            placeholder(navController, Destinations.GAMELIST_LIVE, "Лента LIVE")
-            placeholder(navController, Destinations.GAMELIST_LINE, "Лента Линия")
-            placeholder(navController, Destinations.SPORTS_LIVE, "LIVE")
-            placeholder(navController, Destinations.SPORTS_LINE, "Линия")
-            placeholder(navController, Destinations.SPORTS_CYBERS, "Киберспорт")
-            placeholder(navController, Destinations.CHAMPIONSHIPS, "Чемпионаты")
+            composable(Destinations.MATCH) { entry ->
+                MatchDetailsScreen(
+                    matchId = entry.arguments?.getString("matchId").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.GAMELIST_LIVE) {
+                GameListScreen(
+                    initialMode = "live",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.GAMELIST_LINE) {
+                GameListScreen(
+                    initialMode = "line",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.SPORTS_LIVE) {
+                SportsListScreen(
+                    initialMode = "live",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.SPORTS_LINE) {
+                SportsListScreen(
+                    initialMode = "line",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.SPORTS_CYBERS) {
+                SportsListScreen(
+                    initialMode = "cybers",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.CHAMPIONSHIPS) { entry ->
+                ChampionshipsScreen(
+                    sport = entry.arguments?.getString("sport").orEmpty(),
+                    initialMode = entry.arguments?.getString("mode").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.LEAGUE) { entry ->
+                LeagueScreen(
+                    leagueId = entry.arguments?.getString("leagueId").orEmpty(),
+                    mode = sportsbookViewModel.selectedMode,
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            if (BuildConfig.DEBUG) {
+                composable(Destinations.DEBUG_SPORTSBOOK_PREVIEW) {
+                    MatchDetailsScreen(
+                        matchId = SportsbookPreviewData.MATCH_ID,
+                        onBack = { navController.popBackStack() },
+                        onNavigate = { navController.navigateTo(it) },
+                        viewModel = sportsbookViewModel,
+                        preview = true,
+                    )
+                }
+            }
             placeholder(navController, Destinations.SLOTS, "Слоты")
             placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино")
             placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера")
@@ -247,7 +335,6 @@ private fun AuthenticatedShell(
             placeholder(navController, Destinations.DICE, "Dice")
             placeholder(navController, Destinations.PHARAOH, "Сокровища Фараона")
             placeholder(navController, Destinations.VIP_CASHBACK, "VIP кешбэк")
-            placeholder(navController, Destinations.LEAGUE, "Лига")
             composable("inbox-placeholder") {
                 PlaceholderScreen("Входящие", onBack = { navController.popBackStack() }, message = "Нет новых сообщений")
             }

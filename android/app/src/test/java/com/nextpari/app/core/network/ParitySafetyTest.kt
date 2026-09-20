@@ -33,5 +33,7 @@ class ParitySafetyTest {
         assertThat(FakeHomeCatalogRepository().esportsLiveMatches()).isEmpty()
         assertThat(FakeHomeCatalogRepository().esportsLineMatches()).isEmpty()
         assertThat(FakeHomeCatalogRepository().esportsTournaments()).isEmpty()
+        assertThat(FakeHomeCatalogRepository().matchById("preview-debug-football")).isNull()
+        assertThat(FakeHomeCatalogRepository().marketsFor("preview-debug-football")).isEmpty()
     }
 }
