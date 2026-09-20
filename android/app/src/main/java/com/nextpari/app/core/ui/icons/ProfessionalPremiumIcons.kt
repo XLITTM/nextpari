@@ -939,6 +939,38 @@ object ProfessionalPremiumIcons {
         }.build()
     }
 
+    /** Phosphor caret-right (bold), MIT. */
+    val CaretRight: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.CaretRight",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M184.49,136.49l-80,80a12,12,0,0,1-17-17L159,128,87.51,56.49a12,12,0,1,1,17-17l80,80A12,12,0,0,1,184.49,136.49Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor caret-left (bold), MIT. */
+    val CaretLeft: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.CaretLeft",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M168.49,199.51a12,12,0,0,1-17,17l-80-80a12,12,0,0,1,0-17l80-80a12,12,0,0,1,17,17L97,128Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
     /** Phosphor x (bold), MIT. */
     val Close: ImageVector by lazy {
         ImageVector.Builder(
@@ -1174,6 +1206,134 @@ object ProfessionalPremiumIcons {
         ).apply {
             addPath(
                 pathData = PathParser().parsePathString("M228,144v64a12,12,0,0,1-12,12H40a12,12,0,0,1-12-12V144a12,12,0,0,1,24,0v52H204V144a12,12,0,0,1,24,0Zm-108.49,8.49a12,12,0,0,0,17,0l40-40a12,12,0,0,0-17-17L140,115V32a12,12,0,0,0-24,0v83L96.49,95.51a12,12,0,0,0-17,17Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor warning (bold), MIT. */
+    val Warning: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.Warning",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M240.26,186.1,152.81,34.23h0a28.74,28.74,0,0,0-49.62,0L15.74,186.1a27.45,27.45,0,0,0,0,27.71A28.31,28.31,0,0,0,40.55,228h174.9a28.31,28.31,0,0,0,24.79-14.19A27.45,27.45,0,0,0,240.26,186.1Zm-20.8,15.7a4.46,4.46,0,0,1-4,2.2H40.55a4.46,4.46,0,0,1-4-2.2,3.56,3.56,0,0,1,0-3.73L124,46.2a4.77,4.77,0,0,1,8,0l87.44,151.87A3.56,3.56,0,0,1,219.46,201.8ZM116,136V104a12,12,0,0,1,24,0v32a12,12,0,0,1-24,0Zm28,40a16,16,0,1,1-16-16A16,16,0,0,1,144,176Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor globe (bold), MIT. */
+    val Globe: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.Globe",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M128,20A108,108,0,1,0,236,128,108.12,108.12,0,0,0,128,20Zm0,187a113.4,113.4,0,0,1-20.39-35h40.82a116.94,116.94,0,0,1-10,20.77A108.61,108.61,0,0,1,128,207Zm-26.49-59a135.42,135.42,0,0,1,0-40h53a135.42,135.42,0,0,1,0,40ZM44,128a83.49,83.49,0,0,1,2.43-20H77.25a160.63,160.63,0,0,0,0,40H46.43A83.49,83.49,0,0,1,44,128Zm84-79a113.4,113.4,0,0,1,20.39,35H107.59a116.94,116.94,0,0,1,10-20.77A108.61,108.61,0,0,1,128,49Zm50.73,59h30.82a83.52,83.52,0,0,1,0,40H178.75a160.63,160.63,0,0,0,0-40Zm20.77-24H173.71a140.82,140.82,0,0,0-15.5-34.36A84.51,84.51,0,0,1,199.52,84ZM97.79,49.64A140.82,140.82,0,0,0,82.29,84H56.48A84.51,84.51,0,0,1,97.79,49.64ZM56.48,172H82.29a140.82,140.82,0,0,0,15.5,34.36A84.51,84.51,0,0,1,56.48,172Zm101.73,34.36A140.82,140.82,0,0,0,173.71,172h25.81A84.51,84.51,0,0,1,158.21,206.36Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor translate (bold), MIT. */
+    val Language: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.Language",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M250.73,210.63l-56-112a12,12,0,0,0-21.46,0l-20.52,41A84.2,84.2,0,0,1,114,126.22,107.48,107.48,0,0,0,139.33,68H160a12,12,0,0,0,0-24H108V32a12,12,0,0,0-24,0V44H32a12,12,0,0,0,0,24h83.13A83.69,83.69,0,0,1,96,110.35,84,84,0,0,1,83.6,91a12,12,0,1,0-21.81,10A107.55,107.55,0,0,0,78,126.24,83.54,83.54,0,0,1,32,140a12,12,0,0,0,0,24,107.47,107.47,0,0,0,64-21.07,108.4,108.4,0,0,0,45.39,19.44l-24.13,48.26a12,12,0,1,0,21.46,10.73L151.41,196h65.17l12.68,25.36a12,12,0,1,0,21.47-10.73ZM163.41,172,184,130.83,204.58,172Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor check-circle (bold), MIT. */
+    val Check: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.Check",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M176.49,95.51a12,12,0,0,1,0,17l-56,56a12,12,0,0,1-17,0l-24-24a12,12,0,1,1,17-17L112,143l47.51-47.52A12,12,0,0,1,176.49,95.51ZM236,128A108,108,0,1,1,128,20,108.12,108.12,0,0,1,236,128Zm-24,0a84,84,0,1,0-84,84A84.09,84.09,0,0,0,212,128Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor clipboard-text (bold), MIT. */
+    val FactCheck: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.FactCheck",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M172,164a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h64A12,12,0,0,1,172,164Zm-12-52H96a12,12,0,0,0,0,24h64a12,12,0,0,0,0-24Zm60-64V216a20,20,0,0,1-20,20H56a20,20,0,0,1-20-20V48A20,20,0,0,1,56,28H90.53a51.88,51.88,0,0,1,74.94,0H200A20,20,0,0,1,220,48ZM100.29,60h55.42a28,28,0,0,0-55.42,0ZM196,52H178.59A52.13,52.13,0,0,1,180,64v8a12,12,0,0,1-12,12H88A12,12,0,0,1,76,72V64a52.13,52.13,0,0,1,1.41-12H60V212H196Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor book-open (bold), MIT. */
+    val Book: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.Book",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M232,44H160a43.86,43.86,0,0,0-32,13.85A43.86,43.86,0,0,0,96,44H24A12,12,0,0,0,12,56V200a12,12,0,0,0,12,12H96a20,20,0,0,1,20,20,12,12,0,0,0,24,0,20,20,0,0,1,20-20h72a12,12,0,0,0,12-12V56A12,12,0,0,0,232,44ZM96,188H36V68H96a20,20,0,0,1,20,20V192.81A43.79,43.79,0,0,0,96,188Zm124,0H160a43.71,43.71,0,0,0-20,4.83V88a20,20,0,0,1,20-20h60Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor floppy-disk (bold), MIT. */
+    val Save: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.Save",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M222.14,69.17,186.83,33.86A19.86,19.86,0,0,0,172.69,28H48A20,20,0,0,0,28,48V208a20,20,0,0,0,20,20H208a20,20,0,0,0,20-20V83.31A19.86,19.86,0,0,0,222.14,69.17ZM164,204H92V160h72Zm40,0H188V156a20,20,0,0,0-20-20H88a20,20,0,0,0-20,20v48H52V52H171l33,33ZM164,84a12,12,0,0,1-12,12H96a12,12,0,0,1,0-24h56A12,12,0,0,1,164,84Z").toNodes(),
+                fill = SolidColor(Color.Black),
+            )
+        }.build()
+    }
+
+    /** Phosphor map-pin (bold), MIT. */
+    val Place: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "professional.Place",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 256f,
+            viewportHeight = 256f,
+        ).apply {
+            addPath(
+                pathData = PathParser().parsePathString("M128,60a44,44,0,1,0,44,44A44.05,44.05,0,0,0,128,60Zm0,64a20,20,0,1,1,20-20A20,20,0,0,1,128,124Zm0-112a92.1,92.1,0,0,0-92,92c0,77.36,81.64,135.4,85.12,137.83a12,12,0,0,0,13.76,0,259,259,0,0,0,42.18-39C205.15,170.57,220,136.37,220,104A92.1,92.1,0,0,0,128,12Zm31.3,174.71A249.35,249.35,0,0,1,128,216.89a249.35,249.35,0,0,1-31.3-30.18C80,167.37,60,137.31,60,104a68,68,0,0,1,136,0C196,137.31,176,167.37,159.3,186.71Z").toNodes(),
                 fill = SolidColor(Color.Black),
             )
         }.build()

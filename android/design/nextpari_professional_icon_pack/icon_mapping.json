@@ -231,6 +231,14 @@
     "bold",
     "caret-down"
   ],
+  "CaretRight": [
+    "bold",
+    "caret-right"
+  ],
+  "CaretLeft": [
+    "bold",
+    "caret-left"
+  ],
   "Close": [
     "bold",
     "x"
@@ -290,5 +298,37 @@
   "Download": [
     "bold",
     "download-simple"
+  ],
+  "Warning": [
+    "bold",
+    "warning"
+  ],
+  "Globe": [
+    "bold",
+    "globe"
+  ],
+  "Language": [
+    "bold",
+    "translate"
+  ],
+  "Check": [
+    "bold",
+    "check-circle"
+  ],
+  "FactCheck": [
+    "bold",
+    "clipboard-text"
+  ],
+  "Book": [
+    "bold",
+    "book-open"
+  ],
+  "Save": [
+    "bold",
+    "floppy-disk"
+  ],
+  "Place": [
+    "bold",
+    "map-pin"
   ]
 }

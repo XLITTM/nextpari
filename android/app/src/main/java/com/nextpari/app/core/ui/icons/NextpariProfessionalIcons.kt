@@ -44,19 +44,19 @@ internal object NextpariProfessionalIcons : NextpariIconPack {
         NextpariIconKey.Profile, NextpariIconKey.Person -> ProfessionalPremiumIcons.MenuProfile
         NextpariIconKey.Mail, NextpariIconKey.Email -> ProfessionalPremiumIcons.MenuMessages
         NextpariIconKey.Notifications -> ProfessionalPremiumIcons.Notifications
-        NextpariIconKey.Back, NextpariIconKey.ChevronLeft -> ProfessionalPremiumIcons.Back
-        NextpariIconKey.Forward, NextpariIconKey.ChevronRight -> ProfessionalPremiumIcons.ChevronDown
+        NextpariIconKey.Back -> ProfessionalPremiumIcons.Back
+        NextpariIconKey.ChevronLeft -> ProfessionalPremiumIcons.CaretLeft
+        NextpariIconKey.Forward, NextpariIconKey.ChevronRight -> ProfessionalPremiumIcons.CaretRight
         NextpariIconKey.ChevronDown -> ProfessionalPremiumIcons.ChevronDown
         NextpariIconKey.Close, NextpariIconKey.Cancel -> ProfessionalPremiumIcons.Close
         NextpariIconKey.Share -> ProfessionalPremiumIcons.Share
-        NextpariIconKey.Info,
-        NextpariIconKey.Book,
-        NextpariIconKey.Warning,
-        NextpariIconKey.Globe,
-        NextpariIconKey.Language,
-        NextpariIconKey.Check,
-        NextpariIconKey.FactCheck,
-        -> ProfessionalPremiumIcons.Info
+        NextpariIconKey.Info -> ProfessionalPremiumIcons.Info
+        NextpariIconKey.Book -> ProfessionalPremiumIcons.Book
+        NextpariIconKey.Warning -> ProfessionalPremiumIcons.Warning
+        NextpariIconKey.Globe -> ProfessionalPremiumIcons.Globe
+        NextpariIconKey.Language -> ProfessionalPremiumIcons.Language
+        NextpariIconKey.Check -> ProfessionalPremiumIcons.Check
+        NextpariIconKey.FactCheck -> ProfessionalPremiumIcons.FactCheck
         NextpariIconKey.Support, NextpariIconKey.Headset, NextpariIconKey.Phone ->
             ProfessionalPremiumIcons.MenuSupport
         NextpariIconKey.Promo, NextpariIconKey.Gift, NextpariIconKey.Bonus, NextpariIconKey.Ads,
@@ -75,7 +75,8 @@ internal object NextpariProfessionalIcons : NextpariIconPack {
         NextpariIconKey.Eye -> ProfessionalPremiumIcons.Eye
         NextpariIconKey.EyeOff -> ProfessionalPremiumIcons.EyeOff
         NextpariIconKey.Logout -> ProfessionalPremiumIcons.Logout
-        NextpariIconKey.Pin, NextpariIconKey.PinFilled, NextpariIconKey.Place, NextpariIconKey.Save ->
-            ProfessionalPremiumIcons.Pin
+        NextpariIconKey.Pin, NextpariIconKey.PinFilled -> ProfessionalPremiumIcons.Pin
+        NextpariIconKey.Place -> ProfessionalPremiumIcons.Place
+        NextpariIconKey.Save -> ProfessionalPremiumIcons.Save
     }
 }
