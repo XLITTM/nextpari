@@ -42,7 +42,9 @@ import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
 import com.nextpari.app.feature.home.HomeViewModel
+import com.nextpari.app.feature.info.InfoScreen
 import com.nextpari.app.feature.menu.MenuScreen
+import com.nextpari.app.feature.profile.PersonalDataScreen
 import com.nextpari.app.feature.promo.PromoDetailsScreen
 import com.nextpari.app.feature.promo.PromoMarathonScreen
 import com.nextpari.app.feature.promo.PromoScreen
@@ -58,6 +60,7 @@ import com.nextpari.app.feature.sportsbook.SportsbookPreviewData
 import com.nextpari.app.feature.sportsbook.SportsbookViewModel
 import com.nextpari.app.feature.sportsbook.LeagueScreen
 import com.nextpari.app.feature.wallet.WalletScreen
+import com.nextpari.app.feature.wallets.WalletsScreen
 
 @Composable
 fun NextpariRoot(
@@ -221,7 +224,7 @@ private fun AuthenticatedShell(
                     balanceLabel = balanceLabel,
                     onNavigate = { navController.navigateTo(it) },
                     onLogout = { authViewModel.logout() },
-                    onInbox = { navController.navigateTo("inbox-placeholder") },
+                    onInbox = { navController.navigateTo(Destinations.INBOX_PLACEHOLDER) },
                 )
             }
             composable(Destinations.WALLET) {
@@ -249,8 +252,12 @@ private fun AuthenticatedShell(
             composable(Destinations.PROMO) {
                 PromoScreen(onBack = { navController.popBackStack() }, onNavigate = { navController.navigateTo(it) })
             }
-            placeholder(navController, Destinations.PERSONAL_DATA, "Личные данные")
-            placeholder(navController, Destinations.WALLETS, "Кошелёк и валюты")
+            composable(Destinations.PERSONAL_DATA) {
+                PersonalDataScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.WALLETS) {
+                WalletsScreen(onBack = { navController.popBackStack() })
+            }
             composable(Destinations.MATCH) { entry ->
                 MatchDetailsScreen(
                     matchId = entry.arguments?.getString("matchId").orEmpty(),
@@ -340,7 +347,9 @@ private fun AuthenticatedShell(
             composable(Destinations.PROMO_WELCOME) {
                 PromoWelcomeScreen(onBack = { navController.popBackStack() })
             }
-            placeholder(navController, Destinations.INFO, "Инфо")
+            composable(Destinations.INFO) {
+                InfoScreen(onBack = { navController.popBackStack() })
+            }
             composable(Destinations.PROMO_UNBEATABLE) {
                 PromoUnbeatableScreen(onBack = { navController.popBackStack() })
             }
@@ -353,7 +362,7 @@ private fun AuthenticatedShell(
             composable(Destinations.VIP_CASHBACK) {
                 VipCashbackScreen(onBack = { navController.popBackStack() })
             }
-            composable("inbox-placeholder") {
+            composable(Destinations.INBOX_PLACEHOLDER) {
                 PlaceholderScreen("Входящие", onBack = { navController.popBackStack() }, message = "Нет новых сообщений")
             }
         }
@@ -384,6 +393,7 @@ private fun NavGraphBuilder.placeholder(
 }
 
 private fun NavHostController.navigateTab(route: String) {
+    if (!Destinations.isConcreteNavigationTarget(route)) return
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
@@ -392,5 +402,7 @@ private fun NavHostController.navigateTab(route: String) {
 }
 
 private fun NavHostController.navigateTo(route: String) {
+    if (!Destinations.isConcreteNavigationTarget(route)) return
+    if (currentDestination?.route == route) return
     navigate(route) { launchSingleTop = true }
 }

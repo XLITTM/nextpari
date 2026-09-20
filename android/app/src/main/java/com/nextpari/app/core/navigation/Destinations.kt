@@ -44,6 +44,7 @@ object Destinations {
     const val VIP_CASHBACK = "vip-cashback"
     const val LEAGUE = "league/{leagueId}"
     const val DEBUG_SPORTSBOOK_PREVIEW = "debug/sportsbook-preview"
+    const val INBOX_PLACEHOLDER = "inbox-placeholder"
 
     val unauthenticated = listOf(
         LOGIN,
@@ -107,6 +108,11 @@ object Destinations {
         val encoded = java.net.URLEncoder.encode(leagueId, Charsets.UTF_8.name()).replace("+", "%20")
         return "league/$encoded"
     }
+
+    fun isConcreteNavigationTarget(route: String): Boolean =
+        route.isNotBlank() && '{' !in route && '}' !in route
+
+    fun isPatternRoute(route: String): Boolean = '{' in route || '}' in route
 }
 
 data class BottomNavItem(

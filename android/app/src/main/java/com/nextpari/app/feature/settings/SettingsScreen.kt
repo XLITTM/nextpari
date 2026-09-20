@@ -1,6 +1,7 @@
 package com.nextpari.app.feature.settings
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -110,6 +111,7 @@ fun SettingsScreen(
     val context = LocalContext.current
     val dark = NextpariTheme.colors.bg == NextpariColors.Dark.bg
     val screenBg = if (dark) ScreenDark else ScreenLight
+    BackHandler(enabled = view != "root") { view = "root" }
 
     if (view == "bet-slip") {
         SettingsPage(title = SettingsCatalog.BET_SLIP_TITLE, dark = dark, screenBg = screenBg, onBack = { view = "root" }) {

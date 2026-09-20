@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,16 +13,22 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -518,18 +525,35 @@ private fun DepositModal(
     onCopyId: () -> Unit,
     onQuote: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+    ) {
+        BackHandler(onBack = onClose)
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable(onClick = onClose),
             contentAlignment = Alignment.BottomCenter,
         ) {
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .navigationBarsPadding()
+                    .imePadding()
+                    .padding(12.dp),
+            ) {
             Column(
                 Modifier
                     .fillMaxWidth()
-                    .padding(12.dp)
+                    .heightIn(max = maxHeight)
                     .clip(RoundedCornerShape(16.dp))
                     .background(ModalDark)
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
+                    .verticalScroll(rememberScrollState())
                     .padding(16.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -586,13 +610,22 @@ private fun DepositModal(
                     Text(WalletCatalog.OPEN_WALLET, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
                 }
             }
+            }
         }
     }
 }
 
 @Composable
 private fun RestrictionModal(dark: Boolean, onAction: () -> Unit, onClose: () -> Unit) {
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+        ),
+    ) {
+        BackHandler(onBack = onClose)
         Box(
             Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onClose),
             contentAlignment = Alignment.BottomCenter,
@@ -600,9 +633,13 @@ private fun RestrictionModal(dark: Boolean, onAction: () -> Unit, onClose: () ->
             Column(
                 Modifier
                     .fillMaxWidth()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .navigationBarsPadding()
+                    .imePadding()
                     .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
                     .background(if (dark) Color(0xFF1F2937) else Color.White)
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
+                    .verticalScroll(rememberScrollState())
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

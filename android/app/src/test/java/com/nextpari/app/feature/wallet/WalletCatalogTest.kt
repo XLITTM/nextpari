@@ -146,6 +146,24 @@ class WalletCatalogTest {
             .contains("onBack = { navController.popBackStack() }")
     }
 
+    @Test
+    fun depositModalUsesSafeInsetsAndScrollWithoutMagicOffset() {
+        val screen = moduleFile("src/main/java/com/nextpari/app/feature/wallet/WalletScreen.kt").readText()
+        val deposit = screen.substringAfter("private fun DepositModal").substringBefore("private fun RestrictionModal")
+        assertThat(deposit).contains("WindowInsets.safeDrawing")
+        assertThat(deposit).contains("navigationBarsPadding()")
+        assertThat(deposit).contains("imePadding()")
+        assertThat(deposit).contains("verticalScroll(rememberScrollState())")
+        assertThat(deposit).contains("heightIn(max = maxHeight)")
+        assertThat(deposit).contains("WalletCatalog.OPEN_WALLET")
+        assertThat(deposit.indexOf("verticalScroll")).isLessThan(deposit.lastIndexOf("WalletCatalog.OPEN_WALLET"))
+        assertThat(deposit).doesNotContain("offset(")
+        assertThat(deposit).doesNotContain("padding(bottom = 48")
+        assertThat(deposit).doesNotContain("padding(bottom = 32")
+        assertThat(deposit).contains("dismissOnBackPress = true")
+        assertThat(deposit).contains("BackHandler")
+    }
+
     private fun sample(
         status: WithdrawalStatus,
         pin: String?,
