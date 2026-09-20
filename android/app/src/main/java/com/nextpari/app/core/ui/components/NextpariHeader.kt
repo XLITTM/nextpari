@@ -7,23 +7,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -65,7 +64,7 @@ fun NextpariHeader(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 Box(
                     modifier = Modifier
                         .size(32.dp)
@@ -76,7 +75,6 @@ fun NextpariHeader(
                 ) {
                     Icon(Icons.Outlined.Add, contentDescription = "Пополнить", tint = Color.White, modifier = Modifier.size(16.dp))
                 }
-                Spacer(Modifier.width(4.dp))
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(50))
@@ -86,12 +84,11 @@ fun NextpariHeader(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(balanceLabel, color = colors.text, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp).padding(start = 4.dp))
                 }
             }
             Box(
-                modifier = Modifier
-                    .clickable(onClick = onHome)
-                    .padding(horizontal = 8.dp),
+                modifier = Modifier.clickable(onClick = onHome),
                 contentAlignment = Alignment.Center,
             ) {
                 Image(
@@ -101,21 +98,28 @@ fun NextpariHeader(
                     contentScale = ContentScale.Fit,
                 )
             }
-            Row {
-                IconButton(onClick = onToggleTheme) {
-                    Icon(
-                        imageVector = if (darkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode,
-                        contentDescription = "Переключить тему",
-                        tint = colors.text,
-                    )
-                }
-                IconButton(onClick = onSettings) {
-                    Icon(Icons.Outlined.Settings, contentDescription = "Настройки", tint = colors.text)
-                }
-                IconButton(onClick = onSearch) {
-                    Icon(Icons.Outlined.Search, contentDescription = "Поиск", tint = colors.text)
-                }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                HeaderIcon(if (darkTheme) Icons.Outlined.LightMode else Icons.Outlined.DarkMode, "Переключить тему", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onToggleTheme)
+                HeaderIcon(Icons.Outlined.Settings, "Настройки", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onSettings)
+                HeaderIcon(Icons.Outlined.Search, "Поиск", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onSearch)
             }
         }
+    }
+}
+
+@Composable
+private fun HeaderIcon(
+    icon: ImageVector,
+    description: String,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
     }
 }

@@ -17,6 +17,7 @@ data class HomeUiState(
     val lineTitles: List<String> = emptyList(),
     val championships: List<String> = emptyList(),
     val esports: List<EsportsDiscipline> = emptyList(),
+    val loading: Boolean = false,
 )
 
 class HomeViewModel(

@@ -28,8 +28,6 @@ fun RegisterMenuScreen(
 ) {
     AuthScaffold {
         Text("Регистрация", color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
-        Spacer(Modifier.height(8.dp))
-        Text("Выберите удобный способ создания аккаунта", color = Color(0xFF64748B), fontSize = 13.sp)
         Spacer(Modifier.height(16.dp))
         NextpariCard(onClick = onOneClick) {
             Text("В один клик", fontWeight = FontWeight.ExtraBold, color = Color(0xFF07182F))
@@ -74,7 +72,7 @@ fun RegisterOneClickScreen(onBack: () -> Unit, onPrepared: () -> Unit) {
             color = Color(0xFF64748B),
         )
         Spacer(Modifier.height(20.dp))
-        NextpariButton(text = "Создать аккаунт", onClick = onPrepared)
+        NextpariButton(text = "Создать аккаунт", onClick = onPrepared, containerColor = Color(0xFF16A34A))
         Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
     }
 }
@@ -86,7 +84,7 @@ fun ForgotPasswordScreen(onBack: () -> Unit, onPlaceholder: () -> Unit) {
         Spacer(Modifier.height(8.dp))
         Text("Для восстановления пароля обратитесь в поддержку.", color = Color(0xFF64748B))
         Spacer(Modifier.height(20.dp))
-        NextpariButton(text = "Понятно", onClick = onPlaceholder)
+        NextpariButton(text = "Понятно", onClick = onPlaceholder, containerColor = Color(0xFF16A34A))
         Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
     }
 }
@@ -110,7 +108,7 @@ private fun RegisterFormScreen(
         Spacer(Modifier.height(12.dp))
         NextpariField(password, { password = it }, "Пароль", KeyboardType.Password, password = true)
         Spacer(Modifier.height(20.dp))
-        NextpariButton(text = "Зарегистрироваться", onClick = onPrepared)
+        NextpariButton(text = "Зарегистрироваться", onClick = onPrepared, containerColor = Color(0xFF16A34A))
         Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
     }
 }

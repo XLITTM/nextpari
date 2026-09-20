@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -50,7 +51,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.core.ui.theme.NpRadiusCard
 import com.nextpari.app.core.ui.theme.TabActiveGold
 
 @Composable
@@ -71,26 +71,79 @@ fun HomeScreen(
             "esports" -> {
                 item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
                 item(key = "esports-live") {
-                    MatchSection("Киберспорт LIVE", state.liveTitles, Destinations.SPORTS_CYBERS, onNavigate, "Esports")
+                    MatchSection(
+                        title = "Киберспорт LIVE",
+                        items = state.liveTitles,
+                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.liveTitles.size),
+                        seeAllRoute = Destinations.SPORTS_CYBERS,
+                        onNavigate = onNavigate,
+                        badge = "Esports",
+                    )
                 }
                 item(key = "esports-line") {
-                    MatchSection("Киберспорт Линия", state.lineTitles, Destinations.SPORTS_CYBERS, onNavigate, "Esports")
+                    MatchSection(
+                        title = "Киберспорт Линия",
+                        items = state.lineTitles,
+                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.lineTitles.size),
+                        seeAllRoute = Destinations.SPORTS_CYBERS,
+                        onNavigate = onNavigate,
+                        badge = "Esports",
+                    )
                 }
             }
             "sport" -> {
                 item(key = "sports") { SportsSelector(state, viewModel::selectSport, excludeEsports = true) }
-                item(key = "live") { MatchSection("Популярное LIVE", state.liveTitles, Destinations.GAMELIST_LIVE, onNavigate) }
-                item(key = "line") { MatchSection("Популярное Линия", state.lineTitles, Destinations.GAMELIST_LINE, onNavigate) }
-                if (state.championships.isNotEmpty()) {
+                item(key = "live") {
+                    MatchSection(
+                        title = "Популярное LIVE",
+                        items = state.liveTitles,
+                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.liveTitles.size),
+                        seeAllRoute = Destinations.GAMELIST_LIVE,
+                        onNavigate = onNavigate,
+                        filterLabel = "Спорт",
+                    )
+                }
+                item(key = "line") {
+                    MatchSection(
+                        title = "Популярное Линия",
+                        items = state.lineTitles,
+                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.lineTitles.size),
+                        seeAllRoute = Destinations.GAMELIST_LINE,
+                        onNavigate = onNavigate,
+                        filterLabel = "Спорт",
+                    )
+                }
+                if (HomeFeedVisibility.optionalDataOnly(state.championships.size) == HomeSectionBody.Data) {
                     item(key = "champs") { Championships(state.championships, onNavigate) }
                 }
             }
             else -> {
                 item(key = "sports") { SportsSelector(state, viewModel::selectSport) }
                 item(key = "promos") { PromoRow(state.promos, onNavigate) }
-                item(key = "live") { MatchSection("Популярное LIVE", state.liveTitles, Destinations.GAMELIST_LIVE, onNavigate) }
-                item(key = "line") { MatchSection("Популярное Линия", state.lineTitles, Destinations.GAMELIST_LINE, onNavigate) }
-                if (state.championships.isNotEmpty()) {
+                val liveBody = HomeFeedVisibility.topLive(state.loading, state.liveTitles.size)
+                if (liveBody != HomeSectionBody.Hidden) {
+                    item(key = "live") {
+                        MatchSection(
+                            title = "Популярное LIVE",
+                            items = state.liveTitles,
+                            body = liveBody,
+                            seeAllRoute = Destinations.GAMELIST_LIVE,
+                            onNavigate = onNavigate,
+                            filterLabel = "Спорт",
+                        )
+                    }
+                }
+                item(key = "line") {
+                    MatchSection(
+                        title = "Популярное Линия",
+                        items = state.lineTitles,
+                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.lineTitles.size),
+                        seeAllRoute = Destinations.GAMELIST_LINE,
+                        onNavigate = onNavigate,
+                        filterLabel = "Спорт",
+                    )
+                }
+                if (HomeFeedVisibility.optionalDataOnly(state.championships.size) == HomeSectionBody.Data) {
                     item(key = "champs") { Championships(state.championships, onNavigate) }
                 }
                 item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
@@ -108,7 +161,7 @@ private fun SportsSelector(
     val colors = NextpariTheme.colors
     val sports = if (excludeEsports) state.sports.filter { it.id != "esports" } else state.sports
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(sports, key = { it.id }) { sport ->
@@ -116,13 +169,14 @@ private fun SportsSelector(
             val interaction = remember { MutableInteractionSource() }
             val pressed by interaction.collectIsPressedAsState()
             val scale by animateFloatAsState(if (pressed) 0.96f else 1f, label = "sport-press")
+            val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
             Column(
                 modifier = Modifier
-                    .width(70.dp)
+                    .widthIn(min = 70.dp)
                     .graphicsLayer { scaleX = scale; scaleY = scale }
-                    .shadow(if (active) 6.dp else 2.dp, RoundedCornerShape(NpRadiusCard))
-                    .clip(RoundedCornerShape(NpRadiusCard))
-                    .background(colors.surface)
+                    .shadow(if (active) 6.dp else 2.dp, RoundedCornerShape(16.dp))
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (dark) Color(0xFF27272A) else Color.White)
                     .clickable(interactionSource = interaction, indication = null) { onSport(sport.id) }
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -132,10 +186,10 @@ private fun SportsSelector(
                     contentDescription = sport.name,
                     modifier = Modifier.size(24.dp),
                 )
-                Spacer(Modifier.height(6.dp))
+                Spacer(Modifier.height(4.dp))
                 Text(
                     sport.name,
-                    color = if (active) TabActiveGold else colors.textSecondary,
+                    color = if (active) TabActiveGold else if (dark) Color(0xFFD1D5DB) else Color(0xFF374151),
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
@@ -148,7 +202,6 @@ private fun SportsSelector(
 
 @Composable
 private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
-    val colors = NextpariTheme.colors
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -170,17 +223,19 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
                     modifier = Modifier
                         .width(110.dp)
                         .height(60.dp)
-                        .clip(RoundedCornerShape(NpRadiusCard)),
+                        .clip(RoundedCornerShape(16.dp)),
                     contentScale = ContentScale.Crop,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     promo.title,
-                    color = colors.textMuted,
+                    color = Color(0xFF6B7280),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.width(110.dp),
                 )
             }
         }
@@ -191,84 +246,50 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
 private fun MatchSection(
     title: String,
     items: List<String>,
+    body: HomeSectionBody,
     seeAllRoute: String,
     onNavigate: (String) -> Unit,
     badge: String? = null,
+    filterLabel: String? = null,
 ) {
+    val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 8.dp)) {
-        SectionTitle(title, badge) { onNavigate(seeAllRoute) }
-        if (items.isEmpty()) {
-            MatchEmptyCarousel()
-        } else {
-            LazyRow(
+        SectionTitle(
+            title = title,
+            badge = badge,
+            filterLabel = filterLabel,
+            onFilter = filterLabel?.let { { onNavigate(seeAllRoute) } },
+            onSeeAll = { onNavigate(seeAllRoute) },
+        )
+        when (body) {
+            HomeSectionBody.Hidden -> Unit
+            HomeSectionBody.Skeleton -> MatchSkeletonCarousel()
+            HomeSectionBody.EmptyText -> Text(
+                "Матчи появятся скоро",
+                color = colors.textMuted,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            )
+            HomeSectionBody.Data -> LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(items, key = { it }) { label ->
-                    MatchPreviewCard(label) { onNavigate(Destinations.match(label)) }
+                    NextpariMatchCard(
+                        model = MatchCardModel(
+                            id = label,
+                            sport = "football",
+                            league = label,
+                            country = "",
+                            team1 = "",
+                            team2 = "",
+                        ),
+                        carousel = true,
+                        onOpen = { onNavigate(Destinations.match(label)) },
+                    )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun MatchEmptyCarousel() {
-    val colors = NextpariTheme.colors
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        items(2, key = { it }) {
-            Column(
-                modifier = Modifier
-                    .width(260.dp)
-                    .clip(RoundedCornerShape(NpRadiusCard))
-                    .background(colors.surface)
-                    .padding(14.dp),
-            ) {
-                Box(Modifier.width(88.dp).height(10.dp).clip(RoundedCornerShape(6.dp)).background(colors.surfaceMuted))
-                Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(22.dp).clip(CircleShape).background(colors.surfaceMuted))
-                    Spacer(Modifier.width(8.dp))
-                    Box(Modifier.width(120.dp).height(10.dp).clip(RoundedCornerShape(6.dp)).background(colors.surfaceMuted))
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(22.dp).clip(CircleShape).background(colors.surfaceMuted))
-                    Spacer(Modifier.width(8.dp))
-                    Box(Modifier.width(100.dp).height(10.dp).clip(RoundedCornerShape(6.dp)).background(colors.surfaceMuted))
-                }
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    repeat(3) {
-                        Box(
-                            Modifier
-                                .weight(1f)
-                                .height(36.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(colors.surfaceMuted),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MatchPreviewCard(label: String, onClick: () -> Unit) {
-    val colors = NextpariTheme.colors
-    Column(
-        modifier = Modifier
-            .width(260.dp)
-            .clip(RoundedCornerShape(NpRadiusCard))
-            .background(colors.surface)
-            .clickable(onClick = onClick)
-            .padding(14.dp),
-    ) {
-        Text(label, color = colors.text, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -276,13 +297,13 @@ private fun MatchPreviewCard(label: String, onClick: () -> Unit) {
 private fun Championships(items: List<String>, onNavigate: (String) -> Unit) {
     val colors = NextpariTheme.colors
     Column {
-        SectionTitle("Чемпионаты LIVE")
+        SectionTitle("Чемпионаты LIVE", filterLabel = "Спорт", onFilter = {}, onSeeAll = {})
         items.forEach { name ->
             Row(
                 modifier = Modifier
                     .padding(horizontal = 16.dp, vertical = 4.dp)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(NpRadiusCard))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(colors.surfaceMuted)
                     .clickable { onNavigate(Destinations.league(name)) }
                     .padding(12.dp),
@@ -301,7 +322,7 @@ private fun Championships(items: List<String>, onNavigate: (String) -> Unit) {
 @Composable
 private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
     Column(Modifier.padding(top = 8.dp)) {
-        SectionTitle("Дисциплины", badge = "Esports")
+        SectionTitle("Дисциплины", badge = "Esports", onSeeAll = {})
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -311,7 +332,7 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
                     modifier = Modifier
                         .width(160.dp)
                         .height(224.dp)
-                        .clip(RoundedCornerShape(NpRadiusCard))
+                        .clip(RoundedCornerShape(16.dp))
                         .background(Brush.linearGradient(listOf(Color(item.startColor), Color(item.endColor)))),
                 ) {
                     Box(
@@ -348,9 +369,9 @@ private fun CasinoLanding(onNavigate: (String) -> Unit) {
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 8.dp)) {
         SectionTitle("Казино")
-        CasinoEntry("Слоты", "Тысячи слотов от ведущих студий", Icons.Outlined.Casino) { onNavigate(Destinations.SLOTS) }
+        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", Icons.Outlined.Casino) { onNavigate(Destinations.SLOTS) }
         Spacer(Modifier.height(8.dp))
-        CasinoEntry("Лайв казино", "Столы с живыми дилерами", Icons.Outlined.LiveTv) { onNavigate(Destinations.LIVE_CASINO) }
+        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", Icons.Outlined.LiveTv) { onNavigate(Destinations.LIVE_CASINO) }
         Text(
             "Казино-провайдеры появятся после подключения",
             color = colors.textMuted,
@@ -376,9 +397,9 @@ private fun CasinoEntry(
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .shadow(2.dp, RoundedCornerShape(NpRadiusCard))
-            .clip(RoundedCornerShape(NpRadiusCard))
-            .background(colors.surface)
+            .shadow(2.dp, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) Color(0xFF1F2937) else Color.White)
             .clickable(interactionSource = interaction, indication = null, onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -388,13 +409,20 @@ private fun CasinoEntry(
             Text(title, fontWeight = FontWeight.ExtraBold, color = colors.text, fontSize = 14.sp)
             Text(desc, color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textMuted)
+        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
 @Composable
-private fun SectionTitle(title: String, badge: String? = null, onSeeAll: (() -> Unit)? = null) {
+private fun SectionTitle(
+    title: String,
+    badge: String? = null,
+    filterLabel: String? = null,
+    onFilter: (() -> Unit)? = null,
+    onSeeAll: (() -> Unit)? = null,
+) {
     val colors = NextpariTheme.colors
+    val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -413,11 +441,25 @@ private fun SectionTitle(title: String, badge: String? = null, onSeeAll: (() -> 
                     .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
+        if (onFilter != null) {
+            Row(
+                Modifier
+                    .padding(start = 8.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(if (dark) Color(0xFF1E293B) else Color(0xFFF3F4F6))
+                    .clickable(onClick = onFilter)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(filterLabel ?: "Спорт", color = colors.text, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.text, modifier = Modifier.size(12.dp))
+            }
+        }
         if (onSeeAll != null) {
             Spacer(Modifier.weight(1f))
             Row(Modifier.clickable(onClick = onSeeAll), verticalAlignment = Alignment.CenterVertically) {
                 Text("Все", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.accent, modifier = Modifier.size(14.dp))
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.accent, modifier = Modifier.size(12.dp))
             }
         }
     }

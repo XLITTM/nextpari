@@ -75,10 +75,15 @@ fun NextpariBottomNav(
 @Composable
 private fun CouponButton(betCount: Int, onClick: () -> Unit) {
     val colors = NextpariTheme.colors
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(64.dp),
+    ) {
         Box(
             modifier = Modifier
-                .offset(y = (-18).dp)
+                .align(Alignment.TopCenter)
+                .offset(y = (-20).dp)
                 .size(58.dp)
                 .shadow(12.dp, CircleShape)
                 .clip(CircleShape)
@@ -110,7 +115,7 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
             color = colors.accent,
             fontSize = 10.sp,
             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-            modifier = Modifier.offset(y = (-10).dp),
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
         )
     }
 }

@@ -3,6 +3,12 @@ package com.nextpari.app.feature.home
 import com.nextpari.app.R
 
 object SportIconRes {
+    val knownIds = listOf(
+        "all", "football", "futsal", "basketball", "tennis", "table-tennis", "badminton",
+        "baseball", "polo", "cricket", "beach-volleyball", "snooker", "elections",
+        "pickleball", "fifa", "mk", "polybet", "ufc", "filter", "hockey", "volleyball", "esports",
+    )
+
     fun drawable(sportId: String): Int = when (sportId) {
         "all" -> R.drawable.ic_sport_all
         "football", "futsal" -> R.drawable.ic_sport_football
@@ -11,6 +17,19 @@ object SportIconRes {
         "hockey" -> R.drawable.ic_sport_hockey
         "volleyball", "beach-volleyball" -> R.drawable.ic_sport_volleyball
         "esports" -> R.drawable.ic_sport_esports
+        "table-tennis" -> R.drawable.ic_sport_table_tennis
+        "badminton" -> R.drawable.ic_sport_badminton
+        "baseball" -> R.drawable.ic_sport_baseball
+        "polo" -> R.drawable.ic_sport_polo
+        "cricket" -> R.drawable.ic_sport_cricket
+        "snooker" -> R.drawable.ic_sport_snooker
+        "elections" -> R.drawable.ic_sport_elections
+        "pickleball" -> R.drawable.ic_sport_pickleball
+        "fifa" -> R.drawable.ic_sport_fifa
+        "mk" -> R.drawable.ic_sport_mk
+        "polybet" -> R.drawable.ic_sport_polybet
+        "ufc" -> R.drawable.ic_sport_ufc
+        "filter" -> R.drawable.ic_sport_filter
         else -> R.drawable.ic_sport_default
     }
 }

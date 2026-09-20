@@ -1,11 +1,13 @@
 package com.nextpari.app.core.ui.components
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Casino
 import androidx.compose.material.icons.outlined.Gamepad
@@ -37,6 +39,7 @@ fun NextpariMainTabs(
         MainTabsSpec.tabs.forEach { tab ->
             val active = tab.id == activeId
             val icon = tabIcon(tab.id)
+            val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -49,18 +52,23 @@ fun NextpariMainTabs(
                     }
                     .padding(vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = tab.label,
-                    tint = if (active) TabActiveGold else colors.textMuted,
+                    tint = if (active) TabActiveGold else if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF),
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
                     text = tab.label,
                     fontSize = 11.sp,
                     fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                    color = if (active) colors.text else colors.textMuted,
+                    color = if (active) {
+                        if (dark) Color.White else Color(0xFF111827)
+                    } else {
+                        if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280)
+                    },
                 )
             }
         }

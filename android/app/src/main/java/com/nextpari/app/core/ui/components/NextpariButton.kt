@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -19,8 +20,10 @@ fun NextpariButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    containerColor: Color? = null,
 ) {
     val colors = NextpariTheme.colors
+    val fill = containerColor ?: colors.accent
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -29,13 +32,17 @@ fun NextpariButton(
             .fillMaxWidth()
             .height(56.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = colors.accent,
+            containerColor = fill,
             contentColor = Color.White,
-            disabledContainerColor = colors.accent.copy(alpha = 0.35f),
+            disabledContainerColor = fill.copy(alpha = 0.35f),
             disabledContentColor = Color.White.copy(alpha = 0.7f),
         ),
         contentPadding = PaddingValues(horizontal = 20.dp),
     ) {
-        Text(text = text, style = androidx.compose.material3.MaterialTheme.typography.labelLarge)
+        Text(
+            text = text,
+            fontSize = 17.sp,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold,
+        )
     }
 }

@@ -18,13 +18,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Casino
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,15 +40,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.core.ui.theme.NpRadiusCard
 
 @Composable
 fun MenuScreen(
@@ -78,12 +86,8 @@ fun MenuScreen(
                         Text("Кошелёк и валюты →", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onNavigate(Destinations.WALLETS) })
                     }
                 }
-                IconButton(onClick = onInbox) {
-                    Icon(Icons.Outlined.MailOutline, contentDescription = "Входящие", tint = colors.textSecondary)
-                }
-                IconButton(onClick = { onNavigate(Destinations.SETTINGS) }) {
-                    Icon(Icons.Outlined.Settings, contentDescription = "Настройки", tint = colors.textSecondary)
-                }
+                IconButtonBox("Входящие", Icons.Outlined.MailOutline, onInbox)
+                IconButtonBox("Настройки", Icons.Outlined.Settings) { onNavigate(Destinations.SETTINGS) }
             }
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -96,20 +100,23 @@ fun MenuScreen(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = colors.textSecondary)
-                    Column(Modifier.padding(start = 8.dp)) {
+                    Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
+                    Column(Modifier.padding(start = 8.dp).weight(1f)) {
                         Text("Баланс", color = colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         Text(balanceLabel, color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
                     }
+                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(16.dp))
                 }
-                Box(
+                Row(
                     Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xFF16A34A))
                         .clickable { onNavigate(Destinations.WALLET) }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Пополнить", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Icon(Icons.Outlined.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Text("Пополнить", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp))
                 }
             }
         }
@@ -117,9 +124,19 @@ fun MenuScreen(
             MenuCatalog.subTabs.forEach { label ->
                 val active = tab == label
                 Column(
-                    modifier = Modifier.weight(1f).clickable { tab = label }.padding(vertical = 8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickable { tab = label }
+                        .padding(top = 8.dp, bottom = 4.dp)
+                        .drawBehind {
+                            if (active) {
+                                val stroke = 2.dp.toPx()
+                                drawLine(Color(0xFF4ADE80), Offset(0f, size.height), Offset(size.width, size.height), stroke)
+                            }
+                        },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Icon(menuTabIcon(label), contentDescription = label, tint = Color(0xFF4ADE80).copy(alpha = if (active) 1f else 0.7f), modifier = Modifier.size(24.dp))
                     Text(label, color = Color(0xFF4ADE80).copy(alpha = if (active) 1f else 0.7f), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
@@ -132,15 +149,20 @@ fun MenuScreen(
         Box(
             Modifier
                 .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(NpRadiusCard))
-                .background(colors.danger.copy(alpha = 0.08f))
+                .clip(RoundedCornerShape(16.dp))
+                .background(Color(0xFFFEF2F2))
                 .clickable(onClick = onLogout)
                 .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null, tint = colors.danger)
-                Text("Выйти из аккаунта", color = colors.danger, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 12.dp).weight(1f))
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.danger)
+                Box(
+                    Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFFEE2E2)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.AutoMirrored.Outlined.Logout, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
+                }
+                Text("Выйти из аккаунта", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 12.dp).weight(1f))
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(20.dp))
             }
         }
         Text("nextpari v2.0.1 · © 2026", color = colors.textMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
@@ -159,7 +181,7 @@ private fun MenuRow(item: MenuItem, onNavigate: (String) -> Unit) {
     val click = if (item.soon) null else item.route?.let { { onNavigate(it) } }
     val modifier = Modifier
         .fillMaxWidth()
-        .clip(RoundedCornerShape(NpRadiusCard))
+        .clip(RoundedCornerShape(16.dp))
         .then(
             if (specialBrush != null) Modifier.background(specialBrush) else Modifier.background(colors.surface),
         )
@@ -173,7 +195,31 @@ private fun MenuRow(item: MenuItem, onNavigate: (String) -> Unit) {
         if (item.soon) {
             Text("Скоро", color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         } else {
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (specialBrush != null) Color.White else colors.textMuted)
+            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (specialBrush != null) Color.White else colors.textMuted, modifier = Modifier.size(20.dp))
         }
     }
+}
+
+@Composable
+private fun IconButtonBox(description: String, icon: ImageVector, onClick: () -> Unit) {
+    val colors = NextpariTheme.colors
+    val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
+    Box(
+        Modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (dark) Color(0xFF1E293B) else Color(0xFFF3F4F6))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = description, tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF4B5563), modifier = Modifier.size(20.dp))
+    }
+}
+
+private fun menuTabIcon(label: String): ImageVector = when (label) {
+    "Топ" -> Icons.Outlined.LocalFireDepartment
+    "Спорт" -> Icons.Outlined.EmojiEvents
+    "Казино" -> Icons.Outlined.Casino
+    "Games" -> Icons.Outlined.Gamepad
+    else -> Icons.Outlined.AutoAwesome
 }
