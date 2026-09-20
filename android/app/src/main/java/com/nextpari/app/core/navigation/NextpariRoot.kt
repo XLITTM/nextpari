@@ -1,65 +1,65 @@
 package com.nextpari.app.core.navigation
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.nextpari.app.core.ui.theme.NpAccent
-import com.nextpari.app.core.ui.theme.NpNav
-import com.nextpari.app.core.ui.theme.NpTextMuted
+import com.nextpari.app.core.AppGraph
+import com.nextpari.app.core.ui.components.NextpariBottomNav
+import com.nextpari.app.core.ui.components.NextpariHeader
+import com.nextpari.app.core.ui.components.NextpariMainTabs
+import com.nextpari.app.core.ui.components.PlaceholderScreen
+import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.auth.AuthViewModel
+import com.nextpari.app.feature.auth.ForgotPasswordScreen
 import com.nextpari.app.feature.auth.LoginScreen
 import com.nextpari.app.feature.auth.RegisterEmailScreen
 import com.nextpari.app.feature.auth.RegisterMenuScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
 import com.nextpari.app.feature.history.HistoryScreen
+import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
-import com.nextpari.app.feature.profile.ProfileScreen
+import com.nextpari.app.feature.home.HomeViewModel
+import com.nextpari.app.feature.menu.MenuScreen
 import com.nextpari.app.feature.settings.SettingsScreen
 import com.nextpari.app.feature.wallet.WalletScreen
 
-private data class TabItem(
-    val route: String,
-    val label: String,
-    val icon: ImageVector,
-)
-
-private val tabs = listOf(
-    TabItem(Destinations.HOME, "Главная", Icons.Outlined.Home),
-    TabItem(Destinations.WALLET, "Кошелёк", Icons.Outlined.AccountBalanceWallet),
-    TabItem(Destinations.HISTORY, "История", Icons.Outlined.History),
-    TabItem(Destinations.PROFILE, "Профиль", Icons.Outlined.Person),
-)
-
 @Composable
 fun NextpariRoot(
+    darkTheme: Boolean,
+    onToggleTheme: () -> Unit,
     authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory),
 ) {
     val session by authViewModel.session.collectAsStateWithLifecycle()
     if (!session.isAuthenticated) {
         UnauthenticatedNavHost(authViewModel)
     } else {
-        AuthenticatedShell(authViewModel)
+        AuthenticatedShell(
+            authViewModel = authViewModel,
+            darkTheme = darkTheme,
+            onToggleTheme = onToggleTheme,
+        )
     }
 }
 
@@ -71,6 +71,7 @@ private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
             LoginScreen(
                 viewModel = authViewModel,
                 onOpenRegister = { navController.navigate(Destinations.REGISTER) },
+                onForgotPassword = { navController.navigate(Destinations.FORGOT_PASSWORD) },
             )
         }
         composable(Destinations.REGISTER) {
@@ -108,46 +109,82 @@ private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
                 },
             )
         }
+        composable(Destinations.FORGOT_PASSWORD) {
+            ForgotPasswordScreen(
+                onBack = { navController.popBackStack() },
+                onPlaceholder = {
+                    authViewModel.markRecoveryPlaceholder()
+                    navController.popBackStack()
+                },
+            )
+        }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AuthenticatedShell(authViewModel: AuthViewModel) {
+private fun AuthenticatedShell(
+    authViewModel: AuthViewModel,
+    darkTheme: Boolean,
+    onToggleTheme: () -> Unit,
+) {
     val navController = rememberNavController()
     val session by authViewModel.session.collectAsStateWithLifecycle()
+    val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory)
+    val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
-    val showBottomBar = Destinations.isAuthenticatedTab(current ?: Destinations.HOME)
+    val arcade = current in setOf(
+        Destinations.BLACKJACK, Destinations.AVIATOR, Destinations.APPLES,
+        Destinations.CRYSTAL, Destinations.DICE, Destinations.PHARAOH,
+    )
+    val showBottomBar = current != Destinations.GAMES && !arcade
+    val showHeader = Destinations.showsHeader(current)
+    val showMainTabs = Destinations.showsMainTabs(current)
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val balanceLabel = "${AppGraph.walletRepository.snapshot().displayBalance} ${AppGraph.walletRepository.snapshot().currency}"
+    val colors = NextpariTheme.colors
 
     Scaffold(
-        containerColor = com.nextpari.app.core.ui.theme.NpBackground,
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar(containerColor = NpNav) {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = current == tab.route,
-                            onClick = {
-                                navController.navigate(tab.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label) },
-                            colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = NpAccent,
-                                selectedTextColor = NpAccent,
-                                unselectedIconColor = NpTextMuted,
-                                unselectedTextColor = NpTextMuted,
-                                indicatorColor = NpNav,
-                            ),
-                        )
+        containerColor = colors.bg,
+        topBar = {
+            if (showHeader) {
+                Column {
+                    NextpariHeader(
+                        balanceLabel = balanceLabel,
+                        darkTheme = darkTheme,
+                        onWallet = { navController.navigateTo(Destinations.WALLET) },
+                        onHome = {
+                            homeViewModel.selectTab("top")
+                            navController.navigateTab(Destinations.HOME)
+                        },
+                        onToggleTheme = onToggleTheme,
+                        onSettings = { navController.navigateTo(Destinations.SETTINGS) },
+                        onSearch = { searchOpen = true },
+                    )
+                    if (showMainTabs) {
+                        NextpariMainTabs(activeId = homeState.mainTabId) { tab ->
+                            if (tab.id == "games") {
+                                navController.navigateTo(Destinations.GAMES)
+                            } else {
+                                if (current != Destinations.HOME) navController.navigateTab(Destinations.HOME)
+                                homeViewModel.selectTab(tab.id)
+                            }
+                        }
                     }
                 }
+            }
+        },
+        bottomBar = {
+            if (showBottomBar) {
+                NextpariBottomNav(
+                    activeRoute = when {
+                        current == Destinations.GAMES -> Destinations.HOME
+                        else -> current
+                    },
+                    betCount = 0,
+                    onSelect = { item -> navController.navigateTab(item.route) },
+                )
             }
         },
     ) { padding ->
@@ -157,32 +194,100 @@ private fun AuthenticatedShell(authViewModel: AuthViewModel) {
             modifier = Modifier.padding(padding),
         ) {
             composable(Destinations.HOME) {
-                HomeScreen(
+                HomeScreen(viewModel = homeViewModel, onNavigate = { navController.navigateTo(it) })
+            }
+            composable(Destinations.FAVORITES) {
+                PlaceholderScreen("Избранное", message = "Избранное появится после подключения ленты. Сейчас список пуст.")
+            }
+            composable(Destinations.BETSLIP) {
+                PlaceholderScreen("Купон", message = "Купон пуст. Ставки не размещаются в A002.")
+            }
+            composable(Destinations.HISTORY) { HistoryScreen() }
+            composable(Destinations.MENU) {
+                MenuScreen(
                     session = session,
-                    onDeposit = {
-                        navController.navigate(Destinations.WALLET) {
-                            launchSingleTop = true
-                        }
-                    },
-                    onWithdraw = {
-                        navController.navigate(Destinations.WALLET) {
-                            launchSingleTop = true
-                        }
-                    },
+                    balanceLabel = balanceLabel,
+                    onNavigate = { navController.navigateTo(it) },
+                    onLogout = { authViewModel.logout() },
+                    onInbox = { navController.navigateTo("inbox-placeholder") },
                 )
             }
             composable(Destinations.WALLET) { WalletScreen() }
-            composable(Destinations.HISTORY) { HistoryScreen() }
-            composable(Destinations.PROFILE) {
-                ProfileScreen(
-                    session = session,
-                    onOpenSettings = { navController.navigate(Destinations.SETTINGS) },
-                    onLogout = { authViewModel.logout() },
+            composable(Destinations.SETTINGS) {
+                SettingsScreen(darkTheme = darkTheme, onToggleTheme = onToggleTheme, onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.GAMES) {
+                GamesHubScreen(
+                    games = homeViewModel.uiState.value.hubGames,
+                    onBack = { navController.popBackStack() },
+                    onOpen = { navController.navigateTo(it) },
                 )
             }
-            composable(Destinations.SETTINGS) {
-                SettingsScreen(onBack = { navController.popBackStack() })
+            placeholder(navController, Destinations.MATCH, "Матч")
+            placeholder(navController, Destinations.BET_DETAILS, "Детали ставки")
+            placeholder(navController, Destinations.PROMO, "Акции")
+            placeholder(navController, Destinations.PERSONAL_DATA, "Личные данные")
+            placeholder(navController, Destinations.WALLETS, "Кошелёк и валюты")
+            placeholder(navController, Destinations.GAMELIST_LIVE, "Лента LIVE")
+            placeholder(navController, Destinations.GAMELIST_LINE, "Лента Линия")
+            placeholder(navController, Destinations.SPORTS_LIVE, "LIVE")
+            placeholder(navController, Destinations.SPORTS_LINE, "Линия")
+            placeholder(navController, Destinations.SPORTS_CYBERS, "Киберспорт")
+            placeholder(navController, Destinations.CHAMPIONSHIPS, "Чемпионаты")
+            placeholder(navController, Destinations.SLOTS, "Слоты")
+            placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино")
+            placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера")
+            placeholder(navController, Destinations.PROMO_DETAILS, "Промо")
+            placeholder(navController, Destinations.PROMO_MARATHON, "Марафон Экспрессов")
+            placeholder(navController, Destinations.PROMO_WELCOME, "Приветственный пакет")
+            placeholder(navController, Destinations.INFO, "Инфо")
+            placeholder(navController, Destinations.PROMO_UNBEATABLE, "Непобедимый")
+            placeholder(navController, Destinations.BLACKJACK, "21 / Очко")
+            placeholder(navController, Destinations.AVIATOR, "Aviator")
+            placeholder(navController, Destinations.APPLES, "Apple of Fortune")
+            placeholder(navController, Destinations.CRYSTAL, "Crystal")
+            placeholder(navController, Destinations.DICE, "Dice")
+            placeholder(navController, Destinations.PHARAOH, "Сокровища Фараона")
+            placeholder(navController, Destinations.VIP_CASHBACK, "VIP кешбэк")
+            placeholder(navController, Destinations.LEAGUE, "Лига")
+            composable("inbox-placeholder") {
+                PlaceholderScreen("Входящие", onBack = { navController.popBackStack() }, message = "Сообщения не загружаются в A002.")
             }
         }
     }
+
+    if (searchOpen) {
+        ModalBottomSheet(
+            onDismissRequest = { searchOpen = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = colors.surface,
+        ) {
+            Column(Modifier.padding(24.dp).fillMaxSize()) {
+                Text("Поиск будет подключён позже.", color = colors.text)
+                Text("Данные и backend в A002 не вызываются.", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
+            }
+        }
+    }
+}
+
+private fun NavGraphBuilder.placeholder(
+    navController: NavHostController,
+    route: String,
+    title: String,
+) {
+    composable(route) {
+        PlaceholderScreen(title, onBack = { navController.popBackStack() })
+    }
+}
+
+private fun NavHostController.navigateTab(route: String) {
+    navigate(route) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
+private fun NavHostController.navigateTo(route: String) {
+    navigate(route) { launchSingleTop = true }
 }

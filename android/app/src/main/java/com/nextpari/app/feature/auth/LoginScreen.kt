@@ -1,81 +1,69 @@
 package com.nextpari.app.feature.auth
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nextpari.app.R
 import com.nextpari.app.core.ui.components.NextpariButton
-import com.nextpari.app.core.ui.theme.NpAccent
-import com.nextpari.app.core.ui.theme.NpAccentInk
-import com.nextpari.app.core.ui.theme.NpBackground
-import com.nextpari.app.core.ui.theme.NpDanger
-import com.nextpari.app.core.ui.theme.NpSurface
-import com.nextpari.app.core.ui.theme.NpText
-import com.nextpari.app.core.ui.theme.NpTextMuted
-import com.nextpari.app.core.ui.theme.NpTextSecondary
+import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
 fun LoginScreen(
     viewModel: AuthViewModel,
     onOpenRegister: () -> Unit,
+    onForgotPassword: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(NpBackground)
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
-    ) {
-        Text(text = "Nextpari", color = NpAccent, style = androidx.compose.material3.MaterialTheme.typography.headlineLarge)
-        Text(text = "Вход в аккаунт", color = NpText, style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
-        Spacer(Modifier.height(8.dp))
-        Text(
-            text = "DEV/mock: вход только локальный. Production API и Supabase не вызываются.",
-            color = NpTextMuted,
-        )
-        Spacer(Modifier.height(20.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            LoginChip("Email", state.method == LoginMethod.EMAIL) { viewModel.setMethod(LoginMethod.EMAIL) }
-            LoginChip("Телефон", state.method == LoginMethod.PHONE) { viewModel.setMethod(LoginMethod.PHONE) }
-            LoginChip("ID", state.method == LoginMethod.PLAYER_ID) { viewModel.setMethod(LoginMethod.PLAYER_ID) }
-        }
+    val colors = NextpariTheme.colors
+    AuthScaffold {
+        Text("Авторизация", color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(16.dp))
-        val identifierLabel = when (state.method) {
-            LoginMethod.EMAIL -> "Email"
-            LoginMethod.PHONE -> "Телефон"
-            LoginMethod.PLAYER_ID -> "ID игрока"
-        }
+        LoginModeSwitch(state.mode, viewModel::setMode)
+        Spacer(Modifier.height(16.dp))
         NextpariField(
             value = state.identifier,
             onValueChange = viewModel::setIdentifier,
-            label = identifierLabel,
-            keyboardType = when (state.method) {
-                LoginMethod.EMAIL -> KeyboardType.Email
-                LoginMethod.PHONE -> KeyboardType.Phone
-                LoginMethod.PLAYER_ID -> KeyboardType.Number
-            },
+            label = if (state.mode == LoginMode.PHONE) "Номер телефона" else "Email или ID игрока",
+            keyboardType = if (state.mode == LoginMode.PHONE) KeyboardType.Phone else KeyboardType.Email,
         )
         Spacer(Modifier.height(12.dp))
         NextpariField(
@@ -83,39 +71,120 @@ fun LoginScreen(
             onValueChange = viewModel::setPassword,
             label = "Пароль",
             keyboardType = KeyboardType.Password,
-            password = true,
+            password = !state.passwordVisible,
+            trailing = {
+                IconButton(onClick = viewModel::togglePasswordVisible) {
+                    Icon(
+                        imageVector = if (state.passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        contentDescription = if (state.passwordVisible) "Скрыть пароль" else "Показать пароль",
+                    )
+                }
+            },
         )
         if (state.error != null) {
-            Text(text = state.error ?: "", color = NpDanger, modifier = Modifier.padding(top = 12.dp))
+            Text(state.error ?: "", color = colors.danger, modifier = Modifier.padding(top = 12.dp))
         }
         if (state.registerNotice != null) {
-            Text(text = state.registerNotice ?: "", color = NpTextSecondary, modifier = Modifier.padding(top = 12.dp))
+            Text(state.registerNotice ?: "", color = Color(0xFF166534), modifier = Modifier.padding(top = 12.dp))
         }
-        Spacer(Modifier.height(20.dp))
-        NextpariButton(
-            text = if (state.loading) "Вход..." else "Войти",
-            onClick = viewModel::login,
-            enabled = !state.loading,
+        if (state.recoveryNotice != null) {
+            Text(state.recoveryNotice ?: "", color = Color(0xFF67819C), modifier = Modifier.padding(top = 12.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        NextpariButton(text = if (state.loading) "Вход…" else "Войти", onClick = viewModel::login, enabled = !state.loading)
+        Text(
+            "Забыли пароль?",
+            color = Color(0xFF16A34A),
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onForgotPassword).padding(top = 12.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        TextButton(onClick = onOpenRegister, modifier = Modifier.fillMaxWidth()) {
-            Text("Создать аккаунт", color = NpAccent)
+        Text(
+            "Нет аккаунта? Зарегистрируйтесь",
+            color = Color(0xFF64748B),
+            fontSize = 14.sp,
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenRegister).padding(top = 8.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Text(
+            "DEV/mock: вход только локальный.",
+            color = Color(0xFF91A5B9),
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+    }
+}
+
+@Composable
+internal fun AuthScaffold(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        Image(
+            painter = painterResource(R.drawable.auth_sports_bg),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color(0x33000000), Color.Transparent, Color(0x59000000)))),
+        )
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.logo),
+                    contentDescription = "NextPari",
+                    modifier = Modifier.size(80.dp).clip(RoundedCornerShape(24.dp)),
+                )
+                Text("Ставки на спорт онлайн", color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(top = 12.dp))
+            }
+            Column(
+                Modifier
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 20.dp)
+                    .clip(RoundedCornerShape(32.dp))
+                    .background(Color.White)
+                    .padding(horizontal = 20.dp, vertical = 28.dp)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                content()
+            }
         }
     }
 }
 
 @Composable
-internal fun LoginChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = NpAccent,
-            selectedLabelColor = NpAccentInk,
-            containerColor = NpSurface,
-            labelColor = NpText,
-        ),
-    )
+internal fun LoginModeSwitch(mode: LoginMode, onChange: (LoginMode) -> Unit) {
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF4F6FA)).padding(4.dp)) {
+        ModeChip("Email / ID", mode == LoginMode.IDENTIFIER, Modifier.weight(1f)) { onChange(LoginMode.IDENTIFIER) }
+        ModeChip("Телефон", mode == LoginMode.PHONE, Modifier.weight(1f)) { onChange(LoginMode.PHONE) }
+    }
+}
+
+@Composable
+private fun ModeChip(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (selected) Color.White else Color.Transparent)
+            .clickable(onClick = onClick)
+            .height(44.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = if (selected) Color(0xFF07182F) else Color(0xFF64748B))
+    }
 }
 
 @Composable
@@ -125,6 +194,7 @@ internal fun NextpariField(
     label: String,
     keyboardType: KeyboardType,
     password: Boolean = false,
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -132,16 +202,18 @@ internal fun NextpariField(
         label = { Text(label) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        trailingIcon = trailing,
+        shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = NpText,
-            unfocusedTextColor = NpText,
-            focusedBorderColor = NpAccent,
-            unfocusedBorderColor = NpTextMuted,
-            focusedLabelColor = NpAccent,
-            unfocusedLabelColor = NpTextSecondary,
-            cursorColor = NpAccent,
+            focusedTextColor = Color(0xFF07182F),
+            unfocusedTextColor = Color(0xFF07182F),
+            focusedBorderColor = Color(0xFF16A34A),
+            unfocusedBorderColor = Color(0xFFE6EBF2),
+            focusedLabelColor = Color(0xFF16A34A),
+            unfocusedLabelColor = Color(0xFF64748B),
+            cursorColor = Color(0xFF16A34A),
         ),
     )
 }

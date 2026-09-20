@@ -16,51 +16,49 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.ui.components.NextpariCard
-import com.nextpari.app.core.ui.theme.NpBackground
-import com.nextpari.app.core.ui.theme.NpText
-import com.nextpari.app.core.ui.theme.NpTextMuted
-import com.nextpari.app.core.ui.theme.NpTextSecondary
+import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
 fun WalletScreen(
     viewModel: WalletViewModel = viewModel(factory = WalletViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = NextpariTheme.colors
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(NpBackground)
+            .background(colors.bg)
             .verticalScroll(rememberScrollState())
             .padding(20.dp),
     ) {
-        Text("Кошелёк", color = NpText, style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
+        Text("Кошелёк", color = colors.text, style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp))
         NextpariCard {
-            Text("Баланс", color = NpTextSecondary)
+            Text("Баланс", color = colors.textSecondary)
             Text(
                 "${state.snapshot.displayBalance} ${state.snapshot.currency}",
-                color = NpText,
+                color = colors.text,
                 style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
             )
-            Text(state.snapshot.note, color = NpTextMuted)
+            Text(state.snapshot.note, color = colors.textMuted)
         }
         Spacer(Modifier.height(12.dp))
         NextpariCard {
-            Text("Пополнение", color = NpText)
-            Text("Методы депозита будут подключены к существующему Nextpari wallet. Операции сейчас недоступны.", color = NpTextMuted)
+            Text("Пополнение", color = colors.text)
+            Text("Методы депозита будут подключены к существующему Nextpari wallet. Операции сейчас недоступны.", color = colors.textMuted)
         }
         Spacer(Modifier.height(12.dp))
         NextpariCard {
-            Text("Вывод", color = NpText)
-            Text("Вывод наличных и crypto пойдёт через сервер. Android не дублирует Wallet Ledger.", color = NpTextMuted)
+            Text("Вывод", color = colors.text)
+            Text("Вывод наличных и crypto пойдёт через сервер. Android не дублирует Wallet Ledger.", color = colors.textMuted)
         }
         Spacer(Modifier.height(12.dp))
-        Text("История операций", color = NpText, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+        Text("История операций", color = colors.text, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
         state.transactions.forEach { row ->
             NextpariCard {
-                Text(row.title, color = NpText)
-                Text("${row.amount} · ${row.status}", color = NpTextSecondary)
+                Text(row.title, color = colors.text)
+                Text("${row.amount} · ${row.status}", color = colors.textSecondary)
             }
             Spacer(Modifier.height(8.dp))
         }

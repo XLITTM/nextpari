@@ -20,33 +20,30 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.ui.components.EmptyState
 import com.nextpari.app.core.ui.components.NextpariCard
-import com.nextpari.app.core.ui.theme.NpAccent
-import com.nextpari.app.core.ui.theme.NpBackground
-import com.nextpari.app.core.ui.theme.NpText
-import com.nextpari.app.core.ui.theme.NpTextMuted
-import com.nextpari.app.core.ui.theme.NpTextSecondary
+import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel = viewModel(factory = HistoryViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val colors = NextpariTheme.colors
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    Column(Modifier.fillMaxSize().background(NpBackground)) {
+    Column(Modifier.fillMaxSize().background(colors.bg)) {
         Text(
             "История",
-            color = NpText,
+            color = colors.text,
             style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(20.dp),
         )
         TabRow(
             selectedTabIndex = tab,
-            containerColor = NpBackground,
-            contentColor = NpText,
+            containerColor = colors.bg,
+            contentColor = colors.text,
             indicator = { positions ->
                 TabRowDefaults.SecondaryIndicator(
                     modifier = Modifier.tabIndicatorOffset(positions[tab]),
-                    color = NpAccent,
+                    color = colors.accent,
                 )
             },
         ) {
@@ -58,19 +55,19 @@ fun HistoryScreen(
                 EmptyState("Ставок пока нет")
             } else {
                 Column(Modifier.padding(16.dp)) {
-                    state.bets.forEach { Text(it.title, color = NpText) }
+                    state.bets.forEach { Text(it.title, color = colors.text) }
                 }
             }
         } else {
             Column(Modifier.padding(16.dp)) {
                 state.transactions.forEach { row ->
                     NextpariCard {
-                        Text(row.title, color = NpText)
-                        Text(row.amount, color = NpTextSecondary)
+                        Text(row.title, color = colors.text)
+                        Text(row.amount, color = colors.textSecondary)
                     }
                     androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 8.dp))
                 }
-                Text("Строки mock. Авторитетная история — на сервере.", color = NpTextMuted, modifier = Modifier.padding(top = 8.dp))
+                Text("Строки mock. Авторитетная история — на сервере.", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }

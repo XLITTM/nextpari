@@ -1,0 +1,77 @@
+package com.nextpari.app.core.ui.components
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Casino
+import androidx.compose.material.icons.outlined.Gamepad
+import androidx.compose.material.icons.outlined.LocalFireDepartment
+import androidx.compose.material.icons.outlined.SportsEsports
+import androidx.compose.material.icons.outlined.EmojiEvents
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.navigation.MainTabSpec
+import com.nextpari.app.core.navigation.MainTabsSpec
+import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.core.ui.theme.TabActiveGold
+
+@Composable
+fun NextpariMainTabs(
+    activeId: String,
+    onChange: (MainTabSpec) -> Unit,
+) {
+    val colors = NextpariTheme.colors
+    Row(Modifier.fillMaxWidth().background(colors.bg).padding(horizontal = 8.dp)) {
+        MainTabsSpec.tabs.forEach { tab ->
+            val active = tab.id == activeId
+            val icon = tabIcon(tab.id)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onChange(tab) }
+                    .drawBehind {
+                        if (active) {
+                            val stroke = 2.dp.toPx()
+                            drawLine(TabActiveGold, Offset(0f, size.height), Offset(size.width, size.height), stroke)
+                        }
+                    }
+                    .padding(vertical = 10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = tab.label,
+                    tint = if (active) TabActiveGold else colors.textMuted,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = tab.label,
+                    fontSize = 11.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = if (active) colors.text else colors.textMuted,
+                )
+            }
+        }
+    }
+}
+
+private fun tabIcon(id: String): ImageVector = when (id) {
+    "top" -> Icons.Outlined.LocalFireDepartment
+    "sport" -> Icons.Outlined.EmojiEvents
+    "esports" -> Icons.Outlined.SportsEsports
+    "casino" -> Icons.Outlined.Casino
+    else -> Icons.Outlined.Gamepad
+}

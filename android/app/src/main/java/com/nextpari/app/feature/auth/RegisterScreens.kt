@@ -1,13 +1,9 @@
 package com.nextpari.app.feature.auth
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -15,14 +11,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.components.NextpariButton
 import com.nextpari.app.core.ui.components.NextpariCard
-import com.nextpari.app.core.ui.components.NextpariTopBar
-import com.nextpari.app.core.ui.theme.NpBackground
-import com.nextpari.app.core.ui.theme.NpText
-import com.nextpari.app.core.ui.theme.NpTextMuted
 
 @Composable
 fun RegisterMenuScreen(
@@ -31,56 +26,68 @@ fun RegisterMenuScreen(
     onPhone: () -> Unit,
     onOneClick: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().background(NpBackground)) {
-        NextpariTopBar("Регистрация", Icons.AutoMirrored.Filled.ArrowBack, onBack)
-        Column(Modifier.padding(20.dp)) {
-            Text("Выберите способ", color = NpText, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(8.dp))
-            Text("UI только. Реальные пользователи не создаются.", color = NpTextMuted)
-            Spacer(Modifier.height(16.dp))
-            NextpariCard(onClick = onEmail) { Text("Email", color = NpText) }
-            Spacer(Modifier.height(10.dp))
-            NextpariCard(onClick = onPhone) { Text("Телефон", color = NpText) }
-            Spacer(Modifier.height(10.dp))
-            NextpariCard(onClick = onOneClick) { Text("One-click", color = NpText) }
+    AuthScaffold {
+        Text("Регистрация", color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(8.dp))
+        Text("UI только. Реальные пользователи не создаются.", color = Color(0xFF64748B), fontSize = 13.sp)
+        Spacer(Modifier.height(16.dp))
+        NextpariCard(onClick = onOneClick) {
+            Text("В один клик", fontWeight = FontWeight.ExtraBold, color = Color(0xFF07182F))
+            Text("Быстрая регистрация за несколько секунд", color = Color(0xFF64748B), fontSize = 13.sp)
         }
+        Spacer(Modifier.height(10.dp))
+        NextpariCard(onClick = onPhone) {
+            Text("По телефону", fontWeight = FontWeight.ExtraBold, color = Color(0xFF07182F))
+            Text("Регистрация по номеру мобильного телефона", color = Color(0xFF64748B), fontSize = 13.sp)
+        }
+        Spacer(Modifier.height(10.dp))
+        NextpariCard(onClick = onEmail) {
+            Text("По Email", fontWeight = FontWeight.ExtraBold, color = Color(0xFF07182F))
+            Text("Классическая регистрация через электронную почту", color = Color(0xFF64748B), fontSize = 13.sp)
+        }
+        Text(
+            "Уже есть аккаунт? Войти",
+            color = Color(0xFF16A34A),
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 20.dp).clickable(onClick = onBack),
+        )
     }
 }
 
 @Composable
 fun RegisterEmailScreen(onBack: () -> Unit, onPrepared: () -> Unit) {
-    RegisterFormScreen(
-        title = "Регистрация по email",
-        fieldLabel = "Email",
-        keyboardType = KeyboardType.Email,
-        onBack = onBack,
-        onPrepared = onPrepared,
-    )
+    RegisterFormScreen("Регистрация", "Email", KeyboardType.Email, onBack, onPrepared)
 }
 
 @Composable
 fun RegisterPhoneScreen(onBack: () -> Unit, onPrepared: () -> Unit) {
-    RegisterFormScreen(
-        title = "Регистрация по телефону",
-        fieldLabel = "Телефон",
-        keyboardType = KeyboardType.Phone,
-        onBack = onBack,
-        onPrepared = onPrepared,
-    )
+    RegisterFormScreen("Регистрация по телефону", "Телефон", KeyboardType.Phone, onBack, onPrepared)
 }
 
 @Composable
 fun RegisterOneClickScreen(onBack: () -> Unit, onPrepared: () -> Unit) {
-    Column(Modifier.fillMaxSize().background(NpBackground)) {
-        NextpariTopBar("One-click", Icons.AutoMirrored.Filled.ArrowBack, onBack)
-        Column(Modifier.padding(20.dp)) {
-            Text(
-                "Однокликовая регистрация будет подключена к существующему Nextpari backend. Сейчас пользователь не создаётся.",
-                color = NpTextMuted,
-            )
-            Spacer(Modifier.height(20.dp))
-            NextpariButton(text = "Продолжить позже", onClick = onPrepared)
-        }
+    AuthScaffold {
+        Text("Регистрация в один клик", color = Color(0xFF07182F), fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Мы создадим ID игрока и безопасный пароль автоматически. Сейчас пользователь не создаётся.",
+            color = Color(0xFF64748B),
+        )
+        Spacer(Modifier.height(20.dp))
+        NextpariButton(text = "Создать аккаунт", onClick = onPrepared)
+        Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
+    }
+}
+
+@Composable
+fun ForgotPasswordScreen(onBack: () -> Unit, onPlaceholder: () -> Unit) {
+    AuthScaffold {
+        Text("Забыли пароль?", color = Color(0xFF07182F), fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(8.dp))
+        Text("Восстановление будет подключено к Nextpari API позже. Запрос не отправляется.", color = Color(0xFF64748B))
+        Spacer(Modifier.height(20.dp))
+        NextpariButton(text = "Понятно", onClick = onPlaceholder)
+        Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
     }
 }
 
@@ -92,29 +99,18 @@ private fun RegisterFormScreen(
     onBack: () -> Unit,
     onPrepared: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().background(NpBackground)) {
-        NextpariTopBar(title, Icons.AutoMirrored.Filled.ArrowBack, onBack)
-        Column(Modifier.padding(20.dp)) {
-            var identifier by rememberSaveable { mutableStateOf("") }
-            var password by rememberSaveable { mutableStateOf("") }
-            Text("Интерфейс подготовлен. Backend-контракт не выдуман.", color = NpTextMuted)
-            Spacer(Modifier.height(16.dp))
-            NextpariField(
-                value = identifier,
-                onValueChange = { identifier = it },
-                label = fieldLabel,
-                keyboardType = keyboardType,
-            )
-            Spacer(Modifier.height(12.dp))
-            NextpariField(
-                value = password,
-                onValueChange = { password = it },
-                label = "Пароль",
-                keyboardType = KeyboardType.Password,
-                password = true,
-            )
-            Spacer(Modifier.height(20.dp))
-            NextpariButton(text = "Отправить позже", onClick = onPrepared)
-        }
+    var identifier by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    AuthScaffold {
+        Text(title, color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+        Spacer(Modifier.height(8.dp))
+        Text("Интерфейс подготовлен. Backend-контракт не выдуман.", color = Color(0xFF64748B))
+        Spacer(Modifier.height(16.dp))
+        NextpariField(identifier, { identifier = it }, fieldLabel, keyboardType)
+        Spacer(Modifier.height(12.dp))
+        NextpariField(password, { password = it }, "Пароль", KeyboardType.Password, password = true)
+        Spacer(Modifier.height(20.dp))
+        NextpariButton(text = "Зарегистрироваться", onClick = onPrepared)
+        Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
     }
 }

@@ -12,15 +12,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-enum class LoginMethod { EMAIL, PHONE, PLAYER_ID }
+enum class LoginMode { IDENTIFIER, PHONE }
 
 data class AuthUiState(
-    val method: LoginMethod = LoginMethod.EMAIL,
+    val mode: LoginMode = LoginMode.IDENTIFIER,
     val identifier: String = "",
     val password: String = "",
+    val passwordVisible: Boolean = false,
     val loading: Boolean = false,
     val error: String? = null,
     val registerNotice: String? = null,
+    val recoveryNotice: String? = null,
 )
 
 class AuthViewModel(
@@ -31,8 +33,8 @@ class AuthViewModel(
     private val ui = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = ui.asStateFlow()
 
-    fun setMethod(method: LoginMethod) {
-        ui.value = ui.value.copy(method = method, error = null)
+    fun setMode(mode: LoginMode) {
+        ui.value = ui.value.copy(mode = mode, error = null)
     }
 
     fun setIdentifier(value: String) {
@@ -43,14 +45,24 @@ class AuthViewModel(
         ui.value = ui.value.copy(password = value, error = null)
     }
 
+    fun togglePasswordVisible() {
+        ui.value = ui.value.copy(passwordVisible = !ui.value.passwordVisible)
+    }
+
     fun login() {
         val current = ui.value
         viewModelScope.launch {
             ui.value = current.copy(loading = true, error = null)
-            val identifier = when (current.method) {
-                LoginMethod.EMAIL -> LoginIdentifier.Email(current.identifier)
-                LoginMethod.PHONE -> LoginIdentifier.Phone(current.identifier)
-                LoginMethod.PLAYER_ID -> LoginIdentifier.PlayerId(current.identifier)
+            val identifier = when (current.mode) {
+                LoginMode.PHONE -> LoginIdentifier.Phone(current.identifier)
+                LoginMode.IDENTIFIER -> {
+                    val trimmed = current.identifier.trim()
+                    if (trimmed.all { it.isDigit() } && trimmed.isNotEmpty()) {
+                        LoginIdentifier.PlayerId(trimmed)
+                    } else {
+                        LoginIdentifier.Email(trimmed)
+                    }
+                }
             }
             when (val result = authRepository.login(identifier, current.password)) {
                 is ApiResult.Ok -> ui.value = ui.value.copy(loading = false, password = "")
@@ -69,6 +81,12 @@ class AuthViewModel(
     fun markRegisterPrepared(kind: String) {
         ui.value = ui.value.copy(
             registerNotice = "Регистрация ($kind) будет подключена к Nextpari API. Пользователь не создан.",
+        )
+    }
+
+    fun markRecoveryPlaceholder() {
+        ui.value = ui.value.copy(
+            recoveryNotice = "Восстановление пароля будет подключено позже. Production API не вызывается.",
         )
     }
 
