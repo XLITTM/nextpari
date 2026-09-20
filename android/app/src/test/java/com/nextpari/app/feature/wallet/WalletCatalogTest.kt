@@ -147,21 +147,27 @@ class WalletCatalogTest {
     }
 
     @Test
-    fun depositModalUsesSafeInsetsAndScrollWithoutMagicOffset() {
+    fun depositModalUsesMaterialBottomSheetAndSystemInsets() {
         val screen = moduleFile("src/main/java/com/nextpari/app/feature/wallet/WalletScreen.kt").readText()
         val deposit = screen.substringAfter("private fun DepositModal").substringBefore("private fun RestrictionModal")
-        assertThat(deposit).contains("WindowInsets.safeDrawing")
-        assertThat(deposit).contains("navigationBarsPadding()")
-        assertThat(deposit).contains("imePadding()")
+        assertThat(deposit).contains("ModalBottomSheet(")
+        assertThat(deposit).contains("rememberModalBottomSheetState(skipPartiallyExpanded = true)")
         assertThat(deposit).contains("verticalScroll(rememberScrollState())")
-        assertThat(deposit).contains("heightIn(max = maxHeight)")
+        assertThat(deposit).contains("contentWindowInsets")
+        assertThat(deposit).contains("WindowInsets.navigationBars.union(WindowInsets.ime)")
+        assertThat(deposit).contains("windowInsetsBottomHeight")
         assertThat(deposit).contains("WalletCatalog.OPEN_WALLET")
         assertThat(deposit.indexOf("verticalScroll")).isLessThan(deposit.lastIndexOf("WalletCatalog.OPEN_WALLET"))
+        assertThat(deposit.lastIndexOf("WalletCatalog.OPEN_WALLET")).isLessThan(deposit.indexOf("windowInsetsBottomHeight"))
+        assertThat(deposit).doesNotContain("Dialog(")
+        assertThat(deposit).doesNotContain("BoxWithConstraints")
         assertThat(deposit).doesNotContain("offset(")
         assertThat(deposit).doesNotContain("padding(bottom = 48")
         assertThat(deposit).doesNotContain("padding(bottom = 32")
-        assertThat(deposit).contains("dismissOnBackPress = true")
-        assertThat(deposit).contains("BackHandler")
+        val restriction = screen.substringAfter("private fun RestrictionModal")
+        assertThat(restriction).contains("ModalBottomSheet(")
+        assertThat(restriction).contains("windowInsetsBottomHeight")
+        assertThat(restriction).doesNotContain("Dialog(")
     }
 
     private fun sample(

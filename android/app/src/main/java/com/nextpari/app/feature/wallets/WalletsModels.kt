@@ -23,6 +23,10 @@ data class WalletsUiState(
 object WalletsCatalog {
     const val TITLE = "Кошелёк и валюты"
     const val ADD_CURRENCY = "Добавить валюту"
+    const val ADD_CURRENCY_MENU = "+ Добавить валюту"
+    const val MY_CURRENCIES = "Мои валюты"
+    const val EMPTY_WALLETS = "Нет доступных кошельков"
+    const val SWITCHER_LABEL = "Кошелёк и валюты"
     const val SESSION_UNAVAILABLE =
         "Операция станет доступна после подключения безопасной сессии аккаунта."
 
@@ -58,5 +62,15 @@ object WalletsCatalog {
     fun addable(owned: List<PlayerWalletRow>): List<CurrencyOption> {
         val ownedDisplay = owned.map { displayCurrency(it.currency) }.toSet()
         return displayCurrencies.filter { it.value !in ownedDisplay }
+    }
+
+    fun headerBalanceLabel(fallback: String, state: WalletsUiState): String {
+        val active = state.owned.firstOrNull { it.isActive } ?: return fallback
+        return "${active.availableBalance} ${displayCurrency(active.currency)}"
+    }
+
+    fun rowLabel(row: PlayerWalletRow): String {
+        val mark = if (row.isActive) "✓ " else "  "
+        return "$mark${displayCurrency(row.currency)}"
     }
 }

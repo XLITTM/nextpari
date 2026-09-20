@@ -18,6 +18,7 @@ class WalletsCatalogTest {
         ).inOrder()
         assertThat(WalletsCatalog.TITLE).isEqualTo("Кошелёк и валюты")
         assertThat(WalletsCatalog.ADD_CURRENCY).isEqualTo("Добавить валюту")
+        assertThat(WalletsCatalog.ADD_CURRENCY_MENU).isEqualTo("+ Добавить валюту")
     }
 
     @Test
@@ -40,9 +41,7 @@ class WalletsCatalogTest {
         vm.addCurrency("USD")
         assertThat(vm.uiState.value.owned).isEmpty()
         assertThat(vm.uiState.value.notice).isEqualTo(WalletsCatalog.SESSION_UNAVAILABLE)
-        vm.consumeNotice()
-        vm.activate("TMT")
-        assertThat(vm.uiState.value.notice).isEqualTo(WalletsCatalog.SESSION_UNAVAILABLE)
+        assertThat(vm.activate("TMT")).isFalse()
 
         val sources = listOf(
             "src/main/java/com/nextpari/app/feature/wallets/WalletsScreen.kt",
@@ -57,6 +56,10 @@ class WalletsCatalogTest {
         assertThat(sources).doesNotContain("service_role")
         assertThat(sources).doesNotContain("1000")
         assertThat(sources).doesNotContain("availableBalance = \"1")
+        val switcher = moduleFile("src/main/java/com/nextpari/app/core/ui/components/HeaderWalletSwitcher.kt").readText()
+        assertThat(switcher).doesNotContain("/api/player/wallets")
+        assertThat(switcher).doesNotContain("fetchPlayerWallets")
+        assertThat(switcher).doesNotContain("Supabase")
     }
 
     private fun moduleFile(relative: String): File {

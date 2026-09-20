@@ -55,6 +55,7 @@ fun WalletsScreen(
         Toast.makeText(context, notice, Toast.LENGTH_SHORT).show()
         viewModel.consumeNotice()
     }
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     Column(
         Modifier

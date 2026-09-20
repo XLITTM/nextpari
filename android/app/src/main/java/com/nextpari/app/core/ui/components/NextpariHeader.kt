@@ -17,12 +17,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.DarkMode
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,21 +31,25 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.nextpari.app.R
-import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.wallets.WalletsUiState
 
 @Composable
 fun NextpariHeader(
     balanceLabel: String,
     darkTheme: Boolean,
-    onWallet: () -> Unit,
+    onDeposit: () -> Unit,
     onHome: () -> Unit,
     onToggleTheme: () -> Unit,
     onSettings: () -> Unit,
     onSearch: () -> Unit,
+    walletsState: WalletsUiState,
+    closeKey: String?,
+    onRefreshWallets: () -> Unit,
+    onSelectWallet: (String) -> Boolean,
+    onAddWallet: (String) -> Boolean,
+    onConsumeWalletNotice: () -> Unit,
 ) {
-    val colors = NextpariTheme.colors
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -70,22 +72,21 @@ fun NextpariHeader(
                         .size(32.dp)
                         .clip(CircleShape)
                         .background(Color(0xFF16A34A))
-                        .clickable(onClick = onWallet),
+                        .clickable(onClick = onDeposit),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(Icons.Outlined.Add, contentDescription = "Пополнить", tint = Color.White, modifier = Modifier.size(16.dp))
                 }
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .clickable(onClick = onWallet)
-                        .background(if (darkTheme) Color(0xFF1E293B) else Color(0xFFF3F4F6))
-                        .padding(start = 8.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(balanceLabel, color = colors.text, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                    Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = Color(0xFF6B7280), modifier = Modifier.size(16.dp).padding(start = 4.dp))
-                }
+                HeaderWalletSwitcher(
+                    balanceLabel = balanceLabel,
+                    darkTheme = darkTheme,
+                    state = walletsState,
+                    closeKey = closeKey,
+                    onRefresh = onRefreshWallets,
+                    onSelect = onSelectWallet,
+                    onAdd = onAddWallet,
+                    onConsumeNotice = onConsumeWalletNotice,
+                )
             }
             Box(
                 modifier = Modifier.clickable(onClick = onHome),

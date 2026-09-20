@@ -60,7 +60,9 @@ import com.nextpari.app.feature.sportsbook.SportsbookPreviewData
 import com.nextpari.app.feature.sportsbook.SportsbookViewModel
 import com.nextpari.app.feature.sportsbook.LeagueScreen
 import com.nextpari.app.feature.wallet.WalletScreen
+import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsScreen
+import com.nextpari.app.feature.wallets.WalletsViewModel
 
 @Composable
 fun NextpariRoot(
@@ -149,7 +151,9 @@ private fun AuthenticatedShell(
     val session by authViewModel.session.collectAsStateWithLifecycle()
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory)
     val sportsbookViewModel: SportsbookViewModel = viewModel(factory = SportsbookViewModel.Factory)
+    val walletsViewModel: WalletsViewModel = viewModel(factory = WalletsViewModel.Factory)
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val walletsState by walletsViewModel.uiState.collectAsStateWithLifecycle()
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
     val arcade = current in setOf(
@@ -160,7 +164,8 @@ private fun AuthenticatedShell(
     val showHeader = Destinations.showsHeader(current)
     val showMainTabs = Destinations.showsMainTabs(current)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    val balanceLabel = "${AppGraph.walletRepository.snapshot().displayBalance} ${AppGraph.walletRepository.snapshot().currency}"
+    val fallbackBalance = "${AppGraph.walletRepository.snapshot().displayBalance} ${AppGraph.walletRepository.snapshot().currency}"
+    val balanceLabel = WalletsCatalog.headerBalanceLabel(fallbackBalance, walletsState)
     val colors = NextpariTheme.colors
 
     Scaffold(
@@ -171,7 +176,7 @@ private fun AuthenticatedShell(
                     NextpariHeader(
                         balanceLabel = balanceLabel,
                         darkTheme = darkTheme,
-                        onWallet = { navController.navigateTo(Destinations.WALLET) },
+                        onDeposit = { navController.navigateTo(Destinations.WALLET) },
                         onHome = {
                             homeViewModel.selectTab("top")
                             navController.navigateTab(Destinations.HOME)
@@ -179,6 +184,12 @@ private fun AuthenticatedShell(
                         onToggleTheme = onToggleTheme,
                         onSettings = { navController.navigateTo(Destinations.SETTINGS) },
                         onSearch = { searchOpen = true },
+                        walletsState = walletsState,
+                        closeKey = current,
+                        onRefreshWallets = walletsViewModel::refresh,
+                        onSelectWallet = walletsViewModel::activate,
+                        onAddWallet = walletsViewModel::addCurrency,
+                        onConsumeWalletNotice = walletsViewModel::consumeNotice,
                     )
                     if (showMainTabs) {
                         NextpariMainTabs(activeId = homeState.mainTabId) { tab ->
@@ -256,7 +267,10 @@ private fun AuthenticatedShell(
                 PersonalDataScreen(onBack = { navController.popBackStack() })
             }
             composable(Destinations.WALLETS) {
-                WalletsScreen(onBack = { navController.popBackStack() })
+                WalletsScreen(
+                    onBack = { navController.popBackStack() },
+                    viewModel = walletsViewModel,
+                )
             }
             composable(Destinations.MATCH) { entry ->
                 MatchDetailsScreen(

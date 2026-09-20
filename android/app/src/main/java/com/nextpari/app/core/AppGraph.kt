@@ -16,6 +16,8 @@ import com.nextpari.app.feature.home.FakeHomeCatalogRepository
 import com.nextpari.app.feature.home.HomeCatalogRepository
 import com.nextpari.app.feature.wallet.FakeWalletRepository
 import com.nextpari.app.feature.wallet.WalletRepository
+import com.nextpari.app.feature.wallets.FakeWalletsRepository
+import com.nextpari.app.feature.wallets.WalletsRepository
 
 /**
  * Manual composition root. Keep this small until a DI framework is justified.
@@ -27,6 +29,7 @@ object AppGraph {
     val apiClient: NextpariApiClient = NetworkModule.apiClient()
     val authRepository: AuthRepository = FakeAuthRepository(sessionRepository)
     val walletRepository: WalletRepository = FakeWalletRepository()
+    val walletsRepository: WalletsRepository = FakeWalletsRepository()
     val historyRepository: HistoryRepository = FakeHistoryRepository()
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
 

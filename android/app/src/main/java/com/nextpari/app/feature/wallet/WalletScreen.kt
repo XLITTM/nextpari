@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,7 +12,6 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,14 +19,14 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,8 +50,11 @@ import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -76,8 +77,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
@@ -91,6 +90,7 @@ private val CardDark = Color(0xFF1E293B)
 private val ModalDark = Color(0xFF161C28)
 private val GreenBtn = Color(0xFF22C55E)
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WalletScreen(
     onBack: () -> Unit,
@@ -516,6 +516,7 @@ private fun WithdrawalCard(model: WithdrawalUiModel, dark: Boolean, onCopyPin: (
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DepositModal(
     publicId: String,
@@ -525,153 +526,127 @@ private fun DepositModal(
     onCopyId: () -> Unit,
     onQuote: () -> Unit,
 ) {
-    Dialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onClose,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-        ),
+        sheetState = sheetState,
+        containerColor = ModalDark,
+        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        BackHandler(onBack = onClose)
-        Box(
-            Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f)).clickable(onClick = onClose),
-            contentAlignment = Alignment.BottomCenter,
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
         ) {
-            BoxWithConstraints(
-                Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .navigationBarsPadding()
-                    .imePadding()
-                    .padding(12.dp),
-            ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = maxHeight)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(ModalDark)
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(WalletCatalog.DEPOSIT_TITLE, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
-                    Box(
-                        Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.05f)).clickable(onClick = onClose),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color.White, modifier = Modifier.size(16.dp))
-                    }
-                }
-                Text(WalletCatalog.DEPOSIT_DESC, color = Color(0xFFCBD5E1), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
-                Row(
-                    Modifier
-                        .padding(top = 12.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color.Black.copy(alpha = 0.3f))
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(WalletCatalog.PLAYER_ID_LABEL, color = Color(0xFF64748B), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
-                        Text("#${WalletCatalog.playerIdLabel(publicId)}", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
-                    }
-                    Box(
-                        Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.1f)).clickable(onClick = onCopyId),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(Icons.Outlined.ContentCopy, contentDescription = "Скопировать ID игрока", tint = Color(0xFF6EE7B7), modifier = Modifier.size(16.dp))
-                    }
-                }
-                if (copied) {
-                    Text(WalletCatalog.COPIED, color = Color(0xFF34D399), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                }
-                Box(Modifier.padding(top = 20.dp).fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.1f)))
-                Text(WalletCatalog.USDT_TITLE, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 16.dp))
-                Text(WalletCatalog.USDT_HINT, color = Color(0xFF94A3B8), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-                if (quoteTargets.isEmpty()) {
-                    Text(WalletCatalog.ADD_CURRENCY_FIRST, color = Color(0xFF94A3B8), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-                } else {
-                    Text(WalletCatalog.GET_QUOTE, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp).clickable(onClick = onQuote))
-                }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(WalletCatalog.DEPOSIT_TITLE, color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black, modifier = Modifier.weight(1f))
                 Box(
-                    Modifier
-                        .padding(top = 16.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFC89247))
-                        .clickable(onClick = onClose)
-                        .padding(vertical = 12.dp),
+                    Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.05f)).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(WalletCatalog.OPEN_WALLET, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+                    Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color.White, modifier = Modifier.size(16.dp))
                 }
             }
+            Text(WalletCatalog.DEPOSIT_DESC, color = Color(0xFFCBD5E1), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
+            Row(
+                Modifier
+                    .padding(top = 12.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(WalletCatalog.PLAYER_ID_LABEL, color = Color(0xFF64748B), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp)
+                    Text("#${WalletCatalog.playerIdLabel(publicId)}", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Black, letterSpacing = 2.sp)
+                }
+                Box(
+                    Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.1f)).clickable(onClick = onCopyId),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Скопировать ID игрока", tint = Color(0xFF6EE7B7), modifier = Modifier.size(16.dp))
+                }
             }
+            if (copied) {
+                Text(WalletCatalog.COPIED, color = Color(0xFF34D399), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
+            }
+            Box(Modifier.padding(top = 20.dp).fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.1f)))
+            Text(WalletCatalog.USDT_TITLE, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black, modifier = Modifier.padding(top = 16.dp))
+            Text(WalletCatalog.USDT_HINT, color = Color(0xFF94A3B8), fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            if (quoteTargets.isEmpty()) {
+                Text(WalletCatalog.ADD_CURRENCY_FIRST, color = Color(0xFF94A3B8), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            } else {
+                Text(WalletCatalog.GET_QUOTE, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp).clickable(onClick = onQuote))
+            }
+            Box(
+                Modifier
+                    .padding(top = 16.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFC89247))
+                    .clickable(onClick = onClose)
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(WalletCatalog.OPEN_WALLET, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black)
+            }
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars.union(WindowInsets.ime)))
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun RestrictionModal(dark: Boolean, onAction: () -> Unit, onClose: () -> Unit) {
-    Dialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onClose,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            dismissOnBackPress = true,
-            dismissOnClickOutside = true,
-        ),
+        sheetState = sheetState,
+        containerColor = if (dark) Color(0xFF1F2937) else Color.White,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = null,
+        contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
     ) {
-        BackHandler(onBack = onClose)
-        Box(
-            Modifier.fillMaxSize().background(Color.Black).clickable(onClick = onClose),
-            contentAlignment = Alignment.BottomCenter,
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .navigationBarsPadding()
-                    .imePadding()
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .background(if (dark) Color(0xFF1F2937) else Color.White)
-                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
+            Box(
+                Modifier.size(64.dp).clip(CircleShape).background(if (dark) Color(0x33F59E0B) else Color(0xFFFEF3C7)),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(
-                    Modifier.size(64.dp).clip(CircleShape).background(if (dark) Color(0x33F59E0B) else Color(0xFFFEF3C7)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(32.dp))
-                }
-                Text(WalletCatalog.RESTRICTION, color = NextpariTheme.colors.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                Row(
-                    Modifier
-                        .padding(top = 16.dp)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (dark) Color.White else Color(0xFF111827))
-                        .clickable(onClick = onAction)
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    Text(WalletCatalog.FILL_PROFILE, color = if (dark) Color(0xFF111827) else Color.White, fontWeight = FontWeight.Bold)
-                    Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (dark) Color(0xFF111827) else Color.White, modifier = Modifier.size(20.dp).padding(start = 4.dp))
-                }
-                Text(
-                    WalletCatalog.LATER,
-                    color = if (dark) Color(0xFFD1D5DB) else Color(0xFF6B7280),
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(top = 8.dp).clickable(onClick = onClose),
-                )
+                Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(32.dp))
             }
+            Text(WalletCatalog.RESTRICTION, color = NextpariTheme.colors.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Row(
+                Modifier
+                    .padding(top = 16.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (dark) Color.White else Color(0xFF111827))
+                    .clickable(onClick = onAction)
+                    .padding(vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                Text(WalletCatalog.FILL_PROFILE, color = if (dark) Color(0xFF111827) else Color.White, fontWeight = FontWeight.Bold)
+                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (dark) Color(0xFF111827) else Color.White, modifier = Modifier.size(20.dp).padding(start = 4.dp))
+            }
+            Text(
+                WalletCatalog.LATER,
+                color = if (dark) Color(0xFFD1D5DB) else Color(0xFF6B7280),
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 14.sp,
+                modifier = Modifier.padding(top = 8.dp).clickable(onClick = onClose),
+            )
+            Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars.union(WindowInsets.ime)))
         }
     }
 }
