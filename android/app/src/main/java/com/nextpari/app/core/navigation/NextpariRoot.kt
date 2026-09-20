@@ -227,9 +227,9 @@ private fun AuthenticatedShell(
             composable(Destinations.WALLET) { WalletScreen() }
             composable(Destinations.SETTINGS) {
                 SettingsScreen(
-                    darkTheme = darkTheme,
-                    onToggleTheme = onToggleTheme,
                     onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    onLogout = { authViewModel.logout() },
                 )
             }
             composable(Destinations.GAMES) {

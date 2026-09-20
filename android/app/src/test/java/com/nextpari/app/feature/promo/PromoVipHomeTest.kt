@@ -8,7 +8,7 @@ import com.nextpari.app.feature.home.HomePromoCatalog
 import com.nextpari.app.feature.home.HomeSectionOrder
 import com.nextpari.app.feature.home.MatchCardModel
 import com.nextpari.app.feature.menu.MenuCatalog
-import com.nextpari.app.feature.settings.SettingsCopy
+import com.nextpari.app.feature.settings.SettingsCatalog
 import com.nextpari.app.feature.sportsbook.CountryGrouping
 import com.nextpari.app.feature.sportsbook.HomeAccordionExpansion
 import com.nextpari.app.feature.sportsbook.HomeChampionships
@@ -169,7 +169,7 @@ class PromoVipHomeTest {
         val settings = moduleFile("src/main/java/com/nextpari/app/feature/settings/SettingsScreen.kt").readText()
         assertThat(settings).doesNotContain("Предпросмотр спортбука")
         assertThat(settings).doesNotContain("Только отладка: аккордеоны рынков")
-        assertThat(SettingsCopy.labels.joinToString()).doesNotContain("Предпросмотр спортбука")
+        assertThat(SettingsCatalog.sections.joinToString { it.title }).doesNotContain("Предпросмотр спортбука")
         val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
         assertThat(menu).doesNotContain("Предпросмотр спортбука")
         assertThat(menu).doesNotContain("MenuQuickAccess")
