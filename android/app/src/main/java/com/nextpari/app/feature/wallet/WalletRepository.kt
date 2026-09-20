@@ -1,29 +1,30 @@
 package com.nextpari.app.feature.wallet
 
-data class WalletSnapshot(
-    val displayBalance: String,
-    val currency: String,
-    val note: String,
-)
-
-data class MockTransaction(
-    val id: String,
-    val title: String,
-    val amount: String,
-    val status: String,
-)
-
 interface WalletRepository {
     fun snapshot(): WalletSnapshot
-    fun mockTransactions(): List<MockTransaction>
+    fun publicId(): String
+    fun availableAmount(): Double?
+    fun profileComplete(): Boolean
+    fun withdrawals(): List<WithdrawalUiModel>
+    fun payoutDestinations(): List<PayoutDestinationUiModel>
+    fun quoteTargets(): List<UsdtQuoteTarget>
 }
 
 class FakeWalletRepository : WalletRepository {
     override fun snapshot(): WalletSnapshot = WalletSnapshot(
-        displayBalance = "—",
-        currency = "TMTM",
-        note = "Основной счёт",
+        displayBalance = WalletCatalog.UNAVAILABLE_BALANCE,
+        currency = WalletCatalog.CURRENCY,
     )
 
-    override fun mockTransactions(): List<MockTransaction> = emptyList()
+    override fun publicId(): String = ""
+
+    override fun availableAmount(): Double? = null
+
+    override fun profileComplete(): Boolean = false
+
+    override fun withdrawals(): List<WithdrawalUiModel> = emptyList()
+
+    override fun payoutDestinations(): List<PayoutDestinationUiModel> = emptyList()
+
+    override fun quoteTargets(): List<UsdtQuoteTarget> = emptyList()
 }

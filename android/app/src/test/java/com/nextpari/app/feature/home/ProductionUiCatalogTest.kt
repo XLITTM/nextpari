@@ -3,6 +3,7 @@ package com.nextpari.app.feature.home
 import com.google.common.truth.Truth.assertThat
 import com.nextpari.app.R
 import com.nextpari.app.feature.wallet.FakeWalletRepository
+import com.nextpari.app.feature.wallet.WalletCatalog
 import org.junit.Test
 
 class ProductionUiCatalogTest {
@@ -87,13 +88,15 @@ class ProductionUiCatalogTest {
             GamesCatalog.lobbyTabs.forEach { appendLine(it.label) }
             HomePromoCatalog.items.forEach { appendLine(it.title) }
             EsportsCatalog.disciplines.forEach { appendLine(it.name) }
-            appendLine(FakeWalletRepository().snapshot().note)
+            appendLine(FakeWalletRepository().snapshot().displayBalance)
+            appendLine(FakeWalletRepository().snapshot().currency)
+            appendLine(WalletCatalog.TITLE)
+            appendLine(WalletCatalog.EMPTY_WITHDRAWALS)
+            appendLine(WalletCatalog.DEPOSITS_UNAVAILABLE)
             appendLine("Этот раздел скоро откроется.")
             appendLine("Купон пуст")
             appendLine("В избранном пока нет событий")
             appendLine("Нет новых сообщений")
-            appendLine("Выберите способ пополнения")
-            appendLine("Оформите заявку на вывод")
             appendLine("Регистрация будет доступна в ближайшее время.")
             appendLine("Для восстановления пароля обратитесь в поддержку.")
             appendLine("Казино-провайдеры появятся после подключения")

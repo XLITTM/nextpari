@@ -224,7 +224,12 @@ private fun AuthenticatedShell(
                     onInbox = { navController.navigateTo("inbox-placeholder") },
                 )
             }
-            composable(Destinations.WALLET) { WalletScreen() }
+            composable(Destinations.WALLET) {
+                WalletScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
             composable(Destinations.SETTINGS) {
                 SettingsScreen(
                     onBack = { navController.popBackStack() },
