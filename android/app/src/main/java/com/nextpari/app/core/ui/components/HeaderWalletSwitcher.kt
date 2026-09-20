@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsUiState
@@ -191,7 +193,7 @@ fun HeaderWalletSwitcher(
             Icon(
                 NextpariIcons.ChevronDown,
                 contentDescription = WalletsCatalog.SWITCHER_LABEL,
-                tint = Color(0xFF6B7280),
+                tint = if (isPremiumIcons()) NextpariIconPalette.Header.WalletChevron else Color(0xFF6B7280),
                 modifier = Modifier
                     .padding(start = 4.dp)
                     .size(16.dp)

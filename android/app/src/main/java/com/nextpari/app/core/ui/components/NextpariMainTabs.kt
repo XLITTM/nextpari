@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.MainTabSpec
 import com.nextpari.app.core.navigation.MainTabsSpec
 import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.NextpariPremiumIcon
+import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
 
@@ -34,6 +37,12 @@ fun NextpariMainTabs(
             val active = tab.id == activeId
             val icon = NextpariIcons.mainTab(tab.id)
             val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
+            val semantic = NextpariIconPalette.MainTab.of(tab.id)
+            val iconTint = if (isPremiumIcons()) {
+                if (active) semantic else semantic.copy(alpha = NextpariIconPalette.MainTab.InactiveAlpha)
+            } else {
+                if (active) TabActiveGold else if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF)
+            }
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -48,12 +57,25 @@ fun NextpariMainTabs(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = tab.label,
-                    tint = if (active) TabActiveGold else if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF),
-                    modifier = Modifier.size(20.dp),
-                )
+                if (isPremiumIcons()) {
+                    NextpariPremiumIcon(
+                        imageVector = icon,
+                        semantic = semantic,
+                        contentDescription = tab.label,
+                        containerSize = 32.dp,
+                        iconSize = 20.dp,
+                        active = active,
+                        showContainer = true,
+                        inactiveAlpha = NextpariIconPalette.MainTab.InactiveAlpha,
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = tab.label,
+                        tint = iconTint,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
                 Text(
                     text = tab.label,
                     fontSize = 11.sp,

@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -117,7 +118,7 @@ fun WalletScreen(
                 Icon(
                     NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
-                    tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
+                    tint = NextpariIconPalette.Action.Chevron,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -318,7 +319,7 @@ private fun WithdrawFormCard(state: WalletUiState, dark: Boolean, viewModel: Wal
                                 .padding(vertical = 12.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Icon(methodIcon(method), contentDescription = null, tint = if (active) Brand600 else Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+                            Icon(methodIcon(method), contentDescription = null, tint = methodTint(method, active), modifier = Modifier.size(20.dp))
                             Text(method.label, color = if (active) Brand600 else colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
                         }
                     }
@@ -652,7 +653,7 @@ private fun SearchableSelect(
     val filtered = options.filter { query.isBlank() || it.second.contains(query, ignoreCase = true) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
-            Icon(NextpariIcons.Place, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
+            Icon(NextpariIcons.Place, contentDescription = null, tint = NextpariIconPalette.Action.Place, modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(4.dp))
             FieldLabel(label, dark)
         }
@@ -675,7 +676,7 @@ private fun SearchableSelect(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+            Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = NextpariIconPalette.Action.Chevron, modifier = Modifier.size(16.dp))
         }
         if (open && enabled) {
             Column(
@@ -688,7 +689,7 @@ private fun SearchableSelect(
                     .background(if (dark) Color(0xFF0F172A) else Color.White),
             ) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(NextpariIcons.Search, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+                    Icon(NextpariIcons.Search, contentDescription = null, tint = NextpariIconPalette.Action.Search, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     BasicTextField(
                         value = query,
@@ -770,6 +771,15 @@ private fun methodIcon(method: WalletWithdrawMethod): ImageVector = when (method
     WalletWithdrawMethod.CRYPTO -> NextpariIcons.Bitcoin
     WalletWithdrawMethod.EWALLET -> NextpariIcons.Wallet
     WalletWithdrawMethod.CASH -> NextpariIcons.Payments
+}
+
+private fun methodTint(method: WalletWithdrawMethod, active: Boolean): Color {
+    val semantic = when (method) {
+        WalletWithdrawMethod.CRYPTO -> NextpariIconPalette.Action.Bitcoin
+        WalletWithdrawMethod.EWALLET -> NextpariIconPalette.Action.Wallet
+        WalletWithdrawMethod.CASH -> NextpariIconPalette.Action.Payments
+    }
+    return if (active) semantic else semantic.copy(alpha = 0.5f)
 }
 
 private fun statusIcon(status: WithdrawalStatus): ImageVector = when (status) {

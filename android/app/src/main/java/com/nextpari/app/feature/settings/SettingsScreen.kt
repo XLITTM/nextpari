@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -126,8 +127,8 @@ fun SettingsScreen(
             SettingsGroup(title = "Управление счётом", dark = dark) {
                 SettingsRow(
                     icon = NextpariIcons.Download,
-                    iconBg = if (dark) BrandIconDarkBg else BrandIconLightBg,
-                    iconTint = if (dark) BrandIconDarkFg else BrandGreen,
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Deposit, dark),
+                    iconTint = NextpariIconPalette.Action.Deposit,
                     label = "Пополнить",
                     dark = dark,
                     onClick = { onNavigate(Destinations.WALLET) },
@@ -135,8 +136,8 @@ fun SettingsScreen(
                 SettingsDivider(dark)
                 SettingsRow(
                     icon = NextpariIcons.Upload,
-                    iconBg = if (dark) BrandIconDarkBg else BrandIconLightBg,
-                    iconTint = if (dark) BrandIconDarkFg else BrandGreen,
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Withdraw, dark),
+                    iconTint = NextpariIconPalette.Action.Withdraw,
                     label = "Вывести",
                     dark = dark,
                     onClick = { onNavigate(Destinations.WALLET) },
@@ -148,8 +149,8 @@ fun SettingsScreen(
                 SettingsDivider(dark)
                 SettingsRow(
                     icon = NextpariIcons.Mail,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Email, dark),
+                    iconTint = NextpariIconPalette.Action.Email,
                     label = SettingsCatalog.emailActionLabel(verifiedEmail),
                     dark = dark,
                     onClick = { emailOpen = true },
@@ -157,8 +158,8 @@ fun SettingsScreen(
                 SettingsDivider(dark)
                 SettingsRow(
                     icon = NextpariIcons.Key,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Password, dark),
+                    iconTint = NextpariIconPalette.Action.Password,
                     label = "Сменить пароль",
                     dark = dark,
                     onClick = { passwordOpen = true },
@@ -168,8 +169,8 @@ fun SettingsScreen(
             SettingsGroup(title = "Настройки ставок", dark = dark) {
                 SettingsRow(
                     icon = NextpariIcons.FactCheck,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.BetSettings, dark),
+                    iconTint = NextpariIconPalette.Action.BetSettings,
                     label = "Провод ставки",
                     dark = dark,
                     onClick = { view = "bet-slip" },
@@ -177,8 +178,8 @@ fun SettingsScreen(
                 SettingsDivider(dark)
                 SoonRow(
                     icon = NextpariIcons.Ads,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.BetSettings, dark),
+                    iconTint = NextpariIconPalette.Action.BetSettings,
                     label = "Ставка в 1 клик",
                     dark = dark,
                 )
@@ -187,8 +188,8 @@ fun SettingsScreen(
             SettingsGroup(title = "Настройки приложения", dark = dark) {
                 InfoRow(
                     icon = NextpariIcons.Percent,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Odds, dark),
+                    iconTint = NextpariIconPalette.Action.Odds,
                     label = "Тип коэффициентов",
                     value = SettingsCatalog.ODDS_FORMAT_VALUE,
                     dark = dark,
@@ -196,16 +197,16 @@ fun SettingsScreen(
                 SettingsDivider(dark)
                 SoonRow(
                     icon = NextpariIcons.Notifications,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Notifications, dark),
+                    iconTint = NextpariIconPalette.Action.Notifications,
                     label = "Push",
                     dark = dark,
                 )
                 SettingsDivider(dark)
                 SoonRow(
                     icon = NextpariIcons.Language,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Language, dark),
+                    iconTint = NextpariIconPalette.Action.Language,
                     label = "Выбор языка",
                     dark = dark,
                 )
@@ -214,8 +215,8 @@ fun SettingsScreen(
             SettingsGroup(title = "О приложении", dark = dark) {
                 SettingsRow(
                     icon = NextpariIcons.Share,
-                    iconBg = grayIconBg(dark),
-                    iconTint = grayIconFg(dark),
+                    iconBg = NextpariIconPalette.container(NextpariIconPalette.Action.Share, dark),
+                    iconTint = NextpariIconPalette.Action.Share,
                     label = "Поделиться",
                     dark = dark,
                     onClick = {
@@ -282,7 +283,7 @@ private fun SettingsPage(
                 Icon(
                     NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
-                    tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
+                    tint = NextpariIconPalette.Action.Chevron,
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -439,7 +440,11 @@ private fun EmailStatusRow(verifiedEmail: String, dark: Boolean) {
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SettingsIconBox(NextpariIcons.Mail, grayIconBg(dark), grayIconFg(dark))
+        SettingsIconBox(
+            NextpariIcons.Mail,
+            NextpariIconPalette.container(NextpariIconPalette.Action.Email, dark),
+            NextpariIconPalette.Action.Email,
+        )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("Электронная почта", color = colors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -529,6 +534,7 @@ private fun ChangePasswordModal(dark: Boolean, onClose: () -> Unit) {
             title = "Сменить пароль",
             subtitle = "Безопасность",
             dark = dark,
+            iconTint = NextpariIconPalette.Action.Password,
         )
         PasswordField("Текущий пароль", current, showCurrent, dark, ImeAction.Next, {
             current = it
@@ -593,6 +599,7 @@ private fun EmailBindModal(dark: Boolean, verifiedEmail: String, onClose: () -> 
             title = if (verifiedEmail.isNotBlank()) SettingsCatalog.CHANGE_EMAIL else SettingsCatalog.BIND_EMAIL,
             subtitle = "Электронная почта",
             dark = dark,
+            iconTint = NextpariIconPalette.Action.Email,
         )
         if (step == "email") {
             SheetFieldLabel("Введите электронную почту", dark)
@@ -687,14 +694,14 @@ private fun SettingsSheet(dark: Boolean, onClose: () -> Unit, content: @Composab
 }
 
 @Composable
-private fun SheetHeader(icon: ImageVector, title: String, subtitle: String, dark: Boolean) {
+private fun SheetHeader(icon: ImageVector, title: String, subtitle: String, dark: Boolean, iconTint: Color) {
     val colors = NextpariTheme.colors
     Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(if (dark) Color(0xFF1E293B) else Color(0xFFF3F4F6)),
+            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(NextpariIconPalette.container(iconTint, dark)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF374151), modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
         }
         Column(Modifier.padding(start = 12.dp)) {
             Text(title, color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)

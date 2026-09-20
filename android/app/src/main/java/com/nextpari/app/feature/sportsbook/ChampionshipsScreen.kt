@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -20,13 +19,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,15 +32,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariSportIcon
+import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
@@ -93,7 +85,7 @@ fun ChampionshipsScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NextpariSportIcon(sport, modifier = Modifier.size(24.dp))
+            NextpariSportIconBadge(sport, containerSize = 36.dp, iconSize = 24.dp)
             Spacer(Modifier.width(8.dp))
             Text(sportName.uppercase(), color = if (dark) Color(0xFFD1D5DB) else Color(0xFF4B5563), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
@@ -147,7 +139,7 @@ private fun CountryAccordion(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(NextpariIcons.Language, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            Icon(NextpariIcons.Language, contentDescription = null, tint = NextpariIconPalette.Action.Globe, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             Text(
                 group.country,
@@ -164,7 +156,7 @@ private fun CountryAccordion(
                 Modifier.size(24.dp).clip(CircleShape).background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp).rotate(rotation))
+                Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = NextpariIconPalette.Action.Chevron, modifier = Modifier.size(16.dp).rotate(rotation))
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6)))
@@ -195,7 +187,7 @@ private fun CountryAccordion(
                             Icon(
                                 if (league.name in favorites) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
                                 contentDescription = "Добавить чемпионат в избранное",
-                                tint = if (league.name in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
+                                tint = if (league.name in favorites) NextpariIconPalette.Action.Star else NextpariIconPalette.Action.Star.copy(alpha = 0.5f),
                                 modifier = Modifier.size(20.dp),
                             )
                         }

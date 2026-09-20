@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -143,15 +144,15 @@ private fun InfoRoot(onBack: () -> Unit, onOpen: (String) -> Unit) {
                     .clip(RoundedCornerShape(16.dp))
                     .background(articleBg()),
             ) {
-                InfoRow(NextpariIcons.AccountBalance, Color(0xFFDCFCE7), Color(0xFF16A34A), Color(0x6614532D), Color(0xFF4ADE80), InfoCatalog.ABOUT) { onOpen("about") }
+                InfoRow(NextpariIcons.AccountBalance, NextpariIconPalette.Action.Info, InfoCatalog.ABOUT) { onOpen("about") }
                 InfoDivider()
-                InfoRow(NextpariIcons.Headset, Color(0xFFE0F2FE), Color(0xFF0284C7), Color(0x660C4A6E), Color(0xFF38BDF8), InfoCatalog.CONTACTS) { onOpen("contacts") }
+                InfoRow(NextpariIcons.Headset, NextpariIconPalette.Action.Support, InfoCatalog.CONTACTS) { onOpen("contacts") }
                 InfoDivider()
-                InfoRow(NextpariIcons.LegalBalance, Color(0xFFEDE9FE), Color(0xFF7C3AED), Color(0x664C1D95), Color(0xFFA78BFA), InfoCatalog.RULES) { onOpen("rules") }
+                InfoRow(NextpariIcons.LegalBalance, NextpariIconPalette.Action.Book, InfoCatalog.RULES) { onOpen("rules") }
                 InfoDivider()
-                InfoRow(NextpariIcons.CreditCard, Color(0xFFFEF3C7), Color(0xFFD97706), Color(0x66783150), Color(0xFFFBBF24), InfoCatalog.PAYMENTS) { onOpen("payments") }
+                InfoRow(NextpariIcons.CreditCard, NextpariIconPalette.Action.Payments, InfoCatalog.PAYMENTS) { onOpen("payments") }
                 InfoDivider()
-                InfoRow(NextpariIcons.Book, Color(0xFFD1FAE5), Color(0xFF059669), Color(0x66064E3B), Color(0xFF34D399), InfoCatalog.HOWTO) { onOpen("howto") }
+                InfoRow(NextpariIcons.Book, NextpariIconPalette.Action.Book, InfoCatalog.HOWTO) { onOpen("howto") }
             }
         }
     }
@@ -183,7 +184,7 @@ private fun PageHeader(title: String, onBack: () -> Unit) {
                 Icon(
                     NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
-                    tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
+                    tint = NextpariIconPalette.Action.Chevron,
                     modifier = Modifier.size(24.dp),
                 )
             }
@@ -203,10 +204,7 @@ private fun PageHeader(title: String, onBack: () -> Unit) {
 @Composable
 private fun InfoRow(
     icon: ImageVector,
-    lightBg: Color,
-    lightFg: Color,
-    darkBg: Color,
-    darkFg: Color,
+    semantic: Color,
     label: String,
     onClick: () -> Unit,
 ) {
@@ -216,10 +214,10 @@ private fun InfoRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(16.dp)).background(if (dark) darkBg else lightBg),
+            Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(NextpariIconPalette.container(semantic, dark)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = if (dark) darkFg else lightFg, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = semantic, modifier = Modifier.size(20.dp))
         }
         Text(
             label,

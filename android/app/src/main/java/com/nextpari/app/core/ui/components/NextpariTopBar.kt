@@ -8,6 +8,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -23,7 +24,7 @@ fun NextpariTopBar(
         navigationIcon = {
             if (navigationIcon != null && onNavigationClick != null) {
                 IconButton(onClick = onNavigationClick) {
-                    Icon(imageVector = navigationIcon, contentDescription = "Назад")
+                    Icon(imageVector = navigationIcon, contentDescription = "Назад", tint = NextpariIconPalette.Action.Chevron)
                 }
             }
         },

@@ -40,7 +40,7 @@ object NextpariSportIcons {
         "polo" -> ProfessionalPremiumIcons.SportPolo
         "snooker" -> ProfessionalPremiumIcons.SportSnooker
         "pickleball" -> ProfessionalPremiumIcons.SportPickleball
-        "ufc" -> ProfessionalPremiumIcons.SportUfc
+        "ufc", "mma" -> ProfessionalPremiumIcons.SportUfc
         "fifa" -> ProfessionalPremiumIcons.SportFifa
         "mk" -> ProfessionalPremiumIcons.SportMk
         "polybet" -> ProfessionalPremiumIcons.SportPolybet
@@ -49,15 +49,9 @@ object NextpariSportIcons {
         else -> ProfessionalPremiumIcons.SportDefault
     }
 
-    fun premiumTint(sportId: String, isDark: Boolean): Color = when (sportId) {
-        "all" -> Color(0xFF16D982)
-        "football" -> if (isDark) Color.White else Color(0xFF0F172A)
-        "tennis" -> Color(0xFFC7F000)
-        "basketball" -> Color(0xFFFF7A1A)
-        "hockey", "volleyball" -> if (isDark) Color.White else Color(0xFF0F172A)
-        "esports" -> Color(0xFF22F39A)
-        else -> NextpariSportIconTint
-    }
+    fun premiumTint(sportId: String, isDark: Boolean = true): Color = NextpariIconPalette.Sport.of(sportId)
+
+    fun professionalName(sportId: String): String = vector(sportId).name
 
     fun resolves(sportId: String, variant: NextpariIconVariant): Boolean = when (variant) {
         NextpariIconVariant.Legacy -> legacyDrawable(sportId) != 0

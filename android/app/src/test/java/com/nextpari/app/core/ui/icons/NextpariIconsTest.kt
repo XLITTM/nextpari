@@ -87,17 +87,96 @@ class NextpariIconsTest {
 
     @Test
     fun premiumSportTintPaletteMatchesApprovedColors() {
-        assertThat(NextpariSportIcons.premiumTint("all", true)).isEqualTo(Color(0xFF16D982))
-        assertThat(NextpariSportIcons.premiumTint("football", true)).isEqualTo(Color.White)
-        assertThat(NextpariSportIcons.premiumTint("football", false)).isEqualTo(Color(0xFF0F172A))
-        assertThat(NextpariSportIcons.premiumTint("tennis", true)).isEqualTo(Color(0xFFC7F000))
-        assertThat(NextpariSportIcons.premiumTint("basketball", false)).isEqualTo(Color(0xFFFF7A1A))
-        assertThat(NextpariSportIcons.premiumTint("hockey", true)).isEqualTo(Color.White)
-        assertThat(NextpariSportIcons.premiumTint("hockey", false)).isEqualTo(Color(0xFF0F172A))
-        assertThat(NextpariSportIcons.premiumTint("volleyball", true)).isEqualTo(Color.White)
-        assertThat(NextpariSportIcons.premiumTint("volleyball", false)).isEqualTo(Color(0xFF0F172A))
-        assertThat(NextpariSportIcons.premiumTint("esports", true)).isEqualTo(Color(0xFF22F39A))
-        assertThat(NextpariSportIcons.premiumTint("cricket", true)).isEqualTo(NextpariSportIconTint)
+        assertThat(NextpariSportIcons.premiumTint("all")).isEqualTo(Color(0xFF16D982))
+        assertThat(NextpariSportIcons.premiumTint("football")).isEqualTo(Color(0xFF20B86A))
+        assertThat(NextpariSportIcons.premiumTint("futsal")).isEqualTo(Color(0xFF00BFA6))
+        assertThat(NextpariSportIcons.premiumTint("tennis")).isEqualTo(Color(0xFFB7D900))
+        assertThat(NextpariSportIcons.premiumTint("basketball")).isEqualTo(Color(0xFFFF7A1A))
+        assertThat(NextpariSportIcons.premiumTint("hockey")).isEqualTo(Color(0xFF2F9BFF))
+        assertThat(NextpariSportIcons.premiumTint("volleyball")).isEqualTo(Color(0xFF8B5CF6))
+        assertThat(NextpariSportIcons.premiumTint("beach-volleyball")).isEqualTo(Color(0xFF06B6D4))
+        assertThat(NextpariSportIcons.premiumTint("esports")).isEqualTo(Color(0xFF00CFA5))
+        assertThat(NextpariSportIcons.premiumTint("table-tennis")).isEqualTo(Color(0xFF14B8A6))
+        assertThat(NextpariSportIcons.premiumTint("badminton")).isEqualTo(Color(0xFFF59E0B))
+        assertThat(NextpariSportIcons.premiumTint("baseball")).isEqualTo(Color(0xFFF43F5E))
+        assertThat(NextpariSportIcons.premiumTint("polo")).isEqualTo(Color(0xFFA855F7))
+        assertThat(NextpariSportIcons.premiumTint("cricket")).isEqualTo(Color(0xFF65A30D))
+        assertThat(NextpariSportIcons.premiumTint("snooker")).isEqualTo(Color(0xFF7C3AED))
+        assertThat(NextpariSportIcons.premiumTint("pickleball")).isEqualTo(Color(0xFFEAB308))
+        assertThat(NextpariSportIcons.premiumTint("ufc")).isEqualTo(Color(0xFFEF4444))
+        assertThat(NextpariSportIcons.premiumTint("mma")).isEqualTo(Color(0xFFEF4444))
+        assertThat(NextpariSportIcons.premiumTint("fifa")).isEqualTo(Color(0xFF22C55E))
+        assertThat(NextpariSportIcons.premiumTint("mk")).isEqualTo(Color(0xFFE11D48))
+        assertThat(NextpariSportIcons.premiumTint("polybet")).isEqualTo(Color(0xFF6366F1))
+        assertThat(NextpariSportIcons.premiumTint("elections")).isEqualTo(Color(0xFF3B82F6))
+        assertThat(NextpariSportIcons.premiumTint("filter")).isEqualTo(Color(0xFF64748B))
+        listOf("football", "hockey", "volleyball").forEach { id ->
+            assertThat(NextpariIconPalette.isRawBlack(NextpariSportIcons.premiumTint(id))).isFalse()
+        }
+    }
+
+    @Test
+    fun everyProductionSportHasDedicatedProfessionalVectorAndColor() {
+        NextpariIconPalette.Sport.productionIds.forEach { id ->
+            assertThat(NextpariSportIcons.vector(id).name).isNotEqualTo("professional.SportDefault")
+            assertThat(NextpariSportIcons.vector(id).name).startsWith("professional.Sport")
+            assertThat(NextpariIconPalette.isRawBlack(NextpariIconPalette.Sport.of(id))).isFalse()
+        }
+        assertThat(NextpariSportIcons.vector("mma").name).isEqualTo("professional.SportUfc")
+        assertThat(NextpariSportIcons.vector("mma").name).isEqualTo(NextpariSportIcons.vector("ufc").name)
+        assertThat(NextpariSportIcons.vector("snooker").name).isEqualTo("professional.SportSnooker")
+        assertThat(NextpariSportIcons.vector("polo").name).isEqualTo("professional.SportPolo")
+        assertThat(NextpariSportIcons.vector("cricket").name).isEqualTo("professional.SportCricket")
+        assertThat(SportIconRes.knownIds).doesNotContain("poker")
+        assertThat(NextpariIconPalette.Sport.productionIds).doesNotContain("poker")
+        assertThat(NextpariIconPalette.Sport.productionIds.toSet()).containsExactlyElementsIn(SportIconRes.knownIds)
+        assertThat(NextpariIconPalette.MainTab.of("top")).isEqualTo(Color(0xFFD59A36))
+        assertThat(NextpariIconPalette.MainTab.of("sport")).isEqualTo(Color(0xFF22B86A))
+        assertThat(NextpariIconPalette.MainTab.of("esports")).isEqualTo(Color(0xFF7C5CFC))
+        assertThat(NextpariIconPalette.MainTab.of("casino")).isEqualTo(Color(0xFFEC4899))
+        assertThat(NextpariIconPalette.MainTab.of("games")).isEqualTo(Color(0xFF06A9D8))
+        assertThat(NextpariIconPalette.BottomNav.of(Destinations.HOME)).isEqualTo(Color(0xFFF59E0B))
+        assertThat(NextpariIconPalette.BottomNav.of(Destinations.FAVORITES)).isEqualTo(Color(0xFFEC4899))
+        assertThat(NextpariIconPalette.BottomNav.of(Destinations.HISTORY)).isEqualTo(Color(0xFF3B82F6))
+        assertThat(NextpariIconPalette.BottomNav.of(Destinations.MENU)).isEqualTo(Color(0xFF8B5CF6))
+        val badge = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariPremiumIcon.kt").readText()
+        assertThat(badge).contains("fun NextpariPremiumIconBadge")
+        assertThat(badge).contains("fun NextpariSportIconBadge")
+        assertThat(moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariIconPalette.kt").exists()).isTrue()
+    }
+
+    @Test
+    fun chromeAndMenuHaveDistinctSemanticColors() {
+        val tabs = listOf("top", "sport", "esports", "casino", "games").map { NextpariIconPalette.MainTab.of(it) }
+        assertThat(tabs.toSet()).hasSize(5)
+        val nav = listOf(Destinations.HOME, Destinations.FAVORITES, Destinations.HISTORY, Destinations.MENU)
+            .map { NextpariIconPalette.BottomNav.of(it) }
+        assertThat(nav.toSet()).hasSize(4)
+        val menu = listOf(
+            "LIVE", "Линия", "Киберспорт", "Слоты", "Лайв казино", "Games", "Промокоды",
+            "Непобедимый", "Поддержка", "Аутентификатор", "ТОТО", "Финставки",
+            "Бетконструктор", "Сканер купонов", "Уведомления", "Инфо", "Управление счетом",
+        ).map { NextpariIconPalette.Menu.of(it) }
+        assertThat(menu.toSet().size).isAtLeast(10)
+        assertThat(NextpariIcons.pack(NextpariIconVariant.Premium)).isSameInstanceAs(NextpariProfessionalIcons)
+        assertThat(NextpariIconConfig.defaultVariant).isEqualTo(NextpariIconVariant.Premium)
+        assertThat(NextpariIcons.pack(NextpariIconVariant.Legacy)).isSameInstanceAs(NextpariLegacyIcons)
+    }
+
+    @Test
+    fun playerScreensDoNotImportMaterialIconsDirectly() {
+        val roots = listOf(
+            moduleFile("src/main/java/com/nextpari/app/feature"),
+            moduleFile("src/main/java/com/nextpari/app/core/ui/components"),
+        )
+        roots.filter { it.exists() }.forEach { root ->
+            root.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
+                val text = file.readText()
+                assertThat(text).doesNotContain("import androidx.compose.material.icons")
+            }
+        }
+        val legacy = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariLegacyIcons.kt").readText()
+        assertThat(legacy).contains("import androidx.compose.material.icons")
     }
 
     @Test

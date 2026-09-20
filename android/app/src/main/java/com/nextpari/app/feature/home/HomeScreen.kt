@@ -24,10 +24,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.SportsEsports
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -44,10 +42,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariSportIcon
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
+import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -231,10 +233,12 @@ private fun SportsSelector(
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                NextpariSportIcon(
+                NextpariSportIconBadge(
                     sportId = sport.id,
                     contentDescription = sport.name,
-                    modifier = Modifier.size(24.dp),
+                    active = active,
+                    containerSize = 36.dp,
+                    iconSize = 24.dp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -362,7 +366,7 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
                     Icon(
                         NextpariIcons.Esports,
                         contentDescription = null,
-                        tint = Color(0xFF4ADE80).copy(alpha = 0.5f),
+                        tint = if (isPremiumIcons()) NextpariIconPalette.Sport.Esports.copy(alpha = 0.85f) else Color(0xFF4ADE80).copy(alpha = 0.5f),
                         modifier = Modifier.align(Alignment.Center).size(48.dp),
                     )
                     Box(

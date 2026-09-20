@@ -28,6 +28,8 @@ import com.nextpari.app.core.navigation.BottomNavItem
 import com.nextpari.app.core.navigation.BottomNavSpec
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -57,7 +59,14 @@ fun NextpariBottomNav(
                     } else {
                         val selected = activeRoute == item.route ||
                             (item.route == Destinations.HOME && activeRoute == Destinations.HOME)
-                        NavItem(item.label, navIcon(item.route), selected, colors.accent, colors.textMuted) {
+                        val semantic = NextpariIconPalette.BottomNav.of(item.route)
+                        NavItem(
+                            item.label,
+                            navIcon(item.route),
+                            selected,
+                            if (isPremiumIcons()) semantic else colors.accent,
+                            if (isPremiumIcons()) semantic.copy(alpha = NextpariIconPalette.BottomNav.InactiveAlpha) else colors.textMuted,
+                        ) {
                             onSelect(item)
                         }
                     }

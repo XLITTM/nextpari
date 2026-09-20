@@ -1,6 +1,5 @@
 package com.nextpari.app.feature.sportsbook
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -15,10 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,14 +24,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariSportIcon
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -78,7 +73,7 @@ fun SportsListScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    NextpariSportIcon(row.id, modifier = Modifier.size(24.dp))
+                    NextpariSportIconBadge(row.id, containerSize = 36.dp, iconSize = 24.dp)
                     Spacer(Modifier.width(12.dp))
                     Text(row.name, color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                     Box(
@@ -88,7 +83,7 @@ fun SportsListScreen(
                         Icon(
                             if (row.id in favorites) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
                             contentDescription = "Добавить вид спорта в избранное",
-                            tint = if (row.id in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
+                            tint = if (row.id in favorites) NextpariIconPalette.Action.Star else NextpariIconPalette.Action.Lock,
                             modifier = Modifier.size(16.dp),
                         )
                     }

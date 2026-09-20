@@ -20,13 +20,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Bolt
-import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.WifiTethering
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -46,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.feature.home.MatchCardModel
 
@@ -90,7 +84,7 @@ fun MatchTracker(
                 Icon(
                     NextpariIcons.Bolt,
                     contentDescription = "Live",
-                    tint = Color(0xFF4ADE80),
+                    tint = NextpariIconPalette.Action.Live,
                     modifier = Modifier.size(20.dp).clickable(onClick = onLiveClick),
                 )
                 Spacer(Modifier.width(12.dp))
@@ -186,7 +180,7 @@ private fun ScoreSlide(match: MatchCardModel, favorite: Boolean, onToggleFavorit
         Icon(
             if (favorite) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
             contentDescription = null,
-            tint = if (favorite) Color(0xFF4ADE80) else Color.White,
+            tint = if (favorite) NextpariIconPalette.Action.Star else NextpariIconPalette.Action.Star.copy(alpha = 0.55f),
             modifier = Modifier.padding(top = 8.dp).size(18.dp).clickable(onClick = onToggleFavorite),
         )
     }
@@ -223,7 +217,7 @@ fun StreamPanel() {
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(NextpariIcons.Wifi, contentDescription = null, tint = Color(0xFF22C55E), modifier = Modifier.size(40.dp))
+        Icon(NextpariIcons.Wifi, contentDescription = null, tint = NextpariIconPalette.Action.Stream, modifier = Modifier.size(40.dp))
         Text("Трансляция недоступна", color = Color(0xFF1A1A1A), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
         Text("Стрим появится после подключения провайдера", color = Color(0xFF666666), fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp, bottom = 80.dp))
     }

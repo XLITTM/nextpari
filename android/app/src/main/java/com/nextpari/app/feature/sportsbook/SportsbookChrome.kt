@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +23,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -48,7 +48,12 @@ fun SportsbookScreenHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-            Icon(NextpariIcons.Back, contentDescription = "Назад", tint = Color(0xFF6B7280), modifier = Modifier.size(24.dp))
+            Icon(
+                NextpariIcons.Back,
+                contentDescription = "Назад",
+                tint = if (isPremiumIcons()) NextpariIconPalette.Action.Chevron else Color(0xFF6B7280),
+                modifier = Modifier.size(24.dp),
+            )
         }
         Text(
             title,
@@ -66,7 +71,12 @@ fun SportsbookScreenHeader(
             } else {
                 actions.forEach { (icon, desc) ->
                     Box(Modifier.size(36.dp).clickable { onAction(desc) }, contentAlignment = Alignment.Center) {
-                        Icon(icon, contentDescription = desc, tint = Color(0xFF6B7280), modifier = Modifier.size(20.dp))
+                        Icon(
+                            icon,
+                            contentDescription = desc,
+                            tint = if (isPremiumIcons()) NextpariIconPalette.Action.forChrome(desc) else Color(0xFF6B7280),
+                            modifier = Modifier.size(20.dp),
+                        )
                     }
                 }
             }

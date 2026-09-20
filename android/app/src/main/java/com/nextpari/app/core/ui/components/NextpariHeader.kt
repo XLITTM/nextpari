@@ -27,6 +27,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.nextpari.app.R
 import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.NextpariPremiumIcon
+import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.feature.wallets.WalletsUiState
 
 @Composable
@@ -95,9 +98,9 @@ fun NextpariHeader(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                HeaderIcon(if (darkTheme) NextpariIcons.ThemeLight else NextpariIcons.ThemeDark, "Переключить тему", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onToggleTheme)
-                HeaderIcon(NextpariIcons.Settings, "Настройки", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onSettings)
-                HeaderIcon(NextpariIcons.Search, "Поиск", if (darkTheme) Color(0xFFE5E7EB) else Color(0xFF1F2937), onSearch)
+                HeaderIcon(if (darkTheme) NextpariIcons.ThemeLight else NextpariIcons.ThemeDark, "Переключить тему", NextpariIconPalette.Header.Theme, onToggleTheme)
+                HeaderIcon(NextpariIcons.Settings, "Настройки", NextpariIconPalette.Header.Settings, onSettings)
+                HeaderIcon(NextpariIcons.Search, "Поиск", NextpariIconPalette.Header.Search, onSearch)
             }
         }
     }
@@ -116,6 +119,17 @@ private fun HeaderIcon(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
+        if (isPremiumIcons()) {
+            NextpariPremiumIcon(
+                imageVector = icon,
+                semantic = tint,
+                contentDescription = description,
+                containerSize = 32.dp,
+                iconSize = 18.dp,
+                showContainer = true,
+            )
+        } else {
+            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
+        }
     }
 }

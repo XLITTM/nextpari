@@ -23,9 +23,6 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -53,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.R
 import com.nextpari.app.core.ui.components.NextpariButton
+import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -92,6 +90,7 @@ fun LoginScreen(
                     Icon(
                         imageVector = if (state.passwordVisible) NextpariIcons.EyeOff else NextpariIcons.Eye,
                         contentDescription = if (state.passwordVisible) "Скрыть пароль" else "Показать пароль",
+                        tint = NextpariIconPalette.Action.Eye,
                     )
                 }
             },
