@@ -16,7 +16,7 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 fun PlaceholderScreen(
     title: String,
     onBack: (() -> Unit)? = null,
-    message: String = "Этот раздел будет подключён позже. Данные и провайдеры не вызываются.",
+    message: String = "Этот раздел скоро откроется.",
 ) {
     val colors = NextpariTheme.colors
     Column(Modifier.fillMaxSize().background(colors.bg)) {

@@ -10,8 +10,5 @@ interface HistoryRepository {
 
 class FakeHistoryRepository : HistoryRepository {
     override fun bets(): List<HistoryBetRow> = emptyList()
-    override fun transactions(): List<HistoryTxRow> = listOf(
-        HistoryTxRow("t1", "Пополнение (mock)", "+100.00 TMTM"),
-        HistoryTxRow("t2", "Вывод (mock)", "−40.00 TMTM"),
-    )
+    override fun transactions(): List<HistoryTxRow> = emptyList()
 }

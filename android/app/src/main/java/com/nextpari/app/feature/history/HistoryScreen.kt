@@ -67,7 +67,7 @@ fun HistoryScreen(
                     }
                     androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 8.dp))
                 }
-                Text("Строки mock. Авторитетная история — на сервере.", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
+                Text("Операций пока нет", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }

@@ -45,12 +45,12 @@ fun WalletScreen(
         Spacer(Modifier.height(12.dp))
         NextpariCard {
             Text("Пополнение", color = colors.text)
-            Text("Методы депозита будут подключены к существующему Nextpari wallet. Операции сейчас недоступны.", color = colors.textMuted)
+            Text("Выберите способ пополнения", color = colors.textMuted)
         }
         Spacer(Modifier.height(12.dp))
         NextpariCard {
             Text("Вывод", color = colors.text)
-            Text("Вывод наличных и crypto пойдёт через сервер. Android не дублирует Wallet Ledger.", color = colors.textMuted)
+            Text("Оформите заявку на вывод", color = colors.textMuted)
         }
         Spacer(Modifier.height(12.dp))
         Text("История операций", color = colors.text, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)

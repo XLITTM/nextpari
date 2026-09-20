@@ -17,7 +17,6 @@ data class HomeUiState(
     val lineTitles: List<String> = emptyList(),
     val championships: List<String> = emptyList(),
     val esports: List<EsportsDiscipline> = emptyList(),
-    val hubGames: List<HubGame> = emptyList(),
 )
 
 class HomeViewModel(
@@ -31,7 +30,6 @@ class HomeViewModel(
             lineTitles = repository.lineTitles(),
             championships = repository.championships(),
             esports = repository.esportsDisciplines(),
-            hubGames = repository.hubGames(),
         ),
     )
     val uiState: StateFlow<HomeUiState> = ui.asStateFlow()

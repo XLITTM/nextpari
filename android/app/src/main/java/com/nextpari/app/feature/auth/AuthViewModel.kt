@@ -80,13 +80,13 @@ class AuthViewModel(
 
     fun markRegisterPrepared(kind: String) {
         ui.value = ui.value.copy(
-            registerNotice = "Регистрация ($kind) будет подключена к Nextpari API. Пользователь не создан.",
+            registerNotice = "Регистрация будет доступна в ближайшее время.",
         )
     }
 
     fun markRecoveryPlaceholder() {
         ui.value = ui.value.copy(
-            recoveryNotice = "Восстановление пароля будет подключено позже. Production API не вызывается.",
+            recoveryNotice = "Для восстановления пароля обратитесь в поддержку.",
         )
     }
 
