@@ -47,6 +47,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariSectionIcons
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -61,11 +63,11 @@ fun CasinoHomeContent(
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
         ProductSectionHeader(title = "Казино")
-        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", Icons.Outlined.Casino) {
+        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", NextpariWebIcons.Dices, NextpariWebIcons.MenuGreen) {
             onNavigate(Destinations.SLOTS)
         }
         Spacer(Modifier.height(8.dp))
-        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", Icons.Outlined.LiveTv) {
+        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", NextpariSectionIcons.Casino, Color.Unspecified) {
             onNavigate(Destinations.LIVE_CASINO)
         }
         if (features.isNotEmpty()) {
@@ -114,7 +116,13 @@ fun CasinoHomeContent(
 }
 
 @Composable
-private fun CasinoEntry(title: String, desc: String, icon: ImageVector, onClick: () -> Unit) {
+private fun CasinoEntry(
+    title: String,
+    desc: String,
+    icon: ImageVector,
+    iconTint: Color = Color(0xFF4ADE80),
+    onClick: () -> Unit,
+) {
     val colors = NextpariTheme.colors
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -131,12 +139,12 @@ private fun CasinoEntry(title: String, desc: String, icon: ImageVector, onClick:
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, contentDescription = null, tint = Color(0xFF4ADE80), modifier = Modifier.size(24.dp))
+        Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(24.dp))
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(title, fontWeight = FontWeight.ExtraBold, color = colors.text, fontSize = 14.sp)
             Text(desc, color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+        Icon(NextpariWebIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -220,10 +228,10 @@ fun CasinoTournamentCard(model: CasinoTournament, onOpen: () -> Unit) {
 @Composable
 private fun CasinoCategoryTile(card: CasinoCategoryCard, onOpen: () -> Unit) {
     val icon = when (card.id) {
-        "live" -> Icons.Outlined.LiveTv
-        "tv" -> Icons.Outlined.Tv
-        "bingo" -> Icons.Outlined.EmojiEvents
-        else -> Icons.Outlined.Casino
+        "live" -> NextpariSectionIcons.Casino
+        "tv" -> NextpariWebIcons.Tv
+        "bingo" -> NextpariWebIcons.Trophy
+        else -> NextpariWebIcons.Dices
     }
     Box(
         Modifier

@@ -8,12 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Casino
-import androidx.compose.material.icons.outlined.Gamepad
-import androidx.compose.material.icons.outlined.LocalFireDepartment
-import androidx.compose.material.icons.outlined.SportsEsports
-import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,8 +20,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.MainTabSpec
 import com.nextpari.app.core.navigation.MainTabsSpec
+import com.nextpari.app.core.ui.icons.NextpariSectionIcons
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.core.ui.theme.TabActiveGold
 
 @Composable
 fun NextpariMainTabs(
@@ -40,6 +35,7 @@ fun NextpariMainTabs(
             val active = tab.id == activeId
             val icon = tabIcon(tab.id)
             val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
+            val sectionIcon = tab.id == "games"
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -47,7 +43,7 @@ fun NextpariMainTabs(
                     .drawBehind {
                         if (active) {
                             val stroke = 2.dp.toPx()
-                            drawLine(TabActiveGold, Offset(0f, size.height), Offset(size.width, size.height), stroke)
+                            drawLine(NextpariWebIcons.TabActive, Offset(0f, size.height), Offset(size.width, size.height), stroke)
                         }
                     }
                     .padding(vertical = 10.dp),
@@ -57,7 +53,15 @@ fun NextpariMainTabs(
                 Icon(
                     imageVector = icon,
                     contentDescription = tab.label,
-                    tint = if (active) TabActiveGold else if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF),
+                    tint = if (sectionIcon) {
+                        Color.Unspecified
+                    } else if (active) {
+                        NextpariWebIcons.TabActive
+                    } else if (dark) {
+                        NextpariWebIcons.TabInactiveDark
+                    } else {
+                        NextpariWebIcons.TabInactiveLight
+                    },
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
@@ -76,9 +80,9 @@ fun NextpariMainTabs(
 }
 
 private fun tabIcon(id: String): ImageVector = when (id) {
-    "top" -> Icons.Outlined.LocalFireDepartment
-    "sport" -> Icons.Outlined.EmojiEvents
-    "esports" -> Icons.Outlined.SportsEsports
-    "casino" -> Icons.Outlined.Casino
-    else -> Icons.Outlined.Gamepad
+    "top" -> NextpariWebIcons.flame(NextpariWebIcons.MainTabsStroke)
+    "sport" -> NextpariWebIcons.trophy(NextpariWebIcons.MainTabsStroke)
+    "esports" -> NextpariWebIcons.gamepad2(NextpariWebIcons.MainTabsStroke)
+    "casino" -> NextpariWebIcons.dices(NextpariWebIcons.MainTabsStroke)
+    else -> NextpariSectionIcons.Games
 }

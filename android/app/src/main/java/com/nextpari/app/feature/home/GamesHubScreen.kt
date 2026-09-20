@@ -73,6 +73,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.session.AuthSession
 
 private val GamesBody = Color(0xFF0C1018)
@@ -164,7 +165,7 @@ private fun GamesHeaderBar(
                 Modifier.clickable(onClick = onBack).padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = Color(0xFFE2E8F0))
+                Icon(NextpariWebIcons.ChevronLeft, contentDescription = "Назад", tint = Color(0xFFE2E8F0))
                 Text("Назад", color = Color(0xFFCBD5E1), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
             if (state.searchOpen) {
@@ -177,7 +178,7 @@ private fun GamesHeaderBar(
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Outlined.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
+                    Icon(NextpariWebIcons.Search, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     BasicTextField(
                         value = state.query,
@@ -210,7 +211,7 @@ private fun GamesHeaderBar(
             }
             IconButton(onClick = onToggleSearch) {
                 Icon(
-                    if (state.searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
+                    if (state.searchOpen) NextpariWebIcons.X else NextpariWebIcons.Search,
                     contentDescription = "Поиск",
                     tint = Color(0xFFE2E8F0),
                 )
@@ -234,7 +235,7 @@ private fun GamesHeaderBar(
                     Modifier.size(32.dp).clip(CircleShape).background(Color(0x3322C55E)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = Color(0xFF6EE7B7), modifier = Modifier.size(16.dp))
+                    Icon(NextpariWebIcons.Wallet, contentDescription = null, tint = Color(0xFF6EE7B7), modifier = Modifier.size(16.dp))
                 }
                 Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
                     Text(balanceLabel, color = Color.White, fontWeight = FontWeight.Black, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -243,7 +244,7 @@ private fun GamesHeaderBar(
                     }
                 }
                 Icon(
-                    Icons.Outlined.KeyboardArrowDown,
+                    NextpariWebIcons.ChevronDown,
                     contentDescription = null,
                     tint = Color(0xFF94A3B8),
                     modifier = Modifier.rotate(if (state.walletMenu) 180f else 0f),
@@ -257,7 +258,7 @@ private fun GamesHeaderBar(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Outlined.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Icon(NextpariWebIcons.Plus, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Пополнить", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
@@ -300,7 +301,7 @@ private fun CategoryRow(
                     .clickable(onClick = onSort),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.Tune, contentDescription = "Фильтр", tint = if (sortAz) Color.White else Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
+                Icon(NextpariWebIcons.SlidersHorizontal, contentDescription = "Фильтр", tint = if (sortAz) Color.White else Color(0xFFCBD5E1), modifier = Modifier.size(16.dp))
             }
         }
         items(GamesCatalog.categories, key = { it.id }) { item ->
@@ -416,7 +417,7 @@ private fun GameCard(
         ) {
             Text(game.name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Icon(
-                if (liked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                if (liked) NextpariWebIcons.Heart else NextpariWebIcons.Heart,
                 contentDescription = "Избранное",
                 tint = if (liked) Color(0xFFF43F5E) else Color(0xFF94A3B8),
                 modifier = Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onFavorite).padding(4.dp),
@@ -436,7 +437,7 @@ private fun LobbyPanel(title: String, text: String, action: String, onAction: ()
                 .padding(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Outlined.CardGiftcard, contentDescription = null, tint = Color(0xFFFBBF24))
+                Icon(NextpariWebIcons.Gift, contentDescription = null, tint = Color(0xFFFBBF24))
                 Spacer(Modifier.width(8.dp))
                 Text(title, color = Color.White, fontWeight = FontWeight.Black, fontSize = 16.sp)
             }
@@ -482,8 +483,8 @@ private fun GamesLobbyBar(active: String, onSelect: (String) -> Unit) {
 }
 
 private fun lobbyIcon(id: String): ImageVector = when (id) {
-    "bonuses" -> Icons.Outlined.Tune
-    "cashback" -> Icons.Outlined.Refresh
-    "favorites" -> Icons.Outlined.Star
-    else -> Icons.Outlined.Casino
+    "bonuses" -> NextpariWebIcons.Gift
+    "cashback" -> NextpariWebIcons.RotateCcw
+    "favorites" -> NextpariWebIcons.Star
+    else -> NextpariWebIcons.Dices
 }

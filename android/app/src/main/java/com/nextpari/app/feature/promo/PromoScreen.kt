@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.theme.NextpariColors
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -67,7 +68,7 @@ fun PromoScreen(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = colors.text, modifier = Modifier.size(20.dp))
+                Icon(NextpariWebIcons.ChevronLeft, contentDescription = "Назад", tint = colors.text, modifier = Modifier.size(20.dp))
             }
             Spacer(Modifier.width(12.dp))
             Text("Promo", color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -86,7 +87,7 @@ fun PromoScreen(
                     Modifier.size(48.dp).clip(CircleShape).background(Color.White),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Outlined.ShoppingCart, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(24.dp))
+                    Icon(NextpariWebIcons.ShoppingCart, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(24.dp))
                 }
                 Column(Modifier.padding(start = 12.dp)) {
                     Text("Промо", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Black)
@@ -130,16 +131,16 @@ private fun PromoMenuRow(item: PromoMenuItem, dark: Boolean, onClick: () -> Unit
         if (item.soon) {
             Text("Скоро", color = colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
         } else {
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+            Icon(NextpariWebIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
         }
     }
 }
 
 private fun promoIcon(label: String): ImageVector = when (label) {
-    "Бонусные игры" -> Icons.Outlined.Gamepad
-    "Проверка промокода" -> Icons.Outlined.Visibility
-    "Кешбэк" -> Icons.Outlined.Paid
-    "VIP кешбэк" -> Icons.Outlined.WorkspacePremium
-    "Участие в акциях" -> Icons.Outlined.EmojiEvents
-    else -> Icons.Outlined.CardGiftcard
+    "Бонусные игры" -> NextpariWebIcons.Gamepad2
+    "Проверка промокода" -> NextpariWebIcons.Eye
+    "Кешбэк" -> NextpariWebIcons.RotateCcw
+    "VIP кешбэк" -> NextpariWebIcons.Award
+    "Участие в акциях" -> NextpariWebIcons.CircleDollarSign
+    else -> NextpariWebIcons.Gift
 }

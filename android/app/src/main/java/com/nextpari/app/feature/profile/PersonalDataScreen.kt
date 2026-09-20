@@ -55,6 +55,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.ui.theme.NextpariColors
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.settings.AccountSecurity
 import com.nextpari.app.feature.settings.AccountSecurityResult
@@ -110,7 +111,7 @@ fun PersonalDataScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    NextpariWebIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = colors.text,
                     modifier = Modifier.size(20.dp),
@@ -135,7 +136,7 @@ fun PersonalDataScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Outlined.Shield, contentDescription = null, tint = Brand700, modifier = Modifier.size(14.dp))
+                        Icon(NextpariWebIcons.ShieldCheck, contentDescription = null, tint = Brand700, modifier = Modifier.size(14.dp))
                         Text(
                             PersonalDataCatalog.VERIFIED_BADGE,
                             color = Brand700,
@@ -242,7 +243,7 @@ fun PersonalDataScreen(
                     CardTitle(PersonalDataCatalog.CARD_PHONE, Modifier.weight(1f))
                     if (data.phoneVerified) VerifiedBadge()
                 }
-                IconValue(Icons.Outlined.Phone, data.phone, PersonalDataCatalog.PHONE_PLACEHOLDER, dark)
+                IconValue(NextpariWebIcons.Phone, data.phone, PersonalDataCatalog.PHONE_PLACEHOLDER, dark)
                 Text(PersonalDataCatalog.PHONE_HELPER, color = colors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             }
             Spacer(Modifier.height(16.dp))
@@ -252,7 +253,7 @@ fun PersonalDataScreen(
                     CardTitle(PersonalDataCatalog.CARD_EMAIL, Modifier.weight(1f))
                     if (data.emailVerified && data.email.isNotBlank()) VerifiedBadge()
                 }
-                IconValue(Icons.Outlined.MailOutline, data.email, PersonalDataCatalog.EMAIL_PLACEHOLDER, dark)
+                IconValue(NextpariWebIcons.Mail, data.email, PersonalDataCatalog.EMAIL_PLACEHOLDER, dark)
                 Text(
                     if (data.email.isNotBlank() && data.emailVerified) "${data.email} · Подтверждена ✓" else PersonalDataCatalog.EMAIL_HELPER,
                     color = colors.textMuted,
@@ -288,7 +289,7 @@ fun PersonalDataScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Save, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(NextpariWebIcons.Save, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     Text(
                         if (state.saving) PersonalDataCatalog.SAVING else PersonalDataCatalog.SAVE,
                         color = Color.White,
@@ -437,7 +438,7 @@ private fun OptionSelect(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+            Icon(NextpariWebIcons.ChevronDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
         }
         if (open && !locked) {
             Column(
@@ -453,7 +454,7 @@ private fun OptionSelect(
             ) {
                 if (searchable) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Search, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+                        Icon(NextpariWebIcons.Search, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.size(8.dp))
                         BasicTextField(
                             value = query,
@@ -518,7 +519,7 @@ private fun VerifiedBadge() {
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = BrandGreen, modifier = Modifier.size(12.dp))
+        Icon(NextpariWebIcons.CheckCircle2, contentDescription = null, tint = BrandGreen, modifier = Modifier.size(12.dp))
         Text(PersonalDataCatalog.VERIFIED, color = BrandGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp))
     }
 }

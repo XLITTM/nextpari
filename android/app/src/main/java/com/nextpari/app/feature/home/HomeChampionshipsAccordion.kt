@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -130,7 +131,7 @@ private fun HomeCountryCard(
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Language, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            Icon(NextpariWebIcons.Globe, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
             Text(
                 group.country.ifBlank { "Международные" },
@@ -144,7 +145,7 @@ private fun HomeCountryCard(
             CountPill(group.count)
             Spacer(Modifier.width(8.dp))
             Icon(
-                Icons.Outlined.KeyboardArrowDown,
+                NextpariWebIcons.ChevronDown,
                 contentDescription = null,
                 tint = Color(0xFF9CA3AF),
                 modifier = Modifier.size(18.dp).rotate(rotation),
@@ -174,7 +175,7 @@ private fun HomeCountryCard(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (league.name in favorites) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                                if (league.name in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
                                 contentDescription = "Добавить чемпионат в избранное",
                                 tint = if (league.name in favorites) Color(0xFF16A34A) else colors.textSecondary,
                                 modifier = Modifier.size(18.dp),

@@ -37,6 +37,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.components.LiveBadge
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -69,10 +70,10 @@ fun NextpariMatchCard(
                 Text(model.country, color = colors.textSecondary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.weight(1f))
-            Icon(Icons.Outlined.Notifications, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+            Icon(NextpariWebIcons.Bell, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(4.dp))
             Icon(
-                if (model.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                if (model.isFavorite) NextpariWebIcons.Star else NextpariWebIcons.Star,
                 contentDescription = if (model.isFavorite) "Убрать из избранного" else "Добавить в избранное",
                 tint = if (model.isFavorite) Color(0xFF16A34A) else colors.textSecondary,
                 modifier = Modifier.size(16.dp).clickable(enabled = onToggleFavorite != null) { onToggleFavorite?.invoke() },
@@ -111,7 +112,7 @@ fun NextpariMatchCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("+${model.extraMarkets} рынков", color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
+                Icon(NextpariWebIcons.ChevronRight, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(14.dp))
             }
         }
     }
@@ -208,7 +209,7 @@ private fun OutcomeButton(outcome: MatchOutcome, dark: Boolean, modifier: Modifi
     ) {
         Text(outcome.key, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 12.sp)
         if (outcome.locked || outcome.odds.isNullOrBlank()) {
-            Icon(Icons.Outlined.Lock, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
+            Icon(NextpariWebIcons.Lock, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
         } else {
             Text(outcome.odds, color = oddsColor, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
         }

@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.R
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.NextpariButton
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -89,7 +90,7 @@ fun LoginScreen(
             trailing = {
                 IconButton(onClick = viewModel::togglePasswordVisible) {
                     Icon(
-                        imageVector = if (state.passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        imageVector = if (state.passwordVisible) NextpariWebIcons.EyeOff else NextpariWebIcons.Eye,
                         contentDescription = if (state.passwordVisible) "Скрыть пароль" else "Показать пароль",
                     )
                 }

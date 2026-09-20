@@ -169,7 +169,7 @@ class NextpariIconsTest {
         val selector = home.substringAfter("private fun SportsSelector(").substringBefore("private fun PromoRow(")
         assertThat(selector).contains("NextpariSportIconBadge(")
         assertThat(selector).doesNotContain("SportIconRes.drawable")
-        assertThat(home).contains("Icons.Outlined.SportsEsports")
+        assertThat(home).contains("NextpariWebIcons.gamepad2(1.5f)")
         listOf(
             "football", "tennis", "basketball", "hockey", "volleyball",
             "ufc", "mma", "mk", "polybet",
@@ -209,31 +209,77 @@ class NextpariIconsTest {
             assertThat(source).doesNotContain("NextpariGlyph")
             assertThat(source).doesNotContain("np_ref_")
         }
-        assertThat(bottomNav).contains("Icons.Outlined.LocalFireDepartment")
-        assertThat(bottomNav).contains("Icons.Outlined.ConfirmationNumber")
+        assertThat(bottomNav).contains("NextpariWebIcons.flame(")
+        assertThat(bottomNav).contains("NextpariWebIcons.star(")
+        assertThat(bottomNav).contains("NextpariWebIcons.ticket(")
+        assertThat(bottomNav).contains("NextpariWebIcons.clock(")
+        assertThat(bottomNav).contains("NextpariWebIcons.layoutGrid(")
         assertThat(bottomNav).contains(".size(58.dp)")
-        assertThat(tabs).contains("Icons.Outlined.EmojiEvents")
-        assertThat(tabs).contains("Icons.Outlined.SportsEsports")
-        assertThat(header).contains("Icons.Outlined.Add")
-        assertThat(header).contains("Icons.Outlined.Search")
-        assertThat(header).contains("Icons.Outlined.Settings")
-        assertThat(menu).contains("Icons.Outlined.LocalFireDepartment")
+        assertThat(tabs).contains("NextpariWebIcons.flame(")
+        assertThat(tabs).contains("NextpariWebIcons.trophy(")
+        assertThat(tabs).contains("NextpariWebIcons.gamepad2(")
+        assertThat(tabs).contains("NextpariWebIcons.dices(")
+        assertThat(tabs).contains("NextpariSectionIcons.Games")
+        assertThat(tabs).contains("NextpariWebIcons.TabActive")
+        assertThat(header).contains("NextpariWebIcons.plus(")
+        assertThat(header).contains("NextpariWebIcons.search(")
+        assertThat(header).contains("NextpariWebIcons.settings(")
+        assertThat(header).contains("NextpariWebIcons.sun(")
+        assertThat(header).contains("NextpariWebIcons.moon(")
+        assertThat(menu).contains("NextpariWebIcons.flame(")
+        assertThat(menu).contains("NextpariSectionIcons.Sport")
+        assertThat(menu).contains("NextpariWebIcons.MenuGreen")
         assertThat(moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText())
             .contains("NextpariSportIconBadge(")
     }
 
     @Test
-    fun restoredChromeUsesOriginalMaterialIconsLikeA64629() {
+    fun chromeUsesExactWebLucideIconsNotMaterialOrPhosphor() {
         val bottomNav = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariBottomNav.kt").readText()
         val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
         val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
         val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
-        assertThat(bottomNav).contains("import androidx.compose.material.icons")
-        assertThat(tabs).contains("import androidx.compose.material.icons")
-        assertThat(header).contains("import androidx.compose.material.icons")
-        assertThat(menu).contains("import androidx.compose.material.icons")
+        val webIcons = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariWebIcons.kt").readText()
+        val section = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariSectionIcons.kt").readText()
+        listOf(bottomNav, tabs, header, menu).forEach { source ->
+            assertThat(source).doesNotContain("import androidx.compose.material.icons")
+            assertThat(source).doesNotContain("NextpariProfessionalIcons")
+            assertThat(source).doesNotContain("ProfessionalPremiumIcons")
+            assertThat(source).doesNotContain("NextpariReferenceIcon")
+        }
+        assertThat(webIcons).contains("Lucide Icons 0.446.0")
+        assertThat(webIcons).contains("\"M5 12h14\"")
+        assertThat(webIcons).contains("val TabActive = Color(0xFFC88D3E)")
+        assertThat(webIcons).contains("val MenuGreen = Color(0xFF4ADE80)")
+        assertThat(section).contains("#4ADE80")
+        assertThat(section).contains("M11.8 1.5")
         val legacy = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariLegacyIcons.kt").readText()
         assertThat(legacy).contains("import androidx.compose.material.icons")
+    }
+
+    @Test
+    fun headerTabsBottomNavAndMenuMatchCurrentWebSources() {
+        val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
+        val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
+        val bottomNav = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariBottomNav.kt").readText()
+        val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
+        val home = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
+        val selector = home.substringAfter("private fun SportsSelector(").substringBefore("private fun PromoRow(")
+        assertThat(header).contains("HeaderPlusStroke")
+        assertThat(header).contains("HeaderStroke")
+        assertThat(tabs).contains("MainTabsStroke")
+        assertThat(tabs).contains("NextpariWebIcons.TabActive")
+        assertThat(bottomNav).contains("BottomNavActiveStroke")
+        assertThat(bottomNav).contains("BottomNavInactiveStroke")
+        assertThat(bottomNav).contains("CouponStroke")
+        assertThat(menu).contains("LiveRed")
+        assertThat(menu).contains("\"LIVE\"")
+        assertThat(menu).contains("NextpariSectionIcons.Games")
+        assertThat(menu).contains("NextpariSectionIcons.Esports")
+        assertThat(menu).contains("NextpariSectionIcons.Casino")
+        assertThat(selector).contains("NextpariSportIconBadge(")
+        assertThat(selector).doesNotContain("NextpariWebIcons")
+        assertThat(selector).doesNotContain("NextpariSectionIcons")
     }
 
     @Test

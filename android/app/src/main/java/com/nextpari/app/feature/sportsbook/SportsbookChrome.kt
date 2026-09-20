@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.theme.NextpariColors
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 val SportsbookGold = Color(0xFFD9822B)
@@ -47,7 +48,7 @@ fun SportsbookScreenHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = Color(0xFF6B7280), modifier = Modifier.size(24.dp))
+            Icon(NextpariWebIcons.ChevronLeft, contentDescription = "Назад", tint = Color(0xFF6B7280), modifier = Modifier.size(24.dp))
         }
         Text(
             title,

@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.SportIconRes
@@ -57,7 +58,7 @@ fun SportsListScreen(
             SportsbookScreenHeader(
                 title = "Виды спорта",
                 onBack = onBack,
-                actions = listOf(Icons.Outlined.Search to "Поиск"),
+                actions = listOf(NextpariWebIcons.Search to "Поиск"),
             )
             SportsbookSegmentedTabs(
                 tabs = listOf("live" to "LIVE", "line" to "Линия", "cybers" to "Киберы"),
@@ -85,7 +86,7 @@ fun SportsListScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            if (row.id in favorites) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                            if (row.id in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
                             contentDescription = "Добавить вид спорта в избранное",
                             tint = if (row.id in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
                             modifier = Modifier.size(16.dp),

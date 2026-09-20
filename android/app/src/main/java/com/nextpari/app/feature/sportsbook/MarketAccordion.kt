@@ -38,6 +38,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.feature.home.OddsMovement
 
 private val PinGreen = Color(0xFF22C55E)
@@ -73,14 +74,14 @@ fun MarketAccordion(
             Spacer(Modifier.width(8.dp))
             Box(Modifier.size(28.dp).clickable(onClick = onPin), contentAlignment = Alignment.Center) {
                 Icon(
-                    if (pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                    if (pinned) NextpariWebIcons.Pin else NextpariWebIcons.Pin,
                     contentDescription = if (pinned) "Открепить рынок" else "Закрепить рынок",
                     tint = PinGreen,
                     modifier = Modifier.size(16.dp),
                 )
             }
             Icon(
-                Icons.Outlined.ChevronRight,
+                NextpariWebIcons.ChevronDown,
                 contentDescription = null,
                 tint = PinGreen,
                 modifier = Modifier.size(16.dp).rotate(rotation),
@@ -141,7 +142,7 @@ fun MarketOutcomeButton(
     ) {
         Text(outcome.label, color = if (selected) Color.White else Color(0xFF1A1A1A), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         if (locked) {
-            Icon(Icons.Outlined.Lock, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
+            Icon(NextpariWebIcons.Lock, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
         } else {
             Text(outcome.odds.orEmpty(), color = oddsColor, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
         }

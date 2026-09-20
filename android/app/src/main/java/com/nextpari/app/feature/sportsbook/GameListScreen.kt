@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
@@ -52,7 +53,7 @@ fun GameListScreen(
             SportsbookScreenHeader(
                 title = "Список игр",
                 onBack = onBack,
-                actions = listOf(Icons.Outlined.Search to "Поиск"),
+                actions = listOf(NextpariWebIcons.Search to "Поиск"),
             )
             Row(
                 Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth(),

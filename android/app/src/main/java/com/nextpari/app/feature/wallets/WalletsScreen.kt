@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.ui.theme.NextpariColors
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -78,7 +79,7 @@ fun WalletsScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    NextpariWebIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = colors.text,
                     modifier = Modifier.size(20.dp),

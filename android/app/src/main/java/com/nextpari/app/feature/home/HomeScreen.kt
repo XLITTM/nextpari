@@ -42,13 +42,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -363,7 +362,7 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
                             .background(Color(0xFF1E3A5F).copy(alpha = 0.45f)),
                     )
                     Icon(
-                        Icons.Outlined.SportsEsports,
+                        NextpariWebIcons.gamepad2(1.5f),
                         contentDescription = null,
                         tint = Color(0xFF4ADE80).copy(alpha = 0.5f),
                         modifier = Modifier.align(Alignment.Center).size(48.dp),

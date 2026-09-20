@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.LiveBadge
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -91,7 +92,7 @@ fun EsportsTournamentCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Icon(
-                if (model.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                if (model.isFavorite) NextpariWebIcons.Star else NextpariWebIcons.Star,
                 contentDescription = null,
                 tint = if (model.isFavorite) Color(0xFF4ADE80) else Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.size(16.dp),

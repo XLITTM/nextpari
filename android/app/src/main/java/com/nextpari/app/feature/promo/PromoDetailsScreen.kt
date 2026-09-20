@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 
 @Composable
 fun PromoDetailsScreen(onBack: () -> Unit) {
@@ -44,7 +45,7 @@ internal fun PromoArticleHost(article: PromoArticle, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = Color(0xFFD1D5DB), modifier = Modifier.size(24.dp))
+                Icon(NextpariWebIcons.ChevronLeft, contentDescription = "Назад", tint = Color(0xFFD1D5DB), modifier = Modifier.size(24.dp))
             }
             Text("Акции", color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Spacer(Modifier.width(40.dp))

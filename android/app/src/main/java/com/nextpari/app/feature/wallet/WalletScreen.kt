@@ -80,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -131,7 +132,7 @@ fun WalletScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    NextpariWebIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
                     modifier = Modifier.size(20.dp),
@@ -231,7 +232,7 @@ private fun BalanceCard(
                 background = GreenBtn,
                 onClick = onDeposit,
             ) {
-                Icon(Icons.Outlined.FileDownload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(NextpariWebIcons.ArrowDownToLine, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(WalletCatalog.DEPOSIT, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
@@ -240,7 +241,7 @@ private fun BalanceCard(
                 background = if (dark) Color(0xFF374151) else Color(0xFF111827),
                 onClick = onWithdraw,
             ) {
-                Icon(Icons.Outlined.FileUpload, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Icon(NextpariWebIcons.ArrowUpFromLine, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(8.dp))
                 Text(WalletCatalog.WITHDRAW, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
@@ -290,7 +291,7 @@ private fun WithdrawFormCard(state: WalletUiState, dark: Boolean, viewModel: Wal
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(WalletCatalog.WITHDRAW_FORM_TITLE, color = colors.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Box(Modifier.size(32.dp).clickable(onClick = viewModel::closeWithdraw), contentAlignment = Alignment.Center) {
-                Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+                Icon(NextpariWebIcons.X, contentDescription = "Закрыть", tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
             }
         }
         FieldLabel(WalletCatalog.AMOUNT_LABEL, dark)
@@ -402,7 +403,7 @@ private fun WithdrawFormCard(state: WalletUiState, dark: Boolean, viewModel: Wal
             horizontalArrangement = Arrangement.Center,
         ) {
             Icon(
-                if (state.withdrawMethod == WalletWithdrawMethod.CASH) Icons.Outlined.Payments else Icons.Outlined.FileUpload,
+                if (state.withdrawMethod == WalletWithdrawMethod.CASH) NextpariWebIcons.Banknote else NextpariWebIcons.ArrowUpFromLine,
                 contentDescription = null,
                 tint = submitFg,
                 modifier = Modifier.size(20.dp),
@@ -502,7 +503,7 @@ private fun WithdrawalCard(model: WithdrawalUiModel, dark: Boolean, onCopyPin: (
             ) {
                 Text("PIN: ${model.pinCode}", color = Color(0xFF059669), fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(6.dp))
-                Icon(Icons.Outlined.ContentCopy, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(14.dp))
+                Icon(NextpariWebIcons.Copy, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(14.dp))
             }
             Text(WalletCatalog.PIN_HELPER, color = colors.textMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
@@ -547,7 +548,7 @@ private fun DepositModal(
                     Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.05f)).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Outlined.Close, contentDescription = "Закрыть", tint = Color.White, modifier = Modifier.size(16.dp))
+                    Icon(NextpariWebIcons.X, contentDescription = "Закрыть", tint = Color.White, modifier = Modifier.size(16.dp))
                 }
             }
             Text(WalletCatalog.DEPOSIT_DESC, color = Color(0xFFCBD5E1), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
@@ -568,7 +569,7 @@ private fun DepositModal(
                     Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(Color.White.copy(alpha = 0.1f)).clickable(onClick = onCopyId),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Скопировать ID игрока", tint = Color(0xFF6EE7B7), modifier = Modifier.size(16.dp))
+                    Icon(NextpariWebIcons.Copy, contentDescription = "Скопировать ID игрока", tint = Color(0xFF6EE7B7), modifier = Modifier.size(16.dp))
                 }
             }
             if (copied) {
@@ -622,7 +623,7 @@ private fun RestrictionModal(dark: Boolean, onAction: () -> Unit, onClose: () ->
                 Modifier.size(64.dp).clip(CircleShape).background(if (dark) Color(0x33F59E0B) else Color(0xFFFEF3C7)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.WarningAmber, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(32.dp))
+                Icon(NextpariWebIcons.AlertTriangle, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(32.dp))
             }
             Text(WalletCatalog.RESTRICTION, color = NextpariTheme.colors.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
             Row(
@@ -637,7 +638,7 @@ private fun RestrictionModal(dark: Boolean, onAction: () -> Unit, onClose: () ->
                 horizontalArrangement = Arrangement.Center,
             ) {
                 Text(WalletCatalog.FILL_PROFILE, color = if (dark) Color(0xFF111827) else Color.White, fontWeight = FontWeight.Bold)
-                Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = if (dark) Color(0xFF111827) else Color.White, modifier = Modifier.size(20.dp).padding(start = 4.dp))
+                Icon(NextpariWebIcons.ChevronRight, contentDescription = null, tint = if (dark) Color(0xFF111827) else Color.White, modifier = Modifier.size(20.dp).padding(start = 4.dp))
             }
             Text(
                 WalletCatalog.LATER,
@@ -668,7 +669,7 @@ private fun SearchableSelect(
     val filtered = options.filter { query.isBlank() || it.second.contains(query, ignoreCase = true) }
     Column {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
-            Icon(Icons.Outlined.Place, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
+            Icon(NextpariWebIcons.MapPin, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
             Spacer(Modifier.width(4.dp))
             FieldLabel(label, dark)
         }
@@ -691,7 +692,7 @@ private fun SearchableSelect(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+            Icon(NextpariWebIcons.ChevronDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
         }
         if (open && enabled) {
             Column(
@@ -704,7 +705,7 @@ private fun SearchableSelect(
                     .background(if (dark) Color(0xFF0F172A) else Color.White),
             ) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Search, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+                    Icon(NextpariWebIcons.Search, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     BasicTextField(
                         value = query,
@@ -783,15 +784,15 @@ private fun WalletInput(
 }
 
 private fun methodIcon(method: WalletWithdrawMethod): ImageVector = when (method) {
-    WalletWithdrawMethod.CRYPTO -> Icons.Outlined.CurrencyBitcoin
-    WalletWithdrawMethod.EWALLET -> Icons.Outlined.AccountBalanceWallet
-    WalletWithdrawMethod.CASH -> Icons.Outlined.Payments
+    WalletWithdrawMethod.CRYPTO -> NextpariWebIcons.Bitcoin
+    WalletWithdrawMethod.EWALLET -> NextpariWebIcons.Wallet
+    WalletWithdrawMethod.CASH -> NextpariWebIcons.Banknote
 }
 
 private fun statusIcon(status: WithdrawalStatus): ImageVector = when (status) {
-    WithdrawalStatus.PENDING, WithdrawalStatus.EXPIRED -> Icons.Outlined.Schedule
-    WithdrawalStatus.APPROVED, WithdrawalStatus.PAID -> Icons.Outlined.CheckCircle
-    WithdrawalStatus.REJECTED, WithdrawalStatus.CANCELLED -> Icons.Outlined.Cancel
+    WithdrawalStatus.PENDING, WithdrawalStatus.EXPIRED -> NextpariWebIcons.Clock3
+    WithdrawalStatus.APPROVED, WithdrawalStatus.PAID -> NextpariWebIcons.CheckCircle2
+    WithdrawalStatus.REJECTED, WithdrawalStatus.CANCELLED -> NextpariWebIcons.XCircle
 }
 
 private fun statusColors(status: WithdrawalStatus): Pair<Color, Color> = when (status) {
