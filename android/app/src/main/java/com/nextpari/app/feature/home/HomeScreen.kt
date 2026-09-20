@@ -122,10 +122,13 @@ fun HomeScreen(
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeFeedVisibility.optionalDataOnly(state.championships.size) == HomeSectionBody.Data) {
-                    item(key = "champs") {
-                        ChampionshipsLiveSection(state.championships, onNavigate) { onNavigate(Destinations.GAMELIST_LIVE) }
-                    }
+                item(key = "champs") {
+                    HomeChampionshipsAccordion(
+                        live = state.filteredLive,
+                        line = state.filteredLine,
+                        sportId = state.selectedSportId,
+                        onNavigate = onNavigate,
+                    )
                 }
             }
             else -> {
@@ -154,10 +157,13 @@ fun HomeScreen(
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeFeedVisibility.optionalDataOnly(state.championships.size) == HomeSectionBody.Data) {
-                    item(key = "champs") {
-                        ChampionshipsLiveSection(state.championships, onNavigate) { onNavigate(Destinations.GAMELIST_LIVE) }
-                    }
+                item(key = "champs") {
+                    HomeChampionshipsAccordion(
+                        live = state.filteredLive,
+                        line = state.filteredLine,
+                        sportId = state.selectedSportId,
+                        onNavigate = onNavigate,
+                    )
                 }
                 item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
                 if (HomeFeedVisibility.optionalDataOnly(state.esportsLive.size) == HomeSectionBody.Data) {

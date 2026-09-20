@@ -43,6 +43,12 @@ import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
 import com.nextpari.app.feature.home.HomeViewModel
 import com.nextpari.app.feature.menu.MenuScreen
+import com.nextpari.app.feature.promo.PromoDetailsScreen
+import com.nextpari.app.feature.promo.PromoMarathonScreen
+import com.nextpari.app.feature.promo.PromoScreen
+import com.nextpari.app.feature.promo.PromoUnbeatableScreen
+import com.nextpari.app.feature.promo.PromoWelcomeScreen
+import com.nextpari.app.feature.promo.VipCashbackScreen
 import com.nextpari.app.feature.settings.SettingsScreen
 import com.nextpari.app.feature.sportsbook.ChampionshipsScreen
 import com.nextpari.app.feature.sportsbook.GameListScreen
@@ -224,11 +230,6 @@ private fun AuthenticatedShell(
                     darkTheme = darkTheme,
                     onToggleTheme = onToggleTheme,
                     onBack = { navController.popBackStack() },
-                    onDebugPreview = if (BuildConfig.DEBUG) {
-                        { navController.navigateTo(Destinations.DEBUG_SPORTSBOOK_PREVIEW) }
-                    } else {
-                        null
-                    },
                 )
             }
             composable(Destinations.GAMES) {
@@ -240,7 +241,9 @@ private fun AuthenticatedShell(
                 )
             }
             placeholder(navController, Destinations.BET_DETAILS, "Детали ставки")
-            placeholder(navController, Destinations.PROMO, "Акции")
+            composable(Destinations.PROMO) {
+                PromoScreen(onBack = { navController.popBackStack() }, onNavigate = { navController.navigateTo(it) })
+            }
             placeholder(navController, Destinations.PERSONAL_DATA, "Личные данные")
             placeholder(navController, Destinations.WALLETS, "Кошелёк и валюты")
             composable(Destinations.MATCH) { entry ->
@@ -323,18 +326,28 @@ private fun AuthenticatedShell(
             placeholder(navController, Destinations.SLOTS, "Слоты")
             placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино")
             placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера")
-            placeholder(navController, Destinations.PROMO_DETAILS, "Промо")
-            placeholder(navController, Destinations.PROMO_MARATHON, "Марафон Экспрессов")
-            placeholder(navController, Destinations.PROMO_WELCOME, "Приветственный пакет")
+            composable(Destinations.PROMO_DETAILS) {
+                PromoDetailsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.PROMO_MARATHON) {
+                PromoMarathonScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.PROMO_WELCOME) {
+                PromoWelcomeScreen(onBack = { navController.popBackStack() })
+            }
             placeholder(navController, Destinations.INFO, "Инфо")
-            placeholder(navController, Destinations.PROMO_UNBEATABLE, "Непобедимый")
+            composable(Destinations.PROMO_UNBEATABLE) {
+                PromoUnbeatableScreen(onBack = { navController.popBackStack() })
+            }
             placeholder(navController, Destinations.BLACKJACK, "21 / Очко")
             placeholder(navController, Destinations.AVIATOR, "Aviator")
             placeholder(navController, Destinations.APPLES, "Apple of Fortune")
             placeholder(navController, Destinations.CRYSTAL, "Crystal")
             placeholder(navController, Destinations.DICE, "Dice")
             placeholder(navController, Destinations.PHARAOH, "Сокровища Фараона")
-            placeholder(navController, Destinations.VIP_CASHBACK, "VIP кешбэк")
+            composable(Destinations.VIP_CASHBACK) {
+                VipCashbackScreen(onBack = { navController.popBackStack() })
+            }
             composable("inbox-placeholder") {
                 PlaceholderScreen("Входящие", onBack = { navController.popBackStack() }, message = "Нет новых сообщений")
             }

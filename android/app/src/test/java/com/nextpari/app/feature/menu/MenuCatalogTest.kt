@@ -43,5 +43,7 @@ class MenuCatalogTest {
         )
         assertThat(MenuCatalog.itemsFor("Разное").first { it.label == "Управление счетом" }.route).isEqualTo("wallet")
         assertThat(MenuCatalog.itemsFor("Топ").first { it.label == "Аутентификатор" }.soon).isTrue()
+        assertThat(MenuCatalog.quickAccess.map { it.label }).containsExactly("VIP CLUB", "Кешбэк", "Акции", "Бонусы").inOrder()
+        assertThat(MenuCatalog.quickAccess.map { it.route }).containsExactly("vip-cashback", "vip-cashback", "promo", "promo").inOrder()
     }
 }

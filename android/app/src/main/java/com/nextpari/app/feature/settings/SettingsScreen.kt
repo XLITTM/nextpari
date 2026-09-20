@@ -1,7 +1,6 @@
 package com.nextpari.app.feature.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,12 +20,15 @@ import com.nextpari.app.core.ui.components.NextpariCard
 import com.nextpari.app.core.ui.components.NextpariTopBar
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
+object SettingsCopy {
+    val labels = listOf("Тема", "Уведомления")
+}
+
 @Composable
 fun SettingsScreen(
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
     onBack: () -> Unit,
-    onDebugPreview: (() -> Unit)? = null,
 ) {
     val colors = NextpariTheme.colors
     Column(Modifier.fillMaxSize().background(colors.bg)) {
@@ -49,15 +51,6 @@ fun SettingsScreen(
             NextpariCard {
                 Text("Уведомления", color = colors.text)
                 Text("Push-уведомления о ставках и акциях", color = colors.textMuted)
-            }
-            if (onDebugPreview != null) {
-                Spacer(Modifier.height(10.dp))
-                NextpariCard {
-                    Column(Modifier.clickable(onClick = onDebugPreview)) {
-                        Text("Предпросмотр спортбука", color = colors.text)
-                        Text("Только отладка: аккордеоны рынков", color = colors.textMuted)
-                    }
-                }
             }
         }
     }

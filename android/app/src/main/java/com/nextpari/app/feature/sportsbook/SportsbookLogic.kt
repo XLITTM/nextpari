@@ -266,3 +266,42 @@ object SportsbookCatalog {
     fun pool(mode: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<MatchCardModel> =
         if (mode == "line") line else live
 }
+
+object HomeChampionships {
+    fun title(mode: String): String = if (mode == "line") "Чемпионаты Линия" else "Чемпионаты LIVE"
+
+    fun groups(
+        mode: String,
+        sportId: String,
+        live: List<MatchCardModel>,
+        line: List<MatchCardModel>,
+    ): List<CountryGroup> {
+        val pool = SportsbookCatalog.pool(mode, live, line)
+        val filtered = com.nextpari.app.feature.home.SportsbookFilters.matchesForSport(
+            pool,
+            sportId.ifBlank { "all" },
+            excludeEsportsWhenAll = true,
+        )
+        return CountryGrouping.groupByCountry(filtered)
+    }
+
+    fun seeAllRoute(sportId: String, mode: String): String {
+        val resolved = if (mode == "line") "line" else "live"
+        return if (sportId.isBlank() || sportId == "all") {
+            if (resolved == "line") com.nextpari.app.core.navigation.Destinations.SPORTS_LINE
+            else com.nextpari.app.core.navigation.Destinations.SPORTS_LIVE
+        } else {
+            com.nextpari.app.core.navigation.Destinations.championships(sportId, resolved)
+        }
+    }
+}
+
+object HomeAccordionExpansion {
+    fun resolve(groups: List<CountryGroup>, current: String, userInteracted: Boolean): String {
+        if (userInteracted) {
+            if (current.isEmpty()) return ""
+            if (groups.any { it.country == current }) return current
+        }
+        return CountryGrouping.initialExpanded(groups)
+    }
+}
