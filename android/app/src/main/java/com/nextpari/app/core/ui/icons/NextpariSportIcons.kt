@@ -55,8 +55,10 @@ object NextpariSportIcons {
 
     fun resolves(sportId: String, variant: NextpariIconVariant): Boolean = when (variant) {
         NextpariIconVariant.Legacy -> legacyDrawable(sportId) != 0
-        NextpariIconVariant.Premium -> vector(sportId).name.isNotBlank()
+        NextpariIconVariant.Premium -> NextpariReferenceIconAssets.contains(NextpariReferenceIconAssets.sportKey(sportId))
     }
+
+    fun referenceKey(sportId: String): String = NextpariReferenceIconAssets.sportKey(sportId)
 
     fun legacyDrawable(sportId: String): Int = SportIconRes.drawable(sportId)
 
@@ -82,19 +84,12 @@ fun NextpariSportIcon(
             contentDescription = contentDescription,
             modifier = modifier,
         )
-        NextpariIconVariant.Premium -> {
-            val isDark = NextpariTheme.colors.bg == NextpariColors.Dark.bg
-            Icon(
-                imageVector = NextpariSportIcons.vector(sportId),
-                contentDescription = contentDescription,
-                modifier = modifier,
-                tint = if (tint == Color.Unspecified) {
-                    NextpariSportIcons.premiumTint(sportId, isDark)
-                } else {
-                    tint
-                },
-            )
-        }
+        NextpariIconVariant.Premium -> NextpariReferenceIcon(
+            key = NextpariSportIcons.referenceKey(sportId),
+            modifier = modifier,
+            contentDescription = contentDescription,
+            active = true,
+        )
     }
 }
 

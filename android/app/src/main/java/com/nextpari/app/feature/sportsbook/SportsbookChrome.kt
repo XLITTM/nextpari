@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.isPremiumIcons
@@ -48,11 +49,11 @@ fun SportsbookScreenHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-            Icon(
-                NextpariIcons.Back,
+            NextpariGlyph(
+                imageVector = NextpariIcons.Back,
                 contentDescription = "Назад",
                 tint = if (isPremiumIcons()) NextpariIconPalette.Action.Chevron else Color(0xFF6B7280),
-                modifier = Modifier.size(24.dp),
+                size = 24.dp,
             )
         }
         Text(
@@ -71,11 +72,11 @@ fun SportsbookScreenHeader(
             } else {
                 actions.forEach { (icon, desc) ->
                     Box(Modifier.size(36.dp).clickable { onAction(desc) }, contentAlignment = Alignment.Center) {
-                        Icon(
-                            icon,
+                        NextpariGlyph(
+                            imageVector = icon,
                             contentDescription = desc,
                             tint = if (isPremiumIcons()) NextpariIconPalette.Action.forChrome(desc) else Color(0xFF6B7280),
-                            modifier = Modifier.size(20.dp),
+                            size = 20.dp,
                         )
                     }
                 }

@@ -45,6 +45,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -102,11 +103,11 @@ fun PersonalDataScreen(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    NextpariIcons.ChevronLeft,
+                NextpariGlyph(
+                    imageVector = NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = NextpariIconPalette.Action.Chevron,
-                    modifier = Modifier.size(20.dp),
+                    size = 20.dp,
                 )
             }
             Text(
@@ -128,7 +129,7 @@ fun PersonalDataScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(NextpariIcons.Shield, contentDescription = null, tint = NextpariIconPalette.Action.Check, modifier = Modifier.size(14.dp))
+                        NextpariGlyph(NextpariIcons.Shield, contentDescription = null, tint = NextpariIconPalette.Action.Check, size = 14.dp)
                         Text(
                             PersonalDataCatalog.VERIFIED_BADGE,
                             color = Brand700,
@@ -430,7 +431,7 @@ private fun OptionSelect(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = NextpariIconPalette.Action.Chevron, modifier = Modifier.size(16.dp))
+            NextpariGlyph(NextpariIcons.ChevronDown, contentDescription = null, tint = NextpariIconPalette.Action.Chevron, size = 16.dp)
         }
         if (open && !locked) {
             Column(
@@ -446,7 +447,7 @@ private fun OptionSelect(
             ) {
                 if (searchable) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(NextpariIcons.Search, contentDescription = null, tint = NextpariIconPalette.Action.Search, modifier = Modifier.size(16.dp))
+                        NextpariGlyph(NextpariIcons.Search, contentDescription = null, tint = NextpariIconPalette.Action.Search, size = 16.dp)
                         Spacer(Modifier.size(8.dp))
                         BasicTextField(
                             value = query,

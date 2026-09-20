@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.feature.home.MatchCardModel
@@ -66,11 +67,12 @@ fun MatchTracker(
                 Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    NextpariIcons.Back,
+                NextpariGlyph(
+                    imageVector = NextpariIcons.Back,
                     contentDescription = "Назад",
                     tint = Color.White,
-                    modifier = Modifier.size(20.dp).clickable(onClick = onBack),
+                    size = 20.dp,
+                    modifier = Modifier.clickable(onClick = onBack),
                 )
                 Text(
                     "$sportLabel. ${match.league}",

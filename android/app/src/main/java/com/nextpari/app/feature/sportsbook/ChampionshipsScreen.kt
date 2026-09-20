@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
@@ -85,7 +86,7 @@ fun ChampionshipsScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            NextpariSportIconBadge(sport, containerSize = 36.dp, iconSize = 24.dp)
+            NextpariSportIconBadge(sport, containerSize = 36.dp, iconSize = 28.dp)
             Spacer(Modifier.width(8.dp))
             Text(sportName.uppercase(), color = if (dark) Color(0xFFD1D5DB) else Color(0xFF4B5563), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
@@ -156,7 +157,7 @@ private fun CountryAccordion(
                 Modifier.size(24.dp).clip(CircleShape).background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = NextpariIconPalette.Action.Chevron, modifier = Modifier.size(16.dp).rotate(rotation))
+                NextpariGlyph(NextpariIcons.ChevronDown, contentDescription = null, tint = NextpariIconPalette.Action.Chevron, size = 16.dp, modifier = Modifier.rotate(rotation))
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6)))

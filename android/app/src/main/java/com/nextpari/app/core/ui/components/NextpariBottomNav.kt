@@ -21,14 +21,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.BottomNavItem
 import com.nextpari.app.core.navigation.BottomNavSpec
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
+import com.nextpari.app.core.ui.icons.NextpariReferenceIconAssets
 import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -59,13 +59,12 @@ fun NextpariBottomNav(
                     } else {
                         val selected = activeRoute == item.route ||
                             (item.route == Destinations.HOME && activeRoute == Destinations.HOME)
-                        val semantic = NextpariIconPalette.BottomNav.of(item.route)
                         NavItem(
                             item.label,
-                            navIcon(item.route),
+                            NextpariReferenceIconAssets.bottomNavKey(item.route),
                             selected,
-                            if (isPremiumIcons()) semantic else colors.accent,
-                            if (isPremiumIcons()) semantic.copy(alpha = NextpariIconPalette.BottomNav.InactiveAlpha) else colors.textMuted,
+                            colors.accent,
+                            colors.textMuted,
                         ) {
                             onSelect(item)
                         }
@@ -88,19 +87,37 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = (-20).dp)
-                .size(58.dp)
-                .shadow(12.dp, CircleShape)
-                .clip(CircleShape)
-                .background(colors.accent)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
+                .size(58.dp),
         ) {
-            Icon(
-                NextpariIcons.Betslip,
-                contentDescription = "Купон",
-                tint = Color.White,
-                modifier = Modifier.size(24.dp),
-            )
+            if (isPremiumIcons()) {
+                NextpariReferenceIcon(
+                    key = "bottom_betslip",
+                    contentDescription = "Купон",
+                    size = 58.dp,
+                    modifier = Modifier
+                        .size(58.dp)
+                        .shadow(12.dp, CircleShape)
+                        .clip(CircleShape)
+                        .clickable(onClick = onClick),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(58.dp)
+                        .shadow(12.dp, CircleShape)
+                        .clip(CircleShape)
+                        .background(colors.accent)
+                        .clickable(onClick = onClick),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        NextpariIcons.Betslip,
+                        contentDescription = "Купон",
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            }
             if (betCount > 0) {
                 Box(
                     modifier = Modifier
@@ -127,7 +144,7 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
 @Composable
 private fun NavItem(
     label: String,
-    icon: ImageVector,
+    referenceKey: String,
     active: Boolean,
     accent: Color,
     muted: Color,
@@ -140,7 +157,28 @@ private fun NavItem(
             .padding(top = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(icon, contentDescription = label, tint = if (active) accent else muted, modifier = Modifier.size(18.dp))
+        if (isPremiumIcons()) {
+            NextpariReferenceIcon(
+                key = referenceKey,
+                contentDescription = label,
+                size = 22.dp,
+                active = active,
+            )
+        } else {
+            Icon(
+                NextpariIcons.bottomNav(
+                    when (referenceKey) {
+                        "bottom_popular" -> Destinations.HOME
+                        "bottom_favorites" -> Destinations.FAVORITES
+                        "bottom_history" -> Destinations.HISTORY
+                        else -> Destinations.MENU
+                    },
+                ),
+                contentDescription = label,
+                tint = if (active) accent else muted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
         Text(
             label,
             color = if (active) accent else muted,
@@ -149,5 +187,3 @@ private fun NavItem(
         )
     }
 }
-
-private fun navIcon(route: String): ImageVector = NextpariIcons.bottomNav(route)

@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -59,7 +60,7 @@ fun PromoScreen(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(NextpariIcons.Back, contentDescription = "Назад", tint = NextpariIconPalette.Action.Chevron, modifier = Modifier.size(20.dp))
+                NextpariGlyph(NextpariIcons.Back, contentDescription = "Назад", tint = NextpariIconPalette.Action.Chevron, size = 20.dp)
             }
             Spacer(Modifier.width(12.dp))
             Text("Promo", color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -113,7 +114,7 @@ private fun PromoMenuRow(item: PromoMenuItem, dark: Boolean, onClick: () -> Unit
             Modifier.size(44.dp).clip(CircleShape).background(Color(item.iconBg)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(promoIcon(item.label), contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            NextpariGlyph(promoIcon(item.label), contentDescription = null, tint = Color.White, size = 20.dp)
         }
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(item.label, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)

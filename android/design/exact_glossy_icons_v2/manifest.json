@@ -1,0 +1,474 @@
+{
+  "bottom_popular": {
+    "group": "bottom_nav",
+    "dark_file": "dark/np_ref_bottom_popular.png",
+    "light_file": "light/np_ref_bottom_popular.png",
+    "recommended_size_dp": 22,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "bottom_favorites": {
+    "group": "bottom_nav",
+    "dark_file": "dark/np_ref_bottom_favorites.png",
+    "light_file": "light/np_ref_bottom_favorites.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "bottom_betslip": {
+    "group": "bottom_nav",
+    "dark_file": "dark/np_ref_bottom_betslip.png",
+    "light_file": "light/np_ref_bottom_betslip.png",
+    "recommended_size_dp": 24,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "bottom_history": {
+    "group": "bottom_nav",
+    "dark_file": "dark/np_ref_bottom_history.png",
+    "light_file": "light/np_ref_bottom_history.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "bottom_menu": {
+    "group": "bottom_nav",
+    "dark_file": "dark/np_ref_bottom_menu.png",
+    "light_file": "light/np_ref_bottom_menu.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "tab_top": {
+    "group": "main_tabs",
+    "dark_file": "dark/np_ref_tab_top.png",
+    "light_file": "light/np_ref_tab_top.png",
+    "recommended_size_dp": 22,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "tab_sport": {
+    "group": "main_tabs",
+    "dark_file": "dark/np_ref_tab_sport.png",
+    "light_file": "light/np_ref_tab_sport.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "tab_esports": {
+    "group": "main_tabs",
+    "dark_file": "dark/np_ref_tab_esports.png",
+    "light_file": "light/np_ref_tab_esports.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "tab_casino": {
+    "group": "main_tabs",
+    "dark_file": "dark/np_ref_tab_casino.png",
+    "light_file": "light/np_ref_tab_casino.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "tab_games": {
+    "group": "main_tabs",
+    "dark_file": "dark/np_ref_tab_games.png",
+    "light_file": "light/np_ref_tab_games.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_football": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_football.png",
+    "light_file": "light/np_ref_sport_football.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_tennis": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_tennis.png",
+    "light_file": "light/np_ref_sport_tennis.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_basketball": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_basketball.png",
+    "light_file": "light/np_ref_sport_basketball.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_hockey": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_hockey.png",
+    "light_file": "light/np_ref_sport_hockey.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_volleyball": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_volleyball.png",
+    "light_file": "light/np_ref_sport_volleyball.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_esports": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_esports.png",
+    "light_file": "light/np_ref_sport_esports.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_futsal": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_futsal.png",
+    "light_file": "light/np_ref_sport_futsal.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_table_tennis": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_table_tennis.png",
+    "light_file": "light/np_ref_sport_table_tennis.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_badminton": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_badminton.png",
+    "light_file": "light/np_ref_sport_badminton.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_baseball": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_baseball.png",
+    "light_file": "light/np_ref_sport_baseball.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_cricket": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_cricket.png",
+    "light_file": "light/np_ref_sport_cricket.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_polo": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_polo.png",
+    "light_file": "light/np_ref_sport_polo.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_snooker": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_snooker.png",
+    "light_file": "light/np_ref_sport_snooker.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_pickleball": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_pickleball.png",
+    "light_file": "light/np_ref_sport_pickleball.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_ufc_mma": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_ufc_mma.png",
+    "light_file": "light/np_ref_sport_ufc_mma.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_beach_volleyball": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_beach_volleyball.png",
+    "light_file": "light/np_ref_sport_beach_volleyball.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_fifa": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_fifa.png",
+    "light_file": "light/np_ref_sport_fifa.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_mk": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_mk.png",
+    "light_file": "light/np_ref_sport_mk.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_polybet": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_polybet.png",
+    "light_file": "light/np_ref_sport_polybet.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_elections": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_elections.png",
+    "light_file": "light/np_ref_sport_elections.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_filter": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_filter.png",
+    "light_file": "light/np_ref_sport_filter.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "sport_all": {
+    "group": "sports",
+    "dark_file": "dark/np_ref_sport_all.png",
+    "light_file": "light/np_ref_sport_all.png",
+    "recommended_size_dp": 28,
+    "render_mode": "preserve",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_profile": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_profile.png",
+    "light_file": "light/np_ref_menu_profile.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_messages": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_messages.png",
+    "light_file": "light/np_ref_menu_messages.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_settings": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_settings.png",
+    "light_file": "light/np_ref_menu_settings.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_account": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_account.png",
+    "light_file": "light/np_ref_menu_account.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_deposit": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_deposit.png",
+    "light_file": "light/np_ref_menu_deposit.png",
+    "recommended_size_dp": 22,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_live": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_live.png",
+    "light_file": "light/np_ref_menu_live.png",
+    "recommended_size_dp": 22,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_line": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_line.png",
+    "light_file": "light/np_ref_menu_line.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_esports": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_esports.png",
+    "light_file": "light/np_ref_menu_esports.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_slots": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_slots.png",
+    "light_file": "light/np_ref_menu_slots.png",
+    "recommended_size_dp": 22,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_live_casino": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_live_casino.png",
+    "light_file": "light/np_ref_menu_live_casino.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_games": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_games.png",
+    "light_file": "light/np_ref_menu_games.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_promo": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_promo.png",
+    "light_file": "light/np_ref_menu_promo.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_vip": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_vip.png",
+    "light_file": "light/np_ref_menu_vip.png",
+    "recommended_size_dp": 22,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_cashback": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_cashback.png",
+    "light_file": "light/np_ref_menu_cashback.png",
+    "recommended_size_dp": 22,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "menu_support": {
+    "group": "menu",
+    "dark_file": "dark/np_ref_menu_support.png",
+    "light_file": "light/np_ref_menu_support.png",
+    "recommended_size_dp": 22,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_search": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_search.png",
+    "light_file": "light/np_ref_service_search.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_notifications": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_notifications.png",
+    "light_file": "light/np_ref_service_notifications.png",
+    "recommended_size_dp": 24,
+    "render_mode": "accent",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_light_theme": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_light_theme.png",
+    "light_file": "light/np_ref_service_light_theme.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_dark_theme": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_dark_theme.png",
+    "light_file": "light/np_ref_service_dark_theme.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_back": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_back.png",
+    "light_file": "light/np_ref_service_back.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_down": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_down.png",
+    "light_file": "light/np_ref_service_down.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_close": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_close.png",
+    "light_file": "light/np_ref_service_close.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_share": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_share.png",
+    "light_file": "light/np_ref_service_share.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_info": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_info.png",
+    "light_file": "light/np_ref_service_info.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_security": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_security.png",
+    "light_file": "light/np_ref_service_security.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_authenticator": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_authenticator.png",
+    "light_file": "light/np_ref_service_authenticator.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  },
+  "service_logout": {
+    "group": "service",
+    "dark_file": "dark/np_ref_service_logout.png",
+    "light_file": "light/np_ref_service_logout.png",
+    "recommended_size_dp": 24,
+    "render_mode": "neutral",
+    "source": "exact extraction from approved glossy Nextpari board"
+  }
+}

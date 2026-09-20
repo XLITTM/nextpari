@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.components.LiveBadge
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariSportIcon
@@ -66,7 +67,7 @@ fun NextpariMatchCard(
                 Text(model.country, color = colors.textSecondary, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             Spacer(Modifier.weight(1f))
-            Icon(NextpariIcons.Notifications, contentDescription = null, tint = NextpariIconPalette.Action.Bell, modifier = Modifier.size(16.dp))
+            NextpariGlyph(NextpariIcons.Notifications, contentDescription = null, tint = NextpariIconPalette.Action.Bell, size = 16.dp)
             Spacer(Modifier.width(4.dp))
             Icon(
                 if (model.isFavorite) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,

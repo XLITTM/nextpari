@@ -238,7 +238,7 @@ private fun SportsSelector(
                     contentDescription = sport.name,
                     active = active,
                     containerSize = 36.dp,
-                    iconSize = 24.dp,
+                    iconSize = 28.dp,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -181,11 +182,11 @@ private fun PageHeader(title: String, onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-                Icon(
-                    NextpariIcons.ChevronLeft,
+                NextpariGlyph(
+                    imageVector = NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = NextpariIconPalette.Action.Chevron,
-                    modifier = Modifier.size(24.dp),
+                    size = 24.dp,
                 )
             }
             Text(
@@ -217,7 +218,7 @@ private fun InfoRow(
             Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(NextpariIconPalette.container(semantic, dark)),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = semantic, modifier = Modifier.size(20.dp))
+            NextpariGlyph(icon, contentDescription = null, tint = semantic, size = 20.dp)
         }
         Text(
             label,

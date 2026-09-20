@@ -20,8 +20,8 @@ import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.MainTabSpec
 import com.nextpari.app.core.navigation.MainTabsSpec
 import com.nextpari.app.core.ui.icons.NextpariIcons
-import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.NextpariPremiumIcon
+import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
+import com.nextpari.app.core.ui.icons.NextpariReferenceIconAssets
 import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
@@ -37,11 +37,10 @@ fun NextpariMainTabs(
             val active = tab.id == activeId
             val icon = NextpariIcons.mainTab(tab.id)
             val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
-            val semantic = NextpariIconPalette.MainTab.of(tab.id)
-            val iconTint = if (isPremiumIcons()) {
-                if (active) semantic else semantic.copy(alpha = NextpariIconPalette.MainTab.InactiveAlpha)
+            val iconTint = if (active) {
+                TabActiveGold
             } else {
-                if (active) TabActiveGold else if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF)
+                if (dark) Color(0xFF6B7280) else Color(0xFF9CA3AF)
             }
             Column(
                 modifier = Modifier
@@ -58,15 +57,11 @@ fun NextpariMainTabs(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 if (isPremiumIcons()) {
-                    NextpariPremiumIcon(
-                        imageVector = icon,
-                        semantic = semantic,
+                    NextpariReferenceIcon(
+                        key = NextpariReferenceIconAssets.mainTabKey(tab.id),
                         contentDescription = tab.label,
-                        containerSize = 32.dp,
-                        iconSize = 20.dp,
+                        size = 22.dp,
                         active = active,
-                        showContainer = true,
-                        inactiveAlpha = NextpariIconPalette.MainTab.InactiveAlpha,
                     )
                 } else {
                     Icon(
@@ -90,4 +85,3 @@ fun NextpariMainTabs(
         }
     }
 }
-

@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIcons
 
 @Composable
@@ -63,7 +64,7 @@ fun VipCashbackScreen(onBack: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-                Icon(NextpariIcons.Back, contentDescription = "Назад", tint = Color.White.copy(alpha = 0.85f))
+                NextpariGlyph(NextpariIcons.Back, contentDescription = "Назад", tint = Color.White.copy(alpha = 0.85f))
             }
             Text("VIP CLUB", color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
             Spacer(Modifier.width(40.dp))
@@ -262,7 +263,7 @@ private fun LevelsPanel(selected: VipTier, onSelect: (Int) -> Unit) {
                 .background(Color.Black.copy(alpha = 0.35f))
                 .padding(12.dp),
         ) {
-            Icon(NextpariIcons.Info, contentDescription = null, tint = Color.White.copy(alpha = 0.45f), modifier = Modifier.size(16.dp))
+            NextpariGlyph(NextpariIcons.Info, contentDescription = null, tint = Color.White.copy(alpha = 0.45f), size = 16.dp)
             Text(VipCatalog.levelsNotice, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
         }
     }

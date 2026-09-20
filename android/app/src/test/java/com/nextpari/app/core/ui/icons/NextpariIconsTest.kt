@@ -200,19 +200,28 @@ class NextpariIconsTest {
         val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
         val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
         val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
-        assertThat(bottomNav).contains("NextpariIcons.bottomNav(route)")
+        assertThat(bottomNav).contains("NextpariReferenceIconAssets.bottomNavKey")
+        assertThat(bottomNav).contains("NextpariReferenceIcon")
+        assertThat(bottomNav).contains("bottom_betslip")
         assertThat(bottomNav).contains("NextpariIcons.Betslip")
         assertThat(bottomNav).doesNotContain("Icons.Outlined.LocalFireDepartment")
         assertThat(bottomNav).doesNotContain("Icons.Outlined.ConfirmationNumber")
+        assertThat(tabs).contains("NextpariReferenceIconAssets.mainTabKey")
         assertThat(tabs).contains("NextpariIcons.mainTab(tab.id)")
         assertThat(tabs).doesNotContain("Icons.Outlined.EmojiEvents")
         assertThat(header).contains("NextpariIcons.Add")
         assertThat(header).contains("NextpariIcons.ThemeLight")
         assertThat(header).contains("NextpariIcons.Settings")
         assertThat(header).contains("NextpariIcons.Search")
+        assertThat(header).contains("service_search")
+        assertThat(header).contains("menu_settings")
         assertThat(header).doesNotContain("Icons.Outlined.Add")
+        assertThat(menu).contains("NextpariReferenceIconAssets.menuTabKey")
+        assertThat(menu).contains("NextpariReferenceIconAssets.menuRowKey")
         assertThat(menu).contains("NextpariIcons.menuTab(label)")
         assertThat(menu).contains("NextpariIcons.menuRow(label)")
+        assertThat(menu).contains("menu_profile")
+        assertThat(menu).contains("service_logout")
         assertThat(menu).contains("NextpariIcons.Wallet")
         assertThat(menu).contains("NextpariIcons.ChevronDown")
         assertThat(menu).doesNotContain("Icons.Outlined.LocalFireDepartment")
@@ -351,6 +360,118 @@ class NextpariIconsTest {
         ).firstOrNull { it.exists() }
         assertThat(pack).isNotNull()
         assertThat(pack!!.readText()).contains("MIT")
+    }
+
+    @Test
+    fun everyManifestKeyResolvesToExactDarkAndLightDrawables() {
+        assertThat(NextpariReferenceIconAssets.specs).hasSize(59)
+        NextpariReferenceIconAssets.keys.forEach { key ->
+            val spec = NextpariReferenceIconAssets.spec(key)
+            assertThat(spec.darkRes).isNotEqualTo(0)
+            assertThat(spec.lightRes).isNotEqualTo(0)
+            assertThat(spec.darkRes).isNotEqualTo(spec.lightRes)
+            assertThat(drawableFile("np_ref_dark_$key.png").exists()).isTrue()
+            assertThat(drawableFile("np_ref_light_$key.png").exists()).isTrue()
+            assertThat(NextpariReferenceIconAssets.res(key, true)).isEqualTo(spec.darkRes)
+            assertThat(NextpariReferenceIconAssets.res(key, false)).isEqualTo(spec.lightRes)
+            assertThat(NextpariReferenceIconAssets.appliesTint(key)).isFalse()
+        }
+    }
+
+    @Test
+    fun bottomNavMainTabsSportsMenuAndServiceUseExactReferenceKeys() {
+        assertThat(NextpariReferenceIconAssets.bottomNavKey(Destinations.HOME)).isEqualTo("bottom_popular")
+        assertThat(NextpariReferenceIconAssets.bottomNavKey(Destinations.FAVORITES)).isEqualTo("bottom_favorites")
+        assertThat(NextpariReferenceIconAssets.bottomNavKey(Destinations.BETSLIP)).isEqualTo("bottom_betslip")
+        assertThat(NextpariReferenceIconAssets.bottomNavKey(Destinations.HISTORY)).isEqualTo("bottom_history")
+        assertThat(NextpariReferenceIconAssets.bottomNavKey(Destinations.MENU)).isEqualTo("bottom_menu")
+        assertThat(NextpariReferenceIconAssets.mainTabKey("top")).isEqualTo("tab_top")
+        assertThat(NextpariReferenceIconAssets.mainTabKey("sport")).isEqualTo("tab_sport")
+        assertThat(NextpariReferenceIconAssets.mainTabKey("esports")).isEqualTo("tab_esports")
+        assertThat(NextpariReferenceIconAssets.mainTabKey("casino")).isEqualTo("tab_casino")
+        assertThat(NextpariReferenceIconAssets.mainTabKey("games")).isEqualTo("tab_games")
+        listOf(
+            "football", "tennis", "basketball", "hockey", "volleyball", "esports", "futsal",
+            "table-tennis", "badminton", "baseball", "cricket", "polo", "snooker", "pickleball",
+            "beach-volleyball", "fifa", "mk", "polybet", "elections", "filter", "all",
+        ).forEach { id ->
+            assertThat(NextpariReferenceIconAssets.contains(NextpariReferenceIconAssets.sportKey(id))).isTrue()
+            assertThat(NextpariSportIcons.resolves(id, NextpariIconVariant.Premium)).isTrue()
+        }
+        assertThat(NextpariReferenceIconAssets.sportKey("mk")).isEqualTo("sport_mk")
+        assertThat(NextpariReferenceIconAssets.sportKey("polybet")).isEqualTo("sport_polybet")
+        assertThat(NextpariReferenceIconAssets.sportKey("ufc")).isEqualTo("sport_ufc_mma")
+        assertThat(NextpariReferenceIconAssets.sportKey("mma")).isEqualTo("sport_ufc_mma")
+        assertThat(NextpariReferenceIconAssets.sportKey("polo")).isEqualTo("sport_polo")
+        assertThat(NextpariReferenceIconAssets.sportKey("pickleball")).isEqualTo("sport_pickleball")
+        assertThat(NextpariReferenceIconAssets.menuTabKey("Топ")).isEqualTo("tab_top")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("LIVE")).isEqualTo("menu_live")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Линия")).isEqualTo("menu_line")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Киберспорт")).isEqualTo("menu_esports")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Слоты")).isEqualTo("menu_slots")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Лайв казино")).isEqualTo("menu_live_casino")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Games")).isEqualTo("menu_games")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Промокоды")).isEqualTo("menu_promo")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Непобедимый")).isEqualTo("menu_vip")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Поддержка")).isEqualTo("menu_support")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Управление счетом")).isEqualTo("menu_account")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Аутентификатор")).isEqualTo("service_authenticator")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Повысьте безопасность!")).isEqualTo("service_security")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Уведомления")).isEqualTo("service_notifications")
+        assertThat(NextpariReferenceIconAssets.menuRowKey("Инфо")).isEqualTo("service_info")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Search)).isEqualTo("service_search")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Notifications)).isEqualTo("service_notifications")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.ThemeLight)).isEqualTo("service_light_theme")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.ThemeDark)).isEqualTo("service_dark_theme")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Back)).isEqualTo("service_back")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.ChevronDown)).isEqualTo("service_down")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Close)).isEqualTo("service_close")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Share)).isEqualTo("service_share")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Info)).isEqualTo("service_info")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Security)).isEqualTo("service_security")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Authenticator)).isEqualTo("service_authenticator")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Logout)).isEqualTo("service_logout")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Profile)).isEqualTo("menu_profile")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Mail)).isEqualTo("menu_messages")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Settings)).isEqualTo("menu_settings")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Wallet)).isEqualTo("menu_account")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Deposit)).isEqualTo("menu_deposit")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Cashback)).isEqualTo("menu_cashback")
+        assertThat(NextpariReferenceIconAssets.iconKey(NextpariIconKey.Support)).isEqualTo("menu_support")
+    }
+
+    @Test
+    fun premiumCoveredKeysUseExactPngNotPhosphorOrMaterialAndLegacyRemains() {
+        val reference = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariReferenceIcon.kt").readText()
+        val sports = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariSportIcons.kt").readText()
+        val badge = moduleFile("src/main/java/com/nextpari/app/core/ui/icons/NextpariPremiumIcon.kt").readText()
+        val bottomNav = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariBottomNav.kt").readText()
+        val tabs = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariMainTabs.kt").readText()
+        val menu = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
+        assertThat(reference).contains("painterResource")
+        assertThat(reference).doesNotContain("ColorFilter")
+        assertThat(sports).contains("NextpariReferenceIcon")
+        assertThat(badge).contains("NextpariReferenceIcon")
+        assertThat(bottomNav).contains("isPremiumIcons()")
+        assertThat(bottomNav).contains("NextpariReferenceIcon")
+        assertThat(tabs).contains("NextpariReferenceIcon")
+        assertThat(menu).contains("NextpariReferenceIcon")
+        assertThat(menu).doesNotContain("NextpariPremiumIcon(")
+        assertThat(bottomNav).doesNotContain("import androidx.compose.material.icons")
+        assertThat(NextpariIconConfig.defaultVariant).isEqualTo(NextpariIconVariant.Premium)
+        assertThat(NextpariIconVariant.entries).contains(NextpariIconVariant.Legacy)
+        assertThat(NextpariIcons.pack(NextpariIconVariant.Legacy)).isSameInstanceAs(NextpariLegacyIcons)
+        assertThat(Destinations.HOME).isEqualTo("home")
+        assertThat(Destinations.WALLET).isEqualTo("wallet")
+    }
+
+    private fun drawableFile(name: String): File {
+        val candidates = listOf(
+            File("src/main/res/drawable-nodpi/$name"),
+            File("app/src/main/res/drawable-nodpi/$name"),
+            File("android/app/src/main/res/drawable-nodpi/$name"),
+        )
+        return candidates.firstOrNull { it.exists() } ?: File("src/main/res/drawable-nodpi/$name")
     }
 
     private fun moduleFile(relative: String): File {

@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -115,11 +116,11 @@ fun WalletScreen(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    NextpariIcons.ChevronLeft,
+                NextpariGlyph(
+                    imageVector = NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = NextpariIconPalette.Action.Chevron,
-                    modifier = Modifier.size(20.dp),
+                    size = 20.dp,
                 )
             }
             Spacer(Modifier.width(12.dp))
@@ -275,7 +276,7 @@ private fun WithdrawFormCard(state: WalletUiState, dark: Boolean, viewModel: Wal
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(WalletCatalog.WITHDRAW_FORM_TITLE, color = colors.text, fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Box(Modifier.size(32.dp).clickable(onClick = viewModel::closeWithdraw), contentAlignment = Alignment.Center) {
-                Icon(NextpariIcons.Close, contentDescription = "Закрыть", tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+                NextpariGlyph(NextpariIcons.Close, contentDescription = "Закрыть", tint = Color(0xFF9CA3AF), size = 20.dp)
             }
         }
         FieldLabel(WalletCatalog.AMOUNT_LABEL, dark)
@@ -532,7 +533,7 @@ private fun DepositModal(
                     Modifier.size(32.dp).clip(RoundedCornerShape(8.dp)).background(Color.White.copy(alpha = 0.05f)).clickable(onClick = onClose),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(NextpariIcons.Close, contentDescription = "Закрыть", tint = Color.White, modifier = Modifier.size(16.dp))
+                    NextpariGlyph(NextpariIcons.Close, contentDescription = "Закрыть", tint = Color.White, size = 16.dp)
                 }
             }
             Text(WalletCatalog.DEPOSIT_DESC, color = Color(0xFFCBD5E1), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
@@ -676,7 +677,12 @@ private fun SearchableSelect(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = NextpariIconPalette.Action.Chevron, modifier = Modifier.size(16.dp))
+            NextpariGlyph(
+                imageVector = NextpariIcons.ChevronDown,
+                contentDescription = null,
+                tint = NextpariIconPalette.Action.Chevron,
+                size = 16.dp,
+            )
         }
         if (open && enabled) {
             Column(
@@ -689,7 +695,7 @@ private fun SearchableSelect(
                     .background(if (dark) Color(0xFF0F172A) else Color.White),
             ) {
                 Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(NextpariIcons.Search, contentDescription = null, tint = NextpariIconPalette.Action.Search, modifier = Modifier.size(16.dp))
+                    NextpariGlyph(NextpariIcons.Search, contentDescription = null, tint = NextpariIconPalette.Action.Search, size = 16.dp)
                     Spacer(Modifier.width(8.dp))
                     BasicTextField(
                         value = query,

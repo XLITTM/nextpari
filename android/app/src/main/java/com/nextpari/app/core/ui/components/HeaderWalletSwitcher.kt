@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.isPremiumIcons
@@ -190,13 +191,13 @@ fun HeaderWalletSwitcher(
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
             )
-            Icon(
-                NextpariIcons.ChevronDown,
+            NextpariGlyph(
+                imageVector = NextpariIcons.ChevronDown,
                 contentDescription = WalletsCatalog.SWITCHER_LABEL,
                 tint = if (isPremiumIcons()) NextpariIconPalette.Header.WalletChevron else Color(0xFF6B7280),
+                size = 16.dp,
                 modifier = Modifier
                     .padding(start = 4.dp)
-                    .size(16.dp)
                     .graphicsLayer { rotationZ = rotation },
             )
         }

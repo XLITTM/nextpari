@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.nextpari.app.R
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
-import com.nextpari.app.core.ui.icons.NextpariPremiumIcon
+import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
 import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.feature.wallets.WalletsUiState
 
@@ -98,9 +98,9 @@ fun NextpariHeader(
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-                HeaderIcon(if (darkTheme) NextpariIcons.ThemeLight else NextpariIcons.ThemeDark, "Переключить тему", NextpariIconPalette.Header.Theme, onToggleTheme)
-                HeaderIcon(NextpariIcons.Settings, "Настройки", NextpariIconPalette.Header.Settings, onSettings)
-                HeaderIcon(NextpariIcons.Search, "Поиск", NextpariIconPalette.Header.Search, onSearch)
+                HeaderIcon("service_light_theme".takeIf { darkTheme } ?: "service_dark_theme", "Переключить тему", if (darkTheme) NextpariIcons.ThemeLight else NextpariIcons.ThemeDark, NextpariIconPalette.Header.Theme, onToggleTheme)
+                HeaderIcon("menu_settings", "Настройки", NextpariIcons.Settings, NextpariIconPalette.Header.Settings, onSettings)
+                HeaderIcon("service_search", "Поиск", NextpariIcons.Search, NextpariIconPalette.Header.Search, onSearch)
             }
         }
     }
@@ -108,8 +108,9 @@ fun NextpariHeader(
 
 @Composable
 private fun HeaderIcon(
-    icon: ImageVector,
+    referenceKey: String,
     description: String,
+    fallback: ImageVector,
     tint: Color,
     onClick: () -> Unit,
 ) {
@@ -120,16 +121,13 @@ private fun HeaderIcon(
         contentAlignment = Alignment.Center,
     ) {
         if (isPremiumIcons()) {
-            NextpariPremiumIcon(
-                imageVector = icon,
-                semantic = tint,
+            NextpariReferenceIcon(
+                key = referenceKey,
                 contentDescription = description,
-                containerSize = 32.dp,
-                iconSize = 18.dp,
-                showContainer = true,
+                size = 24.dp,
             )
         } else {
-            Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
+            Icon(fallback, contentDescription = description, tint = tint, modifier = Modifier.size(20.dp))
         }
     }
 }

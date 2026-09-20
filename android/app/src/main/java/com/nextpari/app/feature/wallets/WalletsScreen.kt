@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -77,11 +78,11 @@ fun WalletsScreen(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    NextpariIcons.ChevronLeft,
+                NextpariGlyph(
+                    imageVector = NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = NextpariIconPalette.Action.Chevron,
-                    modifier = Modifier.size(20.dp),
+                    size = 20.dp,
                 )
             }
             Text(

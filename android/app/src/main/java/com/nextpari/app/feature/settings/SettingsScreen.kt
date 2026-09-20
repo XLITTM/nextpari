@@ -59,8 +59,12 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
+import com.nextpari.app.core.ui.icons.NextpariReferenceIcon
+import com.nextpari.app.core.ui.icons.NextpariReferenceIconAssets
+import com.nextpari.app.core.ui.icons.isPremiumIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -280,11 +284,11 @@ private fun SettingsPage(
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(
-                    NextpariIcons.ChevronLeft,
+                NextpariGlyph(
+                    imageVector = NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = NextpariIconPalette.Action.Chevron,
-                    modifier = Modifier.size(24.dp),
+                    size = 24.dp,
                 )
             }
             Text(
@@ -499,11 +503,21 @@ private fun RadioRow(label: String, hint: String, selected: Boolean, dark: Boole
 
 @Composable
 private fun SettingsIconBox(icon: ImageVector, bg: Color, tint: Color) {
-    Box(
-        Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(bg),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+    val key = NextpariReferenceIconAssets.keyForVector(icon)
+    if (isPremiumIcons() && key != null) {
+        Box(
+            Modifier.size(36.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            NextpariReferenceIcon(key = key, contentDescription = null, size = 22.dp)
+        }
+    } else {
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(12.dp)).background(bg),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(16.dp))
+        }
     }
 }
 
@@ -698,10 +712,10 @@ private fun SheetHeader(icon: ImageVector, title: String, subtitle: String, dark
     val colors = NextpariTheme.colors
     Row(Modifier.padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(NextpariIconPalette.container(iconTint, dark)),
+            Modifier.size(40.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(icon, contentDescription = null, tint = iconTint, modifier = Modifier.size(20.dp))
+            NextpariGlyph(icon, contentDescription = null, tint = iconTint, size = 20.dp)
         }
         Column(Modifier.padding(start = 12.dp)) {
             Text(title, color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)

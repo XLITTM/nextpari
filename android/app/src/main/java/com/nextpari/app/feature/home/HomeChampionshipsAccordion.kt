@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.components.ProductSectionHeader
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -140,11 +141,12 @@ private fun HomeCountryCard(
             )
             CountPill(group.count)
             Spacer(Modifier.width(8.dp))
-            Icon(
-                NextpariIcons.ChevronDown,
+            NextpariGlyph(
+                imageVector = NextpariIcons.ChevronDown,
                 contentDescription = null,
                 tint = NextpariIconPalette.Action.Chevron,
-                modifier = Modifier.size(18.dp).rotate(rotation),
+                size = 18.dp,
+                modifier = Modifier.rotate(rotation),
             )
         }
         AnimatedVisibility(visible = expanded && group.leagues.isNotEmpty(), enter = expandVertically(), exit = shrinkVertically()) {

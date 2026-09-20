@@ -73,7 +73,7 @@ fun SportsListScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    NextpariSportIconBadge(row.id, containerSize = 36.dp, iconSize = 24.dp)
+                    NextpariSportIconBadge(row.id, containerSize = 36.dp, iconSize = 28.dp)
                     Spacer(Modifier.width(12.dp))
                     Text(row.name, color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                     Box(

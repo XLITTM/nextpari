@@ -102,7 +102,7 @@ fun NextpariSportIconBadge(
     contentDescription: String? = null,
     active: Boolean = true,
     containerSize: Dp = 36.dp,
-    iconSize: Dp = 24.dp,
+    iconSize: Dp = 28.dp,
 ) {
     when (NextpariIconConfig.defaultVariant) {
         NextpariIconVariant.Legacy -> NextpariSportIcon(
@@ -110,16 +110,12 @@ fun NextpariSportIconBadge(
             modifier = modifier.size(iconSize),
             contentDescription = contentDescription,
         )
-        NextpariIconVariant.Premium -> NextpariPremiumIcon(
-            imageVector = NextpariSportIcons.vector(sportId),
-            semantic = NextpariIconPalette.Sport.of(sportId),
+        NextpariIconVariant.Premium -> NextpariReferenceIcon(
+            key = NextpariSportIcons.referenceKey(sportId),
             modifier = modifier,
             contentDescription = contentDescription,
-            containerSize = containerSize,
-            iconSize = iconSize,
+            size = iconSize,
             active = active,
-            showContainer = true,
-            inactiveAlpha = 0.7f,
         )
     }
 }

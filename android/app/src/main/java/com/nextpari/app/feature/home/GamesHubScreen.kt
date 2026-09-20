@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.session.AuthSession
+import com.nextpari.app.core.ui.icons.NextpariGlyph
 import com.nextpari.app.core.ui.icons.NextpariIconPalette
 import com.nextpari.app.core.ui.icons.NextpariIcons
 
@@ -152,7 +153,7 @@ private fun GamesHeaderBar(
                 Modifier.clickable(onClick = onBack).padding(horizontal = 4.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(NextpariIcons.Back, contentDescription = "Назад", tint = NextpariIconPalette.Action.Chevron)
+                NextpariGlyph(NextpariIcons.Back, contentDescription = "Назад", tint = NextpariIconPalette.Action.Chevron)
                 Text("Назад", color = Color(0xFFCBD5E1), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
             if (state.searchOpen) {
@@ -165,7 +166,7 @@ private fun GamesHeaderBar(
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(NextpariIcons.Search, contentDescription = null, tint = NextpariIconPalette.Action.Search, modifier = Modifier.size(16.dp))
+                    NextpariGlyph(NextpariIcons.Search, contentDescription = null, tint = NextpariIconPalette.Action.Search, size = 16.dp)
                     Spacer(Modifier.width(8.dp))
                     BasicTextField(
                         value = state.query,
@@ -197,8 +198,8 @@ private fun GamesHeaderBar(
                 )
             }
             IconButton(onClick = onToggleSearch) {
-                Icon(
-                    if (state.searchOpen) NextpariIcons.Close else NextpariIcons.Search,
+                NextpariGlyph(
+                    imageVector = if (state.searchOpen) NextpariIcons.Close else NextpariIcons.Search,
                     contentDescription = "Поиск",
                     tint = NextpariIconPalette.Action.Search,
                 )
@@ -230,8 +231,8 @@ private fun GamesHeaderBar(
                         Text("ID #${session.playerPublicId.filter { it.isDigit() }.ifBlank { session.playerPublicId }}", color = Color(0xFF94A3B8), fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
-                Icon(
-                    NextpariIcons.ChevronDown,
+                NextpariGlyph(
+                    imageVector = NextpariIcons.ChevronDown,
                     contentDescription = null,
                     tint = NextpariIconPalette.Action.Chevron,
                     modifier = Modifier.rotate(if (state.walletMenu) 180f else 0f),
