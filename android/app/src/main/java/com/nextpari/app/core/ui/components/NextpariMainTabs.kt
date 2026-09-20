@@ -1,6 +1,5 @@
 package com.nextpari.app.core.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -34,7 +33,7 @@ fun NextpariMainTabs(
     onChange: (MainTabSpec) -> Unit,
 ) {
     val colors = NextpariTheme.colors
-    Row(Modifier.fillMaxWidth().background(colors.bg).padding(horizontal = 8.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         MainTabsSpec.tabs.forEach { tab ->
             val active = tab.id == activeId
             val icon = tabIcon(tab.id)

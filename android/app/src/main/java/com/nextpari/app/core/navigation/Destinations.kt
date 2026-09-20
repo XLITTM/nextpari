@@ -70,6 +70,30 @@ object Destinations {
         return bottomNavRoutes.contains(value)
     }
 
+    /**
+     * Mirrors web `navActive` in `src/App.tsx`.
+     * Maps a player destination onto the five bottom-nav sections.
+     */
+    fun bottomNavActiveRoute(route: String?): String {
+        val value = route ?: return HOME
+        if (value in bottomNavRoutes) return value
+        if (value == BET_DETAILS || value.startsWith("bet-details/")) return HISTORY
+        if (isHomeParentRoute(value)) return HOME
+        return MENU
+    }
+
+    private fun isHomeParentRoute(route: String): Boolean {
+        if (route == MATCH || route.startsWith("match/")) return true
+        if (route == GAMELIST_LIVE || route == GAMELIST_LINE || route.startsWith("gamelist/")) return true
+        if (route == LEAGUE || route.startsWith("league/")) return true
+        return route in homeParentExact
+    }
+
+    private val homeParentExact = setOf(
+        GAMES, BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK,
+        PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, PROMO_UNBEATABLE,
+    )
+
     fun showsHeader(route: String?): Boolean =
         route == HOME || route == FAVORITES || route?.startsWith("home") == true
 

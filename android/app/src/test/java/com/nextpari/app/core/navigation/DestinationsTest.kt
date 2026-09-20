@@ -68,6 +68,32 @@ class DestinationsTest {
     }
 
     @Test
+    fun bottomNavActiveRouteMatchesWebNavActive() {
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.HOME)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.FAVORITES)).isEqualTo(Destinations.FAVORITES)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.BETSLIP)).isEqualTo(Destinations.BETSLIP)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.HISTORY)).isEqualTo(Destinations.HISTORY)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.MENU)).isEqualTo(Destinations.MENU)
+
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.MATCH)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.match("42"))).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.AVIATOR)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.LEAGUE)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.league("epl"))).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.GAMES)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.GAMELIST_LIVE)).isEqualTo(Destinations.HOME)
+
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.BET_DETAILS)).isEqualTo(Destinations.HISTORY)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.betDetails("7"))).isEqualTo(Destinations.HISTORY)
+
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLET)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SETTINGS)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_LIVE)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SLOTS)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.CHAMPIONSHIPS)).isEqualTo(Destinations.MENU)
+    }
+
+    @Test
     fun authAndAppGraphsDoNotOverlap() {
         val overlap = Destinations.unauthenticated.intersect(Destinations.webPlayerRoutes.toSet())
         assertThat(overlap).isEmpty()

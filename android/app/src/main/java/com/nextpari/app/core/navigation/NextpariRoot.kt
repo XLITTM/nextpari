@@ -178,10 +178,7 @@ private fun AuthenticatedShell(
         bottomBar = {
             if (showBottomBar) {
                 NextpariBottomNav(
-                    activeRoute = when {
-                        current == Destinations.GAMES -> Destinations.HOME
-                        else -> current
-                    },
+                    activeRoute = Destinations.bottomNavActiveRoute(current),
                     betCount = 0,
                     onSelect = { item -> navController.navigateTab(item.route) },
                 )
