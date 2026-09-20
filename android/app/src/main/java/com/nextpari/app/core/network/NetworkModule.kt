@@ -33,11 +33,11 @@ object NetworkModule {
     fun retrofit(client: OkHttpClient = okHttpClient()): Retrofit {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(BuildConfig.API_BASE_URL)
+            .baseUrl(NextpariConfig.API_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
     }
 
-    fun apiClient(): NextpariApiClient = RetrofitNextpariApiClient(BuildConfig.API_BASE_URL)
+    fun apiClient(): NextpariApiClient = RetrofitNextpariApiClient(NextpariConfig.API_BASE_URL)
 }

@@ -46,7 +46,7 @@ class FakeAuthRepositoryTest {
     }
 
     @Test
-    fun logoutClearsSession() = runTest {
+    fun H_logoutClearsSession() = runTest {
         val sessions = InMemorySessionRepository()
         val repository = FakeAuthRepository(sessions)
         repository.login(LoginIdentifier.Email("player@nextpari.dev"), "password")

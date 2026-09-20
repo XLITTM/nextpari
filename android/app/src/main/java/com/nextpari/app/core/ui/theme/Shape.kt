@@ -5,9 +5,9 @@ import androidx.compose.material3.Shapes
 import androidx.compose.ui.unit.dp
 
 val NextpariShapes = Shapes(
-    extraSmall = RoundedCornerShape(10.dp),
-    small = RoundedCornerShape(14.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+    extraSmall = RoundedCornerShape(12.dp),
+    small = RoundedCornerShape(NpRadiusControl),
+    medium = RoundedCornerShape(NpRadiusCard),
+    large = RoundedCornerShape(NpRadiusPanel),
+    extraLarge = RoundedCornerShape(32.dp),
 )

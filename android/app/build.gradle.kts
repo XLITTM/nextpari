@@ -14,13 +14,13 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0-a001"
+        versionName = "0.2.0-a002"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
 
-        // Public site only as configuration. A001 makes no authenticated production calls.
-        buildConfigField("String", "API_BASE_URL", "\"https://nextpari.com/\"")
+        // Public site only as configuration. A002 makes no authenticated production calls.
+        buildConfigField("String", "API_BASE_URL", "\"https://nextpari.net/\"")
     }
 
     buildTypes {

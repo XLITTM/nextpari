@@ -8,8 +8,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.nextpari.app.core.ui.theme.NpBackground
-import com.nextpari.app.core.ui.theme.NpText
+import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -18,6 +17,7 @@ fun NextpariTopBar(
     navigationIcon: ImageVector? = null,
     onNavigationClick: (() -> Unit)? = null,
 ) {
+    val colors = NextpariTheme.colors
     TopAppBar(
         title = { Text(title) },
         navigationIcon = {
@@ -28,9 +28,9 @@ fun NextpariTopBar(
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = NpBackground,
-            titleContentColor = NpText,
-            navigationIconContentColor = NpText,
+            containerColor = colors.bg,
+            titleContentColor = colors.text,
+            navigationIconContentColor = colors.text,
         ),
     )
 }
