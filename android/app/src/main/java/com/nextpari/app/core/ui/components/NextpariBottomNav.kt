@@ -13,12 +13,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ConfirmationNumber
-import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.History
-import androidx.compose.material.icons.outlined.LocalFireDepartment
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.BottomNavItem
 import com.nextpari.app.core.navigation.BottomNavSpec
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -92,7 +87,7 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                Icons.Outlined.ConfirmationNumber,
+                NextpariIcons.Betslip,
                 contentDescription = "Купон",
                 tint = Color.White,
                 modifier = Modifier.size(24.dp),
@@ -146,9 +141,4 @@ private fun NavItem(
     }
 }
 
-private fun navIcon(route: String): ImageVector = when (route) {
-    Destinations.HOME -> Icons.Outlined.LocalFireDepartment
-    Destinations.FAVORITES -> Icons.Outlined.StarBorder
-    Destinations.HISTORY -> Icons.Outlined.History
-    else -> Icons.Outlined.GridView
-}
+private fun navIcon(route: String): ImageVector = NextpariIcons.bottomNav(route)

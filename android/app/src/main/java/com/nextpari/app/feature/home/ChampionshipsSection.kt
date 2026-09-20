@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.components.LiveIndicator
 import com.nextpari.app.core.ui.components.ProductSectionHeader
+import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -91,7 +92,7 @@ private fun ChampionshipCard(row: ChampionshipRow, dark: Boolean, onOpen: () -> 
         }
         Text("${row.count}", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, fontSize = 14.sp)
         Icon(
-            if (row.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+            if (row.isFavorite) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
             contentDescription = "Добавить чемпионат в избранное",
             tint = if (row.isFavorite) Color(0xFF16A34A) else colors.textSecondary,
             modifier = Modifier.padding(start = 8.dp).size(16.dp),

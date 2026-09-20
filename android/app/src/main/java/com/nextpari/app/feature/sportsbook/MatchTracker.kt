@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.feature.home.MatchCardModel
 
 private val TrackerSlides = listOf("Счёт", "Таймы", "H2H", "Статистика", "Хронология", "Стадион")
@@ -72,7 +73,7 @@ fun MatchTracker(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.ArrowBack,
+                    NextpariIcons.Back,
                     contentDescription = "Назад",
                     tint = Color.White,
                     modifier = Modifier.size(20.dp).clickable(onClick = onBack),
@@ -87,14 +88,14 @@ fun MatchTracker(
                     modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                 )
                 Icon(
-                    Icons.Outlined.Bolt,
+                    NextpariIcons.Bolt,
                     contentDescription = "Live",
                     tint = Color(0xFF4ADE80),
                     modifier = Modifier.size(20.dp).clickable(onClick = onLiveClick),
                 )
                 Spacer(Modifier.width(12.dp))
                 Icon(
-                    Icons.Outlined.MoreVert,
+                    NextpariIcons.More,
                     contentDescription = "Меню",
                     tint = Color.White,
                     modifier = Modifier.size(20.dp).clickable { menuOpen = !menuOpen },
@@ -183,7 +184,7 @@ private fun ScoreSlide(match: MatchCardModel, favorite: Boolean, onToggleFavorit
             TeamBlock(match.team2, match.team2LogoRes, Modifier.weight(1f))
         }
         Icon(
-            if (favorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+            if (favorite) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
             contentDescription = null,
             tint = if (favorite) Color(0xFF4ADE80) else Color.White,
             modifier = Modifier.padding(top = 8.dp).size(18.dp).clickable(onClick = onToggleFavorite),
@@ -222,7 +223,7 @@ fun StreamPanel() {
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(Icons.Outlined.WifiTethering, contentDescription = null, tint = Color(0xFF22C55E), modifier = Modifier.size(40.dp))
+        Icon(NextpariIcons.Wifi, contentDescription = null, tint = Color(0xFF22C55E), modifier = Modifier.size(40.dp))
         Text("Трансляция недоступна", color = Color(0xFF1A1A1A), fontSize = 16.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
         Text("Стрим появится после подключения провайдера", color = Color(0xFF666666), fontSize = 14.sp, fontWeight = FontWeight.Medium, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp, bottom = 80.dp))
     }

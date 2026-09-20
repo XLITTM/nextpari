@@ -8,12 +8,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Casino
-import androidx.compose.material.icons.outlined.Gamepad
-import androidx.compose.material.icons.outlined.LocalFireDepartment
-import androidx.compose.material.icons.outlined.SportsEsports
-import androidx.compose.material.icons.outlined.EmojiEvents
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,11 +15,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.MainTabSpec
 import com.nextpari.app.core.navigation.MainTabsSpec
+import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
 
@@ -38,7 +32,7 @@ fun NextpariMainTabs(
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
         MainTabsSpec.tabs.forEach { tab ->
             val active = tab.id == activeId
-            val icon = tabIcon(tab.id)
+            val icon = NextpariIcons.mainTab(tab.id)
             val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
             Column(
                 modifier = Modifier
@@ -75,10 +69,3 @@ fun NextpariMainTabs(
     }
 }
 
-private fun tabIcon(id: String): ImageVector = when (id) {
-    "top" -> Icons.Outlined.LocalFireDepartment
-    "sport" -> Icons.Outlined.EmojiEvents
-    "esports" -> Icons.Outlined.SportsEsports
-    "casino" -> Icons.Outlined.Casino
-    else -> Icons.Outlined.Gamepad
-}

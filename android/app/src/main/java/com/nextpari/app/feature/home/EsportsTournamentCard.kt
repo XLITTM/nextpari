@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.components.LiveBadge
 import com.nextpari.app.core.ui.components.ProductSectionHeader
+import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariSportIcon
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -76,9 +78,8 @@ fun EsportsTournamentCard(
             .padding(14.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painterResource(SportIconRes.drawable(model.iconSport)),
-                contentDescription = null,
+            NextpariSportIcon(
+                model.iconSport,
                 modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).padding(4.dp),
             )
             Text(
@@ -91,7 +92,7 @@ fun EsportsTournamentCard(
                 overflow = TextOverflow.Ellipsis,
             )
             Icon(
-                if (model.isFavorite) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                if (model.isFavorite) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
                 contentDescription = null,
                 tint = if (model.isFavorite) Color(0xFF4ADE80) else Color.White.copy(alpha = 0.7f),
                 modifier = Modifier.size(16.dp),

@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.components.ProductSectionHeader
+import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -61,11 +62,11 @@ fun CasinoHomeContent(
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
         ProductSectionHeader(title = "Казино")
-        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", Icons.Outlined.Casino) {
+        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", NextpariIcons.Casino) {
             onNavigate(Destinations.SLOTS)
         }
         Spacer(Modifier.height(8.dp))
-        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", Icons.Outlined.LiveTv) {
+        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", NextpariIcons.Live) {
             onNavigate(Destinations.LIVE_CASINO)
         }
         if (features.isNotEmpty()) {
@@ -136,7 +137,7 @@ private fun CasinoEntry(title: String, desc: String, icon: ImageVector, onClick:
             Text(title, fontWeight = FontWeight.ExtraBold, color = colors.text, fontSize = 14.sp)
             Text(desc, color = colors.textSecondary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         }
-        Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
+        Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(20.dp))
     }
 }
 
@@ -220,10 +221,10 @@ fun CasinoTournamentCard(model: CasinoTournament, onOpen: () -> Unit) {
 @Composable
 private fun CasinoCategoryTile(card: CasinoCategoryCard, onOpen: () -> Unit) {
     val icon = when (card.id) {
-        "live" -> Icons.Outlined.LiveTv
-        "tv" -> Icons.Outlined.Tv
-        "bingo" -> Icons.Outlined.EmojiEvents
-        else -> Icons.Outlined.Casino
+        "live" -> NextpariIcons.Live
+        "tv" -> NextpariIcons.Tv
+        "bingo" -> NextpariIcons.Trophy
+        else -> NextpariIcons.Casino
     }
     Box(
         Modifier

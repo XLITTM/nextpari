@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariIcons
 
 @Composable
 fun VipCashbackScreen(onBack: () -> Unit) {
@@ -74,15 +75,15 @@ fun VipCashbackScreen(onBack: () -> Unit) {
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Назад", tint = Color.White.copy(alpha = 0.85f))
+                Icon(NextpariIcons.Back, contentDescription = "Назад", tint = Color.White.copy(alpha = 0.85f))
             }
             Text("VIP CLUB", color = Color.White.copy(alpha = 0.9f), fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.Center)
             Spacer(Modifier.width(40.dp))
         }
         VipHero()
         Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            VipTabButton("VIP уровни", Icons.Outlined.WorkspacePremium, tab == 0, Modifier.weight(1f)) { tab = 0 }
-            VipTabButton("Кешбэк", Icons.Outlined.Paid, tab == 1, Modifier.weight(1f)) { tab = 1 }
+            VipTabButton("VIP уровни", NextpariIcons.Vip, tab == 0, Modifier.weight(1f)) { tab = 0 }
+            VipTabButton("Кешбэк", NextpariIcons.Cashback, tab == 1, Modifier.weight(1f)) { tab = 1 }
         }
         if (tab == 0) LevelsPanel(selected) { selectedId = it } else CashbackPanel()
         PreviewNotice()
@@ -111,7 +112,7 @@ private fun VipHero() {
                     .background(Color.Black.copy(alpha = 0.3f)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.WorkspacePremium, contentDescription = null, tint = Color(0xFFF3D36F), modifier = Modifier.size(14.dp))
+                Icon(NextpariIcons.Vip, contentDescription = null, tint = Color(0xFFF3D36F), modifier = Modifier.size(14.dp))
             }
             Row(Modifier.padding(top = 6.dp)) {
                 Text("NEXT", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 4.sp)
@@ -273,7 +274,7 @@ private fun LevelsPanel(selected: VipTier, onSelect: (Int) -> Unit) {
                 .background(Color.Black.copy(alpha = 0.35f))
                 .padding(12.dp),
         ) {
-            Icon(Icons.Outlined.Info, contentDescription = null, tint = Color.White.copy(alpha = 0.45f), modifier = Modifier.size(16.dp))
+            Icon(NextpariIcons.Info, contentDescription = null, tint = Color.White.copy(alpha = 0.45f), modifier = Modifier.size(16.dp))
             Text(VipCatalog.levelsNotice, color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
         }
     }
@@ -337,9 +338,9 @@ private fun CashbackPanel() {
             }
         }
         Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FeatureCard("Зависит от VIP-уровня", "Чем выше уровень, тем больше привилегий", Icons.Outlined.WorkspacePremium, Modifier.weight(1f))
-            FeatureCard("Рассчитывается автоматически", "Всё происходит автоматически системой", Icons.Outlined.Settings, Modifier.weight(1f))
-            FeatureCard("Условия будут опубликованы", "Подробная информация перед запуском", Icons.Outlined.CardGiftcard, Modifier.weight(1f))
+            FeatureCard("Зависит от VIP-уровня", "Чем выше уровень, тем больше привилегий", NextpariIcons.Vip, Modifier.weight(1f))
+            FeatureCard("Рассчитывается автоматически", "Всё происходит автоматически системой", NextpariIcons.Settings, Modifier.weight(1f))
+            FeatureCard("Условия будут опубликованы", "Подробная информация перед запуском", NextpariIcons.Gift, Modifier.weight(1f))
         }
     }
 }
@@ -377,24 +378,24 @@ private fun PreviewNotice() {
                 .background(Brush.linearGradient(listOf(Color(0xFF16A967), Color(0xFF22E58A)))),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Outlined.WorkspacePremium, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(NextpariIcons.Vip, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
         Text(VipCatalog.previewNotice, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp, modifier = Modifier.padding(start = 12.dp))
     }
 }
 
 private fun tierIcon(id: Int): ImageVector = when (id) {
-    1 -> Icons.Outlined.EmojiEvents
-    2 -> Icons.Outlined.Star
-    3 -> Icons.Outlined.Shield
-    5 -> Icons.Outlined.Diamond
-    6 -> Icons.Outlined.AutoAwesome
-    7 -> Icons.Outlined.EmojiEvents
-    else -> Icons.Outlined.WorkspacePremium
+    1 -> NextpariIcons.Trophy
+    2 -> NextpariIcons.FavoriteStar
+    3 -> NextpariIcons.Shield
+    5 -> NextpariIcons.Diamond
+    6 -> NextpariIcons.Promo
+    7 -> NextpariIcons.Trophy
+    else -> NextpariIcons.Vip
 }
 
 private fun privilegeIcon(index: Int): ImageVector = when (index) {
-    0 -> Icons.Outlined.CardGiftcard
-    1 -> Icons.Outlined.Star
-    else -> Icons.Outlined.Diamond
+    0 -> NextpariIcons.Gift
+    1 -> NextpariIcons.FavoriteStar
+    else -> NextpariIcons.Diamond
 }

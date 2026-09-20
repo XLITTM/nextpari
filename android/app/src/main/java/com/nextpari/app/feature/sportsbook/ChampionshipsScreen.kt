@@ -47,10 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariSportIcon
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
-import com.nextpari.app.feature.home.SportIconRes
 
 @Composable
 fun ChampionshipsScreen(
@@ -77,9 +78,9 @@ fun ChampionshipsScreen(
                 title = "Чемпионаты",
                 onBack = onBack,
                 actions = listOf(
-                    Icons.Outlined.Search to "Поиск",
-                    Icons.Outlined.Language to "Страна",
-                    Icons.Outlined.Tv to "Трансляции",
+                    NextpariIcons.Search to "Поиск",
+                    NextpariIcons.Language to "Страна",
+                    NextpariIcons.Tv to "Трансляции",
                 ),
             )
             SportsbookSegmentedTabs(
@@ -92,7 +93,7 @@ fun ChampionshipsScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(painterResource(SportIconRes.drawable(sport)), contentDescription = null, modifier = Modifier.size(24.dp))
+            NextpariSportIcon(sport, modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(8.dp))
             Text(sportName.uppercase(), color = if (dark) Color(0xFFD1D5DB) else Color(0xFF4B5563), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
@@ -146,7 +147,7 @@ private fun CountryAccordion(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Outlined.Language, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            Icon(NextpariIcons.Language, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
             Text(
                 group.country,
@@ -163,7 +164,7 @@ private fun CountryAccordion(
                 Modifier.size(24.dp).clip(CircleShape).background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6)),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp).rotate(rotation))
+                Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp).rotate(rotation))
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6)))
@@ -192,7 +193,7 @@ private fun CountryAccordion(
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (league.name in favorites) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                                if (league.name in favorites) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
                                 contentDescription = "Добавить чемпионат в избранное",
                                 tint = if (league.name in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
                                 modifier = Modifier.size(20.dp),

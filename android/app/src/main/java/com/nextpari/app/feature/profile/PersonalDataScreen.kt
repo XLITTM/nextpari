@@ -21,15 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.outlined.CheckCircle
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.Phone
-import androidx.compose.material.icons.outlined.Save
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,6 +45,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.settings.AccountSecurity
@@ -110,7 +102,7 @@ fun PersonalDataScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = colors.text,
                     modifier = Modifier.size(20.dp),
@@ -135,7 +127,7 @@ fun PersonalDataScreen(
                             .padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Outlined.Shield, contentDescription = null, tint = Brand700, modifier = Modifier.size(14.dp))
+                        Icon(NextpariIcons.Shield, contentDescription = null, tint = Brand700, modifier = Modifier.size(14.dp))
                         Text(
                             PersonalDataCatalog.VERIFIED_BADGE,
                             color = Brand700,
@@ -242,7 +234,7 @@ fun PersonalDataScreen(
                     CardTitle(PersonalDataCatalog.CARD_PHONE, Modifier.weight(1f))
                     if (data.phoneVerified) VerifiedBadge()
                 }
-                IconValue(Icons.Outlined.Phone, data.phone, PersonalDataCatalog.PHONE_PLACEHOLDER, dark)
+                IconValue(NextpariIcons.Phone, data.phone, PersonalDataCatalog.PHONE_PLACEHOLDER, dark)
                 Text(PersonalDataCatalog.PHONE_HELPER, color = colors.textMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             }
             Spacer(Modifier.height(16.dp))
@@ -252,7 +244,7 @@ fun PersonalDataScreen(
                     CardTitle(PersonalDataCatalog.CARD_EMAIL, Modifier.weight(1f))
                     if (data.emailVerified && data.email.isNotBlank()) VerifiedBadge()
                 }
-                IconValue(Icons.Outlined.MailOutline, data.email, PersonalDataCatalog.EMAIL_PLACEHOLDER, dark)
+                IconValue(NextpariIcons.Mail, data.email, PersonalDataCatalog.EMAIL_PLACEHOLDER, dark)
                 Text(
                     if (data.email.isNotBlank() && data.emailVerified) "${data.email} · Подтверждена ✓" else PersonalDataCatalog.EMAIL_HELPER,
                     color = colors.textMuted,
@@ -288,7 +280,7 @@ fun PersonalDataScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Outlined.Save, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+                    Icon(NextpariIcons.Save, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                     Text(
                         if (state.saving) PersonalDataCatalog.SAVING else PersonalDataCatalog.SAVE,
                         color = Color.White,
@@ -437,7 +429,7 @@ private fun OptionSelect(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            Icon(Icons.Outlined.KeyboardArrowDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+            Icon(NextpariIcons.ChevronDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
         }
         if (open && !locked) {
             Column(
@@ -453,7 +445,7 @@ private fun OptionSelect(
             ) {
                 if (searchable) {
                     Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Search, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+                        Icon(NextpariIcons.Search, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
                         Spacer(Modifier.size(8.dp))
                         BasicTextField(
                             value = query,
@@ -518,7 +510,7 @@ private fun VerifiedBadge() {
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(Icons.Outlined.CheckCircle, contentDescription = null, tint = BrandGreen, modifier = Modifier.size(12.dp))
+        Icon(NextpariIcons.Check, contentDescription = null, tint = BrandGreen, modifier = Modifier.size(12.dp))
         Text(PersonalDataCatalog.VERIFIED, color = BrandGreen, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 4.dp))
     }
 }

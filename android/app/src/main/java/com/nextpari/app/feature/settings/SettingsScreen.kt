@@ -25,23 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.FactCheck
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.outlined.Logout
-import androidx.compose.material.icons.outlined.AdsClick
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.FileUpload
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Percent
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.VerifiedUser
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material.icons.outlined.VpnKey
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -76,6 +59,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -141,7 +125,7 @@ fun SettingsScreen(
         SettingsPage(title = SettingsCatalog.TITLE, dark = dark, screenBg = screenBg, onBack = onBack) {
             SettingsGroup(title = "Управление счётом", dark = dark) {
                 SettingsRow(
-                    icon = Icons.Outlined.FileDownload,
+                    icon = NextpariIcons.Download,
                     iconBg = if (dark) BrandIconDarkBg else BrandIconLightBg,
                     iconTint = if (dark) BrandIconDarkFg else BrandGreen,
                     label = "Пополнить",
@@ -150,7 +134,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider(dark)
                 SettingsRow(
-                    icon = Icons.Outlined.FileUpload,
+                    icon = NextpariIcons.Upload,
                     iconBg = if (dark) BrandIconDarkBg else BrandIconLightBg,
                     iconTint = if (dark) BrandIconDarkFg else BrandGreen,
                     label = "Вывести",
@@ -163,7 +147,7 @@ fun SettingsScreen(
                 EmailStatusRow(verifiedEmail = verifiedEmail, dark = dark)
                 SettingsDivider(dark)
                 SettingsRow(
-                    icon = Icons.Outlined.MailOutline,
+                    icon = NextpariIcons.Mail,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = SettingsCatalog.emailActionLabel(verifiedEmail),
@@ -172,7 +156,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider(dark)
                 SettingsRow(
-                    icon = Icons.Outlined.VpnKey,
+                    icon = NextpariIcons.Key,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = "Сменить пароль",
@@ -183,7 +167,7 @@ fun SettingsScreen(
 
             SettingsGroup(title = "Настройки ставок", dark = dark) {
                 SettingsRow(
-                    icon = Icons.AutoMirrored.Outlined.FactCheck,
+                    icon = NextpariIcons.FactCheck,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = "Провод ставки",
@@ -192,7 +176,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider(dark)
                 SoonRow(
-                    icon = Icons.Outlined.AdsClick,
+                    icon = NextpariIcons.Ads,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = "Ставка в 1 клик",
@@ -202,7 +186,7 @@ fun SettingsScreen(
 
             SettingsGroup(title = "Настройки приложения", dark = dark) {
                 InfoRow(
-                    icon = Icons.Outlined.Percent,
+                    icon = NextpariIcons.Percent,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = "Тип коэффициентов",
@@ -211,7 +195,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider(dark)
                 SoonRow(
-                    icon = Icons.Outlined.Notifications,
+                    icon = NextpariIcons.Notifications,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = "Push",
@@ -219,7 +203,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider(dark)
                 SoonRow(
-                    icon = Icons.Outlined.Language,
+                    icon = NextpariIcons.Language,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = "Выбор языка",
@@ -229,7 +213,7 @@ fun SettingsScreen(
 
             SettingsGroup(title = "О приложении", dark = dark) {
                 SettingsRow(
-                    icon = Icons.Outlined.Share,
+                    icon = NextpariIcons.Share,
                     iconBg = grayIconBg(dark),
                     iconTint = grayIconFg(dark),
                     label = "Поделиться",
@@ -245,7 +229,7 @@ fun SettingsScreen(
                 )
                 SettingsDivider(dark)
                 SettingsRow(
-                    icon = Icons.AutoMirrored.Outlined.Logout,
+                    icon = NextpariIcons.Logout,
                     iconBg = if (dark) LogoutDarkBg else LogoutLightBg,
                     iconTint = if (dark) LogoutDarkFg else LogoutFg,
                     label = "Выйти",
@@ -296,7 +280,7 @@ private fun SettingsPage(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                    NextpariIcons.ChevronLeft,
                     contentDescription = "Назад",
                     tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
                     modifier = Modifier.size(24.dp),
@@ -386,7 +370,7 @@ private fun SettingsRow(
             modifier = Modifier.weight(1f),
         )
         if (!hideChevron) {
-            Icon(Icons.Outlined.ChevronRight, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
+            Icon(NextpariIcons.ChevronRight, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -455,7 +439,7 @@ private fun EmailStatusRow(verifiedEmail: String, dark: Boolean) {
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        SettingsIconBox(Icons.Outlined.MailOutline, grayIconBg(dark), grayIconFg(dark))
+        SettingsIconBox(NextpariIcons.Mail, grayIconBg(dark), grayIconFg(dark))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text("Электронная почта", color = colors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
@@ -541,7 +525,7 @@ private fun ChangePasswordModal(dark: Boolean, onClose: () -> Unit) {
     val focus = LocalFocusManager.current
     SettingsSheet(dark = dark, onClose = onClose) {
         SheetHeader(
-            icon = Icons.Outlined.VerifiedUser,
+            icon = NextpariIcons.Verified,
             title = "Сменить пароль",
             subtitle = "Безопасность",
             dark = dark,
@@ -605,7 +589,7 @@ private fun EmailBindModal(dark: Boolean, verifiedEmail: String, onClose: () -> 
     var error by rememberSaveable { mutableStateOf("") }
     SettingsSheet(dark = dark, onClose = onClose) {
         SheetHeader(
-            icon = Icons.Outlined.MailOutline,
+            icon = NextpariIcons.Mail,
             title = if (verifiedEmail.isNotBlank()) SettingsCatalog.CHANGE_EMAIL else SettingsCatalog.BIND_EMAIL,
             subtitle = "Электронная почта",
             dark = dark,
@@ -743,7 +727,7 @@ private fun PasswordField(
             trailing = true,
         )
         Icon(
-            if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+            if (visible) NextpariIcons.EyeOff else NextpariIcons.Eye,
             contentDescription = if (visible) "Скрыть пароль" else "Показать пароль",
             tint = Color(0xFF9CA3AF),
             modifier = Modifier

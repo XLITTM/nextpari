@@ -35,9 +35,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariIcons
+import com.nextpari.app.core.ui.icons.NextpariSportIcon
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.feature.home.SportIconRes
 
 @Composable
 fun SportsListScreen(
@@ -57,7 +58,7 @@ fun SportsListScreen(
             SportsbookScreenHeader(
                 title = "Виды спорта",
                 onBack = onBack,
-                actions = listOf(Icons.Outlined.Search to "Поиск"),
+                actions = listOf(NextpariIcons.Search to "Поиск"),
             )
             SportsbookSegmentedTabs(
                 tabs = listOf("live" to "LIVE", "line" to "Линия", "cybers" to "Киберы"),
@@ -77,7 +78,7 @@ fun SportsListScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Image(painterResource(SportIconRes.drawable(row.id)), contentDescription = null, modifier = Modifier.size(24.dp))
+                    NextpariSportIcon(row.id, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(12.dp))
                     Text(row.name, color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
                     Box(
@@ -85,7 +86,7 @@ fun SportsListScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            if (row.id in favorites) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                            if (row.id in favorites) NextpariIcons.FavoriteStar else NextpariIcons.FavoriteStarBorder,
                             contentDescription = "Добавить вид спорта в избранное",
                             tint = if (row.id in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
                             modifier = Modifier.size(16.dp),
