@@ -268,30 +268,21 @@ object SportsbookCatalog {
 }
 
 object HomeChampionships {
-    fun title(mode: String): String = if (mode == "line") "Чемпионаты Линия" else "Чемпионаты LIVE"
+    const val TITLE = "Чемпионаты LIVE"
 
     fun groups(
-        mode: String,
-        sportId: String,
         live: List<MatchCardModel>,
-        line: List<MatchCardModel>,
+        excludeEsports: Boolean = false,
     ): List<CountryGroup> {
-        val pool = SportsbookCatalog.pool(mode, live, line)
-        val filtered = com.nextpari.app.feature.home.SportsbookFilters.matchesForSport(
-            pool,
-            sportId.ifBlank { "all" },
-            excludeEsportsWhenAll = true,
-        )
-        return CountryGrouping.groupByCountry(filtered)
+        val source = if (excludeEsports) live.filter { it.sport != "esports" } else live
+        return CountryGrouping.groupByCountry(source)
     }
 
-    fun seeAllRoute(sportId: String, mode: String): String {
-        val resolved = if (mode == "line") "line" else "live"
+    fun seeAllRoute(sportId: String): String {
         return if (sportId.isBlank() || sportId == "all") {
-            if (resolved == "line") com.nextpari.app.core.navigation.Destinations.SPORTS_LINE
-            else com.nextpari.app.core.navigation.Destinations.SPORTS_LIVE
+            com.nextpari.app.core.navigation.Destinations.SPORTS_LIVE
         } else {
-            com.nextpari.app.core.navigation.Destinations.championships(sportId, resolved)
+            com.nextpari.app.core.navigation.Destinations.championships(sportId, "live")
         }
     }
 }

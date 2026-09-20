@@ -21,7 +21,6 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AutoAwesome
-import androidx.compose.material.icons.outlined.CardGiftcard
 import androidx.compose.material.icons.outlined.Casino
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.EmojiEvents
@@ -29,10 +28,8 @@ import androidx.compose.material.icons.outlined.Gamepad
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.MailOutline
-import androidx.compose.material.icons.outlined.Paid
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -123,7 +120,6 @@ fun MenuScreen(
                 }
             }
         }
-        MenuQuickAccess(onNavigate)
         Row(Modifier.fillMaxWidth().background(colors.surface).padding(horizontal = 8.dp)) {
             MenuCatalog.subTabs.forEach { label ->
                 val active = tab == label
@@ -224,56 +220,6 @@ private fun IconButtonBox(description: String, icon: ImageVector, onClick: () ->
     ) {
         Icon(icon, contentDescription = description, tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF4B5563), modifier = Modifier.size(20.dp))
     }
-}
-
-@Composable
-private fun MenuQuickAccess(onNavigate: (String) -> Unit) {
-    val colors = NextpariTheme.colors
-    Column(Modifier.background(colors.surface).padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MenuCatalog.quickAccess.take(2).forEach { item ->
-                QuickAccessCard(item, Modifier.weight(1f), onNavigate)
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            MenuCatalog.quickAccess.drop(2).forEach { item ->
-                QuickAccessCard(item, Modifier.weight(1f), onNavigate)
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickAccessCard(item: MenuCatalog.QuickAccess, modifier: Modifier, onNavigate: (String) -> Unit) {
-    val colors = NextpariTheme.colors
-    val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
-    Row(
-        modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(if (dark) Color(0xFF0F172A) else Color(0xFFF8FAFC))
-            .clickable { onNavigate(item.route) }
-            .padding(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(item.accent).copy(alpha = 0.16f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(quickAccessIcon(item.label), contentDescription = item.label, tint = Color(item.accent), modifier = Modifier.size(18.dp))
-        }
-        Text(item.label, color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp))
-    }
-}
-
-private fun quickAccessIcon(label: String): ImageVector = when (label) {
-    "VIP CLUB" -> Icons.Outlined.WorkspacePremium
-    "Кешбэк" -> Icons.Outlined.Paid
-    "Акции" -> Icons.Outlined.CardGiftcard
-    else -> Icons.Outlined.AutoAwesome
 }
 
 private fun menuTabIcon(label: String): ImageVector = when (label) {

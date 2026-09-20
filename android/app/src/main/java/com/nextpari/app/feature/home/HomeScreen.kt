@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
@@ -122,13 +123,15 @@ fun HomeScreen(
                         filterLabel = "Спорт",
                     )
                 }
-                item(key = "champs") {
-                    HomeChampionshipsAccordion(
-                        live = state.filteredLive,
-                        line = state.filteredLine,
-                        sportId = state.selectedSportId,
-                        onNavigate = onNavigate,
-                    )
+                if (HomeChampionships.groups(state.liveMatches, excludeEsports = true).isNotEmpty()) {
+                    item(key = "champs") {
+                        HomeChampionshipsAccordion(
+                            live = state.liveMatches,
+                            sportId = state.selectedSportId,
+                            onNavigate = onNavigate,
+                            excludeEsports = true,
+                        )
+                    }
                 }
             }
             else -> {
@@ -157,13 +160,15 @@ fun HomeScreen(
                         filterLabel = "Спорт",
                     )
                 }
-                item(key = "champs") {
-                    HomeChampionshipsAccordion(
-                        live = state.filteredLive,
-                        line = state.filteredLine,
-                        sportId = state.selectedSportId,
-                        onNavigate = onNavigate,
-                    )
+                if (HomeChampionships.groups(state.liveMatches, excludeEsports = false).isNotEmpty()) {
+                    item(key = "champs") {
+                        HomeChampionshipsAccordion(
+                            live = state.liveMatches,
+                            sportId = state.selectedSportId,
+                            onNavigate = onNavigate,
+                            excludeEsports = false,
+                        )
+                    }
                 }
                 item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
                 if (HomeFeedVisibility.optionalDataOnly(state.esportsLive.size) == HomeSectionBody.Data) {
@@ -188,11 +193,6 @@ fun HomeScreen(
                             onNavigate = onNavigate,
                             badge = "Esports",
                         )
-                    }
-                }
-                if (HomeFeedVisibility.optionalDataOnly(state.esportsTournaments.size) == HomeSectionBody.Data) {
-                    item(key = "esports-tournaments") {
-                        EsportsTournamentsSection(state.esportsTournaments, onNavigate)
                     }
                 }
             }

@@ -1,22 +1,17 @@
 package com.nextpari.app.feature.promo
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -40,15 +35,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.feature.home.HomePromo
 
 @Composable
 fun PromoScreen(
@@ -82,18 +73,9 @@ fun PromoScreen(
             Text("Promo", color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
 
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(PromoCatalog.carousel, key = { it.route }) { promo ->
-                PromoHeroCard(promo) { onNavigate(promo.route) }
-            }
-        }
-
         Box(
             Modifier
-                .padding(12.dp)
+                .padding(horizontal = 12.dp)
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(16.dp))
                 .background(Brush.horizontalGradient(listOf(Color(0xFF059669), Color(0xFF0F766E))))
@@ -113,36 +95,13 @@ fun PromoScreen(
             }
         }
 
-        Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             PromoCatalog.menuItems.forEach { item ->
                 PromoMenuRow(item, dark) {
                     item.route?.let(onNavigate)
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun PromoHeroCard(promo: HomePromo, onClick: () -> Unit) {
-    Column(
-        Modifier.width(220.dp).clickable(onClick = onClick),
-    ) {
-        Image(
-            painterResource(promo.imageRes),
-            contentDescription = promo.title,
-            modifier = Modifier.fillMaxWidth().height(110.dp).clip(RoundedCornerShape(16.dp)),
-            contentScale = ContentScale.Crop,
-        )
-        Text(
-            promo.title,
-            color = Color(0xFF6B7280),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 6.dp),
-        )
     }
 }
 

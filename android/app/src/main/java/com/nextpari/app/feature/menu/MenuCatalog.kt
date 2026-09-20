@@ -1,7 +1,5 @@
 package com.nextpari.app.feature.menu
 
-import com.nextpari.app.core.navigation.Destinations
-
 data class MenuItem(
     val label: String,
     val desc: String,
@@ -14,19 +12,6 @@ data class MenuItem(
 
 object MenuCatalog {
     val subTabs = listOf("Топ", "Спорт", "Казино", "Games", "Разное")
-
-    data class QuickAccess(
-        val label: String,
-        val route: String,
-        val accent: Long,
-    )
-
-    val quickAccess: List<QuickAccess> = listOf(
-        QuickAccess("VIP CLUB", Destinations.VIP_CASHBACK, 0xFFE9C66A),
-        QuickAccess("Кешбэк", Destinations.VIP_CASHBACK, 0xFF22C55E),
-        QuickAccess("Акции", Destinations.PROMO, 0xFF22C55E),
-        QuickAccess("Бонусы", Destinations.PROMO, 0xFFE9C66A),
-    )
 
     val top = listOf(
         MenuItem("LIVE", "Ставь на события в прямом эфире", DestinationsSports.LIVE),

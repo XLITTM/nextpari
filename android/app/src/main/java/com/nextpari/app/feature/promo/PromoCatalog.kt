@@ -2,7 +2,6 @@ package com.nextpari.app.feature.promo
 
 import com.nextpari.app.R
 import com.nextpari.app.core.navigation.Destinations
-import com.nextpari.app.feature.home.HomePromoCatalog
 
 data class PromoMenuItem(
     val label: String,
@@ -39,7 +38,6 @@ object PromoCatalog {
     )
 
     val heroSummary = "Акции и бонусы появятся после подключения бонусной системы"
-    val carousel = HomePromoCatalog.items
     val nativeRoutes = listOf(
         Destinations.PROMO,
         Destinations.VIP_CASHBACK,

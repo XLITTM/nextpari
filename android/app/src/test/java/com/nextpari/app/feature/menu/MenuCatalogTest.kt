@@ -43,7 +43,44 @@ class MenuCatalogTest {
         )
         assertThat(MenuCatalog.itemsFor("Разное").first { it.label == "Управление счетом" }.route).isEqualTo("wallet")
         assertThat(MenuCatalog.itemsFor("Топ").first { it.label == "Аутентификатор" }.soon).isTrue()
-        assertThat(MenuCatalog.quickAccess.map { it.label }).containsExactly("VIP CLUB", "Кешбэк", "Акции", "Бонусы").inOrder()
-        assertThat(MenuCatalog.quickAccess.map { it.route }).containsExactly("vip-cashback", "vip-cashback", "promo", "promo").inOrder()
+    }
+
+    @Test
+    fun topItemsMatchProductionOrder() {
+        assertThat(MenuCatalog.top.map { it.label }).containsExactly(
+            "LIVE",
+            "Линия",
+            "Киберспорт",
+            "Слоты",
+            "Лайв казино",
+            "Games",
+            "Промокоды",
+            "Непобедимый",
+            "Поддержка",
+            "Аутентификатор",
+        ).inOrder()
+    }
+
+    @Test
+    fun menuHasNoInventedQuickAccessBlock() {
+        val catalog = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuCatalog.kt").readText()
+        val screen = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
+        assertThat(catalog).doesNotContain("quickAccess")
+        assertThat(catalog).doesNotContain("VIP CLUB")
+        assertThat(screen).doesNotContain("MenuQuickAccess")
+        assertThat(screen).doesNotContain("QuickAccessCard")
+        assertThat(screen).doesNotContain("VIP CLUB")
+        val afterBalance = screen.substringAfter("Пополнить")
+        assertThat(afterBalance).contains("MenuCatalog.subTabs")
+        assertThat(afterBalance.substringBefore("MenuCatalog.subTabs")).doesNotContain("QuickAccess")
+    }
+
+    private fun moduleFile(relative: String): java.io.File {
+        val candidates = listOf(
+            java.io.File(relative),
+            java.io.File("app/$relative"),
+            java.io.File("android/app/$relative"),
+        )
+        return candidates.firstOrNull { it.exists() } ?: java.io.File(relative)
     }
 }

@@ -95,7 +95,6 @@ object HomeSectionOrder {
         "esports-disciplines",
         "esports-live",
         "esports-line",
-        "esports-tournaments",
     )
     val sport = listOf("sports", "live", "line", "champs")
     val esports = listOf("esports-disciplines", "esports-live", "esports-line", "esports-tournaments")

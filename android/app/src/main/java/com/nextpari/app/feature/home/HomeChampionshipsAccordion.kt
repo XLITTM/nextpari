@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
@@ -56,97 +55,48 @@ import com.nextpari.app.feature.sportsbook.LeagueRow
 @Composable
 fun HomeChampionshipsAccordion(
     live: List<MatchCardModel>,
-    line: List<MatchCardModel>,
     sportId: String,
     onNavigate: (String) -> Unit,
+    excludeEsports: Boolean = false,
 ) {
+    val groups = HomeChampionships.groups(live, excludeEsports)
+    if (groups.isEmpty()) return
+
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
-    var mode by rememberSaveable { mutableStateOf("live") }
     var expanded by rememberSaveable { mutableStateOf("") }
     var userInteracted by rememberSaveable { mutableStateOf(false) }
-    var lastMode by rememberSaveable { mutableStateOf("live") }
     var favorites by rememberSaveable { mutableStateOf(setOf<String>()) }
-    val groups = HomeChampionships.groups(mode, sportId, live, line)
 
-    LaunchedEffect(mode, groups.map { it.country }.joinToString()) {
-        if (lastMode != mode) {
-            lastMode = mode
-            userInteracted = false
-        }
+    LaunchedEffect(groups.map { it.country }.joinToString()) {
         expanded = HomeAccordionExpansion.resolve(groups, expanded, userInteracted)
     }
 
     Column(Modifier.padding(top = 16.dp).animateContentSize()) {
         ProductSectionHeader(
-            title = HomeChampionships.title(mode),
+            title = HomeChampionships.TITLE,
             filterLabel = "Спорт",
-            onFilter = { onNavigate(HomeChampionships.seeAllRoute(sportId, mode)) },
-            onSeeAll = { onNavigate(HomeChampionships.seeAllRoute(sportId, mode)) },
+            onFilter = { onNavigate(HomeChampionships.seeAllRoute(sportId)) },
+            onSeeAll = { onNavigate(HomeChampionships.seeAllRoute(sportId)) },
         )
-        Row(
-            Modifier
-                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6))
-                .padding(4.dp),
-        ) {
-            HomeModeTab("LIVE", mode == "live", live = true, Modifier.weight(1f)) { mode = "live" }
-            HomeModeTab("Линия", mode == "line", live = false, Modifier.weight(1f)) { mode = "line" }
-        }
-        if (groups.isEmpty()) {
-            Text(
-                "Сейчас событий нет",
-                color = colors.textMuted,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+        groups.forEach { group ->
+            HomeCountryCard(
+                group = group,
+                expanded = expanded == group.country,
+                dark = dark,
+                favorites = favorites,
+                onToggle = {
+                    userInteracted = true
+                    expanded = if (expanded == group.country) "" else group.country
+                },
+                onLeague = { league ->
+                    onNavigate(Destinations.league(LeagueIds.toLeagueId(league.country, league.name)))
+                },
+                onFavorite = { name ->
+                    favorites = if (name in favorites) favorites - name else favorites + name
+                },
             )
-        } else {
-            groups.forEach { group ->
-                HomeCountryCard(
-                    group = group,
-                    expanded = expanded == group.country,
-                    dark = dark,
-                    favorites = favorites,
-                    onToggle = {
-                        userInteracted = true
-                        expanded = if (expanded == group.country) "" else group.country
-                    },
-                    onLeague = { league ->
-                        onNavigate(Destinations.league(LeagueIds.toLeagueId(league.country, league.name)))
-                    },
-                    onFavorite = { name ->
-                        favorites = if (name in favorites) favorites - name else favorites + name
-                    },
-                )
-            }
         }
-    }
-}
-
-@Composable
-private fun HomeModeTab(label: String, active: Boolean, live: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val colors = NextpariTheme.colors
-    val bg = when {
-        active && live -> colors.accent
-        active -> Color(0xFFD9822B)
-        else -> Color.Transparent
-    }
-    Box(
-        modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(bg)
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            label,
-            color = if (active) Color.White else Color(0xFF6B7280),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-        )
     }
 }
 
