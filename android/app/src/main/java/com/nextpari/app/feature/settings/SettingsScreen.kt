@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.nextpari.app.core.network.NextpariConfig
 import com.nextpari.app.core.ui.components.NextpariCard
 import com.nextpari.app.core.ui.components.NextpariTopBar
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -46,14 +45,8 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(10.dp))
             NextpariCard {
-                Text("Сеть", color = colors.text)
-                Text(NextpariConfig.API_BASE_URL, color = colors.textMuted)
-                Text("Секреты в приложение не кладутся. A002 не делает authenticated production calls.", color = colors.textMuted)
-            }
-            Spacer(Modifier.height(10.dp))
-            NextpariCard {
-                Text("Хранение сессии", color = colors.text)
-                Text("Production-токены должны храниться в Android Keystore. DataStore — только для несущных настроек.", color = colors.textMuted)
+                Text("Уведомления", color = colors.text)
+                Text("Push-уведомления о ставках и акциях", color = colors.textMuted)
             }
         }
     }

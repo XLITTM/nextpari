@@ -29,7 +29,7 @@ fun RegisterMenuScreen(
     AuthScaffold {
         Text("Регистрация", color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
-        Text("UI только. Реальные пользователи не создаются.", color = Color(0xFF64748B), fontSize = 13.sp)
+        Text("Выберите удобный способ создания аккаунта", color = Color(0xFF64748B), fontSize = 13.sp)
         Spacer(Modifier.height(16.dp))
         NextpariCard(onClick = onOneClick) {
             Text("В один клик", fontWeight = FontWeight.ExtraBold, color = Color(0xFF07182F))
@@ -70,7 +70,7 @@ fun RegisterOneClickScreen(onBack: () -> Unit, onPrepared: () -> Unit) {
         Text("Регистрация в один клик", color = Color(0xFF07182F), fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Мы создадим ID игрока и безопасный пароль автоматически. Сейчас пользователь не создаётся.",
+            "Мы создадим ID игрока и безопасный пароль автоматически.",
             color = Color(0xFF64748B),
         )
         Spacer(Modifier.height(20.dp))
@@ -84,7 +84,7 @@ fun ForgotPasswordScreen(onBack: () -> Unit, onPlaceholder: () -> Unit) {
     AuthScaffold {
         Text("Забыли пароль?", color = Color(0xFF07182F), fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
-        Text("Восстановление будет подключено к Nextpari API позже. Запрос не отправляется.", color = Color(0xFF64748B))
+        Text("Для восстановления пароля обратитесь в поддержку.", color = Color(0xFF64748B))
         Spacer(Modifier.height(20.dp))
         NextpariButton(text = "Понятно", onClick = onPlaceholder)
         Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
@@ -104,7 +104,7 @@ private fun RegisterFormScreen(
     AuthScaffold {
         Text(title, color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
-        Text("Интерфейс подготовлен. Backend-контракт не выдуман.", color = Color(0xFF64748B))
+        Text("Укажите данные для регистрации", color = Color(0xFF64748B))
         Spacer(Modifier.height(16.dp))
         NextpariField(identifier, { identifier = it }, fieldLabel, keyboardType)
         Spacer(Modifier.height(12.dp))

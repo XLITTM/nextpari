@@ -16,7 +16,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Visibility
@@ -54,6 +58,7 @@ fun LoginScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
+    val focus = LocalFocusManager.current
     AuthScaffold {
         Text("Авторизация", color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(16.dp))
@@ -64,6 +69,8 @@ fun LoginScreen(
             onValueChange = viewModel::setIdentifier,
             label = if (state.mode == LoginMode.PHONE) "Номер телефона" else "Email или ID игрока",
             keyboardType = if (state.mode == LoginMode.PHONE) KeyboardType.Phone else KeyboardType.Email,
+            imeAction = ImeAction.Next,
+            onImeAction = { focus.moveFocus(FocusDirection.Down) },
         )
         Spacer(Modifier.height(12.dp))
         NextpariField(
@@ -72,6 +79,8 @@ fun LoginScreen(
             label = "Пароль",
             keyboardType = KeyboardType.Password,
             password = !state.passwordVisible,
+            imeAction = ImeAction.Done,
+            onImeAction = { viewModel.login() },
             trailing = {
                 IconButton(onClick = viewModel::togglePasswordVisible) {
                     Icon(
@@ -106,12 +115,6 @@ fun LoginScreen(
             fontSize = 14.sp,
             modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenRegister).padding(top = 8.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-        Text(
-            "DEV/mock: вход только локальный.",
-            color = Color(0xFF91A5B9),
-            fontSize = 12.sp,
-            modifier = Modifier.padding(top = 12.dp),
         )
     }
 }
@@ -194,6 +197,8 @@ internal fun NextpariField(
     label: String,
     keyboardType: KeyboardType,
     password: Boolean = false,
+    imeAction: ImeAction = ImeAction.Next,
+    onImeAction: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     OutlinedTextField(
@@ -203,7 +208,11 @@ internal fun NextpariField(
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
         visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+        keyboardActions = KeyboardActions(
+            onNext = { onImeAction?.invoke() },
+            onDone = { onImeAction?.invoke() },
+        ),
         trailingIcon = trailing,
         shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(

@@ -194,10 +194,10 @@ private fun AuthenticatedShell(
                 HomeScreen(viewModel = homeViewModel, onNavigate = { navController.navigateTo(it) })
             }
             composable(Destinations.FAVORITES) {
-                PlaceholderScreen("Избранное", message = "Избранное появится после подключения ленты. Сейчас список пуст.")
+                PlaceholderScreen("Избранное", message = "В избранном пока нет событий")
             }
             composable(Destinations.BETSLIP) {
-                PlaceholderScreen("Купон", message = "Купон пуст. Ставки не размещаются в A002.")
+                PlaceholderScreen("Купон", message = "Купон пуст")
             }
             composable(Destinations.HISTORY) { HistoryScreen() }
             composable(Destinations.MENU) {
@@ -215,9 +215,10 @@ private fun AuthenticatedShell(
             }
             composable(Destinations.GAMES) {
                 GamesHubScreen(
-                    games = homeViewModel.uiState.value.hubGames,
+                    session = session,
+                    balanceLabel = balanceLabel,
                     onBack = { navController.popBackStack() },
-                    onOpen = { navController.navigateTo(it) },
+                    onNavigate = { navController.navigateTo(it) },
                 )
             }
             placeholder(navController, Destinations.MATCH, "Матч")
@@ -248,7 +249,7 @@ private fun AuthenticatedShell(
             placeholder(navController, Destinations.VIP_CASHBACK, "VIP кешбэк")
             placeholder(navController, Destinations.LEAGUE, "Лига")
             composable("inbox-placeholder") {
-                PlaceholderScreen("Входящие", onBack = { navController.popBackStack() }, message = "Сообщения не загружаются в A002.")
+                PlaceholderScreen("Входящие", onBack = { navController.popBackStack() }, message = "Нет новых сообщений")
             }
         }
     }
@@ -260,8 +261,8 @@ private fun AuthenticatedShell(
             containerColor = colors.surface,
         ) {
             Column(Modifier.padding(24.dp).fillMaxSize()) {
-                Text("Поиск будет подключён позже.", color = colors.text)
-                Text("Данные и backend в A002 не вызываются.", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
+                Text("Поиск", color = colors.text, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                Text("Введите название события или чемпионата", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }
