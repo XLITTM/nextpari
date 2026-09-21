@@ -344,7 +344,7 @@ object NextpariWebIcons {
             val parser = PathParser()
             paths.forEach { d ->
                 builder.addPath(
-                    pathData = parser.parsePathString(d).toNodes(),
+                    pathData = parser.parsePathString(d).toNodes().toList(),
                     fill = SolidColor(Color.Transparent),
                     fillAlpha = 0f,
                     stroke = SolidColor(Color.Black),
