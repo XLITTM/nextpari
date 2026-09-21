@@ -7,6 +7,7 @@ import { LSPORTS_SETTLEMENT } from '../lsports/state/settlement.js';
 import { mapLsportsType35ToCanonical, toCanonicalSettlementNotice } from '../lsports/settlementAdapter.js';
 import {
   accumulatorPayout,
+  planCumulativeSettlement,
   planSettlementTransition,
   settlementPayout,
 } from './payout.js';
@@ -31,6 +32,26 @@ describe('provider-neutral sports settlement', () => {
     assert.equal(settlementPayout(10, 1.85, SPORTS_SETTLEMENT.HalfLost), 5);
     assert.equal(settlementPayout(10, 1.85, SPORTS_SETTLEMENT.HalfWon), 14.25);
     assert.equal(settlementPayout(10, 1.85, SPORTS_SETTLEMENT.Pending), null);
+  });
+
+  it('corrects express payouts by cumulative delta, including the same incoming code', () => {
+    const down = planCumulativeSettlement({
+      previousPayout: 400,
+      targetPayout: 300,
+      unsettled: false,
+      incomingCode: SPORTS_SETTLEMENT.HalfWon,
+    });
+    assert.equal(down.debitLastPayout, 100);
+    assert.equal(down.creditPayout, 0);
+    const again = planCumulativeSettlement({
+      previousPayout: 300,
+      targetPayout: 225,
+      unsettled: false,
+      incomingCode: SPORTS_SETTLEMENT.HalfWon,
+    });
+    assert.equal(again.debitLastPayout, 75);
+    assert.equal(again.nextEconomicPayout, 225);
+    assert.equal(again.creditPayout, 0);
   });
 
   it('preserves cancelled correction and duplicate fingerprint semantics', () => {

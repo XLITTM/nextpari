@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -185,6 +185,24 @@ describe('provider-aware sports settlement SQL', () => {
     assert.notEqual(aVoid, bVoid);
     assert.equal(aSettle.includes(fingerprint), true);
     assert.equal(aSettle.startsWith('sports-settle:same-bet-id:provider-a:'), true);
+  });
+
+  it('069 moves only the cumulative payout delta and does not edit 038', () => {
+    const files = readdirSync(join(root, 'supabase/migrations')).filter((name) => name.includes('_069.sql'));
+    assert.deepEqual(files, ['20260921230000_sports_settlement_correction_069.sql']);
+    const sql069 = read('supabase/migrations/20260921230000_sports_settlement_correction_069.sql');
+    assert.equal(sql.includes('v_delta := private.game_money'), false);
+    assert.match(sql069, /v_delta := private\.game_money\(COALESCE\(v_target, 0\) - v_previous\)/);
+    assert.equal(sql069.includes('last_applied_settlement_code IS DISTINCT FROM v_code'), false);
+    assert.match(sql069, /private\.sports_credit\(/);
+    assert.match(sql069, /private\.sports_debit\(/);
+    assert.equal(sql069.includes('UPDATE public.wallets'), false);
+    assert.equal(sql069.includes('CREATE OR REPLACE FUNCTION private.apply_wallet_entry'), false);
+    assert.match(sql069, /WHERE l\.provider = v_provider/);
+    assert.match(sql069, /ON CONFLICT \(provider, fingerprint\) DO NOTHING/);
+    assert.match(sql069, /REVOKE ALL ON FUNCTION private\.sports_apply_one\(JSONB\) FROM anon, authenticated/);
+    assert.match(sql069, /REMAINING LIVE-GATE BLOCKER/);
+    assert.equal(sql069.includes('CANONICAL_SPORTS_BET_ENABLED'), false);
   });
 });
 
