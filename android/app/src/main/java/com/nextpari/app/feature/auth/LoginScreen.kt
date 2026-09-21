@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,12 +35,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -47,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.R
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.NextpariButton
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -60,7 +66,7 @@ fun LoginScreen(
     val colors = NextpariTheme.colors
     val focus = LocalFocusManager.current
     AuthScaffold {
-        Text("Авторизация", color = Color(0xFF07182F), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+        Text("Авторизация", color = Color(0xFF07182F), fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp)
         Spacer(Modifier.height(16.dp))
         LoginModeSwitch(state.mode, viewModel::setMode)
         Spacer(Modifier.height(16.dp))
@@ -84,7 +90,7 @@ fun LoginScreen(
             trailing = {
                 IconButton(onClick = viewModel::togglePasswordVisible) {
                     Icon(
-                        imageVector = if (state.passwordVisible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                        imageVector = if (state.passwordVisible) NextpariWebIcons.EyeOff else NextpariWebIcons.Eye,
                         contentDescription = if (state.passwordVisible) "Скрыть пароль" else "Показать пароль",
                     )
                 }
@@ -100,7 +106,12 @@ fun LoginScreen(
             Text(state.recoveryNotice ?: "", color = Color(0xFF67819C), modifier = Modifier.padding(top = 12.dp))
         }
         Spacer(Modifier.height(16.dp))
-        NextpariButton(text = if (state.loading) "Вход…" else "Войти", onClick = viewModel::login, enabled = !state.loading)
+        NextpariButton(
+            text = if (state.loading) "Вход…" else "Войти",
+            onClick = viewModel::login,
+            enabled = !state.loading,
+            containerColor = Color(0xFF16A34A),
+        )
         Text(
             "Забыли пароль?",
             color = Color(0xFF16A34A),
@@ -110,9 +121,15 @@ fun LoginScreen(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
         Text(
-            "Нет аккаунта? Зарегистрируйтесь",
+            buildAnnotatedString {
+                append("Нет аккаунта? ")
+                withStyle(SpanStyle(color = Color(0xFF16A34A), fontWeight = FontWeight.Bold)) {
+                    append("Зарегистрируйтесь")
+                }
+            },
             color = Color(0xFF64748B),
             fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenRegister).padding(top = 8.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
@@ -148,17 +165,28 @@ internal fun AuthScaffold(content: @Composable () -> Unit) {
                 Image(
                     painter = painterResource(R.drawable.logo),
                     contentDescription = "NextPari",
-                    modifier = Modifier.size(80.dp).clip(RoundedCornerShape(24.dp)),
+                    modifier = Modifier
+                        .size(72.dp)
+                        .shadow(12.dp, RoundedCornerShape(22.dp))
+                        .clip(RoundedCornerShape(22.dp)),
                 )
-                Text("Ставки на спорт онлайн", color = Color.White.copy(alpha = 0.8f), modifier = Modifier.padding(top = 12.dp))
+                Text(
+                    "Ставки на спорт онлайн",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
             }
             Column(
                 Modifier
                     .padding(horizontal = 16.dp)
-                    .padding(bottom = 20.dp)
+                    .navigationBarsPadding()
+                    .padding(bottom = 12.dp)
+                    .shadow(18.dp, RoundedCornerShape(32.dp))
                     .clip(RoundedCornerShape(32.dp))
                     .background(Color.White)
-                    .padding(horizontal = 20.dp, vertical = 28.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 16.dp)
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
             ) {

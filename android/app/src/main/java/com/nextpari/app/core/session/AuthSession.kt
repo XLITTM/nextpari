@@ -5,6 +5,7 @@ data class AuthSession(
     val displayName: String,
     val loginMethod: String,
     val isAuthenticated: Boolean,
+    val email: String = "",
 ) {
     companion object {
         val Anonymous = AuthSession(
@@ -12,6 +13,7 @@ data class AuthSession(
             displayName = "",
             loginMethod = "",
             isAuthenticated = false,
+            email = "",
         )
     }
 }

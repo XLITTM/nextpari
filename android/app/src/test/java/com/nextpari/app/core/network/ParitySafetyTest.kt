@@ -28,7 +28,12 @@ class ParitySafetyTest {
             FakeHomeCatalogRepository::class.java,
         ).flatMap { type -> type.declaredFields.map { it.type } }
         assertThat(types).containsNoneOf(OkHttpClient::class.java, Retrofit::class.java, NextpariApiClient::class.java)
-        assertThat(FakeHomeCatalogRepository().liveTitles()).isEmpty()
-        assertThat(FakeHomeCatalogRepository().lineTitles()).isEmpty()
+        assertThat(FakeHomeCatalogRepository().liveMatches()).isEmpty()
+        assertThat(FakeHomeCatalogRepository().lineMatches()).isEmpty()
+        assertThat(FakeHomeCatalogRepository().esportsLiveMatches()).isEmpty()
+        assertThat(FakeHomeCatalogRepository().esportsLineMatches()).isEmpty()
+        assertThat(FakeHomeCatalogRepository().esportsTournaments()).isEmpty()
+        assertThat(FakeHomeCatalogRepository().matchById("preview-debug-football")).isNull()
+        assertThat(FakeHomeCatalogRepository().marketsFor("preview-debug-football")).isEmpty()
     }
 }

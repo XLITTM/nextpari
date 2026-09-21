@@ -13,11 +13,24 @@ data class HomeUiState(
     val selectedSportId: String = "all",
     val sports: List<HomeSport> = emptyList(),
     val promos: List<HomePromo> = emptyList(),
-    val liveTitles: List<String> = emptyList(),
-    val lineTitles: List<String> = emptyList(),
-    val championships: List<String> = emptyList(),
+    val liveMatches: List<MatchCardModel> = emptyList(),
+    val lineMatches: List<MatchCardModel> = emptyList(),
+    val esportsLive: List<MatchCardModel> = emptyList(),
+    val esportsLine: List<MatchCardModel> = emptyList(),
+    val esportsTournaments: List<EsportsTournament> = emptyList(),
     val esports: List<EsportsDiscipline> = emptyList(),
-)
+    val casinoFeatures: List<CasinoFeatureCard> = emptyList(),
+    val casinoTournaments: List<CasinoTournament> = emptyList(),
+    val casinoCategories: List<CasinoCategoryCard> = emptyList(),
+    val loading: Boolean = false,
+) {
+    val filteredLive: List<MatchCardModel>
+        get() = SportsbookFilters.matchesForSport(liveMatches, selectedSportId, excludeEsportsWhenAll = true)
+    val filteredLine: List<MatchCardModel>
+        get() = SportsbookFilters.matchesForSport(lineMatches, selectedSportId, excludeEsportsWhenAll = true)
+    val championships: List<ChampionshipRow>
+        get() = ChampionshipsMapper.fromLive(filteredLive, excludeEsports = true)
+}
 
 class HomeViewModel(
     repository: HomeCatalogRepository,
@@ -26,10 +39,15 @@ class HomeViewModel(
         HomeUiState(
             sports = repository.sports(),
             promos = repository.promos(),
-            liveTitles = repository.liveTitles(),
-            lineTitles = repository.lineTitles(),
-            championships = repository.championships(),
+            liveMatches = repository.liveMatches(),
+            lineMatches = repository.lineMatches(),
+            esportsLive = repository.esportsLiveMatches(),
+            esportsLine = repository.esportsLineMatches(),
+            esportsTournaments = repository.esportsTournaments(),
             esports = repository.esportsDisciplines(),
+            casinoFeatures = repository.casinoFeatures(),
+            casinoTournaments = repository.casinoTournaments(),
+            casinoCategories = repository.casinoCategories(),
         ),
     )
     val uiState: StateFlow<HomeUiState> = ui.asStateFlow()

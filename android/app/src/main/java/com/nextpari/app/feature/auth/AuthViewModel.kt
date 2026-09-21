@@ -30,6 +30,7 @@ class AuthViewModel(
     sessionRepository: SessionRepository,
 ) : ViewModel() {
     val session = sessionRepository.session
+    val sessionReady = sessionRepository.ready
     private val ui = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = ui.asStateFlow()
 

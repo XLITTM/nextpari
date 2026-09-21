@@ -1,0 +1,337 @@
+A004 — INSTALL EXACT GLOSSY NEXTPARI ICON PACK v2
+
+Repository:
+XLITTM/nextpari
+
+Continue SAME branch:
+cursor/android-pixel-parity-a004
+
+Last confirmed committed head:
+ca862167e2a49834f31873fbacbea31777d8eafc
+
+Continue SAME PR:
+#75
+
+DO NOT create a new branch.
+DO NOT create a new PR.
+DO NOT merge.
+
+==================================================
+0. CLEAN UP THE INTERRUPTED TASK FIRST
+==================================================
+
+The user stopped the previous icon prompt before completion.
+
+Run:
+git status --short
+
+If there are uncommitted changes created ONLY by the interrupted icon-color task,
+discard ONLY those interrupted changes and return to the last committed HEAD:
+
+ca862167e2a49834f31873fbacbea31777d8eafc
+
+If there are unrelated local changes, DO NOT delete them. Report them and stop.
+
+==================================================
+1. THIS ZIP IS THE FINAL ICON SOURCE
+==================================================
+
+The attached ZIP contains READY-MADE PNG assets extracted directly from the approved
+glossy Nextpari Icon System board.
+
+DO NOT:
+- draw icons;
+- regenerate icons;
+- replace them with Phosphor;
+- replace them with Material Icons;
+- find "similar" icons;
+- recolor sport artwork;
+- invent another palette.
+
+For every key covered by manifest.json, the supplied PNG is the source of truth.
+
+==================================================
+2. INSTALL ASSETS
+==================================================
+
+Copy the pack documentation/reference to:
+android/design/exact_glossy_icons_v2/
+
+Copy runtime PNG resources from:
+dark/
+light/
+
+into Android resource folders in a clean maintainable way.
+
+Recommended:
+drawable-nodpi/np_ref_dark_*.png
+drawable-nodpi/np_ref_light_*.png
+
+or equivalent theme-aware resource structure.
+
+Keep filenames and semantic mapping deterministic.
+
+==================================================
+3. CREATE ONE SEMANTIC REGISTRY
+==================================================
+
+Create/update a central registry such as:
+NextpariReferenceIconAssets.kt
+
+It must map existing semantic keys to the exact PNG resources.
+
+Screens must not hardcode random drawable IDs.
+
+==================================================
+4. THEME RULE
+==================================================
+
+Use:
+- `dark/` asset in dark theme
+- `light/` asset in light theme
+
+The `light/` folder is already prepared.
+
+DO NOT apply additional tint to preserve/accent assets.
+
+Do not double-color them.
+
+==================================================
+5. BOTTOM NAV — EXACT BOARD ASSETS
+==================================================
+
+Use supplied:
+bottom_popular
+bottom_favorites
+bottom_betslip
+bottom_history
+bottom_menu
+
+Do not use Phosphor/Material for these active Premium icons.
+
+Keep current:
+routes
+labels
+58dp coupon geometry
+safe-area behavior
+navigation behavior
+
+==================================================
+6. MAIN TABS — EXACT BOARD ASSETS
+==================================================
+
+Use supplied:
+tab_top
+tab_sport
+tab_esports
+tab_casino
+tab_games
+
+Keep tab order/layout/behavior.
+
+Do not reintroduce rainbow tab colors.
+
+==================================================
+7. SPORTS — EXACT GLOSSY COLORED ASSETS
+==================================================
+
+Use supplied PNGs exactly for:
+
+football
+tennis
+basketball
+hockey
+volleyball
+esports
+futsal
+table-tennis
+badminton
+baseball
+cricket
+polo
+snooker
+pickleball
+ufc/mma
+beach-volleyball
+fifa
+mk
+polybet
+elections
+filter
+all
+
+These are deliberately colored/glossy where the approved board shows color.
+
+DO NOT tint them green.
+DO NOT flatten them to monochrome.
+DO NOT replace them with Phosphor.
+
+Important exact special assets:
+- MK = board-specific circular combat/dragon mark
+- POLYBET = board-specific honeycomb
+- UFC/MMA = board-specific glove
+- Polo = board-specific polo icon
+- Pickleball = board-specific perforated ball
+
+==================================================
+8. MENU — EXACT BOARD ASSETS
+==================================================
+
+Use supplied:
+
+menu_profile
+menu_messages
+menu_settings
+menu_account
+menu_deposit
+menu_live
+menu_line
+menu_esports
+menu_slots
+menu_live_casino
+menu_games
+menu_promo
+menu_vip
+menu_cashback
+menu_support
+
+No rainbow recoloring.
+
+==================================================
+9. SERVICE ICONS — EXACT BOARD ASSETS
+==================================================
+
+Use supplied:
+
+service_search
+service_notifications
+service_light_theme
+service_dark_theme
+service_back
+service_down
+service_close
+service_share
+service_info
+service_security
+service_authenticator
+service_logout
+
+No replacement glyphs.
+
+==================================================
+10. PRESERVE PRODUCT BEHAVIOR
+==================================================
+
+Do not change:
+navigation
+auth
+wallet dropdown
+wallets
+Mobcash
+deposit/withdraw logic
+personal data
+sportsbook business logic
+markets/odds
+bets
+casino logic
+promo/VIP logic
+backend
+Supabase
+migrations
+BetConstruct/provider code
+money logic
+
+This task is ONLY exact icon asset installation.
+
+==================================================
+11. LEGACY ROLLBACK
+==================================================
+
+Preserve:
+NextpariIconVariant.Legacy
+NextpariIconVariant.Premium
+
+Premium remains default.
+
+Legacy one-line rollback must remain possible.
+
+Previous Phosphor files may remain in source for history/rollback,
+but for keys covered by this pack they must NOT be the active Premium source.
+
+==================================================
+12. REMOVE REJECTED ACTIVE PRESENTATION
+==================================================
+
+For the covered keys, stop using:
+- rainbow semantic icon palette;
+- substitute Phosphor active mapping;
+- direct Material active mapping;
+- pastel sport icon badge backgrounds that obscure the supplied glossy icon.
+
+The supplied icon itself is the hero.
+
+==================================================
+13. SIZE
+==================================================
+
+Use manifest recommended sizes as the starting point:
+
+Bottom nav outer ~22dp
+Coupon ~24dp
+Main tabs ~22dp
+Sports ~28dp
+Menu ~22dp
+Service ~24dp
+
+Adjust only a maximum of ±2dp if optical alignment demands it.
+Do NOT modify the PNG artwork itself.
+
+==================================================
+14. TESTS
+==================================================
+
+Add/update tests:
+
+- every manifest key resolves to an Android drawable
+- BottomNav uses exact reference assets
+- MainTabs uses exact reference assets
+- every listed sport uses exact reference assets
+- MK/POLYBET/UFC/Polo/Pickleball use exact package assets
+- Menu uses exact reference assets
+- Service icons use exact reference assets
+- dark theme selects dark assets
+- light theme selects light assets
+- no extra tint is applied to preserve/accent assets
+- covered Premium keys do not use Phosphor/Material
+- Legacy remains available
+- Premium remains default
+- no product/navigation logic changed
+
+Run:
+./gradlew test
+./gradlew assembleDebug
+
+==================================================
+15. FINAL REPORT
+==================================================
+
+Return:
+
+A. old SHA
+B. new SHA
+C. interrupted worktree cleanup result
+D. exact changed files
+E. number of installed exact PNG assets
+F. BottomNav mapping
+G. MainTabs mapping
+H. sports mapping
+I. Menu mapping
+J. Service mapping
+K. dark/light asset selection
+L. confirmation that covered active Premium keys no longer use substitute Phosphor/Material
+M. Legacy rollback
+N. tests
+O. assembleDebug
+P. PR #75 OPEN / NOT MERGED
+
+DO NOT MERGE.

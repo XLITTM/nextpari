@@ -88,9 +88,44 @@ class DestinationsTest {
 
         assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLET)).isEqualTo(Destinations.MENU)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SETTINGS)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.PERSONAL_DATA)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLETS)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.INFO)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO)).isEqualTo(Destinations.MENU)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_LIVE)).isEqualTo(Destinations.MENU)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SLOTS)).isEqualTo(Destinations.MENU)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.CHAMPIONSHIPS)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.INBOX_PLACEHOLDER)).isEqualTo(Destinations.MENU)
+
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_DETAILS)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_MARATHON)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_WELCOME)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_UNBEATABLE)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.VIP_CASHBACK)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.BLACKJACK)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.GAMELIST_LINE)).isEqualTo(Destinations.HOME)
+    }
+
+    @Test
+    fun routeBuildersProduceConcretePathsNotPatterns() {
+        assertThat(Destinations.isPatternRoute(Destinations.MATCH)).isTrue()
+        assertThat(Destinations.isPatternRoute(Destinations.LEAGUE)).isTrue()
+        assertThat(Destinations.isPatternRoute(Destinations.CHAMPIONSHIPS)).isTrue()
+        assertThat(Destinations.isPatternRoute(Destinations.BET_DETAILS)).isTrue()
+        assertThat(Destinations.match("42")).isEqualTo("match/42")
+        assertThat(Destinations.match("42")).doesNotContain("{")
+        assertThat(Destinations.league("epl")).isEqualTo("league/epl")
+        assertThat(Destinations.league("epl")).doesNotContain("{")
+        assertThat(Destinations.championships("football", "live")).isEqualTo("championships/football/live")
+        assertThat(Destinations.championships("football", "live")).doesNotContain("{")
+        assertThat(Destinations.betDetails("7")).isEqualTo("bet-details/7")
+        assertThat(Destinations.isConcreteNavigationTarget(Destinations.match("42"))).isTrue()
+        assertThat(Destinations.isConcreteNavigationTarget(Destinations.MATCH)).isFalse()
+        assertThat(Destinations.isConcreteNavigationTarget(Destinations.LEAGUE)).isFalse()
+        assertThat(Destinations.isConcreteNavigationTarget(Destinations.CHAMPIONSHIPS)).isFalse()
+        assertThat(Destinations.isConcreteNavigationTarget(Destinations.BET_DETAILS)).isFalse()
+        assertThat(Destinations.isConcreteNavigationTarget(Destinations.PERSONAL_DATA)).isTrue()
+        assertThat(Destinations.isConcreteNavigationTarget(Destinations.INBOX_PLACEHOLDER)).isTrue()
     }
 
     @Test

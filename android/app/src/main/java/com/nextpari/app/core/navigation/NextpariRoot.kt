@@ -1,5 +1,7 @@
 package com.nextpari.app.core.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -24,6 +27,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.nextpari.app.BuildConfig
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.ui.components.NextpariBottomNav
 import com.nextpari.app.core.ui.components.NextpariHeader
@@ -41,9 +45,27 @@ import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
 import com.nextpari.app.feature.home.HomeViewModel
+import com.nextpari.app.feature.info.InfoScreen
 import com.nextpari.app.feature.menu.MenuScreen
+import com.nextpari.app.feature.profile.PersonalDataScreen
+import com.nextpari.app.feature.promo.PromoDetailsScreen
+import com.nextpari.app.feature.promo.PromoMarathonScreen
+import com.nextpari.app.feature.promo.PromoScreen
+import com.nextpari.app.feature.promo.PromoUnbeatableScreen
+import com.nextpari.app.feature.promo.PromoWelcomeScreen
+import com.nextpari.app.feature.promo.VipCashbackScreen
 import com.nextpari.app.feature.settings.SettingsScreen
+import com.nextpari.app.feature.sportsbook.ChampionshipsScreen
+import com.nextpari.app.feature.sportsbook.GameListScreen
+import com.nextpari.app.feature.sportsbook.MatchDetailsScreen
+import com.nextpari.app.feature.sportsbook.SportsListScreen
+import com.nextpari.app.feature.sportsbook.SportsbookPreviewData
+import com.nextpari.app.feature.sportsbook.SportsbookViewModel
+import com.nextpari.app.feature.sportsbook.LeagueScreen
 import com.nextpari.app.feature.wallet.WalletScreen
+import com.nextpari.app.feature.wallets.WalletsCatalog
+import com.nextpari.app.feature.wallets.WalletsScreen
+import com.nextpari.app.feature.wallets.WalletsViewModel
 
 @Composable
 fun NextpariRoot(
@@ -52,6 +74,15 @@ fun NextpariRoot(
     authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory),
 ) {
     val session by authViewModel.session.collectAsStateWithLifecycle()
+    val sessionReady by authViewModel.sessionReady.collectAsStateWithLifecycle()
+    if (!sessionReady) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (darkTheme) Color(0xFF09090B) else Color(0xFFF4F4F5)),
+        )
+        return
+    }
     if (!session.isAuthenticated) {
         UnauthenticatedNavHost(authViewModel)
     } else {
@@ -131,7 +162,10 @@ private fun AuthenticatedShell(
     val navController = rememberNavController()
     val session by authViewModel.session.collectAsStateWithLifecycle()
     val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.Factory)
+    val sportsbookViewModel: SportsbookViewModel = viewModel(factory = SportsbookViewModel.Factory)
+    val walletsViewModel: WalletsViewModel = viewModel(factory = WalletsViewModel.Factory)
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val walletsState by walletsViewModel.uiState.collectAsStateWithLifecycle()
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
     val arcade = current in setOf(
@@ -142,37 +176,44 @@ private fun AuthenticatedShell(
     val showHeader = Destinations.showsHeader(current)
     val showMainTabs = Destinations.showsMainTabs(current)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    val balanceLabel = "${AppGraph.walletRepository.snapshot().displayBalance} ${AppGraph.walletRepository.snapshot().currency}"
+    val fallbackBalance = "${AppGraph.walletRepository.snapshot().displayBalance} ${AppGraph.walletRepository.snapshot().currency}"
+    val balanceLabel = WalletsCatalog.headerBalanceLabel(fallbackBalance, walletsState)
     val colors = NextpariTheme.colors
 
     Scaffold(
         containerColor = colors.bg,
         topBar = {
             if (showHeader) {
-                Column {
-                    NextpariHeader(
-                        balanceLabel = balanceLabel,
-                        darkTheme = darkTheme,
-                        onWallet = { navController.navigateTo(Destinations.WALLET) },
-                        onHome = {
-                            homeViewModel.selectTab("top")
-                            navController.navigateTab(Destinations.HOME)
-                        },
-                        onToggleTheme = onToggleTheme,
-                        onSettings = { navController.navigateTo(Destinations.SETTINGS) },
-                        onSearch = { searchOpen = true },
-                    )
-                    if (showMainTabs) {
-                        NextpariMainTabs(activeId = homeState.mainTabId) { tab ->
-                            if (tab.id == "games") {
-                                navController.navigateTo(Destinations.GAMES)
-                            } else {
-                                if (current != Destinations.HOME) navController.navigateTab(Destinations.HOME)
-                                homeViewModel.selectTab(tab.id)
+                NextpariHeader(
+                    balanceLabel = balanceLabel,
+                    darkTheme = darkTheme,
+                    onDeposit = { navController.navigateTo(Destinations.WALLET) },
+                    onHome = {
+                        homeViewModel.selectTab("top")
+                        navController.navigateTab(Destinations.HOME)
+                    },
+                    onToggleTheme = onToggleTheme,
+                    onSettings = { navController.navigateTo(Destinations.SETTINGS) },
+                    onSearch = { searchOpen = true },
+                    walletsState = walletsState,
+                    closeKey = current,
+                    onRefreshWallets = walletsViewModel::refresh,
+                    onSelectWallet = walletsViewModel::activate,
+                    onAddWallet = walletsViewModel::addCurrency,
+                    onConsumeWalletNotice = walletsViewModel::consumeNotice,
+                    bottomContent = {
+                        if (showMainTabs) {
+                            NextpariMainTabs(activeId = homeState.mainTabId) { tab ->
+                                if (tab.id == "games") {
+                                    navController.navigateTo(Destinations.GAMES)
+                                } else {
+                                    if (current != Destinations.HOME) navController.navigateTab(Destinations.HOME)
+                                    homeViewModel.selectTab(tab.id)
+                                }
                             }
                         }
-                    }
-                }
+                    },
+                )
             }
         },
         bottomBar = {
@@ -206,12 +247,27 @@ private fun AuthenticatedShell(
                     balanceLabel = balanceLabel,
                     onNavigate = { navController.navigateTo(it) },
                     onLogout = { authViewModel.logout() },
-                    onInbox = { navController.navigateTo("inbox-placeholder") },
+                    onInbox = { navController.navigateTo(Destinations.INBOX_PLACEHOLDER) },
+                    walletsState = walletsState,
+                    onRefreshWallets = walletsViewModel::refresh,
+                    onSelectWallet = walletsViewModel::activate,
+                    onAddWallet = walletsViewModel::addCurrency,
+                    onConsumeWalletNotice = walletsViewModel::consumeNotice,
+                    closeKey = current,
                 )
             }
-            composable(Destinations.WALLET) { WalletScreen() }
+            composable(Destinations.WALLET) {
+                WalletScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
             composable(Destinations.SETTINGS) {
-                SettingsScreen(darkTheme = darkTheme, onToggleTheme = onToggleTheme, onBack = { navController.popBackStack() })
+                SettingsScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    onLogout = { authViewModel.logout() },
+                )
             }
             composable(Destinations.GAMES) {
                 GamesHubScreen(
@@ -221,34 +277,124 @@ private fun AuthenticatedShell(
                     onNavigate = { navController.navigateTo(it) },
                 )
             }
-            placeholder(navController, Destinations.MATCH, "Матч")
             placeholder(navController, Destinations.BET_DETAILS, "Детали ставки")
-            placeholder(navController, Destinations.PROMO, "Акции")
-            placeholder(navController, Destinations.PERSONAL_DATA, "Личные данные")
-            placeholder(navController, Destinations.WALLETS, "Кошелёк и валюты")
-            placeholder(navController, Destinations.GAMELIST_LIVE, "Лента LIVE")
-            placeholder(navController, Destinations.GAMELIST_LINE, "Лента Линия")
-            placeholder(navController, Destinations.SPORTS_LIVE, "LIVE")
-            placeholder(navController, Destinations.SPORTS_LINE, "Линия")
-            placeholder(navController, Destinations.SPORTS_CYBERS, "Киберспорт")
-            placeholder(navController, Destinations.CHAMPIONSHIPS, "Чемпионаты")
+            composable(Destinations.PROMO) {
+                PromoScreen(onBack = { navController.popBackStack() }, onNavigate = { navController.navigateTo(it) })
+            }
+            composable(Destinations.PERSONAL_DATA) {
+                PersonalDataScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.WALLETS) {
+                WalletsScreen(
+                    onBack = { navController.popBackStack() },
+                    viewModel = walletsViewModel,
+                )
+            }
+            composable(Destinations.MATCH) { entry ->
+                MatchDetailsScreen(
+                    matchId = entry.arguments?.getString("matchId").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.GAMELIST_LIVE) {
+                GameListScreen(
+                    initialMode = "live",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.GAMELIST_LINE) {
+                GameListScreen(
+                    initialMode = "line",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.SPORTS_LIVE) {
+                SportsListScreen(
+                    initialMode = "live",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.SPORTS_LINE) {
+                SportsListScreen(
+                    initialMode = "line",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.SPORTS_CYBERS) {
+                SportsListScreen(
+                    initialMode = "cybers",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.CHAMPIONSHIPS) { entry ->
+                ChampionshipsScreen(
+                    sport = entry.arguments?.getString("sport").orEmpty(),
+                    initialMode = entry.arguments?.getString("mode").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.LEAGUE) { entry ->
+                LeagueScreen(
+                    leagueId = entry.arguments?.getString("leagueId").orEmpty(),
+                    mode = sportsbookViewModel.selectedMode,
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                    viewModel = sportsbookViewModel,
+                )
+            }
+            if (BuildConfig.DEBUG) {
+                composable(Destinations.DEBUG_SPORTSBOOK_PREVIEW) {
+                    MatchDetailsScreen(
+                        matchId = SportsbookPreviewData.MATCH_ID,
+                        onBack = { navController.popBackStack() },
+                        onNavigate = { navController.navigateTo(it) },
+                        viewModel = sportsbookViewModel,
+                        preview = true,
+                    )
+                }
+            }
             placeholder(navController, Destinations.SLOTS, "Слоты")
             placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино")
             placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера")
-            placeholder(navController, Destinations.PROMO_DETAILS, "Промо")
-            placeholder(navController, Destinations.PROMO_MARATHON, "Марафон Экспрессов")
-            placeholder(navController, Destinations.PROMO_WELCOME, "Приветственный пакет")
-            placeholder(navController, Destinations.INFO, "Инфо")
-            placeholder(navController, Destinations.PROMO_UNBEATABLE, "Непобедимый")
+            composable(Destinations.PROMO_DETAILS) {
+                PromoDetailsScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.PROMO_MARATHON) {
+                PromoMarathonScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.PROMO_WELCOME) {
+                PromoWelcomeScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.INFO) {
+                InfoScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.PROMO_UNBEATABLE) {
+                PromoUnbeatableScreen(onBack = { navController.popBackStack() })
+            }
             placeholder(navController, Destinations.BLACKJACK, "21 / Очко")
             placeholder(navController, Destinations.AVIATOR, "Aviator")
             placeholder(navController, Destinations.APPLES, "Apple of Fortune")
             placeholder(navController, Destinations.CRYSTAL, "Crystal")
             placeholder(navController, Destinations.DICE, "Dice")
             placeholder(navController, Destinations.PHARAOH, "Сокровища Фараона")
-            placeholder(navController, Destinations.VIP_CASHBACK, "VIP кешбэк")
-            placeholder(navController, Destinations.LEAGUE, "Лига")
-            composable("inbox-placeholder") {
+            composable(Destinations.VIP_CASHBACK) {
+                VipCashbackScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Destinations.INBOX_PLACEHOLDER) {
                 PlaceholderScreen("Входящие", onBack = { navController.popBackStack() }, message = "Нет новых сообщений")
             }
         }
@@ -279,6 +425,7 @@ private fun NavGraphBuilder.placeholder(
 }
 
 private fun NavHostController.navigateTab(route: String) {
+    if (!Destinations.isConcreteNavigationTarget(route)) return
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
@@ -287,5 +434,7 @@ private fun NavHostController.navigateTab(route: String) {
 }
 
 private fun NavHostController.navigateTo(route: String) {
+    if (!Destinations.isConcreteNavigationTarget(route)) return
+    if (currentDestination?.route == route) return
     navigate(route) { launchSingleTop = true }
 }

@@ -3,6 +3,7 @@ package com.nextpari.app.feature.home
 import com.google.common.truth.Truth.assertThat
 import com.nextpari.app.R
 import com.nextpari.app.feature.wallet.FakeWalletRepository
+import com.nextpari.app.feature.wallet.WalletCatalog
 import org.junit.Test
 
 class ProductionUiCatalogTest {
@@ -50,6 +51,19 @@ class ProductionUiCatalogTest {
         assertThat(SportIconRes.drawable("football")).isEqualTo(R.drawable.ic_sport_football)
         assertThat(SportIconRes.drawable("esports")).isEqualTo(R.drawable.ic_sport_esports)
         assertThat(SportIconRes.drawable("unknown-sport")).isEqualTo(R.drawable.ic_sport_default)
+        assertThat(SportIconRes.knownIds).containsExactly(
+            "all", "football", "futsal", "basketball", "tennis", "table-tennis", "badminton",
+            "baseball", "polo", "cricket", "beach-volleyball", "snooker", "elections",
+            "pickleball", "fifa", "mk", "polybet", "ufc", "filter", "hockey", "volleyball", "esports",
+        ).inOrder()
+        SportIconRes.knownIds.forEach { id ->
+            assertThat(SportIconRes.drawable(id)).isNotEqualTo(R.drawable.ic_sport_default)
+        }
+        assertThat(SportIconRes.drawable("futsal")).isEqualTo(R.drawable.ic_sport_football)
+        assertThat(SportIconRes.drawable("beach-volleyball")).isEqualTo(R.drawable.ic_sport_volleyball)
+        assertThat(SportIconRes.drawable("table-tennis")).isEqualTo(R.drawable.ic_sport_table_tennis)
+        assertThat(SportIconRes.drawable("ufc")).isEqualTo(R.drawable.ic_sport_ufc)
+        assertThat(FakeHomeCatalogRepository().sports().map { it.id }).containsAtLeastElementsIn(SportIconRes.knownIds)
     }
 
     @Test
@@ -74,18 +88,26 @@ class ProductionUiCatalogTest {
             GamesCatalog.lobbyTabs.forEach { appendLine(it.label) }
             HomePromoCatalog.items.forEach { appendLine(it.title) }
             EsportsCatalog.disciplines.forEach { appendLine(it.name) }
-            appendLine(FakeWalletRepository().snapshot().note)
+            appendLine(FakeWalletRepository().snapshot().displayBalance)
+            appendLine(FakeWalletRepository().snapshot().currency)
+            appendLine(WalletCatalog.TITLE)
+            appendLine(WalletCatalog.EMPTY_WITHDRAWALS)
+            appendLine(WalletCatalog.DEPOSITS_UNAVAILABLE)
             appendLine("Этот раздел скоро откроется.")
             appendLine("Купон пуст")
             appendLine("В избранном пока нет событий")
             appendLine("Нет новых сообщений")
-            appendLine("Выберите способ пополнения")
-            appendLine("Оформите заявку на вывод")
             appendLine("Регистрация будет доступна в ближайшее время.")
             appendLine("Для восстановления пароля обратитесь в поддержку.")
             appendLine("Казино-провайдеры появятся после подключения")
+            appendLine("Игры появятся после подключения провайдера")
+            appendLine("Столы появятся после подключения провайдера")
+            appendLine("Матчи появятся скоро")
+            CasinoHomeCatalog.features.forEach { appendLine("${it.title} ${it.subtitle}") }
+            CasinoHomeCatalog.tournaments.forEach { appendLine(it.title) }
+            CasinoHomeCatalog.categories.forEach { appendLine(it.name) }
         }
-        listOf("DEV/mock", "A002", "A003", "Production API", "Движки в", "backend", "repository").forEach { token ->
+        listOf("DEV/mock", "A002", "A003", "Production API", "Движки в", "backend", "repository", "YOHOHO", "Yohoho", "YohohoGames").forEach { token ->
             assertThat(blob).doesNotContain(token)
         }
     }

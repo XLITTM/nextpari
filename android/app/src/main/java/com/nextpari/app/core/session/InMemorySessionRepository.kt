@@ -5,21 +5,28 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * In-memory session only. A001 does not persist auth tokens.
- *
- * Production mobile tokens MUST use Android Keystore-backed secure storage
- * (EncryptedSharedPreferences / Keystore). Do not store access or refresh
- * tokens in DataStore, SharedPreferences, or plain files.
+ * In-memory player-facing session only. Access/refresh credentials stay in the
+ * Keystore-backed CookieJar and are never stored here.
  */
 class InMemorySessionRepository : SessionRepository {
     private val state = MutableStateFlow(AuthSession.Anonymous)
+    private val readyState = MutableStateFlow(true)
     override val session: StateFlow<AuthSession> = state.asStateFlow()
+    override val ready: StateFlow<Boolean> = readyState.asStateFlow()
 
     override suspend fun setSession(session: AuthSession) {
         state.value = session
     }
 
     override suspend fun clear() {
+        clearImmediate()
+    }
+
+    override fun clearImmediate() {
         state.value = AuthSession.Anonymous
+    }
+
+    override fun setReady(value: Boolean) {
+        readyState.value = value
     }
 }
