@@ -1,7 +1,6 @@
 package com.nextpari.app.core.ui.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,11 +18,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.nextpari.app.core.navigation.BottomNavItem
 import com.nextpari.app.core.navigation.BottomNavSpec
 import com.nextpari.app.core.navigation.Destinations
@@ -40,14 +42,21 @@ fun NextpariBottomNav(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .drawBehind {
+                drawLine(
+                    color = colors.border,
+                    start = Offset(0f, 0f),
+                    end = Offset(size.width, 0f),
+                    strokeWidth = 0.5.dp.toPx(),
+                )
+            }
             .background(colors.nav)
             .navigationBarsPadding(),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
-                .border(width = 0.5.dp, color = colors.border),
+                .height(64.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BottomNavSpec.items.forEach { item ->
@@ -79,6 +88,7 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = (-20).dp)
+                .zIndex(1f)
                 .size(58.dp)
                 .shadow(12.dp, CircleShape)
                 .clip(CircleShape)

@@ -44,6 +44,7 @@ fun NextpariHeader(
     onSelectWallet: (String) -> Boolean,
     onAddWallet: (String) -> Boolean,
     onConsumeWalletNotice: () -> Unit,
+    bottomContent: (@Composable () -> Unit)? = null,
 ) {
     Column(
         modifier = Modifier
@@ -111,6 +112,7 @@ fun NextpariHeader(
                 HeaderIcon(NextpariWebIcons.search(NextpariWebIcons.HeaderStroke), "Поиск", chromeTint, onSearch)
             }
         }
+        bottomContent?.invoke()
     }
 }
 

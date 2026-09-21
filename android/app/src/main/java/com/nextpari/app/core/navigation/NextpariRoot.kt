@@ -172,36 +172,36 @@ private fun AuthenticatedShell(
         containerColor = colors.bg,
         topBar = {
             if (showHeader) {
-                Column {
-                    NextpariHeader(
-                        balanceLabel = balanceLabel,
-                        darkTheme = darkTheme,
-                        onDeposit = { navController.navigateTo(Destinations.WALLET) },
-                        onHome = {
-                            homeViewModel.selectTab("top")
-                            navController.navigateTab(Destinations.HOME)
-                        },
-                        onToggleTheme = onToggleTheme,
-                        onSettings = { navController.navigateTo(Destinations.SETTINGS) },
-                        onSearch = { searchOpen = true },
-                        walletsState = walletsState,
-                        closeKey = current,
-                        onRefreshWallets = walletsViewModel::refresh,
-                        onSelectWallet = walletsViewModel::activate,
-                        onAddWallet = walletsViewModel::addCurrency,
-                        onConsumeWalletNotice = walletsViewModel::consumeNotice,
-                    )
-                    if (showMainTabs) {
-                        NextpariMainTabs(activeId = homeState.mainTabId) { tab ->
-                            if (tab.id == "games") {
-                                navController.navigateTo(Destinations.GAMES)
-                            } else {
-                                if (current != Destinations.HOME) navController.navigateTab(Destinations.HOME)
-                                homeViewModel.selectTab(tab.id)
+                NextpariHeader(
+                    balanceLabel = balanceLabel,
+                    darkTheme = darkTheme,
+                    onDeposit = { navController.navigateTo(Destinations.WALLET) },
+                    onHome = {
+                        homeViewModel.selectTab("top")
+                        navController.navigateTab(Destinations.HOME)
+                    },
+                    onToggleTheme = onToggleTheme,
+                    onSettings = { navController.navigateTo(Destinations.SETTINGS) },
+                    onSearch = { searchOpen = true },
+                    walletsState = walletsState,
+                    closeKey = current,
+                    onRefreshWallets = walletsViewModel::refresh,
+                    onSelectWallet = walletsViewModel::activate,
+                    onAddWallet = walletsViewModel::addCurrency,
+                    onConsumeWalletNotice = walletsViewModel::consumeNotice,
+                    bottomContent = {
+                        if (showMainTabs) {
+                            NextpariMainTabs(activeId = homeState.mainTabId) { tab ->
+                                if (tab.id == "games") {
+                                    navController.navigateTo(Destinations.GAMES)
+                                } else {
+                                    if (current != Destinations.HOME) navController.navigateTab(Destinations.HOME)
+                                    homeViewModel.selectTab(tab.id)
+                                }
                             }
                         }
-                    }
-                }
+                    },
+                )
             }
         },
         bottomBar = {
