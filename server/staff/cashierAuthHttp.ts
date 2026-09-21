@@ -16,7 +16,14 @@ import {
   type CashierAuthGatewayPorts,
   type CashierAuthHttpResult,
 } from './cashierAuthService.js';
-import { requestIsSecure } from './cashierCookies.js';
+import { clearCashierCookies, requestIsSecure } from './cashierCookies.js';
+import {
+  enforceStaffAuthLoginLimit,
+  normalizeStaffAuthEmail,
+  staffAuthRateLimitFromPorts,
+  staffAuthRateLimitHttpFields,
+  trustedStaffForwardedAddress,
+} from './staffAuthRateLimit.js';
 import type { StaffLog } from './types.js';
 
 export const CASHIER_AUTH_LOGIN_PATH = '/api/cashier/auth/login';
@@ -59,6 +66,7 @@ export async function handleCashierAuthRequest(
     cookie?: string;
     cookieSecure?: boolean;
     body?: unknown;
+    forwardedFor?: string | string[];
   },
   ports: CashierAuthGatewayPorts,
   log: StaffLog = staffHttpLog,
@@ -73,12 +81,24 @@ export async function handleCashierAuthRequest(
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       const body = asRecord(parseJsonPayload(input.body));
-      return loginCashierWithPassword(
-        ports,
-        String(body.email ?? ''),
-        String(body.password ?? ''),
-        secure,
-      );
+      const email = String(body.email ?? '');
+      const password = String(body.password ?? '');
+      const normalizedEmail = normalizeStaffAuthEmail(email);
+      if (normalizedEmail && password) {
+        const decision = await enforceStaffAuthLoginLimit({
+          role: 'cashier',
+          normalizedIdentifier: normalizedEmail,
+          networkAddress: trustedStaffForwardedAddress(input.forwardedFor),
+          ports: staffAuthRateLimitFromPorts(ports),
+        });
+        if (!decision.ok) {
+          return {
+            ...staffAuthRateLimitHttpFields(decision),
+            cookies: clearCashierCookies(secure),
+          };
+        }
+      }
+      return loginCashierWithPassword(ports, email, password, secure);
     }
     if (path === CASHIER_AUTH_SESSION_PATH) {
       if (method !== 'GET') {
@@ -135,6 +155,7 @@ export async function attachCashierAuthHttp(
         pathname,
         cookie: headerValue(req.headers, 'cookie'),
         cookieSecure: requestIsSecure(req.headers),
+        forwardedFor: headerValue(req.headers, 'x-forwarded-for'),
         body,
       },
       liveCashierAuthPorts(),
@@ -170,6 +191,7 @@ export async function handleVercelCashierAuth(
       pathname,
       cookie: Array.isArray(cookie) ? cookie.join('; ') : cookie,
       cookieSecure: requestIsSecure(req.headers),
+      forwardedFor: req.headers['x-forwarded-for'],
       body: req.body,
     },
     ports ?? liveCashierAuthPorts(),

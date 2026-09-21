@@ -1,5 +1,6 @@
 import { createAnonAuthClient, createServiceRoleClient, createUserJwtClient } from '../supabase/admin.js';
 import { completeStaffLogout, signOutCurrentSupabaseSession } from './ownerAuthService.js';
+import type { StaffAuthRateLimitPorts } from './staffAuthRateLimit.js';
 import { loadOwnerAuthEnv, loadStaffOnboardingEnv } from './env.js';
 import { extractErrorCode, rpcMessage, staffError, StaffOnboardingError } from './errors.js';
 import {
@@ -27,6 +28,7 @@ export interface SecurityAuthGatewayPorts {
     accessToken: string,
     refreshToken: string | null,
   ) => Promise<void>;
+  staffAuthRateLimit?: StaffAuthRateLimitPorts;
 }
 
 export interface SecurityAuthHttpResult {

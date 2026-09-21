@@ -16,7 +16,14 @@ import {
   type ManagerAuthGatewayPorts,
   type ManagerAuthHttpResult,
 } from './managerAuthService.js';
-import { requestIsSecure } from './managerCookies.js';
+import { clearManagerCookies, requestIsSecure } from './managerCookies.js';
+import {
+  enforceStaffAuthLoginLimit,
+  normalizeStaffAuthEmail,
+  staffAuthRateLimitFromPorts,
+  staffAuthRateLimitHttpFields,
+  trustedStaffForwardedAddress,
+} from './staffAuthRateLimit.js';
 import type { StaffLog } from './types.js';
 
 export const MANAGER_AUTH_LOGIN_PATH = '/api/manager/auth/login';
@@ -59,6 +66,7 @@ export async function handleManagerAuthRequest(
     cookie?: string;
     cookieSecure?: boolean;
     body?: unknown;
+    forwardedFor?: string | string[];
   },
   ports: ManagerAuthGatewayPorts,
   log: StaffLog = staffHttpLog,
@@ -73,12 +81,24 @@ export async function handleManagerAuthRequest(
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       const body = asRecord(parseJsonPayload(input.body));
-      return loginManagerWithPassword(
-        ports,
-        String(body.email ?? ''),
-        String(body.password ?? ''),
-        secure,
-      );
+      const email = String(body.email ?? '');
+      const password = String(body.password ?? '');
+      const normalizedEmail = normalizeStaffAuthEmail(email);
+      if (normalizedEmail && password) {
+        const decision = await enforceStaffAuthLoginLimit({
+          role: 'manager',
+          normalizedIdentifier: normalizedEmail,
+          networkAddress: trustedStaffForwardedAddress(input.forwardedFor),
+          ports: staffAuthRateLimitFromPorts(ports),
+        });
+        if (!decision.ok) {
+          return {
+            ...staffAuthRateLimitHttpFields(decision),
+            cookies: clearManagerCookies(secure),
+          };
+        }
+      }
+      return loginManagerWithPassword(ports, email, password, secure);
     }
     if (path === MANAGER_AUTH_SESSION_PATH) {
       if (method !== 'GET') {
@@ -135,6 +155,7 @@ export async function attachManagerAuthHttp(
         pathname,
         cookie: headerValue(req.headers, 'cookie'),
         cookieSecure: requestIsSecure(req.headers),
+        forwardedFor: headerValue(req.headers, 'x-forwarded-for'),
         body,
       },
       liveManagerAuthPorts(),
@@ -170,6 +191,7 @@ export async function handleVercelManagerAuth(
       pathname,
       cookie: Array.isArray(cookie) ? cookie.join('; ') : cookie,
       cookieSecure: requestIsSecure(req.headers),
+      forwardedFor: req.headers['x-forwarded-for'],
       body: req.body,
     },
     ports ?? liveManagerAuthPorts(),

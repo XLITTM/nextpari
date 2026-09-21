@@ -103,6 +103,11 @@ function createAuthPorts(init?: {
       return { accessToken: ACCESS2, refreshToken: REFRESH2 };
     },
     async signOutCurrentSession() {},
+    staffAuthRateLimit: {
+      async consume() {
+        return { allowed: true, retryAfterSeconds: 0 };
+      },
+    },
     async currentStaffContext(accessToken) {
       contextTokens.push(accessToken);
       accessAttempts += 1;
