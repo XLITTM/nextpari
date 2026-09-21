@@ -16,7 +16,14 @@ import {
   type SecurityAuthGatewayPorts,
   type SecurityAuthHttpResult,
 } from './securityAuthService.js';
-import { requestIsSecure } from './securityCookies.js';
+import { clearSecurityCookies, requestIsSecure } from './securityCookies.js';
+import { normalizeSecurityLogin } from './securityAuthService.js';
+import {
+  enforceStaffAuthLoginLimit,
+  staffAuthRateLimitFromPorts,
+  staffAuthRateLimitHttpFields,
+  trustedStaffForwardedAddress,
+} from './staffAuthRateLimit.js';
 import type { StaffLog } from './types.js';
 
 export const SECURITY_AUTH_LOGIN_PATH = '/api/security/auth/login';
@@ -59,6 +66,7 @@ export async function handleSecurityAuthRequest(
     cookie?: string;
     cookieSecure?: boolean;
     body?: unknown;
+    forwardedFor?: string | string[];
   },
   ports: SecurityAuthGatewayPorts = liveSecurityAuthPorts(),
   log: StaffLog = staffHttpLog,
@@ -71,12 +79,38 @@ export async function handleSecurityAuthRequest(
     if (path === SECURITY_AUTH_LOGIN_PATH) {
       if (method !== 'POST') throw staffError('METHOD_NOT_ALLOWED', 405);
       const body = asRecord(parseJsonPayload(input.body));
-      return loginSecurityWithPassword(
-        ports,
-        String(body.login ?? body.username ?? ''),
-        String(body.password ?? ''),
-        secure,
-      );
+      const login = String(body.login ?? body.username ?? '');
+      const password = String(body.password ?? '');
+      let normalizedLogin: string | null = null;
+      if (password) {
+        try {
+          normalizedLogin = normalizeSecurityLogin(login);
+        } catch (error) {
+          if (error instanceof StaffOnboardingError) {
+            return {
+              status: error.httpStatus,
+              body: { ok: false, error: error.code, ...error.payload },
+              cookies: clearSecurityCookies(secure),
+            };
+          }
+          throw error;
+        }
+      }
+      if (normalizedLogin && password) {
+        const decision = await enforceStaffAuthLoginLimit({
+          role: 'security',
+          normalizedIdentifier: normalizedLogin,
+          networkAddress: trustedStaffForwardedAddress(input.forwardedFor),
+          ports: staffAuthRateLimitFromPorts(ports),
+        });
+        if (!decision.ok) {
+          return {
+            ...staffAuthRateLimitHttpFields(decision),
+            cookies: clearSecurityCookies(secure),
+          };
+        }
+      }
+      return loginSecurityWithPassword(ports, login, password, secure);
     }
     if (path === SECURITY_AUTH_ME_PATH) {
       if (method !== 'GET') throw staffError('METHOD_NOT_ALLOWED', 405);
@@ -129,6 +163,7 @@ export async function attachSecurityAuthHttp(
         pathname,
         cookie: headerValue(req.headers, 'cookie'),
         cookieSecure: requestIsSecure(req.headers),
+        forwardedFor: headerValue(req.headers, 'x-forwarded-for'),
         body,
       },
       liveSecurityAuthPorts(),
@@ -164,6 +199,7 @@ export async function handleVercelSecurityAuth(
       pathname,
       cookie: Array.isArray(cookie) ? cookie.join('; ') : cookie,
       cookieSecure: requestIsSecure(req.headers),
+      forwardedFor: req.headers['x-forwarded-for'],
       body: req.body,
     },
     ports,

@@ -16,7 +16,14 @@ import {
   type OwnerAuthGatewayPorts,
   type OwnerAuthHttpResult,
 } from './ownerAuthService.js';
-import { requestIsSecure } from './ownerCookies.js';
+import { clearOwnerCookies, requestIsSecure } from './ownerCookies.js';
+import {
+  enforceStaffAuthLoginLimit,
+  normalizeStaffAuthEmail,
+  staffAuthRateLimitFromPorts,
+  staffAuthRateLimitHttpFields,
+  trustedStaffForwardedAddress,
+} from './staffAuthRateLimit.js';
 import type { StaffLog } from './types.js';
 
 export const OWNER_AUTH_LOGIN_PATH = '/api/owner/auth/login';
@@ -59,6 +66,7 @@ export async function handleOwnerAuthRequest(
     cookie?: string;
     cookieSecure?: boolean;
     body?: unknown;
+    forwardedFor?: string | string[];
   },
   ports: OwnerAuthGatewayPorts = liveOwnerAuthPorts(),
   log: StaffLog = staffHttpLog,
@@ -73,12 +81,24 @@ export async function handleOwnerAuthRequest(
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
       const body = asRecord(parseJsonPayload(input.body));
-      return loginOwnerWithPassword(
-        ports,
-        String(body.email ?? ''),
-        String(body.password ?? ''),
-        secure,
-      );
+      const email = String(body.email ?? '');
+      const password = String(body.password ?? '');
+      const normalizedEmail = normalizeStaffAuthEmail(email);
+      if (normalizedEmail && password) {
+        const decision = await enforceStaffAuthLoginLimit({
+          role: 'owner',
+          normalizedIdentifier: normalizedEmail,
+          networkAddress: trustedStaffForwardedAddress(input.forwardedFor),
+          ports: staffAuthRateLimitFromPorts(ports),
+        });
+        if (!decision.ok) {
+          return {
+            ...staffAuthRateLimitHttpFields(decision),
+            cookies: clearOwnerCookies(secure),
+          };
+        }
+      }
+      return loginOwnerWithPassword(ports, email, password, secure);
     }
     if (path === OWNER_AUTH_SESSION_PATH) {
       if (method !== 'GET') {
@@ -135,6 +155,7 @@ export async function attachOwnerAuthHttp(
         pathname,
         cookie: headerValue(req.headers, 'cookie'),
         cookieSecure: requestIsSecure(req.headers),
+        forwardedFor: headerValue(req.headers, 'x-forwarded-for'),
         body,
       },
       liveOwnerAuthPorts(),
@@ -170,6 +191,7 @@ export async function handleVercelOwnerAuth(
       pathname,
       cookie: Array.isArray(cookie) ? cookie.join('; ') : cookie,
       cookieSecure: requestIsSecure(req.headers),
+      forwardedFor: req.headers['x-forwarded-for'],
       body: req.body,
     },
     ports,

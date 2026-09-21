@@ -7,6 +7,7 @@ import {
   type OwnerStaffContext,
 } from './ownerContext.js';
 import { clearOwnerCookies, readOwnerCookies, serializeOwnerCookies } from './ownerCookies.js';
+import type { StaffAuthRateLimitPorts } from './staffAuthRateLimit.js';
 
 export interface OwnerAuthTokens {
   accessToken: string;
@@ -21,6 +22,7 @@ export interface OwnerAuthGatewayPorts {
     accessToken: string,
     refreshToken: string | null,
   ) => Promise<void>;
+  staffAuthRateLimit?: StaffAuthRateLimitPorts;
 }
 
 export interface OwnerAuthHttpResult {
