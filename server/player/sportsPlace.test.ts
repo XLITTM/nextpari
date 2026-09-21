@@ -30,7 +30,7 @@ function cookieHeader(access = 'player-access-token', refresh = 'player-refresh-
 }
 
 const OPEN: SportsQuote = {
-  provider: 'lsports',
+  provider: 'provider-a',
   feedType: 'inplay',
   fixtureId: '19981248',
   marketId: '1',
@@ -54,7 +54,7 @@ const PLACE_BODY = {
   mode: 'single' as const,
   idempotencyKey: 'k1',
   selections: [{
-    provider: 'lsports',
+    provider: 'provider-a',
     fixtureId: '19981248',
     marketId: '1',
     marketKey: '19981248:1:',
@@ -218,7 +218,7 @@ describe('player sports place HTTP', () => {
       ...PLACE_BODY,
       idempotencyKey: 'k2',
       selections: [{
-        provider: 'lsports',
+        provider: 'provider-a',
         fixtureId: '19981248',
         marketId: '1',
         marketKey: '19981248:1:',
@@ -242,7 +242,7 @@ describe('player sports place HTTP', () => {
       ...PLACE_BODY,
       idempotencyKey: 'k-missing-key',
       selections: [{
-        provider: 'lsports',
+        provider: 'provider-a',
         fixtureId: '19981248',
         marketId: '1',
         outcomeId: '117469638719981250',
@@ -276,13 +276,15 @@ describe('player sports place HTTP', () => {
         provider: 'betsapi',
       }],
     });
-    assert.equal(unsupported.body.error, 'EVENT_UNAVAILABLE');
+    assert.equal(unsupported.status, 403);
+    assert.equal(unsupported.body.error, 'SPORTS_PROVIDER_RETIRED');
+    assert.equal(unknownProvider.quoteFetches.length, 0);
     assert.equal(unknownProvider.places.length, 0);
 
     const missingBet = await place(createPorts(), {
       ...PLACE_BODY,
       idempotencyKey: 'k4',
-      selections: [{ fixtureId: '19981248', outcomeId: '', price: 1.85, provider: 'lsports' }],
+      selections: [{ fixtureId: '19981248', outcomeId: '', price: 1.85, provider: 'provider-a' }],
     });
     assert.equal(missingBet.body.error, 'MISSING_BET_ID');
 
@@ -307,9 +309,9 @@ describe('player sports place HTTP', () => {
       mode: 'express',
       idempotencyKey: 'express-odds-leg-2',
       selections: [
-        { provider: 'lsports', fixtureId: '100', marketId: '1', marketKey: '100:1:', outcomeId: 'o1', price: 1.4 },
-        { provider: 'lsports', fixtureId: '200', marketId: '1', marketKey: '200:1:', outcomeId: 'o2', price: 1.8 },
-        { provider: 'lsports', fixtureId: '300', marketId: '1', marketKey: '300:1:', outcomeId: 'o3', price: 3.1 },
+        { provider: 'provider-a', fixtureId: '100', marketId: '1', marketKey: '100:1:', outcomeId: 'o1', price: 1.4 },
+        { provider: 'provider-a', fixtureId: '200', marketId: '1', marketKey: '200:1:', outcomeId: 'o2', price: 1.8 },
+        { provider: 'provider-a', fixtureId: '300', marketId: '1', marketKey: '300:1:', outcomeId: 'o3', price: 3.1 },
       ],
     });
     assert.equal(result.body.error, 'ODDS_CHANGED');
@@ -424,12 +426,10 @@ describe('explicit sports provider', () => {
     });
   });
 
-  it('canonicalizes explicit LSports and still quotes through the LSports provider id', async () => {
-    const seen: string[] = [];
+  it('rejects retired LSports before quote or wallet mutation even when betting is enabled', async () => {
     const ports = createPorts({
       fetchQuote: async (request) => {
-        seen.push(String(request.provider ?? ''));
-        return OPEN;
+        throw new Error(`quote must not run for ${request.provider}`);
       },
     });
     const result = await place(ports, {
@@ -437,10 +437,10 @@ describe('explicit sports provider', () => {
       idempotencyKey: 'k-lsports-explicit',
       selections: [{ ...PLACE_BODY.selections[0], provider: 'LSports' }],
     });
-    assert.equal(result.status, 200);
-    assert.deepEqual(seen, ['lsports']);
-    assert.deepEqual(ports.quoteFetches.map((row) => row.provider), ['lsports']);
-    assert.equal(ports.places.length, 1);
+    assert.equal(result.status, 403);
+    assert.equal(result.body.error, 'SPORTS_PROVIDER_RETIRED');
+    assert.deepEqual(ports.quoteFetches, []);
+    assert.equal(ports.places.length, 0);
   });
 
   it('fails closed on explicit unsupported provider after quote lookup', async () => {

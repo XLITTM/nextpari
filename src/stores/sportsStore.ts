@@ -29,6 +29,7 @@ interface SportsStore {
   getUpcomingEvents: () => BetsEvent[];
   liveMatches: () => EventState[];
   removeEvent: (id: string) => void;
+  clearEvents: () => void;
 }
 
 function displayMatchTime(ev: BetsEvent, prev?: EventState): string {
@@ -170,4 +171,5 @@ export const useSportsStore = create<SportsStore>((set, get) => ({
     delete next[id];
     set({ events: next });
   },
+  clearEvents: () => set({ events: {} }),
 }));

@@ -683,20 +683,8 @@ export function parseAllMarketsFromOdds(raw: unknown): ExtraMarket[] {
   return [...unique.values()].filter((market) => Object.keys(market.outcomes).length > 0);
 }
 
-function readEnv(name: string): string {
-  const vite = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env?.[name];
-  if (vite) return vite;
-  const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process;
-  return proc?.env?.[name] ?? '';
-}
-
 export function getBetsApiToken(): string {
-  return (
-    readEnv('BETSAPI_KEY') ||
-    readEnv('BETSAPI_TOKEN') ||
-    readEnv('VITE_BETSAPI_KEY') ||
-    readEnv('VITE_BETSAPI_TOKEN')
-  );
+  return '';
 }
 
 const PRIMARY_HOST = 'https://api.b365api.com';
@@ -730,34 +718,11 @@ function isRetryableHttp(status: number): boolean {
 }
 
 async function fetchBetsApiResponse(
-  path: string,
-  search: URLSearchParams,
-  signal?: AbortSignal,
+  _path: string,
+  _search: URLSearchParams,
+  _signal?: AbortSignal,
 ): Promise<Response> {
-  if (isBrowser()) {
-    const query = search.toString();
-    return fetch(`/api/betsapi${path}${query ? `?${query}` : ''}`, { signal });
-  }
-
-  const token = getBetsApiToken();
-  if (!token) throw new Error('BetsAPI token is missing');
-  search.set('token', token);
-
-  let lastError: Error | null = null;
-  for (const [index, host] of [PRIMARY_HOST, FALLBACK_HOST].entries()) {
-    try {
-      const response = await fetch(`${host}${path}?${search.toString()}`, { signal });
-      if (isRetryableHttp(response.status) && index === 0) {
-        lastError = new Error(`BetsAPI HTTP ${response.status}`);
-        continue;
-      }
-      return response;
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') throw error;
-      lastError = error instanceof Error ? error : new Error(String(error));
-    }
-  }
-  throw lastError ?? new Error('BetsAPI request failed');
+  throw new Error('LEGACY_SPORTS_FEED_DISABLED');
 }
 
 async function parseBetsApiJson<T>(response: Response): Promise<T> {

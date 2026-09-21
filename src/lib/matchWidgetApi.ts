@@ -10,27 +10,11 @@ import type {
 
 /** Direct gateway fetch — bypasses the shared client odds queue so the match widget stays snappy. */
 async function gatewayGet<T>(
-  path: string,
-  params: Record<string, string | number>,
-  timeoutMs = 7000,
+  _path: string,
+  _params: Record<string, string | number>,
+  _timeoutMs = 7000,
 ): Promise<T> {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    search.set(key, String(value));
-  }
-  const controller = new AbortController();
-  const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(`/api/betsapi${path}?${search.toString()}`, {
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`BetsAPI ${path} failed (${response.status})`);
-    }
-    return (await response.json()) as T;
-  } finally {
-    globalThis.clearTimeout(timer);
-  }
+  throw new Error('LEGACY_SPORTS_FEED_DISABLED');
 }
 
 interface ViewEventRow {
@@ -307,44 +291,7 @@ function mapIncidents(view: ViewPayload): { home: SideIncidents; away: SideIncid
   };
 }
 
-export async function fetchMatchWidgetBundle(eventId: string): Promise<MatchWidgetApiBundle | null> {
-  if (!/^\d+$/.test(eventId.trim())) return null;
-
-  const [viewJson, historyJson] = await Promise.all([
-    gatewayGet<{ success?: number; results?: unknown; error?: string }>('/v1/event/view', {
-      event_id: eventId,
-    }),
-    gatewayGet<{
-      success?: number;
-      results?: { h2h?: BetsApiEvent[]; home?: BetsApiEvent[]; away?: BetsApiEvent[] };
-      error?: string;
-    }>('/v1/event/history', { event_id: eventId, qty: 10 }).catch(() => null),
-  ]);
-
-  const results = viewJson.results;
-  const view = (
-    Array.isArray(results) ? results[0] : results
-  ) as ViewPayload | null | undefined;
-  if (!view?.id && !view?.ss && !view?.stats) return null;
-
-  const incidents = mapIncidents(view);
-  const stadium = parseStadium(view.extra);
-  const weather = parseWeather(view.extra?.weather);
-  const round = view.extra?.round != null ? String(view.extra.round) : undefined;
-
-  const homeName = view.home?.name ?? '';
-  const awayName = view.away?.name ?? '';
-
-  return {
-    stats: mapStats(view.stats),
-    h2h: mapH2H(historyJson?.results?.h2h),
-    stadium,
-    weather,
-    round,
-    home: incidents.home,
-    away: incidents.away,
-    timeline: mapTimeline(view.events, homeName, awayName),
-    homeForm: mapTeamForm(historyJson?.results?.home, homeName),
-    awayForm: mapTeamForm(historyJson?.results?.away, awayName),
-  };
+export async function fetchMatchWidgetBundle(_eventId: string): Promise<MatchWidgetApiBundle | null> {
+  return null;
 }
+

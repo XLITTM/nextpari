@@ -170,16 +170,7 @@ export function matchEventFromStore(state: EventState): MatchEvent {
       : undefined;
   const rawMarkets = latestOdds ?? base.markets;
   const lsports = isLsportsDisplayEvent(ev);
-  const projected = lsports
-    ? lsportsCardMarkets(rawMarkets)
-    : {
-      markets: {
-        '1': rawMarkets['1'] > 1 ? rawMarkets['1'] : 2.1,
-        x: rawMarkets.x > 1 ? rawMarkets.x : 3.25,
-        '2': rawMarkets['2'] > 1 ? rawMarkets['2'] : 2.8,
-      },
-      marketsLocked: false,
-    };
+  const projected = lsportsCardMarkets(rawMarkets);
   return {
     ...base,
     sport: sportFromBetsId(ev.sport_id) ?? base.sport,

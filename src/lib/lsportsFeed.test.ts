@@ -37,12 +37,12 @@ describe('lsports display feed guards', () => {
     assert.ok(buttons.every((row) => row.locked));
   });
 
-  it('keeps BetsAPI fallbacks when the match is not LSports-locked', () => {
+  it('locks missing 1X2 instead of using retired BetsAPI fallbacks', () => {
     const buttons = mainOutcomeButtons(match({
       markets: { '1': 0, x: 0, '2': 0 },
       marketsLocked: false,
     }));
-    assert.deepEqual(buttons.map((row) => row.odds), [2.1, 3.25, 2.8]);
-    assert.ok(buttons.every((row) => !row.locked));
+    assert.deepEqual(buttons.map((row) => row.odds), [0, 0, 0]);
+    assert.ok(buttons.every((row) => row.locked));
   });
 });

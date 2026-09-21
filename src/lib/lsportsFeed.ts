@@ -14,11 +14,7 @@ export function setLsportsDisplayFeedEnabledForTests(value: boolean | null): voi
  */
 export function isLsportsDisplayFeedEnabled(): boolean {
   if (testOverride != null) return testOverride;
-  try {
-    return String((import.meta as { env?: { VITE_LSPORTS_DISPLAY_FEED?: string } }).env?.VITE_LSPORTS_DISPLAY_FEED ?? '') === '1';
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 export function isLsportsDisplayEvent(event: { our_events?: string } | null | undefined): boolean {

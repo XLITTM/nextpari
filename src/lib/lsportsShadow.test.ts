@@ -51,17 +51,15 @@ const staleFeed: LsportsBrowserFeed = {
 };
 
 describe('lsports shadow client guards', () => {
-  it('leaves BetsAPI inplay wiring in place when the display flag is off', () => {
+  it('does not mount BetsAPI or LSports feeds from LiveMatchesProvider', () => {
     setLsportsDisplayFeedEnabledForTests(null);
     assert.equal(isLsportsDisplayFeedEnabled(), false);
-    const hook = readFileSync(join(root, 'src/hooks/useEventsList.ts'), 'utf8');
-    assert.match(hook, /fetchSportsFeed\('inplay'/);
-    assert.match(hook, /isLsportsDisplayFeedEnabled\(\)/);
-    const sports = readFileSync(join(root, 'src/services/sports.ts'), 'utf8');
-    assert.match(sports, /\/api\/sports\?type=/);
-    assert.equal(sports.includes('/api/lsports'), false);
     const context = readFileSync(join(root, 'src/LiveMatchesContext.tsx'), 'utf8');
-    assert.match(context, /useLsportsShadowFeed/);
+    assert.equal(context.includes('useEventsList'), false);
+    assert.equal(context.includes('useLsportsShadowFeed'), false);
+    assert.equal(context.includes('fetchSportsFeed'), false);
+    assert.match(context, /clearEvents/);
+    assert.match(context, /loading: false/);
   });
 
   it('locks stale LSports feeds without fabricating 2.10/3.25/2.80', () => {

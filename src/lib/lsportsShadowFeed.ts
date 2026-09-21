@@ -10,7 +10,7 @@ export const LSPORTS_RAILWAY_HEALTH_PATH = '/health';
 type LsportsFeedEnv = { VITE_LSPORTS_FEED_BASE_URL?: string; DEV?: boolean };
 
 function viteEnv(): LsportsFeedEnv {
-  return (import.meta as { env?: LsportsFeedEnv }).env ?? {};
+  return {};
 }
 
 function isViteDev(env: LsportsFeedEnv): boolean {
