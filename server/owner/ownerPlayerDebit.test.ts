@@ -52,6 +52,7 @@ function createAuthPorts(context: unknown = OWNER_CTX): OwnerAuthGatewayPorts {
     async refreshSession() {
       return { accessToken: ACCESS, refreshToken: REFRESH };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return context;
     },

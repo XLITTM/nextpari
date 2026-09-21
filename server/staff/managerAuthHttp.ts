@@ -90,7 +90,7 @@ export async function handleManagerAuthRequest(
       if (method !== 'POST') {
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
-      return logoutManagerSession(secure);
+      return logoutManagerSession(ports, input.cookie, secure);
     }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {

@@ -81,6 +81,7 @@ function createAuthPorts(init?: {
     async refreshSession() {
       return { accessToken: ACCESS2, refreshToken: REFRESH2 };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       if (init?.context !== undefined) return init.context;
       return SECURITY_CTX;

@@ -63,6 +63,7 @@ function ownerPorts(): OwnerAuthGatewayPorts {
   return {
     async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
     async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
     },
@@ -379,6 +380,7 @@ describe('phase 059 player funding limits', () => {
     const session: CashierAuthGatewayPorts = {
       async signInWithPassword() { return { accessToken: 'ca', refreshToken: 'cr' }; },
       async refreshSession() { throw staffError('JWT_INVALID', 401); },
+      async signOutCurrentSession() {},
       async currentStaffContext() {
         return {
           role: 'cashier',

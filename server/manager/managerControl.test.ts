@@ -84,6 +84,7 @@ function createAuthPorts(init?: {
       refreshes.push(refreshToken);
       return { accessToken: ACCESS2, refreshToken: REFRESH2 };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext(accessToken) {
       contextTokens.push(accessToken);
       accessAttempts += 1;

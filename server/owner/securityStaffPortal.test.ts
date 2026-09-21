@@ -56,6 +56,7 @@ function createAuthPorts(): OwnerAuthGatewayPorts {
     async refreshSession() {
       return { accessToken: ACCESS, refreshToken: REFRESH };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return OWNER_CTX;
     },
@@ -355,6 +356,7 @@ describe('owner creates and manages Security staff', () => {
           async refreshSession() {
             throw staffError('JWT_INVALID', 401);
           },
+          async signOutCurrentSession() {},
           async currentStaffContext() {
             throw staffError('JWT_REQUIRED', 401);
           },

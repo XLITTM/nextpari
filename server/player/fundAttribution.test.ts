@@ -655,6 +655,7 @@ describe('fund attribution HTTP privacy and permissions', () => {
       async refreshSession() {
         return { accessToken: SECURITY_ACCESS, refreshToken: SECURITY_REFRESH };
       },
+      async signOutCurrentSession() {},
       async currentStaffContext() {
         return {
           role: 'security',
@@ -718,6 +719,7 @@ describe('fund attribution HTTP privacy and permissions', () => {
           async refreshSession() {
             return { accessToken: OWNER_ACCESS, refreshToken: OWNER_REFRESH };
           },
+          async signOutCurrentSession() {},
           async currentStaffContext() {
             return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
           },

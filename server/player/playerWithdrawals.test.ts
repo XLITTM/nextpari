@@ -80,6 +80,7 @@ function ownerAuth(): OwnerAuthGatewayPorts {
     async refreshSession() {
       return { accessToken: OWNER_ACCESS, refreshToken: OWNER_REFRESH };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
     },

@@ -84,7 +84,7 @@ export async function handleSecurityAuthRequest(
     }
     if (path === SECURITY_AUTH_LOGOUT_PATH) {
       if (method !== 'POST') throw staffError('METHOD_NOT_ALLOWED', 405);
-      return logoutSecuritySession(secure);
+      return logoutSecuritySession(ports, input.cookie, secure);
     }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {

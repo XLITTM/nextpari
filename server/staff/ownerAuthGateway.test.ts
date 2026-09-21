@@ -102,6 +102,7 @@ function createAuthPorts(init?: {
       if (init?.refreshError) throw staffError('JWT_INVALID', 401);
       return { accessToken: ACCESS2, refreshToken: REFRESH2 };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext(accessToken) {
       contextTokens.push(accessToken);
       accessAttempts += 1;

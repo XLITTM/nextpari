@@ -135,6 +135,7 @@ describe('owner_list_cashiers owner-native scope 062 (not executed)', () => {
           async refreshSession() {
             return { accessToken: ACCESS, refreshToken: REFRESH };
           },
+          async signOutCurrentSession() {},
           async currentStaffContext() {
             return {
               role: 'owner',

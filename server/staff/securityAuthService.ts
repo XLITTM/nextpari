@@ -1,4 +1,5 @@
 import { createAnonAuthClient, createServiceRoleClient, createUserJwtClient } from '../supabase/admin.js';
+import { completeStaffLogout, signOutCurrentSupabaseSession } from './ownerAuthService.js';
 import { loadOwnerAuthEnv, loadStaffOnboardingEnv } from './env.js';
 import { extractErrorCode, rpcMessage, staffError, StaffOnboardingError } from './errors.js';
 import {
@@ -22,6 +23,10 @@ export interface SecurityAuthGatewayPorts {
   signInWithPassword: (email: string, password: string) => Promise<SecurityAuthTokens>;
   refreshSession: (refreshToken: string) => Promise<SecurityAuthTokens>;
   currentStaffContext: (accessToken: string) => Promise<unknown>;
+  signOutCurrentSession: (
+    accessToken: string,
+    refreshToken: string | null,
+  ) => Promise<void>;
 }
 
 export interface SecurityAuthHttpResult {
@@ -58,7 +63,12 @@ function securityContextError(err: unknown): StaffOnboardingError {
       ? 'SECURITY_REQUIRED'
       : code, 403);
   }
-  if (code === 'JWT_INVALID' || code === 'JWT_REQUIRED' || code === 'AUTH_REQUIRED') {
+  if (
+    code === 'SESSION_EXPIRED'
+    || code === 'JWT_INVALID'
+    || code === 'JWT_REQUIRED'
+    || code === 'AUTH_REQUIRED'
+  ) {
     return staffError(code, 401);
   }
   const lower = raw.toLowerCase();
@@ -132,15 +142,21 @@ export function liveSecurityAuthPorts(): SecurityAuthGatewayPorts {
       }
       return { accessToken, refreshToken: nextRefresh };
     },
+    async signOutCurrentSession(accessToken, refreshToken) {
+      await signOutCurrentSupabaseSession(env, accessToken, refreshToken);
+    },
     async currentStaffContext(accessToken) {
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
       const { data, error } = await client.rpc('security_current_staff');
       if (error) {
         const text = rpcMessage(error);
+        const code = extractErrorCode(text);
+        if (code === 'SESSION_EXPIRED' || code === 'AUTH_REQUIRED') {
+          throw staffError(code, 401);
+        }
         if (error.code === 'PGRST301' || /jwt|expired|unauthorized/i.test(text)) {
           throw staffError('JWT_INVALID', 401);
         }
-        const code = extractErrorCode(text);
         if (code) {
           throw staffError(code, /OWNER|MANAGER|CASHIER|SECURITY|STAFF_/.test(code) ? 403 : 401);
         }
@@ -279,10 +295,16 @@ export async function readSecuritySession(
   }
 }
 
-export function logoutSecuritySession(secure: boolean): SecurityAuthHttpResult {
-  return {
-    status: 200,
-    body: { ok: true },
-    cookies: clearSecurityCookies(secure),
-  };
+export async function logoutSecuritySession(
+  ports: SecurityAuthGatewayPorts,
+  cookieHeader: string | undefined,
+  secure: boolean,
+): Promise<SecurityAuthHttpResult> {
+  const cookies = readSecurityCookies(cookieHeader);
+  return completeStaffLogout(
+    ports,
+    cookies.accessToken,
+    cookies.refreshToken,
+    clearSecurityCookies(secure),
+  );
 }

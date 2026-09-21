@@ -17,6 +17,10 @@ export interface OwnerAuthGatewayPorts {
   signInWithPassword: (email: string, password: string) => Promise<OwnerAuthTokens>;
   refreshSession: (refreshToken: string) => Promise<OwnerAuthTokens>;
   currentStaffContext: (accessToken: string) => Promise<unknown>;
+  signOutCurrentSession: (
+    accessToken: string,
+    refreshToken: string | null,
+  ) => Promise<void>;
 }
 
 export interface OwnerAuthHttpResult {
@@ -38,7 +42,12 @@ function ownerContextError(err: unknown): StaffOnboardingError {
   ) {
     return staffError(code, 403);
   }
-  if (code === 'JWT_INVALID' || code === 'JWT_REQUIRED' || code === 'AUTH_REQUIRED') {
+  if (
+    code === 'SESSION_EXPIRED'
+    || code === 'JWT_INVALID'
+    || code === 'JWT_REQUIRED'
+    || code === 'AUTH_REQUIRED'
+  ) {
     return staffError(code, 401);
   }
   const lower = raw.toLowerCase();
@@ -87,15 +96,21 @@ export function liveOwnerAuthPorts(): OwnerAuthGatewayPorts {
       }
       return { accessToken, refreshToken: nextRefresh };
     },
+    async signOutCurrentSession(accessToken, refreshToken) {
+      await signOutCurrentSupabaseSession(env, accessToken, refreshToken);
+    },
     async currentStaffContext(accessToken) {
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
       const { data, error } = await client.rpc('current_staff_binding_context');
       if (error) {
         const text = rpcMessage(error);
+        const code = extractErrorCode(text);
+        if (code === 'SESSION_EXPIRED' || code === 'AUTH_REQUIRED') {
+          throw staffError(code, 401);
+        }
         if (error.code === 'PGRST301' || /jwt|expired|unauthorized/i.test(text)) {
           throw staffError('JWT_INVALID', 401);
         }
-        const code = extractErrorCode(text);
         if (code) {
           throw staffError(
             code,
@@ -212,10 +227,83 @@ export async function readOwnerSession(
   }
 }
 
-export function logoutOwnerSession(secure: boolean): OwnerAuthHttpResult {
-  return {
-    status: 200,
-    body: { ok: true },
-    cookies: clearOwnerCookies(secure),
-  };
+export async function logoutOwnerSession(
+  ports: OwnerAuthGatewayPorts,
+  cookieHeader: string | undefined,
+  secure: boolean,
+): Promise<OwnerAuthHttpResult> {
+  const cookies = readOwnerCookies(cookieHeader);
+  return completeStaffLogout(
+    ports,
+    cookies.accessToken,
+    cookies.refreshToken,
+    clearOwnerCookies(secure),
+  );
+}
+
+export async function signOutCurrentSupabaseSession(
+  env: { supabaseUrl: string; supabaseAnonKey: string },
+  accessToken: string,
+  refreshToken: string | null,
+): Promise<void> {
+  const access = accessToken.trim();
+  const refresh = refreshToken?.trim() ?? '';
+  if (!access && !refresh) return;
+
+  if (access && refresh) {
+    const client = createAnonAuthClient(env.supabaseUrl, env.supabaseAnonKey);
+    const { error: sessionError } = await client.auth.setSession({
+      access_token: access,
+      refresh_token: refresh,
+    });
+    if (sessionError) throw sessionError;
+    const { error } = await client.auth.signOut({ scope: 'local' });
+    if (error) throw error;
+    return;
+  }
+
+  if (refresh) {
+    const client = createAnonAuthClient(env.supabaseUrl, env.supabaseAnonKey);
+    const { error: refreshError } = await client.auth.refreshSession({ refresh_token: refresh });
+    if (refreshError) throw refreshError;
+    const { error } = await client.auth.signOut({ scope: 'local' });
+    if (error) throw error;
+    return;
+  }
+
+  const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, access);
+  const { error } = await client.auth.signOut({ scope: 'local' });
+  if (error) throw error;
+}
+
+const SERVICE_FAILURE = /fetch failed|econnrefused|econnreset|enotfound|etimedout|network|timeout|socket|\b5\d\d\b/i;
+
+export function staffSessionAlreadyRevoked(err: unknown): boolean {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  if (SERVICE_FAILURE.test(raw)) return false;
+  return /session|refresh|jwt|expired|invalid|not found|unauthorized|auth|\b401\b|\b403\b/i.test(raw);
+}
+
+export async function completeStaffLogout(
+  ports: Pick<OwnerAuthGatewayPorts, 'signOutCurrentSession'>,
+  accessToken: string | null,
+  refreshToken: string | null,
+  clearedCookies: string[],
+): Promise<OwnerAuthHttpResult> {
+  if (!accessToken && !refreshToken) {
+    return { status: 200, body: { ok: true }, cookies: clearedCookies };
+  }
+  try {
+    await ports.signOutCurrentSession(accessToken ?? '', refreshToken);
+    return { status: 200, body: { ok: true }, cookies: clearedCookies };
+  } catch (err) {
+    if (staffSessionAlreadyRevoked(err)) {
+      return { status: 200, body: { ok: true }, cookies: clearedCookies };
+    }
+    return {
+      status: 503,
+      body: { ok: false, error: 'STAFF_SESSION_REVOCATION_FAILED' },
+      cookies: clearedCookies,
+    };
+  }
 }

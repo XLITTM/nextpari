@@ -360,6 +360,7 @@ describe('owner and security verification request HTTP', () => {
         sessionPorts: {
           async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async signOutCurrentSession() {},
           async currentStaffContext() {
             return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
           },
@@ -407,6 +408,7 @@ describe('owner and security verification request HTTP', () => {
           async lookupLoginEmail() { return 'sec@nextpari.test'; },
           async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async signOutCurrentSession() {},
           async currentStaffContext() {
             return { role: 'security', status: 'active', auth_user_id: 'sec-uid', display_name: 'Sec', login: 'security01' };
           },
@@ -446,6 +448,7 @@ describe('owner and security verification request HTTP', () => {
         sessionPorts: {
           async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async signOutCurrentSession() {},
           async currentStaffContext() {
             return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
           },
@@ -476,6 +479,7 @@ describe('owner and security verification request HTTP', () => {
           async lookupLoginEmail() { return 'sec@nextpari.test'; },
           async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async signOutCurrentSession() {},
           async currentStaffContext() {
             return { role: 'security', status: 'active', auth_user_id: 'sec-uid', display_name: 'Sec', login: 'security01' };
           },

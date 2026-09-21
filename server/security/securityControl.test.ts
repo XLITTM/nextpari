@@ -48,6 +48,7 @@ function createAuthPorts(): SecurityAuthGatewayPorts {
     async refreshSession() {
       throw staffError('JWT_INVALID', 401);
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return SECURITY_CTX;
     },
@@ -247,6 +248,7 @@ describe('security control same-origin BFF', () => {
       async refreshSession() {
         throw staffError('JWT_INVALID', 401);
       },
+      async signOutCurrentSession() {},
       async currentStaffContext() {
         throw staffError('JWT_REQUIRED', 401);
       },

@@ -78,6 +78,7 @@ function authPorts(context: unknown): OwnerAuthGatewayPorts {
     async refreshSession() {
       return { accessToken: 'access-2', refreshToken: 'refresh-2' };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return context;
     },
