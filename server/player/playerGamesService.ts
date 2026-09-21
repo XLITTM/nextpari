@@ -59,7 +59,8 @@ function isJwtAuthError(error: unknown): boolean {
   return error.httpStatus === 401
     || error.code === 'JWT_INVALID'
     || error.code === 'JWT_REQUIRED'
-    || error.code === 'AUTH_REQUIRED';
+    || error.code === 'AUTH_REQUIRED'
+    || error.code === 'SESSION_EXPIRED';
 }
 
 function withGameHeaders(
