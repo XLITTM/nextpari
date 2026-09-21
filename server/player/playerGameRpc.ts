@@ -8,14 +8,17 @@ export interface PlayerGameRpcPort {
 
 export function mapPlayerGameRpcError(error: { message?: string; code?: string }): StaffOnboardingError {
   const text = rpcMessage(error);
+  const code = extractErrorCode(text);
+  if (code === 'SESSION_EXPIRED') {
+    return staffError('SESSION_EXPIRED', 401);
+  }
   if (error.code === 'PGRST301' || /jwt|expired|unauthorized/i.test(text)) {
     return staffError('JWT_INVALID', 401);
   }
-  const code = extractErrorCode(text);
   if (!code) {
     return staffError('GAME_RPC_FAILED', 500);
   }
-  if (code === 'AUTH_REQUIRED' || code === 'JWT_REQUIRED' || code === 'JWT_INVALID') {
+  if (code === 'AUTH_REQUIRED' || code === 'JWT_REQUIRED' || code === 'JWT_INVALID' || code === 'SESSION_EXPIRED') {
     return staffError(code, 401);
   }
   if (
