@@ -59,6 +59,16 @@ object WalletsCatalog {
     fun labelFor(code: String): String =
         displayCurrencies.firstOrNull { it.value == displayCurrency(code) }?.label ?: displayCurrency(code)
 
+    fun displayNameRu(code: String): String = when (displayCurrency(code)) {
+        "TMT" -> "Манат"
+        "USD" -> "Доллар США"
+        "TRY" -> "Турецкая лира"
+        "UZS" -> "Узбекский сум"
+        "RUB" -> "Российский рубль"
+        "KZT" -> "Казахстанский тенге"
+        else -> displayCurrency(code)
+    }
+
     fun addable(owned: List<PlayerWalletRow>): List<CurrencyOption> {
         val ownedDisplay = owned.map { displayCurrency(it.currency) }.toSet()
         return displayCurrencies.filter { it.value !in ownedDisplay }

@@ -32,6 +32,36 @@ class WalletsCatalogTest {
     }
 
     @Test
+    fun canonicalDisplayNamesIgnoreServerMojibake() {
+        assertThat(WalletsCatalog.displayNameRu("TMT")).isEqualTo("Манат")
+        assertThat(WalletsCatalog.displayNameRu("TMTM")).isEqualTo("Манат")
+        assertThat(WalletsCatalog.displayNameRu("USD")).isEqualTo("Доллар США")
+        assertThat(WalletsCatalog.displayNameRu("TRY")).isEqualTo("Турецкая лира")
+        assertThat(WalletsCatalog.displayNameRu("UZS")).isEqualTo("Узбекский сум")
+        assertThat(WalletsCatalog.displayNameRu("RUB")).isEqualTo("Российский рубль")
+        assertThat(WalletsCatalog.displayNameRu("KZT")).isEqualTo("Казахстанский тенге")
+        val mapped = com.nextpari.app.core.player.mappedWalletsToRows(
+            listOf(
+                com.nextpari.app.core.player.MappedWalletRow(
+                    walletId = "w-tmt",
+                    currency = "TMTM",
+                    availableBalance = 10.38,
+                    lockedBalance = 0.0,
+                    isActive = true,
+                    displayNameRu = "ÐœÐ°Ð½Ð°Ñ‚",
+                ),
+            ),
+        )
+        assertThat(mapped).hasSize(1)
+        assertThat(mapped[0].displayNameRu).isEqualTo("Манат")
+        assertThat(mapped[0].displayNameRu).isNotEqualTo("ÐœÐ°Ð½Ð°Ñ‚")
+        assertThat(mapped[0].walletId).isEqualTo("w-tmt")
+        assertThat(mapped[0].availableBalance).isEqualTo("10.38")
+        assertThat(mapped[0].isActive).isTrue()
+        assertThat(mapped[0].currency).isEqualTo("TMT")
+    }
+
+    @Test
     fun emptyRuntimeHasNoFakeBalancesOrProductionNetworking() {
         val repo = FakeWalletsRepository()
         assertThat(repo.ownedWallets()).isEmpty()

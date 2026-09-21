@@ -57,7 +57,7 @@ fun mappedWalletsToRows(rows: List<MappedWalletRow>): List<PlayerWalletRow> =
         PlayerWalletRow(
             walletId = row.walletId,
             currency = WalletsCatalog.displayCurrency(row.currency),
-            displayNameRu = row.displayNameRu,
+            displayNameRu = WalletsCatalog.displayNameRu(row.currency),
             availableBalance = formatServerBalance(row.availableBalance),
             isActive = row.isActive,
         )
