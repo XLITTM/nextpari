@@ -35,7 +35,7 @@ fun ProfileScreen(
     ) {
         Text("Профиль", color = NpText, style = androidx.compose.material3.MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp))
-        ProfileRow("ID игрока", session.playerPublicId.ifBlank { "DEV001" })
+        ProfileRow("ID игрока", session.playerPublicId.ifBlank { "—" })
         ProfileRow("Личные данные", "Не заполнены")
         ProfileRow("Email", "hidden@nextpari.dev")
         ProfileRow("Телефон", "+993 ••••••")

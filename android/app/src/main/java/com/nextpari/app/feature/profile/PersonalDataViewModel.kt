@@ -72,7 +72,7 @@ class PersonalDataViewModel(
         val Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return PersonalDataViewModel(FakePersonalDataRepository()) as T
+                return PersonalDataViewModel(com.nextpari.app.core.AppGraph.personalDataRepository) as T
             }
         }
     }

@@ -1,5 +1,7 @@
 package com.nextpari.app.core.navigation
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -71,6 +74,15 @@ fun NextpariRoot(
     authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory),
 ) {
     val session by authViewModel.session.collectAsStateWithLifecycle()
+    val sessionReady by authViewModel.sessionReady.collectAsStateWithLifecycle()
+    if (!sessionReady) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(if (darkTheme) Color(0xFF09090B) else Color(0xFFF4F4F5)),
+        )
+        return
+    }
     if (!session.isAuthenticated) {
         UnauthenticatedNavHost(authViewModel)
     } else {
