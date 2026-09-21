@@ -22,6 +22,7 @@ const sql038 = readFileSync(
 const WON = SPORTS_SETTLEMENT.Won;
 const HALF = SPORTS_SETTLEMENT.HalfWon;
 const LOST = SPORTS_SETTLEMENT.Lost;
+const REFUND = SPORTS_SETTLEMENT.Refund;
 const CANCEL = SPORTS_SETTLEMENT.Cancelled;
 
 interface BetState {
@@ -52,6 +53,7 @@ function applyTarget(
     targetPayout: target,
     unsettled: state.unsettled,
     incomingCode: code,
+    previousCode: state.code,
     availableBalance: available,
   });
   if (step.failedClosed) {
@@ -132,11 +134,102 @@ describe('sports settlement cumulative corrections', () => {
       targetPayout: 225,
       unsettled: false,
       incomingCode: HALF,
+      previousCode: HALF,
     });
     assert.equal(sameTarget.action, 'duplicate');
     assert.equal(sameTarget.creditPayout, 0);
     assert.equal(sameTarget.debitLastPayout, 0);
     assert.equal(sameTarget.nextEconomicPayout, 225);
+    assert.equal(sameTarget.nextCode, HALF);
+
+    const unknownCode = planCumulativeSettlement({
+      previousPayout: 225,
+      targetPayout: 225,
+      unsettled: false,
+      incomingCode: HALF,
+    });
+    assert.equal(unknownCode.action, 'corrected');
+    assert.equal(unknownCode.creditPayout, 0);
+    assert.equal(unknownCode.debitLastPayout, 0);
+  });
+
+  it('same target with a new code persists state and moves no money', () => {
+    const sameCode = planSettlementTransition({
+      previousCode: WON,
+      previousPayout: 200,
+      incoming: WON,
+      stake: 100,
+      acceptedOdds: 2,
+      sameFingerprint: false,
+    });
+    assert.equal(sameCode.action, 'duplicate');
+    assert.equal(sameCode.creditPayout, 0);
+    assert.equal(sameCode.debitLastPayout, 0);
+    assert.equal(sameCode.nextCode, WON);
+
+    const bet: {
+      code: number;
+      payout: number;
+      fingerprint: string;
+      state: 'unsettled' | 'settled' | 'cancelled';
+    } = {
+      code: WON,
+      payout: 100,
+      fingerprint: 'fp-won',
+      state: 'settled',
+    };
+    const leg: { settlement: number; fingerprint: string } = { settlement: WON, fingerprint: 'fp-won' };
+    leg.settlement = REFUND;
+    leg.fingerprint = 'fp-refund';
+    const changed = planSettlementTransition({
+      previousCode: bet.code,
+      previousPayout: bet.payout,
+      incoming: REFUND,
+      stake: 100,
+      acceptedOdds: 1,
+      sameFingerprint: false,
+    });
+    assert.equal(changed.action, 'corrected');
+    assert.notEqual(changed.action, 'duplicate');
+    assert.equal(changed.creditPayout, 0);
+    assert.equal(changed.debitLastPayout, 0);
+    assert.equal(changed.nextEconomicPayout, 100);
+    bet.code = changed.nextCode ?? bet.code;
+    bet.payout = changed.nextEconomicPayout;
+    bet.state = changed.nextState;
+    bet.fingerprint = leg.fingerprint;
+    assert.equal(bet.code, REFUND);
+    assert.equal(bet.code, leg.settlement);
+    assert.equal(bet.state, 'settled');
+    assert.equal(bet.fingerprint, 'fp-refund');
+    assert.equal(bet.payout, 100);
+
+    const cancelToRefund = planSettlementTransition({
+      previousCode: CANCEL,
+      previousPayout: 100,
+      incoming: REFUND,
+      stake: 100,
+      acceptedOdds: 2,
+      sameFingerprint: false,
+    });
+    assert.equal(cancelToRefund.action, 'corrected');
+    assert.equal(cancelToRefund.creditPayout, 0);
+    assert.equal(cancelToRefund.debitLastPayout, 0);
+    assert.equal(cancelToRefund.nextEconomicPayout, 100);
+    assert.equal(cancelToRefund.nextCode, REFUND);
+    assert.equal(cancelToRefund.nextState, 'settled');
+
+    const guard = sql.indexOf('last_applied_settlement_code IS NOT DISTINCT FROM v_code');
+    const duplicateContinue = sql.indexOf('CONTINUE;', guard);
+    const betUpdate = sql.indexOf('last_settlement_fingerprint = v_fp', duplicateContinue);
+    assert.ok(guard > 0);
+    assert.ok(duplicateContinue > guard);
+    assert.ok(betUpdate > duplicateContinue);
+    assert.match(sql, /delta = 0 writes no Wallet Ledger entry/);
+    assert.equal(
+      sql.includes("settlement_state IS DISTINCT FROM 'unsettled' AND v_delta = 0 THEN"),
+      false,
+    );
   });
 
   it('F/G/H. cancel refund is stored, then win adds only the difference, and loss removes the refund', () => {

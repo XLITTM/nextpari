@@ -170,6 +170,7 @@ export function planSettlementTransition(input: {
     targetPayout: nextPayout,
     unsettled: !previousSettled && input.previousCode !== SPORTS_SETTLEMENT.Cancelled,
     incomingCode: input.incoming,
+    previousCode: input.previousCode,
   });
 }
 
@@ -182,6 +183,8 @@ export function planCumulativeSettlement(input: {
   targetPayout: number;
   unsettled: boolean;
   incomingCode: number;
+  /** Stored bet code. Omitted means the caller has not proven the code is unchanged. */
+  previousCode?: number | null;
   availableBalance?: number;
 }): SettlementTransition & { failedClosed: boolean } {
   const previous = money2(input.previousPayout);
@@ -194,12 +197,22 @@ export function planCumulativeSettlement(input: {
     failedClosed: false,
   };
   if (delta === 0 && !input.unsettled) {
+    const codeUnchanged = input.previousCode != null && input.previousCode === input.incomingCode;
+    if (codeUnchanged) {
+      return {
+        ...base,
+        action: 'duplicate',
+        debitLastPayout: 0,
+        creditPayout: 0,
+        nextEconomicPayout: previous,
+        nextCode: input.previousCode ?? input.incomingCode,
+      };
+    }
     return {
       ...base,
-      action: 'duplicate',
+      action: 'corrected',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextEconomicPayout: previous,
     };
   }
   if (delta < 0) {

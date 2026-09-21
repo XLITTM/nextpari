@@ -27,6 +27,10 @@ BEGIN;
 --   delta < 0 debit exactly abs(delta) via private.sports_debit
 --   delta = 0 no wallet movement
 -- After success last_payout_amount = target.
+-- A new fingerprint with delta 0 is a duplicate only when
+-- last_applied_settlement_code is already the incoming code.
+-- A different code persists bet state and is result 'corrected'.
+-- Exact (provider, fingerprint) replay still returns before any mutation.
 -- A debit rejected by Wallet Ledger aborts the function. The caller
 -- transaction keeps the pre-correction leg and bet rows.
 --
@@ -202,7 +206,12 @@ BEGIN
 
         v_delta := private.game_money(COALESCE(v_target, 0) - v_previous);
 
-        IF v_bet.settlement_state IS DISTINCT FROM 'unsettled' AND v_delta = 0 THEN
+        -- Same payout is not enough. Duplicate only when the stored
+        -- settlement code is unchanged. A different code falls through
+        -- and persists bet state with no Wallet Ledger entry.
+        IF v_delta = 0
+           AND v_bet.settlement_state IS DISTINCT FROM 'unsettled'
+           AND v_bet.last_applied_settlement_code IS NOT DISTINCT FROM v_code THEN
             v_result := 'duplicate';
             UPDATE private.sports_settlement_events
             SET matched_bet_id = v_bet.id,
@@ -259,7 +268,14 @@ BEGIN
                 jsonb_build_object('phase', 'cumulative-delta', 'target', v_target, 'previous', v_previous)
             );
         ELSE
-            v_result := 'applied';
+            -- delta = 0 writes no Wallet Ledger entry.
+            -- Unsettled first result (for example a loss) is applied.
+            -- A new code with the same target is corrected.
+            IF v_bet.settlement_state IS DISTINCT FROM 'unsettled' THEN
+                v_result := 'corrected';
+            ELSE
+                v_result := 'applied';
+            END IF;
         END IF;
 
         UPDATE private.sports_bets
