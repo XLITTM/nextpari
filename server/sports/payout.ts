@@ -78,9 +78,11 @@ export function accumulatorPayout(
 }
 
 export interface SettlementTransition {
-  action: 'none' | 'payout' | 'reverse' | 'reverse_then_payout' | 'unmatched' | 'duplicate' | 'unknown';
+  action: 'none' | 'payout' | 'reverse' | 'corrected' | 'unmatched' | 'duplicate' | 'unknown';
   debitLastPayout: number;
   creditPayout: number;
+  /** Economic amount credited after this step. Not the wallet delta. */
+  nextEconomicPayout: number;
   nextState: 'unsettled' | 'settled' | 'cancelled';
   nextCode: number | null;
 }
@@ -93,12 +95,14 @@ export function planSettlementTransition(input: {
   acceptedOdds: number;
   sameFingerprint: boolean;
 }): SettlementTransition {
+  const unsettled = input.previousCode == null || input.previousCode === SPORTS_SETTLEMENT.Pending;
   if (input.sameFingerprint) {
     return {
       action: 'duplicate',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextState: input.previousCode == null || input.previousCode === SPORTS_SETTLEMENT.Pending ? 'unsettled' : 'settled',
+      nextEconomicPayout: money2(input.previousPayout),
+      nextState: unsettled ? 'unsettled' : 'settled',
       nextCode: input.previousCode,
     };
   }
@@ -107,7 +111,8 @@ export function planSettlementTransition(input: {
       action: 'unknown',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextState: input.previousCode == null || input.previousCode === SPORTS_SETTLEMENT.Pending ? 'unsettled' : 'settled',
+      nextEconomicPayout: money2(input.previousPayout),
+      nextState: unsettled ? 'unsettled' : 'settled',
       nextCode: input.previousCode,
     };
   }
@@ -116,7 +121,8 @@ export function planSettlementTransition(input: {
       action: 'none',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextState: input.previousCode == null || input.previousCode === SPORTS_SETTLEMENT.Pending ? 'unsettled' : 'settled',
+      nextEconomicPayout: money2(input.previousPayout),
+      nextState: unsettled ? 'unsettled' : 'settled',
       nextCode: input.previousCode,
     };
   }
@@ -127,12 +133,23 @@ export function planSettlementTransition(input: {
   const lastPayout = money2(input.previousPayout);
 
   if (input.incoming === SPORTS_SETTLEMENT.Cancelled) {
+    if (input.previousCode === SPORTS_SETTLEMENT.Cancelled) {
+      return {
+        action: 'duplicate',
+        debitLastPayout: 0,
+        creditPayout: 0,
+        nextEconomicPayout: lastPayout,
+        nextState: 'cancelled',
+        nextCode: SPORTS_SETTLEMENT.Cancelled,
+      };
+    }
     if (!previousSettled && lastPayout <= 0) {
       const refund = money2(input.stake);
       return {
         action: refund > 0 ? 'payout' : 'none',
         debitLastPayout: 0,
         creditPayout: refund,
+        nextEconomicPayout: refund,
         nextState: 'cancelled',
         nextCode: SPORTS_SETTLEMENT.Cancelled,
       };
@@ -141,35 +158,87 @@ export function planSettlementTransition(input: {
       action: lastPayout > 0 ? 'reverse' : 'none',
       debitLastPayout: lastPayout,
       creditPayout: 0,
+      nextEconomicPayout: 0,
       nextState: 'cancelled',
       nextCode: SPORTS_SETTLEMENT.Cancelled,
     };
   }
 
-  const nextPayout = settlementPayout(input.stake, input.acceptedOdds, input.incoming) ?? 0;
-  if (previousSettled && input.previousCode === input.incoming && lastPayout === money2(nextPayout)) {
+  const nextPayout = money2(settlementPayout(input.stake, input.acceptedOdds, input.incoming) ?? 0);
+  return planCumulativeSettlement({
+    previousPayout: lastPayout,
+    targetPayout: nextPayout,
+    unsettled: !previousSettled && input.previousCode !== SPORTS_SETTLEMENT.Cancelled,
+    incomingCode: input.incoming,
+    previousCode: input.previousCode,
+  });
+}
+
+/**
+ * Move only target - previous. Same incoming settlement code can still
+ * change an express target. Does not order different fingerprints.
+ */
+export function planCumulativeSettlement(input: {
+  previousPayout: number;
+  targetPayout: number;
+  unsettled: boolean;
+  incomingCode: number;
+  /** Stored bet code. Omitted means the caller has not proven the code is unchanged. */
+  previousCode?: number | null;
+  availableBalance?: number;
+}): SettlementTransition & { failedClosed: boolean } {
+  const previous = money2(input.previousPayout);
+  const target = money2(input.targetPayout);
+  const delta = money2(target - previous);
+  const base = {
+    nextEconomicPayout: target,
+    nextState: input.incomingCode === SPORTS_SETTLEMENT.Cancelled ? 'cancelled' as const : 'settled' as const,
+    nextCode: input.incomingCode,
+    failedClosed: false,
+  };
+  if (delta === 0 && !input.unsettled) {
+    const codeUnchanged = input.previousCode != null && input.previousCode === input.incomingCode;
+    if (codeUnchanged) {
+      return {
+        ...base,
+        action: 'duplicate',
+        debitLastPayout: 0,
+        creditPayout: 0,
+        nextEconomicPayout: previous,
+        nextCode: input.previousCode ?? input.incomingCode,
+      };
+    }
     return {
-      action: 'duplicate',
+      ...base,
+      action: 'corrected',
       debitLastPayout: 0,
       creditPayout: 0,
-      nextState: 'settled',
-      nextCode: input.incoming,
     };
   }
-  if (previousSettled || lastPayout > 0) {
+  if (delta < 0) {
+    const debit = money2(Math.abs(delta));
+    if (input.availableBalance != null && input.availableBalance + 1e-9 < debit) {
+      return {
+        action: 'corrected',
+        debitLastPayout: 0,
+        creditPayout: 0,
+        nextEconomicPayout: previous,
+        nextState: input.unsettled ? 'unsettled' : 'settled',
+        nextCode: null,
+        failedClosed: true,
+      };
+    }
     return {
-      action: 'reverse_then_payout',
-      debitLastPayout: lastPayout,
-      creditPayout: money2(nextPayout),
-      nextState: 'settled',
-      nextCode: input.incoming,
+      ...base,
+      action: input.incomingCode === SPORTS_SETTLEMENT.Cancelled && target === 0 ? 'reverse' : 'corrected',
+      debitLastPayout: debit,
+      creditPayout: 0,
     };
   }
   return {
-    action: nextPayout === 0 && input.incoming === SPORTS_SETTLEMENT.Lost ? 'payout' : 'payout',
+    ...base,
+    action: previous > 0 ? 'corrected' : 'payout',
     debitLastPayout: 0,
-    creditPayout: money2(nextPayout),
-    nextState: 'settled',
-    nextCode: input.incoming,
+    creditPayout: delta > 0 ? delta : 0,
   };
 }
