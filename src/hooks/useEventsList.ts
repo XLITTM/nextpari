@@ -5,6 +5,7 @@ import { isLineEvent, isLive, type BetsEvent } from '@/lib/betsapi';
 import { hydrateCatalogOdds, pickCatalogIds } from '@/lib/hydrateCatalogOdds';
 import type { ParsedMarket } from '@/lib/odds-parser';
 import { isLsportsDisplayFeedEnabled } from '@/lib/lsportsFeed';
+import { LEGACY_SPORTS_RUNTIME_RETIRED } from '@/lib/legacySportsRuntime';
 import {
   isArcadeSportsPaused,
   subscribeArcadeSportsPause,
@@ -48,7 +49,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   const events = useMemo(() => safeEvents(tab, eventsMap), [eventsMap, tab]);
 
   const loadLive = useCallback(async () => {
-    if (isLsportsDisplayFeedEnabled()) {
+    if (LEGACY_SPORTS_RUNTIME_RETIRED || isLsportsDisplayFeedEnabled()) {
       return;
     }
     if (liveAbort.current) liveAbort.current.abort();
@@ -69,6 +70,7 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   }, [applyInplay, setLiveEvents]);
 
   const loadLine = useCallback(async () => {
+    if (LEGACY_SPORTS_RUNTIME_RETIRED) return;
     if (lineAbort.current) lineAbort.current.abort();
     lineAbort.current = new AbortController();
     const { signal } = lineAbort.current;
@@ -99,6 +101,10 @@ export function useEventsList(tab: EventTab, sportId = '1') {
   }, [loadLine, loadLive]);
 
   useEffect(() => {
+    if (LEGACY_SPORTS_RUNTIME_RETIRED) {
+      setLoading(false);
+      return;
+    }
     let stopped = false;
     const liveMs = 3_000;
     const lineMs = 30_000;

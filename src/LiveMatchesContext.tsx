@@ -1,9 +1,4 @@
-import { createContext, useContext, useMemo, useCallback, type ReactNode } from 'react';
-import { useEventsList } from './hooks/useEventsList';
-import { useLsportsShadowFeed } from './hooks/useLsportsShadowFeed';
-import { isLineEvent, isLive } from './lib/betsapi';
-import { isLsportsDisplayFeedEnabled } from './lib/lsportsFeed';
-import { matchEventFromStore } from './lib/liveMatches';
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
@@ -15,53 +10,32 @@ interface LiveMatchesContextValue {
   findMatch: (id: string) => MatchEvent | undefined;
 }
 
+const EMPTY_MATCHES: MatchEvent[] = [];
+
 const LiveMatchesContext = createContext<LiveMatchesContextValue | null>(null);
 
 export function LiveMatchesProvider({ children }: { children: ReactNode }) {
-  const list = useEventsList('live', 'all');
-  const shadow = useLsportsShadowFeed();
-  const loading = isLsportsDisplayFeedEnabled() ? shadow.loading : list.loading;
-  const refresh = isLsportsDisplayFeedEnabled() ? shadow.refresh : list.refresh;
-  const eventsMap = useSportsStore((s) => s.events);
+  const clearEvents = useSportsStore((s) => s.clearEvents);
 
-  const liveMatches = useMemo(() => {
-    try {
-      return Object.values(eventsMap ?? {}).flatMap((row) => {
-        try {
-          return row?.event && isLive(row.event) ? [matchEventFromStore(row)] : [];
-        } catch {
-          return [];
-        }
-      });
-    } catch {
-      return [];
-    }
-  }, [eventsMap]);
+  useEffect(() => {
+    clearEvents();
+  }, [clearEvents]);
 
-  const upcomingMatches = useMemo(() => {
-    try {
-      return Object.values(eventsMap ?? {}).flatMap((row) => {
-        try {
-          return row?.event && isLineEvent(row.event) ? [matchEventFromStore(row)] : [];
-        } catch {
-          return [];
-        }
-      });
-    } catch {
-      return [];
-    }
-  }, [eventsMap]);
+  const refresh = useCallback(async () => {}, []);
+  const findMatch = useCallback((_id: string) => undefined, []);
 
-  const findMatch = useCallback(
-    (id: string) => liveMatches.find((match) => match.id === id) ?? upcomingMatches.find((match) => match.id === id),
-    [liveMatches, upcomingMatches],
+  const value = useMemo<LiveMatchesContextValue>(
+    () => ({
+      liveMatches: EMPTY_MATCHES,
+      upcomingMatches: EMPTY_MATCHES,
+      loading: false,
+      refresh,
+      findMatch,
+    }),
+    [refresh, findMatch],
   );
 
-  return (
-    <LiveMatchesContext.Provider value={{ liveMatches, upcomingMatches, loading, refresh, findMatch }}>
-      {children}
-    </LiveMatchesContext.Provider>
-  );
+  return <LiveMatchesContext.Provider value={value}>{children}</LiveMatchesContext.Provider>;
 }
 
 export function useLiveMatches() {

@@ -8,7 +8,7 @@ import {
   resolveSportsQuoteProvider,
   SportsProviderUnsupportedError,
 } from './quoteProvider.js';
-import { SPORTS_PROVIDER_LSPORTS, type SportsQuote, type SportsQuoteRequest } from './types.js';
+import { type SportsQuote, type SportsQuoteRequest } from './types.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const PROVIDERS = ['provider-a', 'provider-b'] as const;
@@ -165,9 +165,17 @@ describe('provider-neutral quote decision', () => {
     }
   });
 
-  it('resolves explicit lsports to the LSports adapter', () => {
-    assert.equal(resolveSportsQuoteProvider('lsports').id, SPORTS_PROVIDER_LSPORTS);
-    assert.equal(resolveSportsQuoteProvider('LSports').id, SPORTS_PROVIDER_LSPORTS);
+  it('rejects retired lsports instead of resolving the LSports adapter', () => {
+    assert.throws(
+      () => resolveSportsQuoteProvider('lsports'),
+      (error: unknown) => error instanceof SportsProviderUnsupportedError
+        && error.code === 'SPORTS_PROVIDER_UNSUPPORTED',
+    );
+    assert.throws(
+      () => resolveSportsQuoteProvider('LSports'),
+      (error: unknown) => error instanceof SportsProviderUnsupportedError
+        && error.code === 'SPORTS_PROVIDER_UNSUPPORTED',
+    );
   });
 
   it('fails closed on explicit unknown providers without using LSports', () => {
@@ -188,10 +196,11 @@ describe('provider-neutral quote decision', () => {
     assert.equal(source.includes('default to LSports'), false);
   });
 
-  it('composes live LSports through the registry instead of an if/else router', () => {
+  it('does not register LSports in the live quote registry', () => {
     const source = readFileSync(join(root, 'server/sports/quoteProvider.ts'), 'utf8');
     assert.equal((source.match(/createSportsQuoteProviderRegistry\(/g) ?? []).length, 1);
-    assert.equal((source.match(/create: \(\) => createLsportsHttpQuoteProvider\(\)/g) ?? []).length, 1);
+    assert.equal(source.includes('createLsportsHttpQuoteProvider'), false);
+    assert.match(source, /createSportsQuoteProviderRegistry\(\[\]\)/);
     assert.equal(source.includes('if (id === SPORTS_PROVIDER_LSPORTS)'), false);
     assert.equal(source.includes('if (!id || id === SPORTS_PROVIDER_LSPORTS)'), false);
     assert.match(source, /liveRegistry\.resolve/);

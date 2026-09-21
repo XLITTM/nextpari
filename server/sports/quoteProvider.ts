@@ -1,8 +1,7 @@
-import { createLsportsHttpQuoteProvider } from './lsportsQuote.js';
 import {
   createSportsQuoteProviderRegistry,
 } from './quoteProviderRegistry.js';
-import { SPORTS_PROVIDER_LSPORTS, type SportsQuoteProvider } from './types.js';
+import type { SportsQuoteProvider } from './types.js';
 
 export {
   createSportsQuoteProviderRegistry,
@@ -17,16 +16,12 @@ export type {
   SportsQuoteProviderRegistry,
 } from './quoteProviderRegistry.js';
 
-const liveRegistry = createSportsQuoteProviderRegistry([
-  {
-    id: SPORTS_PROVIDER_LSPORTS,
-    create: () => createLsportsHttpQuoteProvider(),
-  },
-]);
+const liveRegistry = createSportsQuoteProviderRegistry([]);
 
 /**
  * Live quote source for the generic place path.
- * Delegates to the composed registry. Missing/blank and unknown ids fail closed.
+ * Legacy BetsAPI / LSports identities are retired from this registry.
+ * Missing/blank and unknown ids fail closed.
  */
 export function resolveSportsQuoteProvider(providerId?: string): SportsQuoteProvider {
   return liveRegistry.resolve(providerId);

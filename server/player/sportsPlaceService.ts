@@ -4,6 +4,7 @@ import { createSportsPlaceAsPlayerRpc, createSportsLookupExistingPlaceRpc, type 
 import { sanitizeChangedLeg } from '../sports/changedLeg.js';
 import { decideSportsQuote } from '../sports/quote.js';
 import { resolveSportsQuoteProvider, SportsProviderUnsupportedError, normalizeSportsProviderId } from '../sports/quoteProvider.js';
+import { isRetiredSportsProvider, SPORTS_PROVIDER_RETIRED } from '../sports/retiredProviders.js';
 import { evaluateSportsRisk } from '../sports/risk.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
 import { staffError, StaffOnboardingError } from '../staff/errors.js';
@@ -48,7 +49,7 @@ function isUuid(value: string): boolean {
 }
 
 function quoteHttpStatus(reason: string): number {
-  if (reason === 'SPORTS_BET_DISABLED') return 403;
+  if (reason === 'SPORTS_BET_DISABLED' || reason === SPORTS_PROVIDER_RETIRED) return 403;
   if (reason === 'INVALID_PRICE' || reason === 'MISSING_BET_ID' || reason === 'MISSING_FIXTURE' || reason === 'CURRENCY_AMOUNT_SCALE_INVALID') return 400;
   if (
     reason === 'SPORTS_STAKE_LIMIT'
@@ -234,6 +235,20 @@ export async function placeSportsBet(
       }
       throw error;
     }
+  }
+
+  const retired = requests.find((row) => isRetiredSportsProvider(row.provider));
+  if (retired) {
+    await recordPlaceDecision(ports, {
+      idempotencyKey,
+      playerUserId: session.userId,
+      providers: requests.map((row) => String(row.provider ?? '')).filter(Boolean).join(','),
+      mode,
+      stake,
+      decision: 'rejected',
+      decisionCode: SPORTS_PROVIDER_RETIRED,
+    });
+    throw staffError(SPORTS_PROVIDER_RETIRED, 403);
   }
 
   if (!isCanonicalSportsBetEnabled(env)) {

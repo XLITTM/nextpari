@@ -54,6 +54,7 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'EVENT_UNAVAILABLE'
     || code === 'FEED_STALE'
     || code === 'SPORTS_BET_DISABLED'
+    || code === 'SPORTS_PROVIDER_RETIRED'
     || code === 'CURRENCY_LIMITS_UNCONFIGURED'
     || code === 'OPERATIONAL_ACCOUNT_NOT_ACTIVE'
     || code === 'INSUFFICIENT_LOCKED_BALANCE'
@@ -66,7 +67,7 @@ export function mapPlayerGameRpcError(error: { message?: string; code?: string }
     || code === 'PAYOUT_ALREADY_PAID'
     || (code != null && code.endsWith('_RESTRICTED'))
   ) {
-    return staffError(code, code === 'SPORTS_BET_DISABLED' ? 403 : 409);
+    return staffError(code, code === 'SPORTS_BET_DISABLED' || code === 'SPORTS_PROVIDER_RETIRED' ? 403 : 409);
   }
   if (code === 'GAME_NOT_FOUND' || code === 'GAME_ROUND_NOT_FOUND' || code === 'WALLET_ACCOUNT_NOT_FOUND' || code === 'PLAYER_WALLET_MISSING') {
     return staffError(code, 404);

@@ -42,18 +42,8 @@ function oddsDictFromEvent(raw: BetsApiEvent & Record<string, unknown>): Record<
   const home = toDecimalOdds(raw.home_od ?? extra.home_od);
   const draw = toDecimalOdds(raw.draw_od ?? extra.draw_od);
   const away = toDecimalOdds(raw.away_od ?? extra.away_od);
-  if (!asArrays['1_1'] && !asArrays['1']) {
-    if (lsports) {
-      if (home > 1 && draw > 1 && away > 1) {
-        asArrays['1_1'] = [{ home_od: home, draw_od: draw, away_od: away }];
-      }
-    } else {
-      asArrays['1_1'] = [{
-        home_od: home || DEFAULT_1X2.home,
-        draw_od: draw || DEFAULT_1X2.draw,
-        away_od: away || DEFAULT_1X2.away,
-      }];
-    }
+  if (!asArrays['1_1'] && !asArrays['1'] && lsports && home > 1 && draw > 1 && away > 1) {
+    asArrays['1_1'] = [{ home_od: home, draw_od: draw, away_od: away }];
   }
   return asArrays;
 }

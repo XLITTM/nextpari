@@ -22,19 +22,9 @@ export function hasMainOdds(row) {
 }
 
 export function ensureOdds(row) {
-  if (!row || typeof row !== 'object') return row;
-  const extra = extraOf(row);
-  const home = numericOdd(row.home_od ?? extra.home_od ?? row.odd_home);
-  const draw = numericOdd(row.draw_od ?? extra.draw_od ?? row.odd_draw);
-  const away = numericOdd(row.away_od ?? extra.away_od ?? row.odd_away);
-  return {
-    ...row,
-    home_od: home > 1 ? String(row.home_od ?? extra.home_od ?? home) : DEFAULT_1X2.home_od,
-    draw_od: draw > 1 ? String(row.draw_od ?? extra.draw_od ?? draw) : DEFAULT_1X2.draw_od,
-    away_od: away > 1 ? String(row.away_od ?? extra.away_od ?? away) : DEFAULT_1X2.away_od,
-  };
+  return row;
 }
 
 export function ensureOddsList(results) {
-  return (Array.isArray(results) ? results : []).map(ensureOdds);
+  return Array.isArray(results) ? results : [];
 }
