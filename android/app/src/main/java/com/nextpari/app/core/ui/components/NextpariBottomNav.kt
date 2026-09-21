@@ -42,6 +42,7 @@ fun NextpariBottomNav(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .background(colors.nav)
             .drawBehind {
                 drawLine(
                     color = colors.border,
@@ -50,7 +51,6 @@ fun NextpariBottomNav(
                     strokeWidth = 0.5.dp.toPx(),
                 )
             }
-            .background(colors.nav)
             .navigationBarsPadding(),
     ) {
         Row(
