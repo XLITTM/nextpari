@@ -956,11 +956,20 @@ describe('Phase 068 cash withdrawal UI fail-closed + review action hardening', (
     assert.match(review, /if \(\(kind === 'approve' \|\| kind === 'reject'\) && reason\.trim\(\)\.length < 1\) return;/);
   });
 
-  it('does not add a Phase 068 migration or change 066/067 SQL', () => {
+  it('does not change 066/067 SQL', () => {
     const migrations = readdirSync(join(root, 'supabase/migrations'));
-    assert.equal(migrations.some((name) => /068/.test(name)), false);
+    assert.deepEqual(
+      migrations.filter((name) => name.includes('_068')),
+      ['20260921160600_legacy_public_access_lockdown_068.sql'],
+    );
     assert.match(sql, /enforcement_enabled/);
     assert.match(sql067, /NEW\.idempotency_key/);
+    const sql068 = readFileSync(
+      join(root, 'supabase/migrations/20260921160600_legacy_public_access_lockdown_068.sql'),
+      'utf8',
+    );
+    assert.equal(sql068.includes('fund_attribution_on_wallet_ledger'), false);
+    assert.equal(sql068.includes('CREATE OR REPLACE FUNCTION'), false);
   });
 });
 
