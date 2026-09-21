@@ -1,5 +1,6 @@
 import { extractErrorCode, staffError, StaffOnboardingError } from './errors.js';
 import {
+  completeStaffLogout,
   liveOwnerAuthPorts,
   type OwnerAuthGatewayPorts,
   type OwnerAuthHttpResult,
@@ -33,7 +34,12 @@ function managerContextError(err: unknown): StaffOnboardingError {
   ) {
     return staffError(code, 403);
   }
-  if (code === 'JWT_INVALID' || code === 'JWT_REQUIRED' || code === 'AUTH_REQUIRED') {
+  if (
+    code === 'SESSION_EXPIRED'
+    || code === 'JWT_INVALID'
+    || code === 'JWT_REQUIRED'
+    || code === 'AUTH_REQUIRED'
+  ) {
     return staffError(code, 401);
   }
   const lower = raw.toLowerCase();
@@ -160,10 +166,16 @@ export async function readManagerSession(
   }
 }
 
-export function logoutManagerSession(secure: boolean): ManagerAuthHttpResult {
-  return {
-    status: 200,
-    body: { ok: true },
-    cookies: clearManagerCookies(secure),
-  };
+export async function logoutManagerSession(
+  ports: ManagerAuthGatewayPorts,
+  cookieHeader: string | undefined,
+  secure: boolean,
+): Promise<ManagerAuthHttpResult> {
+  const cookies = readManagerCookies(cookieHeader);
+  return completeStaffLogout(
+    ports,
+    cookies.accessToken,
+    cookies.refreshToken,
+    clearManagerCookies(secure),
+  );
 }

@@ -417,6 +417,7 @@ describe('owner USDT rates and staff isolation', () => {
     const session: OwnerAuthGatewayPorts = {
       async signInWithPassword() { return { accessToken: 'oa', refreshToken: 'or' }; },
       async refreshSession() { throw staffError('JWT_INVALID', 401); },
+      async signOutCurrentSession() {},
       async currentStaffContext() {
         return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'owner', network_id: null };
       },
@@ -494,6 +495,7 @@ describe('cashier currency-safe deposits', () => {
     const session: CashierAuthGatewayPorts = {
       async signInWithPassword() { return { accessToken: 'ca', refreshToken: 'cr' }; },
       async refreshSession() { throw staffError('JWT_INVALID', 401); },
+      async signOutCurrentSession() {},
       async currentStaffContext() {
         return {
           role: 'cashier',

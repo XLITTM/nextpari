@@ -64,6 +64,7 @@ function createAuthPorts(context: unknown = CASHIER_CTX): CashierAuthGatewayPort
     async refreshSession() {
       return { accessToken: ACCESS, refreshToken: REFRESH };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return context;
     },

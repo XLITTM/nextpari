@@ -540,7 +540,8 @@ describe('owner and security personal-data visibility', () => {
         sessionPorts: {
           async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
-          async currentStaffContext() {
+            async signOutCurrentSession() {},
+            async currentStaffContext() {
             return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
           },
         } as OwnerAuthGatewayPorts,
@@ -586,7 +587,8 @@ describe('owner and security personal-data visibility', () => {
           async lookupLoginEmail() { return 'sec@nextpari.test'; },
           async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
-          async currentStaffContext() {
+            async signOutCurrentSession() {},
+            async currentStaffContext() {
             return { role: 'security', status: 'active', auth_user_id: 'sec-uid', display_name: 'Sec', login: 'security01' };
           },
         } as SecurityAuthGatewayPorts,
@@ -621,6 +623,7 @@ describe('owner and security personal-data visibility', () => {
           sessionPorts: {
             async signInWithPassword() { return { accessToken: 'a', refreshToken: 'r' }; },
             async refreshSession() { throw staffError('JWT_INVALID', 401); },
+            async signOutCurrentSession() {},
             async currentStaffContext() {
               return { role, status: 'active', auth_user_id: `${role}-uid`, display_name: role, network_id: null };
             },

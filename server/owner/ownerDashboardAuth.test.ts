@@ -132,6 +132,7 @@ describe('owner dashboard HTTP stays on Owner session', () => {
         sessionPorts: {
           async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
           async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+          async signOutCurrentSession() {},
           async currentStaffContext() { return OWNER_CTX; },
         } satisfies OwnerAuthGatewayPorts,
         rpcFactory: () => ({
@@ -186,6 +187,7 @@ describe('manager dashboard HTTP keeps self-binding', () => {
         sessionPorts: {
           async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
           async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+          async signOutCurrentSession() {},
           async currentStaffContext() { return MANAGER_CTX; },
         } satisfies ManagerAuthGatewayPorts,
         rpcFactory: () => ({

@@ -206,6 +206,7 @@ describe('win-pattern HTTP and session isolation', () => {
         sessionPorts: {
           async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
           async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+          async signOutCurrentSession() {},
           async currentStaffContext() { return OWNER_CTX; },
         } satisfies OwnerAuthGatewayPorts,
         rpcFactory: () => ({
@@ -232,6 +233,7 @@ describe('win-pattern HTTP and session isolation', () => {
           async lookupLoginEmail() { throw staffError('AUTH_FAILED', 401); },
           async signInWithPassword() { throw staffError('AUTH_FAILED', 401); },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async signOutCurrentSession() {},
           async currentStaffContext() { return SECURITY_CTX; },
         } satisfies SecurityAuthGatewayPorts,
         rpcFactory: () => ({
@@ -257,6 +259,7 @@ describe('win-pattern HTTP and session isolation', () => {
         sessionPorts: {
           async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
           async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+          async signOutCurrentSession() {},
           async currentStaffContext() { return OWNER_CTX; },
         },
         rpcFactory: () => ({
@@ -281,6 +284,7 @@ describe('win-pattern HTTP and session isolation', () => {
           async lookupLoginEmail() { throw staffError('AUTH_FAILED', 401); },
           async signInWithPassword() { throw staffError('AUTH_FAILED', 401); },
           async refreshSession() { throw staffError('JWT_INVALID', 401); },
+          async signOutCurrentSession() {},
           async currentStaffContext() { return SECURITY_CTX; },
         },
         rpcFactory: () => ({

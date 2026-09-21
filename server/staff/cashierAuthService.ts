@@ -1,5 +1,6 @@
 import { extractErrorCode, staffError, StaffOnboardingError } from './errors.js';
 import {
+  completeStaffLogout,
   liveOwnerAuthPorts,
   type OwnerAuthGatewayPorts,
   type OwnerAuthHttpResult,
@@ -34,7 +35,12 @@ function cashierContextError(err: unknown): StaffOnboardingError {
   ) {
     return staffError(code === 'OWNER_REQUIRED' || code === 'MANAGER_REQUIRED' ? 'CASHIER_REQUIRED' : code, 403);
   }
-  if (code === 'JWT_INVALID' || code === 'JWT_REQUIRED' || code === 'AUTH_REQUIRED') {
+  if (
+    code === 'SESSION_EXPIRED'
+    || code === 'JWT_INVALID'
+    || code === 'JWT_REQUIRED'
+    || code === 'AUTH_REQUIRED'
+  ) {
     return staffError(code, 401);
   }
   const lower = raw.toLowerCase();
@@ -161,10 +167,16 @@ export async function readCashierSession(
   }
 }
 
-export function logoutCashierSession(secure: boolean): CashierAuthHttpResult {
-  return {
-    status: 200,
-    body: { ok: true },
-    cookies: clearCashierCookies(secure),
-  };
+export async function logoutCashierSession(
+  ports: CashierAuthGatewayPorts,
+  cookieHeader: string | undefined,
+  secure: boolean,
+): Promise<CashierAuthHttpResult> {
+  const cookies = readCashierCookies(cookieHeader);
+  return completeStaffLogout(
+    ports,
+    cookies.accessToken,
+    cookies.refreshToken,
+    clearCashierCookies(secure),
+  );
 }

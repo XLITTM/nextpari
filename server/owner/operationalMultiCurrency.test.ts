@@ -60,6 +60,7 @@ function ownerPorts(): OwnerAuthGatewayPorts {
   return {
     async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
     async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return { role: 'owner', status: 'active', auth_user_id: 'owner-uid', display_name: 'Owner', network_id: null };
     },
@@ -70,6 +71,7 @@ function managerPorts(): ManagerAuthGatewayPorts {
   return {
     async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
     async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return {
         role: 'manager',
@@ -87,6 +89,7 @@ function cashierPorts(): CashierAuthGatewayPorts {
   return {
     async signInWithPassword() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
     async refreshSession() { return { accessToken: ACCESS, refreshToken: REFRESH }; },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return {
         role: 'cashier',

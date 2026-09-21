@@ -79,6 +79,7 @@ function ownerSession(): OwnerAuthGatewayPorts {
     async refreshSession() {
       return { accessToken: 'owner-access', refreshToken: 'owner-refresh' };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return {
         role: 'owner',
@@ -99,6 +100,7 @@ function cashierSession(): CashierAuthGatewayPorts {
     async refreshSession() {
       return { accessToken: 'cashier-access', refreshToken: 'cashier-refresh' };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return {
         role: 'cashier',

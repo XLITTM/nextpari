@@ -90,7 +90,7 @@ export async function handleCashierAuthRequest(
       if (method !== 'POST') {
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
-      return logoutCashierSession(secure);
+      return logoutCashierSession(ports, input.cookie, secure);
     }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {

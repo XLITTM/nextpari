@@ -90,7 +90,7 @@ export async function handleOwnerAuthRequest(
       if (method !== 'POST') {
         throw staffError('METHOD_NOT_ALLOWED', 405);
       }
-      return logoutOwnerSession(secure);
+      return logoutOwnerSession(ports, input.cookie, secure);
     }
     throw staffError('NOT_FOUND', 404);
   } catch (error) {

@@ -86,6 +86,7 @@ function createAuthPorts(init?: { context?: unknown }): ManagerAuthGatewayPorts 
     async refreshSession() {
       return { accessToken: ACCESS, refreshToken: REFRESH };
     },
+    async signOutCurrentSession() {},
     async currentStaffContext() {
       return init?.context ?? MANAGER_CTX;
     },
