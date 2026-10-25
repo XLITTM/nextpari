@@ -26,6 +26,12 @@ interface PlayerApi {
     @GET("api/player/wallets")
     suspend fun wallets(): Response<JsonObject>
 
+    @POST("api/player/wallets/add")
+    suspend fun addWallet(@Body body: JsonObject): Response<JsonObject>
+
+    @POST("api/player/wallets/active")
+    suspend fun setActiveWallet(@Body body: JsonObject): Response<JsonObject>
+
     @POST("api/player/games/start")
     suspend fun startGame(@Body body: JsonObject): Response<JsonObject>
 

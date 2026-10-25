@@ -2,23 +2,24 @@ package com.nextpari.app.feature.wallets
 
 interface WalletsRepository {
     fun ownedWallets(): List<PlayerWalletRow>
-    fun addWallet(currency: String): Result<Unit>
-    fun setActiveWallet(currency: String): Result<Unit>
+    suspend fun refresh(): Result<Unit> = Result.success(Unit)
+    suspend fun addWallet(currency: String): Result<Unit>
+    suspend fun setActiveWallet(currency: String): Result<Unit>
 }
 
 class FakeWalletsRepository : WalletsRepository {
     override fun ownedWallets(): List<PlayerWalletRow> = emptyList()
 
-    override fun addWallet(currency: String): Result<Unit> {
+    override suspend fun addWallet(currency: String): Result<Unit> {
         if (WalletsCatalog.storageCurrency(currency) == null) {
-            return Result.failure(IllegalArgumentException("Некорректная валюта"))
+            return Result.failure(IllegalArgumentException(WalletsCatalog.CURRENCY_INVALID))
         }
         return Result.failure(IllegalStateException(WalletsCatalog.SESSION_UNAVAILABLE))
     }
 
-    override fun setActiveWallet(currency: String): Result<Unit> {
+    override suspend fun setActiveWallet(currency: String): Result<Unit> {
         if (WalletsCatalog.storageCurrency(currency) == null) {
-            return Result.failure(IllegalArgumentException("Некорректная валюта"))
+            return Result.failure(IllegalArgumentException(WalletsCatalog.CURRENCY_INVALID))
         }
         return Result.failure(IllegalStateException(WalletsCatalog.SESSION_UNAVAILABLE))
     }
