@@ -28,6 +28,25 @@ class PlayerStateStore {
         synchronized(lock) { wallets = rows.toList() }
     }
 
+    fun applyAuthoritativeWallets(
+        rows: List<PlayerWalletRow>,
+        activeBalance: Double?,
+        activeCurrency: String?,
+    ) {
+        synchronized(lock) {
+            wallets = rows.toList()
+            if (activeBalance == null || activeCurrency.isNullOrBlank()) return
+            if (!activeBalance.isFinite() || activeBalance < 0.0) return
+            val current = me ?: return
+            me = current.copy(
+                wallet = current.wallet.copy(
+                    balance = activeBalance,
+                    currency = activeCurrency,
+                ),
+            )
+        }
+    }
+
     fun applyProfile(questionnaire: PersonalDataQuestionnaire) {
         synchronized(lock) { profile = questionnaire }
     }

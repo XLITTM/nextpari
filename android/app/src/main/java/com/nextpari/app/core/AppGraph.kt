@@ -96,7 +96,12 @@ object AppGraph {
         sessionCoordinator = coordinator
         authRepository = RemoteAuthRepository(coordinator)
         walletRepository = RemoteWalletRepository(playerStateStore)
-        walletsRepository = RemoteWalletsRepository(playerStateStore)
+        walletsRepository = RemoteWalletsRepository(
+            store = playerStateStore,
+            api = api,
+            json = NetworkModule.json,
+            hasSession = { cookieJar.hasPlayerSessionCookies() },
+        )
         personalDataRepository = RemotePersonalDataRepository(playerStateStore)
         gameRepository = RemoteGameRepository(api, NetworkModule.json)
         sessionRepository.setReady(false)

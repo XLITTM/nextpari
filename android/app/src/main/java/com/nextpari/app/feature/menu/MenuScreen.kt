@@ -70,6 +70,7 @@ fun MenuScreen(
     WalletSwitcherEffects(
         closeKey = closeKey,
         notice = walletsState.notice,
+        completedMutations = walletsState.completedMutations,
         onClose = { walletsOpen = false },
         onConsumeNotice = onConsumeWalletNotice,
     )

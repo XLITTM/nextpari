@@ -6,10 +6,29 @@ import com.nextpari.app.feature.wallets.PlayerWalletRow
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsUiState
 import com.nextpari.app.feature.wallets.WalletsViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import java.io.File
 
+@OptIn(ExperimentalCoroutinesApi::class)
+
 class HeaderWalletSwitcherTest {
+    @Before
+    fun setMainDispatcher() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+    }
+
+    @After
+    fun resetMainDispatcher() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun plusAndBalancePillAreIndependentActions() {
         val header = moduleFile("src/main/java/com/nextpari/app/core/ui/components/NextpariHeader.kt").readText()
@@ -147,7 +166,7 @@ class HeaderWalletSwitcherTest {
             return rows.toList()
         }
 
-        override fun addWallet(currency: String): Result<Unit> {
+        override suspend fun addWallet(currency: String): Result<Unit> {
             if (failClosed) return Result.failure(IllegalStateException(WalletsCatalog.SESSION_UNAVAILABLE))
             val display = WalletsCatalog.displayCurrency(currency)
             if (rows.none { WalletsCatalog.displayCurrency(it.currency) == display }) {
@@ -156,7 +175,7 @@ class HeaderWalletSwitcherTest {
             return Result.success(Unit)
         }
 
-        override fun setActiveWallet(currency: String): Result<Unit> {
+        override suspend fun setActiveWallet(currency: String): Result<Unit> {
             if (failClosed) return Result.failure(IllegalStateException(WalletsCatalog.SESSION_UNAVAILABLE))
             val display = WalletsCatalog.displayCurrency(currency)
             rows.replaceAll { it.copy(isActive = WalletsCatalog.displayCurrency(it.currency) == display) }

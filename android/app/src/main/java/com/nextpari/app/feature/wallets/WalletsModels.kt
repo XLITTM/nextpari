@@ -18,6 +18,7 @@ data class WalletsUiState(
     val addable: List<CurrencyOption> = WalletsCatalog.displayCurrencies,
     val notice: String? = null,
     val busy: Boolean = false,
+    val completedMutations: Int = 0,
 )
 
 object WalletsCatalog {
@@ -29,6 +30,14 @@ object WalletsCatalog {
     const val SWITCHER_LABEL = "Кошелёк и валюты"
     const val SESSION_UNAVAILABLE =
         "Операция станет доступна после подключения безопасной сессии аккаунта."
+    const val CURRENCY_INVALID = "Некорректная валюта"
+    const val CURRENCY_EXISTS = "Кошелёк в этой валюте уже существует"
+    const val CURRENCY_UNSUPPORTED_MESSAGE = "Эта валюта не поддерживается"
+    const val SESSION_EXPIRED = "Сессия недействительна. Войдите снова."
+    const val REFRESH_FAILED = "Не удалось обновить список кошельков"
+    const val OPERATION_FAILED = "Не удалось выполнить операцию с кошельком"
+    const val ADD_CURRENCY_FIRST = "Сначала добавьте эту валюту"
+    const val WALLET_UNAVAILABLE_MESSAGE = "Кошелёк недоступен"
 
     val displayCodes: List<String> = listOf("TMT", "USD", "TRY", "UZS", "RUB", "KZT")
 

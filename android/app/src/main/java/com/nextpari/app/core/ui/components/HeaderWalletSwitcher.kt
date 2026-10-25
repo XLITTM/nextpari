@@ -134,11 +134,15 @@ fun WalletDropdownMenu(
 fun WalletSwitcherEffects(
     closeKey: String?,
     notice: String?,
+    completedMutations: Int,
     onClose: () -> Unit,
     onConsumeNotice: () -> Unit,
 ) {
     val context = LocalContext.current
     LaunchedEffect(closeKey) { onClose() }
+    LaunchedEffect(completedMutations) {
+        if (completedMutations > 0) onClose()
+    }
     LaunchedEffect(notice) {
         val value = notice ?: return@LaunchedEffect
         Toast.makeText(context, value, Toast.LENGTH_SHORT).show()
@@ -169,6 +173,7 @@ fun HeaderWalletSwitcher(
     WalletSwitcherEffects(
         closeKey = closeKey,
         notice = state.notice,
+        completedMutations = state.completedMutations,
         onClose = { open = false },
         onConsumeNotice = onConsumeNotice,
     )
