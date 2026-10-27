@@ -29,6 +29,7 @@ import com.nextpari.app.R
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
+import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.wallets.WalletsUiState
 
 @Composable
@@ -53,7 +54,7 @@ fun NextpariHeader(
             .fillMaxWidth()
             .shadow(2.dp, RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
             .clip(RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp))
-            .background(if (darkTheme) Color(0xFF18181B) else Color.White)
+            .background(NextpariTheme.colors.nav)
             .statusBarsPadding(),
     ) {
         Row(

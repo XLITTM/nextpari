@@ -213,14 +213,13 @@ private fun SportsSelector(
     ) {
         items(sports, key = { it.id }) { sport ->
             val active = sport.id == state.selectedSportId
-            val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
             Column(
                 modifier = Modifier
                     .widthIn(min = 70.dp)
                     .vipNeonFrame(selected = active, shape = RoundedCornerShape(16.dp))
                     .shadow(if (active) 6.dp else 2.dp, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (dark) Color(0xFF27272A) else Color.White)
+                    .background(colors.surface)
                     .clickable { onSport(sport.id) }
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -235,7 +234,7 @@ private fun SportsSelector(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     sport.name,
-                    color = if (active) TabActiveGold else if (dark) Color(0xFFD1D5DB) else Color(0xFF374151),
+                    color = if (active) TabActiveGold else colors.text,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
@@ -248,6 +247,7 @@ private fun SportsSelector(
 
 @Composable
 private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
+    val colors = NextpariTheme.colors
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -272,7 +272,7 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     promo.title,
-                    color = Color(0xFF6B7280),
+                    color = colors.textSecondary,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,

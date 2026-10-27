@@ -63,6 +63,10 @@ data class VipNeonVisual(
 object VipNeon {
     const val PRESS_SCALE = 0.98f
     const val PRESS_MILLIS = 130
+    const val LIGHT_GLOW = 0.55f
+
+    fun renderedAlpha(alpha: Float, dark: Boolean): Float =
+        if (dark) alpha else alpha * LIGHT_GLOW
 
     fun resolve(
         selected: Boolean,
@@ -138,6 +142,7 @@ fun Modifier.vipNeonFrame(
     val glow by animateFloatAsState(visual.glowAlpha, spec, label = "vipNeonGlow")
     val border by animateFloatAsState(visual.borderAlpha, spec, label = "vipNeonBorder")
     val paint = if (gold) colors.premiumGold else colors.accent
+    val dark = colors.isDarkNeon
     return this
         .graphicsLayer {
             scaleX = scale
@@ -146,10 +151,11 @@ fun Modifier.vipNeonFrame(
         }
         .drawWithContent {
             drawContent()
-            if (chrome != VipNeonChrome.PressOnly && glow > 0.02f) {
+            val glowPaint = VipNeon.renderedAlpha(glow, dark)
+            if (chrome != VipNeonChrome.PressOnly && glowPaint > 0.02f) {
                 drawRect(
                     brush = Brush.radialGradient(
-                        colors = listOf(paint.copy(alpha = glow), Color.Transparent),
+                        colors = listOf(paint.copy(alpha = glowPaint), Color.Transparent),
                         center = center,
                         radius = size.minDimension * 0.75f,
                     ),
@@ -159,9 +165,10 @@ fun Modifier.vipNeonFrame(
                 val stroke = Path().apply {
                     addOutline(shape.createOutline(size, layoutDirection, this@drawWithContent))
                 }
+                val borderScale = if (dark) 0.85f else 0.7f
                 drawPath(
                     path = stroke,
-                    color = paint.copy(alpha = border * if (colors.isDarkNeon) 0.85f else 0.45f),
+                    color = paint.copy(alpha = border * borderScale),
                     style = Stroke(width = 1.dp.toPx()),
                 )
             }

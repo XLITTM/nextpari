@@ -114,6 +114,23 @@ class VipNeonTest {
     }
 
     @Test
+    fun lightThemeIsWhiteEmeraldWithTheSameMotionContract() {
+        val light = NextpariColors.Light
+        assertThat(light.surface).isEqualTo(androidx.compose.ui.graphics.Color.White)
+        assertThat(light.nav).isEqualTo(androidx.compose.ui.graphics.Color.White)
+        assertThat(light.text).isEqualTo(androidx.compose.ui.graphics.Color(0xFF10241C))
+        assertThat(light.accent).isEqualTo(androidx.compose.ui.graphics.Color(0xFF12C97A))
+        assertThat(light.premiumGold).isEqualTo(androidx.compose.ui.graphics.Color(0xFFC8962E))
+        val pressed = VipNeon.resolve(selected = false, pressed = true, enabled = true)
+        val selected = VipNeon.resolve(selected = true, pressed = false, enabled = true)
+        assertThat(VipNeon.renderedAlpha(pressed.glowAlpha, dark = false))
+            .isLessThan(VipNeon.renderedAlpha(pressed.glowAlpha, dark = true))
+        assertThat(VipNeon.renderedAlpha(selected.glowAlpha, dark = false)).isGreaterThan(0f)
+        assertThat(pressed.durationMillis).isEqualTo(selected.durationMillis)
+        assertThat(pressed.scale).isEqualTo(VipNeon.PRESS_SCALE)
+    }
+
+    @Test
     fun walletAndAuthContractsRemainOnTheExistingPlayerSession() {
         assertThat(WalletsCatalog.displayCodes).containsExactly("TMT", "USD", "TRY", "UZS", "RUB", "KZT").inOrder()
         assertThat(WalletsCatalog.storageCurrency("TMT")).isEqualTo("TMTM")

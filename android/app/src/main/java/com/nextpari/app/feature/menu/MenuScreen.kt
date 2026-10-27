@@ -79,7 +79,7 @@ fun MenuScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) Color(0xFF111827) else Color(0xFFF3F4F6))
+            .background(colors.bg)
             .verticalScroll(rememberScrollState())
             .padding(bottom = 112.dp),
     ) {
