@@ -12,6 +12,7 @@ class DestinationsTest {
             Destinations.REGISTER_EMAIL,
             Destinations.REGISTER_PHONE,
             Destinations.REGISTER_ONE_CLICK,
+            Destinations.REGISTER_ONE_CLICK_RESULT,
             Destinations.FORGOT_PASSWORD,
         ).inOrder()
     }

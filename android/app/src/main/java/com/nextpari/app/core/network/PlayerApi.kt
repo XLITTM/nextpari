@@ -11,6 +11,9 @@ interface PlayerApi {
     @POST("api/player/auth/login")
     suspend fun login(@Body body: JsonObject): Response<JsonObject>
 
+    @POST("api/player/auth/register")
+    suspend fun register(@Body body: JsonObject): Response<JsonObject>
+
     @POST("api/player/auth/logout")
     suspend fun logout(): Response<JsonObject>
 

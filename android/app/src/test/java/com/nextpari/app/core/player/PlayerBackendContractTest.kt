@@ -3,11 +3,16 @@ package com.nextpari.app.core.player
 import com.google.common.truth.Truth.assertThat
 import com.nextpari.app.core.network.ApiResult
 import com.nextpari.app.core.network.NetworkModule
+import com.nextpari.app.core.network.userMessage
 import com.nextpari.app.core.network.session.InMemoryCookiePersistence
 import com.nextpari.app.core.network.session.PlayerCookieNames
 import com.nextpari.app.core.network.session.SecureCookieJar
 import com.nextpari.app.core.session.InMemorySessionRepository
 import com.nextpari.app.feature.auth.LoginIdentifier
+import com.nextpari.app.feature.auth.OneClickContinue
+import com.nextpari.app.feature.auth.RegistrationCopy
+import com.nextpari.app.feature.auth.RegistrationRequest
+import com.nextpari.app.feature.auth.RegistrationResult
 import com.nextpari.app.feature.auth.RemoteAuthRepository
 import com.nextpari.app.feature.games.RemoteGameRepository
 import com.nextpari.app.feature.games.newGameIdempotencyKey
@@ -96,6 +101,169 @@ class PlayerBackendContractTest {
         assertThat(login.body.readUtf8()).isEqualTo(
             """{"mode":"phone","phone":"+99365123456","password":"password1"}""",
         )
+    }
+
+    @Test
+    fun rejectedLoginShowsTheServerMessageAndDoesNotOpenASession() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(401)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"ok":false,"authenticated":false,"error":"AUTH_FAILED"}"""),
+        )
+        val harness = harness()
+
+        val result = harness.auth.login(LoginIdentifier.Email("player@nextpari.net"), "password1")
+
+        assertThat(result).isInstanceOf(ApiResult.Err::class.java)
+        assertThat((result as ApiResult.Err).error.userMessage()).isEqualTo("Неверный логин или пароль")
+        assertThat(harness.sessions.session.value.isAuthenticated).isFalse()
+        assertThat(server.requestCount).isEqualTo(1)
+    }
+
+    @Test
+    fun emailRegistrationSendsTheProductionContractAndOpensAVerifiedSession() = runTest {
+        enqueueRegister(ME_BODY)
+        enqueueMe()
+        enqueueWallets()
+        enqueueProfile()
+        val harness = harness()
+
+        val result = harness.auth.register(emailRequest())
+
+        assertThat(result).isInstanceOf(RegistrationResult.Authenticated::class.java)
+        val register = server.takeRequest()
+        assertThat(register.path).isEqualTo("/api/player/auth/register")
+        assertThat(register.method).isEqualTo("POST")
+        assertThat(register.body.readUtf8()).isEqualTo(
+            """{"method":"email","email":"player@nextpari.net","password":"password1","ageConfirmed":true,"currency":"TMT"}""",
+        )
+        assertThat(server.takeRequest().path).isEqualTo("/api/player/me")
+        assertThat(harness.sessions.session.value.isAuthenticated).isTrue()
+        assertThat(harness.sessions.session.value.playerPublicId).isEqualTo("110790")
+    }
+
+    @Test
+    fun phoneRegistrationSendsCompactPhoneAndCurrency() = runTest {
+        enqueueRegister(ME_BODY)
+        enqueueMe()
+        enqueueWallets()
+        enqueueProfile()
+        val harness = harness()
+
+        val result = harness.auth.register(
+            RegistrationRequest(
+                method = "phone",
+                phone = "+993 (65) 123-456",
+                password = "password1",
+                ageConfirmed = true,
+                currency = "usd",
+            ),
+        )
+
+        assertThat(result).isInstanceOf(RegistrationResult.Authenticated::class.java)
+        assertThat(server.takeRequest().body.readUtf8()).isEqualTo(
+            """{"method":"phone","phone":"+99365123456","password":"password1","ageConfirmed":true,"currency":"USD"}""",
+        )
+        assertThat(harness.sessions.session.value.isAuthenticated).isTrue()
+    }
+
+    @Test
+    fun oneClickRegistrationShowsIssuedCredentialsBeforeTheSession() = runTest {
+        enqueueRegister(oneClickBody("mockpass1"))
+        val harness = harness()
+
+        val issued = harness.auth.register(
+            RegistrationRequest(method = "one_click", ageConfirmed = true, currency = "TMT"),
+        )
+
+        assertThat(issued).isInstanceOf(RegistrationResult.OneClickIssued::class.java)
+        val credentials = issued as RegistrationResult.OneClickIssued
+        assertThat(credentials.playerId).isEqualTo("110790")
+        assertThat(credentials.password).isEqualTo("mockpass1")
+        assertThat(credentials.canEnter).isTrue()
+        assertThat(harness.sessions.session.value.isAuthenticated).isFalse()
+        assertThat(server.takeRequest().body.readUtf8()).isEqualTo(
+            """{"method":"one_click","ageConfirmed":true,"currency":"TMT"}""",
+        )
+
+        enqueueMe()
+        enqueueWallets()
+        enqueueProfile()
+        val continued = harness.auth.continueOneClick()
+
+        assertThat(continued).isInstanceOf(OneClickContinue.Entered::class.java)
+        assertThat(server.takeRequest().path).isEqualTo("/api/player/me")
+        assertThat(harness.sessions.session.value.isAuthenticated).isTrue()
+        assertThat(harness.sessions.session.value.loginMethod).isEqualTo("one_click")
+    }
+
+    @Test
+    fun oneClickWithoutASessionAsksThePlayerToSignIn() = runTest {
+        enqueueRegister(
+            """{"ok":true,"authenticated":false,"player":{"publicId":"110790","email":""},"oneClick":{"playerId":"110790","password":"mockpass1"}}""",
+        )
+        val harness = harness()
+
+        val issued = harness.auth.register(
+            RegistrationRequest(method = "one_click", ageConfirmed = true, currency = "RUB"),
+        )
+
+        assertThat(issued).isInstanceOf(RegistrationResult.OneClickIssued::class.java)
+        assertThat((issued as RegistrationResult.OneClickIssued).canEnter).isFalse()
+        val continued = harness.auth.continueOneClick()
+        assertThat(continued).isInstanceOf(OneClickContinue.NeedLogin::class.java)
+        assertThat((continued as OneClickContinue.NeedLogin).notice).isEqualTo(RegistrationCopy.ONE_CLICK_LOGIN)
+        assertThat(harness.sessions.session.value.isAuthenticated).isFalse()
+        assertThat(server.requestCount).isEqualTo(1)
+    }
+
+    @Test
+    fun emailConfirmationRequiredDoesNotOpenASession() = runTest {
+        enqueueRegister(
+            """{"ok":false,"authenticated":false,"error":"EMAIL_CONFIRMATION_REQUIRED"}""",
+            code = 409,
+        )
+        val harness = harness()
+
+        val result = harness.auth.register(emailRequest())
+
+        assertThat(result).isEqualTo(RegistrationResult.EmailConfirmationRequired)
+        assertThat(harness.sessions.session.value.isAuthenticated).isFalse()
+        assertThat(server.requestCount).isEqualTo(1)
+    }
+
+    @Test
+    fun registrationValidationStopsBeforeTheNetwork() = runTest {
+        val harness = harness()
+
+        val age = harness.auth.register(emailRequest().copy(ageConfirmed = false))
+        val currency = harness.auth.register(emailRequest().copy(currency = "TMTM"))
+        val email = harness.auth.register(emailRequest().copy(email = "not-an-email"))
+        val password = harness.auth.register(emailRequest().copy(password = "short"))
+        val phone = harness.auth.register(
+            RegistrationRequest(method = "phone", phone = "123", password = "password1", ageConfirmed = true, currency = "TMT"),
+        )
+
+        assertThat((age as RegistrationResult.Failed).error.userMessage()).isEqualTo(RegistrationCopy.AGE)
+        assertThat((currency as RegistrationResult.Failed).error.userMessage()).isEqualTo(RegistrationCopy.CURRENCY)
+        assertThat((email as RegistrationResult.Failed).error.userMessage()).isEqualTo(RegistrationCopy.EMAIL)
+        assertThat((password as RegistrationResult.Failed).error.userMessage()).isEqualTo(RegistrationCopy.PASSWORD)
+        assertThat((phone as RegistrationResult.Failed).error.userMessage()).isEqualTo(RegistrationCopy.PHONE)
+        assertThat(harness.sessions.session.value.isAuthenticated).isFalse()
+        assertThat(server.requestCount).isEqualTo(0)
+    }
+
+    @Test
+    fun registrationNetworkFailureStaysSignedOut() = runTest {
+        server.enqueue(MockResponse().setSocketPolicy(okhttp3.mockwebserver.SocketPolicy.DISCONNECT_AT_START))
+        val harness = harness()
+
+        val result = harness.auth.register(emailRequest())
+
+        assertThat(result).isInstanceOf(RegistrationResult.Failed::class.java)
+        assertThat((result as RegistrationResult.Failed).error.userMessage()).isEqualTo("Нет соединения с сетью")
+        assertThat(harness.sessions.session.value.isAuthenticated).isFalse()
     }
 
     @Test
@@ -519,6 +687,48 @@ class PlayerBackendContractTest {
         assertThat(usdRow.isActive).isEqualTo(usdActive)
         assertThat(tmtRow.currency).isEqualTo("TMT")
         assertThat(usdRow.currency).isEqualTo("USD")
+    }
+
+    private fun emailRequest() = RegistrationRequest(
+        method = "email",
+        email = "player@nextpari.net",
+        password = "password1",
+        ageConfirmed = true,
+        currency = "TMT",
+    )
+
+    private fun oneClickBody(password: String): String = """
+        {
+          "ok": true,
+          "authenticated": true,
+          "player": { "publicId": "110790", "email": "" },
+          "wallet": { "balance": 0, "currency": "TMT", "status": "active", "migrationState": null },
+          "profile": {
+            "firstName": "",
+            "lastName": "",
+            "middleName": "",
+            "birthDate": "",
+            "passport": "",
+            "phone": "",
+            "email": "",
+            "phoneVerified": false,
+            "emailVerified": false
+          },
+          "oneClick": { "playerId": "110790", "password": "$password" }
+        }
+    """
+
+    private fun enqueueRegister(body: String, code: Int = 200) {
+        val response = MockResponse()
+            .setResponseCode(code)
+            .setHeader("Content-Type", "application/json")
+            .setBody(body)
+        if (code in 200..299) {
+            response
+                .addHeader("Set-Cookie", "${PlayerCookieNames.ACCESS}=access-token; Path=/; HttpOnly; SameSite=Lax")
+                .addHeader("Set-Cookie", "${PlayerCookieNames.REFRESH}=refresh-token; Path=/; HttpOnly; SameSite=Lax")
+        }
+        server.enqueue(response)
     }
 
     private fun enqueueLogin() {

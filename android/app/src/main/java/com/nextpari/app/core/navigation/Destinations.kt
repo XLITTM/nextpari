@@ -6,6 +6,7 @@ object Destinations {
     const val REGISTER_EMAIL = "register/email"
     const val REGISTER_PHONE = "register/phone"
     const val REGISTER_ONE_CLICK = "register/one-click"
+    const val REGISTER_ONE_CLICK_RESULT = "register/one-click-result"
     const val FORGOT_PASSWORD = "forgot-password"
 
     const val HOME = "home"
@@ -52,6 +53,7 @@ object Destinations {
         REGISTER_EMAIL,
         REGISTER_PHONE,
         REGISTER_ONE_CLICK,
+        REGISTER_ONE_CLICK_RESULT,
         FORGOT_PASSWORD,
     )
 

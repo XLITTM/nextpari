@@ -11,6 +11,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,6 +40,7 @@ import com.nextpari.app.feature.auth.ForgotPasswordScreen
 import com.nextpari.app.feature.auth.LoginScreen
 import com.nextpari.app.feature.auth.RegisterEmailScreen
 import com.nextpari.app.feature.auth.RegisterMenuScreen
+import com.nextpari.app.feature.auth.RegisterOneClickResultScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
 import com.nextpari.app.feature.history.HistoryScreen
@@ -97,6 +99,16 @@ fun NextpariRoot(
 @Composable
 private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
     val navController = rememberNavController()
+    val authState by authViewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(authState.pendingNavigation) {
+        when (authViewModel.consumeNavigation()) {
+            "email_confirmation", "one_click_login" ->
+                navController.popBackStack(Destinations.LOGIN, inclusive = false)
+            "one_click" -> navController.navigate(Destinations.REGISTER_ONE_CLICK_RESULT) {
+                launchSingleTop = true
+            }
+        }
+    }
     NavHost(navController = navController, startDestination = Destinations.LOGIN) {
         composable(Destinations.LOGIN) {
             LoginScreen(
@@ -115,29 +127,26 @@ private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
         }
         composable(Destinations.REGISTER_EMAIL) {
             RegisterEmailScreen(
+                viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onPrepared = {
-                    authViewModel.markRegisterPrepared("email")
-                    navController.popBackStack(Destinations.LOGIN, inclusive = false)
-                },
             )
         }
         composable(Destinations.REGISTER_PHONE) {
             RegisterPhoneScreen(
+                viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onPrepared = {
-                    authViewModel.markRegisterPrepared("phone")
-                    navController.popBackStack(Destinations.LOGIN, inclusive = false)
-                },
             )
         }
         composable(Destinations.REGISTER_ONE_CLICK) {
             RegisterOneClickScreen(
+                viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onPrepared = {
-                    authViewModel.markRegisterPrepared("one-click")
-                    navController.popBackStack(Destinations.LOGIN, inclusive = false)
-                },
+            )
+        }
+        composable(Destinations.REGISTER_ONE_CLICK_RESULT) {
+            RegisterOneClickResultScreen(
+                viewModel = authViewModel,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(Destinations.FORGOT_PASSWORD) {

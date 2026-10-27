@@ -11,6 +11,14 @@ class RemoteAuthRepository(
         return coordinator.login(identifier, password)
     }
 
+    override suspend fun register(request: RegistrationRequest): RegistrationResult {
+        return coordinator.register(request)
+    }
+
+    override suspend fun continueOneClick(): OneClickContinue {
+        return coordinator.continueOneClick()
+    }
+
     override suspend fun logout() {
         coordinator.logout()
     }

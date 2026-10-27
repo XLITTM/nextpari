@@ -79,7 +79,14 @@ object PlayerJsonMapper {
         return when (code) {
             "AUTH_FAILED" -> NetworkError.Unknown("Неверный логин или пароль")
             "AUTH_RATE_LIMITED" -> NetworkError.Unknown("Слишком много попыток. Попробуйте позже.")
-            "INVALID_PASSWORD" -> NetworkError.Unknown("Пароль должен содержать не менее 8 символов")
+            "INVALID_PASSWORD" -> NetworkError.Unknown("Пароль слишком короткий")
+            "INVALID_EMAIL" -> NetworkError.Unknown("Неверный email")
+            "INVALID_PHONE" -> NetworkError.Unknown("Неверный номер телефона")
+            "AGE_REQUIRED" -> NetworkError.Unknown("Подтвердите, что вам есть 18 лет")
+            "REGISTRATION_CURRENCY_REQUIRED", "CURRENCY_UNSUPPORTED" -> NetworkError.Unknown("Выберите валюту счёта")
+            "EMAIL_CONFIRMATION_REQUIRED" -> NetworkError.Unknown("Подтвердите Email, затем войдите.")
+            "REGISTRATION_FAILED", "REGISTRATION_UNAVAILABLE" ->
+                NetworkError.Unknown("Не удалось зарегистрироваться с этими данными.")
             "JWT_REQUIRED", "JWT_INVALID", "SESSION_EXPIRED", "SESSION_REQUIRED", "AUTH_REQUIRED" ->
                 NetworkError.Unauthorized
             "WALLET_UNAVAILABLE" -> NetworkError.Unknown("Кошелёк недоступен")

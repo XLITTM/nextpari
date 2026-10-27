@@ -7,6 +7,10 @@ import com.nextpari.app.core.network.session.SecureCookieJar
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.session.SessionRepository
 import com.nextpari.app.feature.auth.LoginIdentifier
+import com.nextpari.app.feature.auth.OneClickContinue
+import com.nextpari.app.feature.auth.RegistrationCopy
+import com.nextpari.app.feature.auth.RegistrationRequest
+import com.nextpari.app.feature.auth.RegistrationResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -21,6 +25,8 @@ class PlayerSessionCoordinator(
     private val store: PlayerStateStore,
     private val json: Json,
 ) {
+    private var pendingOneClick: PlayerMeSnapshot? = null
+
     suspend fun login(identifier: LoginIdentifier, password: String): ApiResult<AuthSession> {
         val value = identifier.raw().trim()
         if (value.isEmpty() || password.isBlank()) {
@@ -41,6 +47,60 @@ class PlayerSessionCoordinator(
             return hydrateAuthenticated(loginSnapshot, method)
         }
         return meResult
+    }
+
+    suspend fun register(request: RegistrationRequest): RegistrationResult {
+        RegistrationCopy.clientError(request)?.let { return RegistrationResult.Failed(it) }
+        val currency = RegistrationCopy.normalizeCurrency(request.currency)
+            ?: return RegistrationResult.Failed(NetworkError.Unknown(RegistrationCopy.CURRENCY))
+        val response = runCatching { api.register(request.wireBody(currency)) }
+            .getOrElse { return RegistrationResult.Failed(com.nextpari.app.core.network.ApiErrorMapper.fromThrowable(it)) }
+        val body = response.jsonBody(json)
+        val code = PlayerJsonMapper.errorCode(body)
+        if (response.code() == 409 && code == "EMAIL_CONFIRMATION_REQUIRED") {
+            pendingOneClick = null
+            return RegistrationResult.EmailConfirmationRequired
+        }
+        if (!response.isSuccessful) {
+            return RegistrationResult.Failed(
+                PlayerJsonMapper.mapAuthError(code, NetworkError.Unknown(RegistrationCopy.FAILED)),
+            )
+        }
+        val oneClick = body?.obj("oneClick")
+        if (request.method == "one_click" || oneClick != null) {
+            val playerId = PlayerJsonMapper.parsePublicPlayerId(
+                oneClick?.str("playerId").orEmpty().ifBlank { body?.obj("player")?.str("publicId").orEmpty() },
+            )
+            val issuedPassword = oneClick?.str("password").orEmpty()
+            if (playerId.isBlank() || issuedPassword.length < 8) {
+                pendingOneClick = null
+                return RegistrationResult.Failed(NetworkError.Unknown(RegistrationCopy.FAILED))
+            }
+            val snapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
+            pendingOneClick = snapshot
+            return RegistrationResult.OneClickIssued(
+                playerId = playerId,
+                password = issuedPassword,
+                canEnter = snapshot != null,
+            )
+        }
+        pendingOneClick = null
+        val snapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
+        if (snapshot == null) return RegistrationResult.EmailConfirmationRequired
+        return when (val established = establishSession(snapshot, request.method)) {
+            is ApiResult.Ok -> RegistrationResult.Authenticated(established.data)
+            is ApiResult.Err -> RegistrationResult.Failed(established.error)
+        }
+    }
+
+    suspend fun continueOneClick(): OneClickContinue {
+        val pending = pendingOneClick
+        pendingOneClick = null
+        if (pending == null) return OneClickContinue.NeedLogin(RegistrationCopy.ONE_CLICK_LOGIN)
+        return when (val established = establishSession(pending, "one_click")) {
+            is ApiResult.Ok -> OneClickContinue.Entered(established.data)
+            is ApiResult.Err -> OneClickContinue.Failed(established.error)
+        }
     }
 
     suspend fun logout() {
@@ -84,6 +144,14 @@ class PlayerSessionCoordinator(
             }
         refreshSecondaryReads()
         return hydrateAuthenticated(snapshot, loginMethod ?: sessions.session.value.loginMethod)
+    }
+
+    private suspend fun establishSession(snapshot: PlayerMeSnapshot, loginMethod: String): ApiResult<AuthSession> {
+        val refreshed = refreshPlayerState(loginMethod = loginMethod)
+        if (refreshed is ApiResult.Ok) return refreshed
+        if (refreshed is ApiResult.Err && refreshed.error is NetworkError.Unauthorized) return refreshed
+        runCatching { refreshSecondaryReads() }
+        return hydrateAuthenticated(snapshot, loginMethod)
     }
 
     fun applyBalanceAfter(balanceAfter: Double) {
@@ -131,9 +199,32 @@ class PlayerSessionCoordinator(
     }
 
     private fun clearLocal() {
+        pendingOneClick = null
         cookieJar.clear()
         store.clear()
         sessions.clearImmediate()
+    }
+}
+
+private fun RegistrationRequest.wireBody(currency: String): JsonObject = when (method) {
+    "email" -> buildJsonObject {
+        put("method", "email")
+        put("email", email.trim())
+        put("password", password)
+        put("ageConfirmed", true)
+        put("currency", currency)
+    }
+    "phone" -> buildJsonObject {
+        put("method", "phone")
+        put("phone", RegistrationCopy.compactPhone(phone))
+        put("password", password)
+        put("ageConfirmed", true)
+        put("currency", currency)
+    }
+    else -> buildJsonObject {
+        put("method", "one_click")
+        put("ageConfirmed", true)
+        put("currency", currency)
     }
 }
 

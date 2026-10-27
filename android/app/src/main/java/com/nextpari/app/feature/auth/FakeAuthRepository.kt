@@ -36,6 +36,16 @@ class FakeAuthRepository(
         return ApiResult.Ok(session)
     }
 
+    override suspend fun register(request: RegistrationRequest): RegistrationResult {
+        return RegistrationResult.Failed(
+            NetworkError.Unknown("Не удалось зарегистрироваться с этими данными."),
+        )
+    }
+
+    override suspend fun continueOneClick(): OneClickContinue {
+        return OneClickContinue.NeedLogin(RegistrationCopy.ONE_CLICK_LOGIN)
+    }
+
     override suspend fun logout() {
         sessionRepository.clear()
     }

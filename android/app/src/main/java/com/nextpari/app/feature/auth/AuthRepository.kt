@@ -11,5 +11,7 @@ sealed class LoginIdentifier {
 
 interface AuthRepository {
     suspend fun login(identifier: LoginIdentifier, password: String): ApiResult<AuthSession>
+    suspend fun register(request: RegistrationRequest): RegistrationResult
+    suspend fun continueOneClick(): OneClickContinue
     suspend fun logout()
 }

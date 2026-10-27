@@ -137,6 +137,7 @@ class VipNeonTest {
         assertThat(WalletsCatalog.displayCurrency("TMTM")).isEqualTo("TMT")
         val api = moduleFile("src/main/java/com/nextpari/app/core/network/PlayerApi.kt").readText()
         assertThat(api).contains("@POST(\"api/player/auth/login\")")
+        assertThat(api).contains("@POST(\"api/player/auth/register\")")
         assertThat(api).contains("@GET(\"api/player/wallets\")")
         assertThat(api).contains("@POST(\"api/player/wallets/add\")")
         assertThat(api).contains("@POST(\"api/player/wallets/active\")")
