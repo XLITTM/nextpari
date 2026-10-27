@@ -1,11 +1,8 @@
 package com.nextpari.app.feature.home
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,15 +27,12 @@ import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -50,6 +44,8 @@ import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariSectionIcons
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.ProductSectionHeader
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -124,18 +120,15 @@ private fun CasinoEntry(
     onClick: () -> Unit,
 ) {
     val colors = NextpariTheme.colors
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.98f else 1f, label = "casino-press")
     Row(
         modifier = Modifier
             .padding(horizontal = 16.dp)
             .fillMaxWidth()
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .vipNeonFrame(shape = RoundedCornerShape(16.dp))
             .shadow(2.dp, RoundedCornerShape(16.dp))
             .clip(RoundedCornerShape(16.dp))
             .background(if (colors.bg == NextpariColors.Dark.bg) Color(0xFF1F2937) else Color.White)
-            .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+            .clickable(onClick = onClick)
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -150,16 +143,13 @@ private fun CasinoEntry(
 
 @Composable
 private fun CasinoFeatureHero(card: CasinoFeatureCard, onOpen: () -> Unit) {
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "feature-press")
     Box(
         Modifier
             .width(280.dp)
             .height(148.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .vipNeonFrame(shape = RoundedCornerShape(20.dp), chrome = VipNeonChrome.PressOnly)
             .clip(RoundedCornerShape(20.dp))
-            .clickable(interactionSource = interaction, indication = null, onClick = onOpen),
+            .clickable(onClick = onOpen),
     ) {
         Image(
             painter = painterResource(card.imageRes),
@@ -197,6 +187,12 @@ fun CasinoTournamentCard(model: CasinoTournament, onOpen: () -> Unit) {
         Modifier
             .width(240.dp)
             .height(156.dp)
+            .vipNeonFrame(
+                selected = model.status == CasinoTournamentStatus.ACTIVE,
+                gold = true,
+                shape = RoundedCornerShape(20.dp),
+                chrome = VipNeonChrome.Glow,
+            )
             .clip(RoundedCornerShape(20.dp))
             .clickable(onClick = onOpen),
     ) {
@@ -237,6 +233,7 @@ private fun CasinoCategoryTile(card: CasinoCategoryCard, onOpen: () -> Unit) {
         Modifier
             .width(148.dp)
             .height(108.dp)
+            .vipNeonFrame(shape = RoundedCornerShape(18.dp), chrome = VipNeonChrome.PressOnly)
             .clip(RoundedCornerShape(18.dp))
             .background(Brush.linearGradient(listOf(Color(card.startColor), Color(card.endColor))))
             .clickable(onClick = onOpen)

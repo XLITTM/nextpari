@@ -1,11 +1,8 @@
 package com.nextpari.app.feature.home
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,14 +25,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +45,8 @@ import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.core.ui.components.ProductSectionHeader
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
 
@@ -216,18 +213,15 @@ private fun SportsSelector(
     ) {
         items(sports, key = { it.id }) { sport ->
             val active = sport.id == state.selectedSportId
-            val interaction = remember { MutableInteractionSource() }
-            val pressed by interaction.collectIsPressedAsState()
-            val scale by animateFloatAsState(if (pressed) 0.96f else 1f, label = "sport-press")
             val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
             Column(
                 modifier = Modifier
                     .widthIn(min = 70.dp)
-                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .vipNeonFrame(selected = active, shape = RoundedCornerShape(16.dp))
                     .shadow(if (active) 6.dp else 2.dp, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
                     .background(if (dark) Color(0xFF27272A) else Color.White)
-                    .clickable(interactionSource = interaction, indication = null) { onSport(sport.id) }
+                    .clickable { onSport(sport.id) }
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -259,14 +253,11 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(promos, key = { it.route }) { promo ->
-            val interaction = remember { MutableInteractionSource() }
-            val pressed by interaction.collectIsPressedAsState()
-            val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "promo-press")
             Column(
                 modifier = Modifier
                     .width(110.dp)
-                    .graphicsLayer { scaleX = scale; scaleY = scale }
-                    .clickable(interactionSource = interaction, indication = null) { onNavigate(promo.route) },
+                    .vipNeonFrame(chrome = VipNeonChrome.PressOnly)
+                    .clickable { onNavigate(promo.route) },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Image(

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -100,6 +101,11 @@ fun WalletsScreen(
                     Modifier
                         .fillMaxWidth()
                         .padding(bottom = 12.dp)
+                        .vipNeonFrame(
+                            selected = row.isActive,
+                            enabled = !state.busy,
+                            shape = RoundedCornerShape(16.dp),
+                        )
                         .clip(RoundedCornerShape(16.dp))
                         .background(cardBg)
                         .border(1.dp, border, RoundedCornerShape(16.dp))
@@ -135,6 +141,10 @@ fun WalletsScreen(
                         Modifier
                             .padding(bottom = 8.dp)
                             .fillMaxWidth()
+                            .vipNeonFrame(
+                                enabled = !state.busy,
+                                shape = RoundedCornerShape(12.dp),
+                            )
                             .clip(RoundedCornerShape(12.dp))
                             .background(addBg)
                             .clickable(enabled = !state.busy) { viewModel.addCurrency(option.value) }

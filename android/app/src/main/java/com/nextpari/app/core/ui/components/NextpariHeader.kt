@@ -27,6 +27,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import com.nextpari.app.R
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.feature.wallets.WalletsUiState
 
 @Composable
@@ -66,6 +68,7 @@ fun NextpariHeader(
                 Box(
                     modifier = Modifier
                         .size(32.dp)
+                        .vipNeonFrame(shape = CircleShape, chrome = VipNeonChrome.PressOnly)
                         .clip(CircleShape)
                         .background(Color(0xFF16A34A))
                         .clickable(onClick = onDeposit),
@@ -126,6 +129,7 @@ private fun HeaderIcon(
     Box(
         modifier = Modifier
             .size(36.dp)
+            .vipNeonFrame(chrome = VipNeonChrome.PressOnly)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

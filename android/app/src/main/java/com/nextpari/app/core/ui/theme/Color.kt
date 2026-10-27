@@ -28,6 +28,7 @@ data class NextpariColors(
     val danger: Color,
     val info: Color,
     val nav: Color,
+    val premiumGold: Color,
 ) {
     companion object {
         val Light = NextpariColors(
@@ -49,6 +50,7 @@ data class NextpariColors(
             danger = Color(0xFFFF4E58),
             info = Color(0xFF3D8EBD),
             nav = Color(0xFFFFFFFF),
+            premiumGold = Color(0xFFC8962E),
         )
         val Dark = NextpariColors(
             bg = Color(0xFF031522),
@@ -69,6 +71,7 @@ data class NextpariColors(
             danger = Color(0xFFFF555F),
             info = Color(0xFF5EC8E8),
             nav = Color(0xFF061C2C),
+            premiumGold = Color(0xFFF5C969),
         )
 
         fun forDark(dark: Boolean): NextpariColors = if (dark) Dark else Light

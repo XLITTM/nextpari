@@ -38,6 +38,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.ui.components.WalletDropdownMenu
 import com.nextpari.app.core.ui.components.WalletSwitcherEffects
@@ -138,6 +140,7 @@ fun MenuScreen(
                     Modifier
                         .clip(RoundedCornerShape(16.dp))
                         .background(Color(0xFF16A34A))
+                        .vipNeonFrame(shape = RoundedCornerShape(12.dp), chrome = VipNeonChrome.PressOnly)
                         .clickable { onNavigate(Destinations.WALLET) }
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -153,6 +156,7 @@ fun MenuScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .vipNeonFrame(selected = active, chrome = VipNeonChrome.Glow)
                         .clickable { tab = label }
                         .padding(top = 8.dp, bottom = 4.dp)
                         .drawBehind {
@@ -214,6 +218,11 @@ private fun MenuRow(item: MenuItem, tab: String, onNavigate: (String) -> Unit) {
     val click = if (item.soon) null else item.route?.let { { onNavigate(it) } }
     val modifier = Modifier
         .fillMaxWidth()
+        .vipNeonFrame(
+            enabled = click != null,
+            shape = RoundedCornerShape(16.dp),
+            chrome = if (specialBrush == null) VipNeonChrome.Card else VipNeonChrome.PressOnly,
+        )
         .clip(RoundedCornerShape(16.dp))
         .then(
             if (specialBrush != null) Modifier.background(specialBrush) else Modifier.background(colors.surface),
@@ -247,6 +256,7 @@ private fun IconButtonBox(description: String, icon: ImageVector, onClick: () ->
     Box(
         Modifier
             .size(36.dp)
+            .vipNeonFrame(shape = RoundedCornerShape(12.dp), chrome = VipNeonChrome.PressOnly)
             .clip(RoundedCornerShape(12.dp))
             .background(if (dark) Color(0xFF1E293B) else Color(0xFFF3F4F6))
             .clickable(onClick = onClick),

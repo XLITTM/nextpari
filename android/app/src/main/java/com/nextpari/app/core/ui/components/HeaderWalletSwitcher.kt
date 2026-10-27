@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsUiState
@@ -80,6 +82,11 @@ fun WalletDropdownMenu(
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .vipNeonFrame(
+                            selected = row.isActive,
+                            enabled = !state.busy,
+                            chrome = VipNeonChrome.Glow,
+                        )
                         .clickable(enabled = !state.busy) {
                             if (onSelect(row.currency)) onDismiss()
                         }
@@ -121,6 +128,7 @@ fun WalletDropdownMenu(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .vipNeonFrame(enabled = !state.busy, chrome = VipNeonChrome.PressOnly)
                     .clickable(enabled = !state.busy) {
                         if (onAdd(option.value)) onDismiss()
                     }
@@ -180,6 +188,7 @@ fun HeaderWalletSwitcher(
     Box {
         Row(
             modifier = Modifier
+                .vipNeonFrame(shape = RoundedCornerShape(50), chrome = VipNeonChrome.PressOnly)
                 .clip(RoundedCornerShape(50))
                 .border(1.dp, if (darkTheme) Color(0xFF374151) else Color(0xFFE5E7EB), RoundedCornerShape(50))
                 .background(if (darkTheme) Color(0xFF1E293B) else Color(0xFFF3F4F6))
