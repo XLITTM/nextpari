@@ -43,6 +43,7 @@ import com.nextpari.app.feature.auth.RegisterMenuScreen
 import com.nextpari.app.feature.auth.RegisterOneClickResultScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
+import com.nextpari.app.feature.games.NativeGameScreen
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
@@ -394,12 +395,24 @@ private fun AuthenticatedShell(
             composable(Destinations.PROMO_UNBEATABLE) {
                 PromoUnbeatableScreen(onBack = { navController.popBackStack() })
             }
-            placeholder(navController, Destinations.BLACKJACK, "21 / Очко")
-            placeholder(navController, Destinations.AVIATOR, "Aviator")
-            placeholder(navController, Destinations.APPLES, "Apple of Fortune")
-            placeholder(navController, Destinations.CRYSTAL, "Crystal")
-            placeholder(navController, Destinations.DICE, "Dice")
-            placeholder(navController, Destinations.PHARAOH, "Сокровища Фараона")
+            composable(Destinations.BLACKJACK) {
+                NativeGameScreen("blackjack", "21 / Очко") { navController.popBackStack() }
+            }
+            composable(Destinations.AVIATOR) {
+                NativeGameScreen("aviator", "Aviator") { navController.popBackStack() }
+            }
+            composable(Destinations.APPLES) {
+                NativeGameScreen("apples", "Apple of Fortune") { navController.popBackStack() }
+            }
+            composable(Destinations.CRYSTAL) {
+                NativeGameScreen("crystal", "Crystal") { navController.popBackStack() }
+            }
+            composable(Destinations.DICE) {
+                NativeGameScreen("dice", "Dice") { navController.popBackStack() }
+            }
+            composable(Destinations.PHARAOH) {
+                NativeGameScreen("pharaoh", "Сокровища Фараона") { navController.popBackStack() }
+            }
             composable(Destinations.VIP_CASHBACK) {
                 VipCashbackScreen(onBack = { navController.popBackStack() })
             }

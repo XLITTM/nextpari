@@ -47,7 +47,7 @@ object SettingsCatalog {
         SettingsSection("О приложении"),
     )
 
-    val accountLabels: List<String> = listOf("Пополнить", "Вывести")
+    val accountLabels: List<String> = listOf("Пополнить", "Вывести", "Кошелёк и валюты")
     val securityLabels: List<String> = listOf("Электронная почта", "Привязать почту", "Сменить пароль")
     val bettingLabels: List<String> = listOf("Провод ставки", "Ставка в 1 клик")
     val applicationLabels: List<String> = listOf("Тип коэффициентов", "Push", "Выбор языка")

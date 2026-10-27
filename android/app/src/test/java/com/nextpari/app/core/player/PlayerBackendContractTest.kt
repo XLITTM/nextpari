@@ -15,6 +15,7 @@ import com.nextpari.app.feature.auth.RegistrationRequest
 import com.nextpari.app.feature.auth.RegistrationResult
 import com.nextpari.app.feature.auth.RemoteAuthRepository
 import com.nextpari.app.feature.games.RemoteGameRepository
+import com.nextpari.app.feature.games.describeRound
 import com.nextpari.app.feature.games.newGameIdempotencyKey
 import com.nextpari.app.feature.profile.RemotePersonalDataRepository
 import com.nextpari.app.feature.wallet.RemoteWalletRepository
@@ -620,6 +621,31 @@ class PlayerBackendContractTest {
         assertThat(request.path).isEqualTo("/api/player/games/11111111-1111-4111-8111-111111111111/action")
         assertThat(request.body.readUtf8()).contains("\"action\":\"cashout\"")
         assertThat(round.balanceAfter).isEqualTo(110.0)
+    }
+
+    @Test
+    fun gamePublicResultKeepsNestedServerFields() = runTest {
+        server.enqueue(
+            MockResponse().setHeader("Content-Type", "application/json").setBody(
+                """
+                {
+                  "ok": true,
+                  "roundId": "22222222-2222-4222-8222-222222222222",
+                  "gameCode": "dice",
+                  "state": "settled",
+                  "stake": 12,
+                  "payout": 24,
+                  "balanceAfter": 40,
+                  "publicResult": {"playerDice":[6,5],"rivalDice":[1,2],"outcome":"win"}
+                }
+                """.trimIndent(),
+            ),
+        )
+        val round = harness().games.startGame("dice", 12.0, "key-dice")
+        assertThat(round.publicResult["outcome"]).isEqualTo("win")
+        assertThat(round.publicResult["playerDice"]).contains("6")
+        assertThat(describeRound("dice", round)).contains("6")
+        assertThat(round.balanceAfter).isEqualTo(40.0)
     }
 
     private suspend fun loggedIn(): Harness {

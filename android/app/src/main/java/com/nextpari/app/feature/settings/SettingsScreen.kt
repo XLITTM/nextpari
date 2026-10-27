@@ -158,6 +158,15 @@ fun SettingsScreen(
                     dark = dark,
                     onClick = { onNavigate(Destinations.WALLET) },
                 )
+                SettingsDivider(dark)
+                SettingsRow(
+                    icon = NextpariWebIcons.Wallet,
+                    iconBg = if (dark) BrandIconDarkBg else BrandIconLightBg,
+                    iconTint = if (dark) BrandIconDarkFg else BrandGreen,
+                    label = "Кошелёк и валюты",
+                    dark = dark,
+                    onClick = { onNavigate(Destinations.WALLETS) },
+                )
             }
 
             SettingsGroup(title = "Безопасность", dark = dark) {

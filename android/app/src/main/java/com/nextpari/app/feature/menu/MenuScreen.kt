@@ -94,11 +94,6 @@ fun MenuScreen(
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(session.displayName.ifBlank { "Игрок" }, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Text("ID: ${session.playerPublicId.ifBlank { "—" }}", color = colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Row {
-                        Text("Заполнить профиль →", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onNavigate(Destinations.PERSONAL_DATA) })
-                        Spacer(Modifier.size(8.dp))
-                        Text("Кошелёк и валюты →", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onNavigate(Destinations.WALLETS) })
-                    }
                 }
                 IconButtonBox("Входящие", NextpariWebIcons.Mail, onInbox)
                 IconButtonBox("Настройки", NextpariWebIcons.Settings) { onNavigate(Destinations.SETTINGS) }

@@ -9,7 +9,9 @@ import com.nextpari.app.core.player.optionalStr
 import com.nextpari.app.core.player.str
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -101,7 +103,11 @@ class RemoteGameRepository(
             sessionId = source.optionalStr("sessionId") ?: source.optionalStr("session_id"),
             mathVersion = source.optionalStr("mathVersion") ?: source.optionalStr("math_version"),
             publicResult = publicResult?.mapValues { (_, value) ->
-                value.jsonPrimitive.contentOrNull ?: value.toString()
+                when (value) {
+                    is JsonNull -> ""
+                    is JsonPrimitive -> value.contentOrNull ?: value.toString()
+                    else -> value.toString()
+                }
             } ?: emptyMap(),
             allowedActions = ((source["allowedActions"] ?: source["allowed_actions"]) as? JsonArray)
                 ?.map { it.jsonPrimitive.contentOrNull ?: it.toString() }

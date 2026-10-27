@@ -49,6 +49,13 @@ class NavigationAuditTest {
         assertThat(root).contains("placeholder(navController, Destinations.LIVE_CASINO")
         assertThat(root).contains("placeholder(navController, Destinations.PROVIDER_SPORTSBOOK")
         assertThat(root).contains("composable(Destinations.INBOX_PLACEHOLDER)")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.BLACKJACK")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.AVIATOR")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.APPLES")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.CRYSTAL")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.DICE")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.PHARAOH")
+        assertThat(root).contains("NativeGameScreen(")
     }
 
     @Test

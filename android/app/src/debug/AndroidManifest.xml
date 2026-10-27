@@ -5,5 +5,9 @@
             android:name=".debug.VipNeonDevicePreviewActivity"
             android:exported="true"
             android:theme="@style/Theme.Nextpari" />
+        <activity
+            android:name=".debug.ScreenCheckActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Nextpari" />
     </application>
 </manifest>

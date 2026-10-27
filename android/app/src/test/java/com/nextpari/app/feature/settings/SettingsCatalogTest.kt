@@ -19,7 +19,11 @@ class SettingsCatalogTest {
             "Настройки приложения",
             "О приложении",
         ).inOrder()
-        assertThat(SettingsCatalog.accountLabels).containsExactly("Пополнить", "Вывести").inOrder()
+        assertThat(SettingsCatalog.accountLabels).containsExactly(
+            "Пополнить",
+            "Вывести",
+            "Кошелёк и валюты",
+        ).inOrder()
         assertThat(SettingsCatalog.securityLabels).containsExactly(
             "Электронная почта",
             "Привязать почту",
@@ -57,6 +61,8 @@ class SettingsCatalogTest {
         assertThat(screen).contains("О приложении")
         assertThat(screen).contains("Пополнить")
         assertThat(screen).contains("Вывести")
+        assertThat(screen).contains("Кошелёк и валюты")
+        assertThat(screen).contains("Destinations.WALLETS")
         assertThat(screen).contains("Электронная почта")
         assertThat(screen).contains("Сменить пароль")
         assertThat(screen).contains("Провод ставки")
