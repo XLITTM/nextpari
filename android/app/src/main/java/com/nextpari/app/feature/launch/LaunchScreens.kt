@@ -1,6 +1,5 @@
 package com.nextpari.app.feature.launch
 
-import android.content.Context
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -40,7 +39,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,9 +51,6 @@ private val BrandBg = Color(0xFF031522)
 private val BrandMint = Color(0xFF22F39A)
 private val BrandText = Color(0xFFF8FAFC)
 private val BrandMuted = Color(0xFF91AEC7)
-
-fun welcomeTigerRes(context: Context): Int =
-    context.resources.getIdentifier("welcome_sports_tiger", "drawable", context.packageName)
 
 @Composable
 fun SplashBrandScreen() {
@@ -190,7 +185,6 @@ fun WelcomeScreen(
     onContinue: () -> Unit,
     onExistingAccount: () -> Unit,
 ) {
-    val tiger = welcomeTigerRes(LocalContext.current)
     Column(
         Modifier
             .fillMaxSize()
@@ -219,14 +213,12 @@ fun WelcomeScreen(
                 .background(Color(0xFF08283A)),
             contentAlignment = Alignment.Center,
         ) {
-            if (tiger != 0) {
-                Image(
-                    painter = painterResource(tiger),
-                    contentDescription = "Nextpari",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Fit,
-                )
-            }
+            Image(
+                painter = painterResource(R.drawable.welcome_sports_tiger),
+                contentDescription = "Nextpari",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Fit,
+            )
         }
         Text(
             "Твой Nextpari",
