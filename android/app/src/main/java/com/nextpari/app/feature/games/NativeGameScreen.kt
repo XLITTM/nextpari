@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,7 +44,7 @@ fun NativeGameScreen(gameCode: String, title: String, onBack: () -> Unit) {
         state = state,
         onBack = onBack,
         onStake = model::setStake,
-        onPlay = { model.play() },
+        onPlay = { options -> model.play(options) },
         onAct = model::act,
     )
 }
@@ -50,7 +52,7 @@ fun NativeGameScreen(gameCode: String, title: String, onBack: () -> Unit) {
 @Composable
 private fun GameMessage(title: String, onBack: () -> Unit, message: String) {
     val colors = NextpariTheme.colors
-    Column(Modifier.fillMaxSize().background(colors.bg).padding(20.dp)) {
+    Column(Modifier.fillMaxSize().background(colors.bg).statusBarsPadding().navigationBarsPadding().padding(20.dp)) {
         Text(title, color = colors.text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         Text(message, color = colors.text, modifier = Modifier.padding(top = 16.dp))
         Text(

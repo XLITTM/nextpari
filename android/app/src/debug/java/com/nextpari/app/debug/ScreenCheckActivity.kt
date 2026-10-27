@@ -62,7 +62,7 @@ class ScreenCheckActivity : ComponentActivity() {
                                 state = previewState(page, fixture),
                                 onBack = { finish() },
                                 onStake = {},
-                                onPlay = {},
+                                onPlay = { _ -> },
                                 onAct = { _, _ -> },
                             )
                         }
