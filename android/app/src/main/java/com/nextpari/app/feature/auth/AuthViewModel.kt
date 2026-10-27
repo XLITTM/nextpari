@@ -19,6 +19,7 @@ data class AuthUiState(
     val identifier: String = "",
     val password: String = "",
     val passwordVisible: Boolean = false,
+    val rememberLogin: Boolean = false,
     val loading: Boolean = false,
     val error: String? = null,
     val registerError: String? = null,
@@ -38,6 +39,19 @@ class AuthViewModel(
     val sessionReady = sessionRepository.ready
     private val ui = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = ui.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val saved = AppGraph.preferencesStorage.getString(REMEMBER_KEY).orEmpty()
+            if (saved.isNotBlank()) {
+                ui.value = ui.value.copy(identifier = saved, rememberLogin = true)
+            }
+        }
+    }
+
+    fun setRememberLogin(value: Boolean) {
+        ui.value = ui.value.copy(rememberLogin = value)
+    }
 
     fun setMode(mode: LoginMode) {
         ui.value = ui.value.copy(mode = mode, error = null)
@@ -71,7 +85,15 @@ class AuthViewModel(
                 }
             }
             when (val result = authRepository.login(identifier, current.password)) {
-                is ApiResult.Ok -> ui.value = ui.value.copy(loading = false, password = "")
+                is ApiResult.Ok -> {
+                    val remembered = ui.value.identifier.trim()
+                    if (ui.value.rememberLogin && remembered.isNotEmpty()) {
+                        AppGraph.preferencesStorage.putString(REMEMBER_KEY, remembered)
+                    } else {
+                        AppGraph.preferencesStorage.putString(REMEMBER_KEY, "")
+                    }
+                    ui.value = ui.value.copy(loading = false, password = "")
+                }
                 is ApiResult.Err -> ui.value = ui.value.copy(
                     loading = false,
                     error = result.error.userMessage(),
@@ -204,6 +226,8 @@ class AuthViewModel(
     }
 
     companion object {
+        private const val REMEMBER_KEY = "nextpari-remembered-identifier"
+
         val Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {

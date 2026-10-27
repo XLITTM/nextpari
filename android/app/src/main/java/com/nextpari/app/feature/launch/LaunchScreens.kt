@@ -7,12 +7,13 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,9 +23,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,14 +38,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nextpari.app.R
+import com.nextpari.app.core.ui.icons.NextpariWebIcons
+import com.nextpari.app.core.ui.icons.ProfessionalPremiumIcons
 
 private val BrandBg = Color(0xFF031522)
 private val BrandMint = Color(0xFF22F39A)
@@ -72,29 +71,20 @@ fun SplashBrandScreen() {
                 .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.weight(1f))
-            EmeraldRing(size = 228.dp, stroke = 7.dp) {
-                Image(
-                    painter = painterResource(R.drawable.logo),
-                    contentDescription = "BK NEXT PARI",
-                    modifier = Modifier.size(156.dp),
-                    contentScale = ContentScale.Fit,
-                )
+            Spacer(Modifier.weight(0.7f))
+            EmeraldRing(size = 280.dp, stroke = 10.dp) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    LaunchWordmark(fontSize = 22)
+                    Text(
+                        "В ЦЕНТРЕ ИГРЫ",
+                        color = BrandMuted,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 1.2.sp,
+                        modifier = Modifier.padding(top = 6.dp),
+                    )
+                }
             }
-            Spacer(Modifier.height(28.dp))
-            Text(
-                "NEXTPARI",
-                color = BrandText,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.4.sp,
-            )
-            Text(
-                "В центре игры",
-                color = BrandMuted,
-                fontSize = 16.sp,
-                modifier = Modifier.padding(top = 6.dp),
-            )
             Spacer(Modifier.height(36.dp))
             Box(
                 Modifier
@@ -116,15 +106,13 @@ fun SplashBrandScreen() {
                 fontSize = 14.sp,
                 modifier = Modifier.padding(top = 18.dp),
             )
-            Text(
-                "Загрузка данных · начальный экран",
-                color = BrandMuted,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 6.dp),
-            )
-            Spacer(Modifier.weight(1.15f))
-            Text("18+", color = BrandMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.weight(1f))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                SplashFeature(ProfessionalPremiumIcons.SportFootball, "Спорт", "Тысячи событий")
+                SplashFeature(NextpariWebIcons.Dices, "Казино", "Топовые игры")
+                SplashFeature(NextpariWebIcons.Gift, "Бонусы", "Ежедневно")
+            }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
@@ -190,54 +178,56 @@ fun WelcomeScreen(
             .fillMaxSize()
             .background(BrandBg)
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 22.dp, vertical = 12.dp),
     ) {
-        Text(
-            "Добро пожаловать",
-            color = BrandText,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.ExtraBold,
-        )
-        Text(
-            "Всё любимое — в одном приложении",
-            color = BrandMuted,
-            fontSize = 15.sp,
-            modifier = Modifier.padding(top = 6.dp, bottom = 18.dp),
-        )
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(340.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color(0xFF08283A)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(R.drawable.welcome_sports_tiger),
-                contentDescription = "Nextpari",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Fit,
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            LaunchWordmark(fontSize = 20)
+            Spacer(Modifier.weight(1f))
+            Text(
+                "Пропустить",
+                color = BrandMuted,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.clickable(onClick = onExistingAccount).padding(8.dp),
             )
         }
+        Spacer(Modifier.weight(1f))
         Text(
-            "Твой Nextpari",
+            "БОЛЬШЕ",
             color = BrandText,
-            fontSize = 26.sp,
+            fontSize = 36.sp,
             fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.padding(top = 18.dp),
+            letterSpacing = 0.4.sp,
         )
         Text(
-            "Следи за матчами, находи любимые игры и управляй кошельком в одном месте.",
-            color = BrandMuted,
-            fontSize = 15.sp,
-            lineHeight = 21.sp,
-            modifier = Modifier.padding(top = 8.dp, bottom = 18.dp),
+            "ЧЕМ ИГРА",
+            color = BrandMint,
+            fontSize = 36.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 0.4.sp,
         )
+        Text(
+            "Спорт  ·  Live  ·  Казино  ·  Бонусы",
+            color = BrandText,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 14.dp),
+        )
+        Text(
+            "Всё в одном приложении",
+            color = BrandMuted,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 18.dp)) {
+            Box(Modifier.size(8.dp).clip(RoundedCornerShape(99.dp)).background(BrandMint))
+            Box(Modifier.size(8.dp).clip(RoundedCornerShape(99.dp)).background(Color(0xFF1C4A62)))
+            Box(Modifier.size(8.dp).clip(RoundedCornerShape(99.dp)).background(Color(0xFF1C4A62)))
+        }
         BrandButton("Начать", onContinue)
         Spacer(Modifier.height(10.dp))
         Text(
-            "У меня уже есть аккаунт",
+            "У меня есть аккаунт",
             color = BrandText,
             fontWeight = FontWeight.Bold,
             fontSize = 16.sp,
@@ -249,15 +239,27 @@ fun WelcomeScreen(
                 .clickable(onClick = onExistingAccount)
                 .padding(vertical = 16.dp),
         )
-        Text(
-            "18+  ·  Ответственная игра",
-            color = BrandMuted,
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
-        )
+    }
+}
+
+@Composable
+internal fun LaunchWordmark(fontSize: Int, nextColor: Color = BrandText) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("NEXT", color = nextColor, fontSize = fontSize.sp, fontWeight = FontWeight.ExtraBold)
+        Text("PARI", color = BrandMint, fontSize = fontSize.sp, fontWeight = FontWeight.ExtraBold)
+    }
+}
+
+@Composable
+private fun SplashFeature(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    caption: String,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(icon, contentDescription = null, tint = BrandText, modifier = Modifier.size(28.dp))
+        Text(title, color = BrandText, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(caption, color = BrandMuted, fontSize = 11.sp)
     }
 }
 

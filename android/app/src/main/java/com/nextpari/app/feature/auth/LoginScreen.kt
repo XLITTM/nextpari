@@ -29,6 +29,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -58,6 +60,7 @@ import com.nextpari.app.R
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.NextpariButton
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.launch.LaunchWordmark
 
 @Composable
 fun LoginScreen(
@@ -75,28 +78,30 @@ fun LoginScreen(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 22.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("С возвращением", color = colors.text, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
-                Text(
-                    "Войди в свой Nextpari",
-                    color = colors.textSecondary,
-                    fontSize = 15.sp,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            Image(
-                painter = painterResource(R.drawable.logo),
-                contentDescription = "BK NEXT PARI",
-                modifier = Modifier.size(72.dp),
-                contentScale = ContentScale.Fit,
-            )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            LaunchWordmark(fontSize = 18, nextColor = colors.text)
+            Spacer(Modifier.weight(1f))
+            Text("RU", color = colors.textSecondary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(18.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(colors.surface.copy(alpha = if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) 0.92f else 1f))
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+        ) {
+        Text("Авторизация", color = colors.text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+        Text(
+            "Войдите в свой аккаунт",
+            color = colors.textSecondary,
+            fontSize = 15.sp,
+            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
+        )
         LoginModeSwitch(state.mode, viewModel::setMode)
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
         ThemedField(
             value = state.identifier,
             onValueChange = viewModel::setIdentifier,
@@ -104,6 +109,13 @@ fun LoginScreen(
             keyboardType = if (state.mode == LoginMode.PHONE) KeyboardType.Phone else KeyboardType.Email,
             imeAction = ImeAction.Next,
             onImeAction = { focus.moveFocus(FocusDirection.Down) },
+            leading = {
+                Icon(
+                    if (state.mode == LoginMode.PHONE) NextpariWebIcons.Phone else NextpariWebIcons.Mail,
+                    contentDescription = null,
+                    tint = colors.textSecondary,
+                )
+            },
         )
         Spacer(Modifier.height(12.dp))
         ThemedField(
@@ -114,6 +126,9 @@ fun LoginScreen(
             password = !state.passwordVisible,
             imeAction = ImeAction.Done,
             onImeAction = { viewModel.login() },
+            leading = {
+                Icon(NextpariWebIcons.Lock, contentDescription = null, tint = colors.textSecondary)
+            },
             trailing = {
                 IconButton(onClick = viewModel::togglePasswordVisible) {
                     Icon(
@@ -124,6 +139,20 @@ fun LoginScreen(
                 }
             },
         )
+        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(
+                checked = state.rememberLogin,
+                onCheckedChange = viewModel::setRememberLogin,
+                colors = CheckboxDefaults.colors(checkedColor = colors.accent, uncheckedColor = colors.textSecondary),
+            )
+            Text("Запомнить меня", color = colors.text, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            Text(
+                "Забыли пароль?",
+                color = colors.textSecondary,
+                fontSize = 14.sp,
+                modifier = Modifier.clickable(onClick = onForgotPassword),
+            )
+        }
         if (state.error != null) {
             Text(state.error ?: "", color = colors.danger, modifier = Modifier.padding(top = 12.dp))
         }
@@ -161,21 +190,27 @@ fun LoginScreen(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
         Text(
-            "Забыли пароль?",
-            color = colors.accent,
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onForgotPassword).padding(top = 10.dp),
+            "или",
+            color = colors.textMuted,
+            fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        Spacer(Modifier.height(28.dp))
         Text(
-            "Безопасная авторизация",
+            "Google, Apple и Telegram не подключены",
+            color = colors.textSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Text(
+            "Нажимая «Войти», вы соглашаетесь с Правилами и Условиями",
             color = colors.textMuted,
             fontSize = 12.sp,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
+        }
     }
 }
 
@@ -188,6 +223,7 @@ private fun ThemedField(
     password: Boolean = false,
     imeAction: ImeAction = ImeAction.Next,
     onImeAction: (() -> Unit)? = null,
+    leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
 ) {
     val colors = NextpariTheme.colors
@@ -203,6 +239,7 @@ private fun ThemedField(
             onNext = { onImeAction?.invoke() },
             onDone = { onImeAction?.invoke() },
         ),
+        leadingIcon = leading,
         trailingIcon = trailing,
         shape = RoundedCornerShape(16.dp),
         colors = OutlinedTextFieldDefaults.colors(
