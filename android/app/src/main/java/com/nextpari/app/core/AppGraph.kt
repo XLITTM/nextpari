@@ -1,13 +1,17 @@
 package com.nextpari.app.core
 
 import android.app.Application
+import com.nextpari.app.core.network.ApiResult
+import com.nextpari.app.core.network.NetworkError
 import com.nextpari.app.core.network.NetworkModule
 import com.nextpari.app.core.network.NextpariApiClient
 import com.nextpari.app.core.network.PlayerApi
+import com.nextpari.app.core.network.userMessage
 import com.nextpari.app.core.network.session.EncryptedCookiePersistence
 import com.nextpari.app.core.network.session.SecureCookieJar
 import com.nextpari.app.core.player.PlayerSessionCoordinator
 import com.nextpari.app.core.player.PlayerStateStore
+import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.session.InMemorySessionRepository
 import com.nextpari.app.core.session.SessionRepository
 import com.nextpari.app.core.storage.DataStorePreferencesStorage
@@ -34,6 +38,9 @@ import com.nextpari.app.feature.wallets.WalletsRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -60,6 +67,18 @@ object AppGraph {
     val historyRepository: HistoryRepository = FakeHistoryRepository()
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
     private var sessionCoordinator: PlayerSessionCoordinator? = null
+    private val restorePhase = MutableStateFlow(SessionRestorePhase.Checking)
+    private val restoreDetail = MutableStateFlow<String?>(null)
+    val sessionRestorePhase: StateFlow<SessionRestorePhase> = restorePhase.asStateFlow()
+    val sessionRestoreDetail: StateFlow<String?> = restoreDetail.asStateFlow()
+
+    fun retrySessionRestore() {
+        val coordinator = sessionCoordinator ?: return
+        restorePhase.value = SessionRestorePhase.Checking
+        restoreDetail.value = null
+        sessionRepositoryImpl.setReady(false)
+        appScope.launch { finishRestore(coordinator.restore()) }
+    }
 
     fun bindPreferences(storage: PreferencesStorage) {
         preferencesStorage = storage
@@ -105,12 +124,17 @@ object AppGraph {
         personalDataRepository = RemotePersonalDataRepository(playerStateStore)
         gameRepository = RemoteGameRepository(api, NetworkModule.json)
         sessionRepository.setReady(false)
-        appScope.launch {
-            try {
-                coordinator.restore()
-            } finally {
-                sessionRepository.setReady(true)
-            }
-        }
+        restorePhase.value = SessionRestorePhase.Checking
+        restoreDetail.value = null
+        appScope.launch { finishRestore(coordinator.restore()) }
+    }
+
+    private fun finishRestore(result: ApiResult<AuthSession>) {
+        val failed = result is ApiResult.Err && result.error !is NetworkError.Unauthorized
+        restoreDetail.value = if (result is ApiResult.Err && failed) result.error.userMessage() else null
+        restorePhase.value = if (failed) SessionRestorePhase.Failed else SessionRestorePhase.Ready
+        sessionRepositoryImpl.setReady(true)
     }
 }
+
+enum class SessionRestorePhase { Checking, Ready, Failed }

@@ -129,14 +129,21 @@ class AuthViewModel(
                     oneClickPassword = null,
                     oneClickCanEnter = false,
                 )
-                is OneClickContinue.NeedLogin -> ui.value = ui.value.copy(
-                    loading = false,
-                    oneClickPlayerId = null,
-                    oneClickPassword = null,
-                    oneClickCanEnter = false,
-                    registerNotice = result.notice,
-                    pendingNavigation = "one_click_login",
-                )
+                is OneClickContinue.NeedLogin -> {
+                    val playerId = ui.value.oneClickPlayerId.orEmpty()
+                    val issued = ui.value.oneClickPassword.orEmpty()
+                    ui.value = ui.value.copy(
+                        loading = false,
+                        mode = LoginMode.IDENTIFIER,
+                        identifier = playerId.ifBlank { ui.value.identifier },
+                        password = issued.ifBlank { ui.value.password },
+                        oneClickPlayerId = null,
+                        oneClickPassword = null,
+                        oneClickCanEnter = false,
+                        registerNotice = result.notice,
+                        pendingNavigation = "one_click_login",
+                    )
+                }
                 is OneClickContinue.Failed -> ui.value = ui.value.copy(
                     loading = false,
                     registerError = result.error.userMessage(),

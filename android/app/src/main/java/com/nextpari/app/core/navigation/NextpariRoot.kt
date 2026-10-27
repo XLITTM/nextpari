@@ -1,7 +1,5 @@
 package com.nextpari.app.core.navigation
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -14,10 +12,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -35,7 +34,11 @@ import com.nextpari.app.core.ui.components.NextpariHeader
 import com.nextpari.app.core.ui.components.NextpariMainTabs
 import com.nextpari.app.core.ui.components.PlaceholderScreen
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.core.SessionRestorePhase
 import com.nextpari.app.feature.auth.AuthViewModel
+import com.nextpari.app.feature.launch.SessionRestoreScreen
+import com.nextpari.app.feature.launch.WelcomePreferences
+import com.nextpari.app.feature.launch.WelcomeScreen
 import com.nextpari.app.feature.auth.ForgotPasswordScreen
 import com.nextpari.app.feature.auth.LoginScreen
 import com.nextpari.app.feature.auth.RegisterEmailScreen
@@ -69,6 +72,7 @@ import com.nextpari.app.feature.wallet.WalletScreen
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsScreen
 import com.nextpari.app.feature.wallets.WalletsViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun NextpariRoot(
@@ -78,11 +82,40 @@ fun NextpariRoot(
 ) {
     val session by authViewModel.session.collectAsStateWithLifecycle()
     val sessionReady by authViewModel.sessionReady.collectAsStateWithLifecycle()
-    if (!sessionReady) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(if (darkTheme) Color(0xFF09090B) else Color(0xFFF4F4F5)),
+    val restorePhase by AppGraph.sessionRestorePhase.collectAsStateWithLifecycle()
+    val restoreDetail by AppGraph.sessionRestoreDetail.collectAsStateWithLifecycle()
+    var welcomeCompleted by remember { mutableStateOf<Boolean?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        welcomeCompleted = WelcomePreferences(AppGraph.preferencesStorage).isCompleted()
+    }
+    val checking = !sessionReady || restorePhase == SessionRestorePhase.Checking ||
+        (!session.isAuthenticated && welcomeCompleted == null && restorePhase != SessionRestorePhase.Failed)
+    if (checking) {
+        SessionRestoreScreen()
+        return
+    }
+    if (restorePhase == SessionRestorePhase.Failed && !session.isAuthenticated) {
+        SessionRestoreScreen(
+            message = restoreDetail ?: "Нет соединения с сетью",
+            onRetry = AppGraph::retrySessionRestore,
+        )
+        return
+    }
+    if (!session.isAuthenticated && welcomeCompleted == false) {
+        WelcomeScreen(
+            onContinue = {
+                scope.launch {
+                    WelcomePreferences(AppGraph.preferencesStorage).markCompleted()
+                    welcomeCompleted = true
+                }
+            },
+            onExistingAccount = {
+                scope.launch {
+                    WelcomePreferences(AppGraph.preferencesStorage).markCompleted()
+                    welcomeCompleted = true
+                }
+            },
         )
         return
     }

@@ -39,14 +39,7 @@ class PlayerSessionCoordinator(
         if (!response.isSuccessful) {
             return ApiResult.Err(PlayerJsonMapper.mapAuthError(PlayerJsonMapper.errorCode(body)))
         }
-        val loginSnapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
-        val meResult = refreshPlayerState(loginMethod = method)
-        if (meResult is ApiResult.Ok) return meResult
-        if (loginSnapshot != null) {
-            runCatching { refreshSecondaryReads() }
-            return hydrateAuthenticated(loginSnapshot, method)
-        }
-        return meResult
+        return refreshPlayerState(loginMethod = method)
     }
 
     suspend fun register(request: RegistrationRequest): RegistrationResult {
@@ -87,18 +80,19 @@ class PlayerSessionCoordinator(
         pendingOneClick = null
         val snapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
         if (snapshot == null) return RegistrationResult.EmailConfirmationRequired
-        return when (val established = establishSession(snapshot, request.method)) {
+        return when (val established = establishSession(request.method)) {
             is ApiResult.Ok -> RegistrationResult.Authenticated(established.data)
             is ApiResult.Err -> RegistrationResult.Failed(established.error)
         }
     }
 
     suspend fun continueOneClick(): OneClickContinue {
-        val pending = pendingOneClick
-        pendingOneClick = null
-        if (pending == null) return OneClickContinue.NeedLogin(RegistrationCopy.ONE_CLICK_LOGIN)
-        return when (val established = establishSession(pending, "one_click")) {
-            is ApiResult.Ok -> OneClickContinue.Entered(established.data)
+        if (pendingOneClick == null) return OneClickContinue.NeedLogin(RegistrationCopy.ONE_CLICK_LOGIN)
+        return when (val established = establishSession("one_click")) {
+            is ApiResult.Ok -> {
+                pendingOneClick = null
+                OneClickContinue.Entered(established.data)
+            }
             is ApiResult.Err -> OneClickContinue.Failed(established.error)
         }
     }
@@ -146,12 +140,8 @@ class PlayerSessionCoordinator(
         return hydrateAuthenticated(snapshot, loginMethod ?: sessions.session.value.loginMethod)
     }
 
-    private suspend fun establishSession(snapshot: PlayerMeSnapshot, loginMethod: String): ApiResult<AuthSession> {
-        val refreshed = refreshPlayerState(loginMethod = loginMethod)
-        if (refreshed is ApiResult.Ok) return refreshed
-        if (refreshed is ApiResult.Err && refreshed.error is NetworkError.Unauthorized) return refreshed
-        runCatching { refreshSecondaryReads() }
-        return hydrateAuthenticated(snapshot, loginMethod)
+    private suspend fun establishSession(loginMethod: String): ApiResult<AuthSession> {
+        return refreshPlayerState(loginMethod = loginMethod)
     }
 
     fun applyBalanceAfter(balanceAfter: Double) {

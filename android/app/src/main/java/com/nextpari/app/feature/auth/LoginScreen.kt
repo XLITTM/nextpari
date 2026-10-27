@@ -7,14 +7,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -65,12 +68,36 @@ fun LoginScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
     val focus = LocalFocusManager.current
-    AuthScaffold {
-        Text("Авторизация", color = Color(0xFF07182F), fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = (-0.4).sp)
-        Spacer(Modifier.height(16.dp))
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(colors.bg)
+            .windowInsetsPadding(WindowInsets.safeDrawing)
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 22.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("С возвращением", color = colors.text, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "Войди в свой Nextpari",
+                    color = colors.textSecondary,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Image(
+                painter = painterResource(R.drawable.logo),
+                contentDescription = "BK NEXT PARI",
+                modifier = Modifier.size(72.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+        Spacer(Modifier.height(22.dp))
         LoginModeSwitch(state.mode, viewModel::setMode)
         Spacer(Modifier.height(16.dp))
-        NextpariField(
+        ThemedField(
             value = state.identifier,
             onValueChange = viewModel::setIdentifier,
             label = if (state.mode == LoginMode.PHONE) "Номер телефона" else "Email или ID игрока",
@@ -79,7 +106,7 @@ fun LoginScreen(
             onImeAction = { focus.moveFocus(FocusDirection.Down) },
         )
         Spacer(Modifier.height(12.dp))
-        NextpariField(
+        ThemedField(
             value = state.password,
             onValueChange = viewModel::setPassword,
             label = "Пароль",
@@ -92,6 +119,7 @@ fun LoginScreen(
                     Icon(
                         imageVector = if (state.passwordVisible) NextpariWebIcons.EyeOff else NextpariWebIcons.Eye,
                         contentDescription = if (state.passwordVisible) "Скрыть пароль" else "Показать пароль",
+                        tint = colors.textSecondary,
                     )
                 }
             },
@@ -100,40 +128,95 @@ fun LoginScreen(
             Text(state.error ?: "", color = colors.danger, modifier = Modifier.padding(top = 12.dp))
         }
         if (state.registerNotice != null) {
-            Text(state.registerNotice ?: "", color = Color(0xFF166534), modifier = Modifier.padding(top = 12.dp))
+            Text(state.registerNotice ?: "", color = colors.success, modifier = Modifier.padding(top = 12.dp))
         }
         if (state.recoveryNotice != null) {
-            Text(state.recoveryNotice ?: "", color = Color(0xFF67819C), modifier = Modifier.padding(top = 12.dp))
+            Text(state.recoveryNotice ?: "", color = colors.textSecondary, modifier = Modifier.padding(top = 12.dp))
         }
         Spacer(Modifier.height(16.dp))
-        NextpariButton(
-            text = if (state.loading) "Вход…" else "Войти",
-            onClick = viewModel::login,
-            enabled = !state.loading,
-            containerColor = Color(0xFF16A34A),
-        )
         Text(
-            "Забыли пароль?",
-            color = Color(0xFF16A34A),
-            fontWeight = FontWeight.Bold,
-            fontSize = 15.sp,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onForgotPassword).padding(top = 12.dp),
+            if (state.loading) "Вход…" else "Войти",
+            color = colors.accentInk,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 16.sp,
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (state.loading) colors.accent.copy(alpha = 0.45f) else colors.accent)
+                .clickable(enabled = !state.loading, onClick = viewModel::login)
+                .padding(vertical = 16.dp),
         )
         Text(
             buildAnnotatedString {
                 append("Нет аккаунта? ")
-                withStyle(SpanStyle(color = Color(0xFF16A34A), fontWeight = FontWeight.Bold)) {
+                withStyle(SpanStyle(color = colors.accent, fontWeight = FontWeight.Bold)) {
                     append("Зарегистрируйтесь")
                 }
             },
-            color = Color(0xFF64748B),
+            color = colors.textSecondary,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenRegister).padding(top = 8.dp),
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenRegister).padding(top = 14.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Text(
+            "Забыли пароль?",
+            color = colors.accent,
+            fontWeight = FontWeight.Bold,
+            fontSize = 15.sp,
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onForgotPassword).padding(top = 10.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Spacer(Modifier.height(28.dp))
+        Text(
+            "Безопасная авторизация",
+            color = colors.textMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth(),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
+}
+
+@Composable
+private fun ThemedField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    keyboardType: KeyboardType,
+    password: Boolean = false,
+    imeAction: ImeAction = ImeAction.Next,
+    onImeAction: (() -> Unit)? = null,
+    trailing: (@Composable () -> Unit)? = null,
+) {
+    val colors = NextpariTheme.colors
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label) },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType, imeAction = imeAction),
+        keyboardActions = KeyboardActions(
+            onNext = { onImeAction?.invoke() },
+            onDone = { onImeAction?.invoke() },
+        ),
+        trailingIcon = trailing,
+        shape = RoundedCornerShape(16.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedTextColor = colors.text,
+            unfocusedTextColor = colors.text,
+            focusedBorderColor = colors.accent,
+            unfocusedBorderColor = colors.border,
+            focusedLabelColor = colors.accent,
+            unfocusedLabelColor = colors.textSecondary,
+            cursorColor = colors.accent,
+            focusedContainerColor = colors.surface,
+            unfocusedContainerColor = colors.surface,
+        ),
+    )
 }
 
 @Composable
@@ -198,7 +281,8 @@ internal fun AuthScaffold(content: @Composable () -> Unit) {
 
 @Composable
 internal fun LoginModeSwitch(mode: LoginMode, onChange: (LoginMode) -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFF4F6FA)).padding(4.dp)) {
+    val colors = NextpariTheme.colors
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.surface).padding(4.dp)) {
         ModeChip("Email / ID", mode == LoginMode.IDENTIFIER, Modifier.weight(1f)) { onChange(LoginMode.IDENTIFIER) }
         ModeChip("Телефон", mode == LoginMode.PHONE, Modifier.weight(1f)) { onChange(LoginMode.PHONE) }
     }
@@ -206,15 +290,21 @@ internal fun LoginModeSwitch(mode: LoginMode, onChange: (LoginMode) -> Unit) {
 
 @Composable
 private fun ModeChip(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val colors = NextpariTheme.colors
     Box(
         modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) Color.White else Color.Transparent)
+            .background(if (selected) colors.accent else Color.Transparent)
             .clickable(onClick = onClick)
             .height(44.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, color = if (selected) Color(0xFF07182F) else Color(0xFF64748B))
+        Text(
+            label,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 14.sp,
+            color = if (selected) colors.accentInk else colors.textSecondary,
+        )
     }
 }
 
