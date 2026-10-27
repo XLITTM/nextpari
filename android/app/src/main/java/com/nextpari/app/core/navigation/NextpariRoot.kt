@@ -37,6 +37,7 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.SessionRestorePhase
 import com.nextpari.app.feature.auth.AuthViewModel
 import com.nextpari.app.feature.launch.SessionRestoreScreen
+import com.nextpari.app.feature.launch.SplashBrandScreen
 import com.nextpari.app.feature.launch.WelcomePreferences
 import com.nextpari.app.feature.launch.WelcomeScreen
 import com.nextpari.app.feature.auth.ForgotPasswordScreen
@@ -92,7 +93,7 @@ fun NextpariRoot(
     val checking = !sessionReady || restorePhase == SessionRestorePhase.Checking ||
         (!session.isAuthenticated && welcomeCompleted == null && restorePhase != SessionRestorePhase.Failed)
     if (checking) {
-        SessionRestoreScreen()
+        SplashBrandScreen()
         return
     }
     if (restorePhase == SessionRestorePhase.Failed && !session.isAuthenticated) {

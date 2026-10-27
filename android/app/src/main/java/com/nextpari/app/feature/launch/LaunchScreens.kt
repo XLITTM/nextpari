@@ -7,6 +7,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,20 +18,29 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -43,6 +53,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.R
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.icons.ProfessionalPremiumIcons
 
@@ -59,54 +70,49 @@ fun SplashBrandScreen() {
         animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
         label = "splash-bar",
     )
-    Box(
-        Modifier
-            .fillMaxSize()
-            .background(BrandBg)
-            .windowInsetsPadding(WindowInsets.safeDrawing),
-    ) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        Image(
+            painter = painterResource(R.drawable.np_splash_stadium_background),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
         Column(
             Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .padding(horizontal = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.weight(0.7f))
-            EmeraldRing(size = 280.dp, stroke = 10.dp) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    LaunchWordmark(fontSize = 22)
-                    Text(
-                        "В ЦЕНТРЕ ИГРЫ",
-                        color = BrandMuted,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.2.sp,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-            }
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.weight(0.48f))
+            Image(
+                painter = painterResource(R.drawable.np_splash_neon_logo_medallion),
+                contentDescription = "NEXTPARI",
+                modifier = Modifier.fillMaxWidth(0.8f),
+                contentScale = ContentScale.Fit,
+            )
+            Spacer(Modifier.weight(0.38f))
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(3.dp)
+                    .height(8.dp)
+                    .shadow(12.dp, RoundedCornerShape(99.dp), ambientColor = Color(0xFF03ED88), spotColor = Color(0xFF00D877))
                     .clip(RoundedCornerShape(99.dp))
-                    .background(Color(0xFF143246)),
+                    .background(Color(0xFF10241C)),
             ) {
                 Box(
                     Modifier
+                        .fillMaxHeight()
                         .fillMaxWidth(progress)
-                        .height(3.dp)
-                        .background(BrandMint),
+                        .background(Brush.horizontalGradient(listOf(Color(0xFF03ED88), Color(0xFFB8FFE4)))),
                 )
             }
             Text(
                 "Подключаем спорт, Live и игры...",
                 color = BrandText,
                 fontSize = 14.sp,
-                modifier = Modifier.padding(top = 18.dp),
+                modifier = Modifier.padding(top = 14.dp, bottom = 18.dp),
             )
-            Spacer(Modifier.weight(1f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 SplashFeature(ProfessionalPremiumIcons.SportFootball, "Спорт", "Тысячи событий")
                 SplashFeature(NextpariWebIcons.Dices, "Казино", "Топовые игры")
@@ -176,77 +182,117 @@ fun WelcomeScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(BrandBg)
+            .background(Color(0xFF05080A))
             .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = 22.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            LaunchWordmark(fontSize = 20)
+            LaunchWordmark(height = 34.dp)
             Spacer(Modifier.weight(1f))
             Text(
                 "Пропустить",
                 color = BrandMuted,
-                fontSize = 14.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.clickable(onClick = onExistingAccount).padding(8.dp),
             )
         }
+        Box(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+            Image(
+                painter = painterResource(R.drawable.np_welcome_luxury_tiger_scene),
+                contentDescription = "Nextpari",
+                modifier = Modifier.fillMaxWidth(),
+                contentScale = ContentScale.FillWidth,
+            )
+            Column(
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color(0xD905080A), Color(0xFF05080A)),
+                        ),
+                    )
+                    .padding(top = 42.dp),
+            ) {
+                Text("БОЛЬШЕ", color = BrandText, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+                Text("ЧЕМ ИГРА", color = Color(0xFF03ED88), fontSize = 34.sp, fontWeight = FontWeight.ExtraBold)
+                Text(
+                    "Спорт  •  Live  •  Казино  •  Бонусы",
+                    color = BrandText,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                Text(
+                    "Всё в одном приложении",
+                    color = BrandMuted,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
         Spacer(Modifier.weight(1f))
-        Text(
-            "БОЛЬШЕ",
-            color = BrandText,
-            fontSize = 36.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 0.4.sp,
-        )
-        Text(
-            "ЧЕМ ИГРА",
-            color = BrandMint,
-            fontSize = 36.sp,
-            fontWeight = FontWeight.ExtraBold,
-            letterSpacing = 0.4.sp,
-        )
-        Text(
-            "Спорт  ·  Live  ·  Казино  ·  Бонусы",
-            color = BrandText,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(top = 14.dp),
-        )
-        Text(
-            "Всё в одном приложении",
-            color = BrandMuted,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(top = 4.dp, bottom = 16.dp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 18.dp)) {
-            Box(Modifier.size(8.dp).clip(RoundedCornerShape(99.dp)).background(BrandMint))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 12.dp, bottom = 14.dp)) {
+            Box(Modifier.size(8.dp).clip(RoundedCornerShape(99.dp)).background(Color(0xFF03ED88)))
             Box(Modifier.size(8.dp).clip(RoundedCornerShape(99.dp)).background(Color(0xFF1C4A62)))
             Box(Modifier.size(8.dp).clip(RoundedCornerShape(99.dp)).background(Color(0xFF1C4A62)))
         }
-        BrandButton("Начать", onContinue)
+        NeonPrimaryButton("Начать", onContinue)
         Spacer(Modifier.height(10.dp))
-        Text(
-            "У меня есть аккаунт",
-            color = BrandText,
-            fontWeight = FontWeight.Bold,
-            fontSize = 16.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .border(1.dp, Color(0xFF1C4A62), RoundedCornerShape(16.dp))
-                .clickable(onClick = onExistingAccount)
-                .padding(vertical = 16.dp),
-        )
+        NeonSecondaryButton("У меня есть аккаунт", onExistingAccount)
+        Spacer(Modifier.height(8.dp))
     }
 }
 
 @Composable
-internal fun LaunchWordmark(fontSize: Int, nextColor: Color = BrandText) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text("NEXT", color = nextColor, fontSize = fontSize.sp, fontWeight = FontWeight.ExtraBold)
-        Text("PARI", color = BrandMint, fontSize = fontSize.sp, fontWeight = FontWeight.ExtraBold)
+internal fun LaunchWordmark(height: Dp = 36.dp) {
+    Image(
+        painter = painterResource(R.drawable.np_crowned_n_wordmark_from_reference),
+        contentDescription = "NEXTPARI",
+        modifier = Modifier.height(height),
+        contentScale = ContentScale.Fit,
+    )
+}
+
+@Composable
+internal fun NeonPrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed && enabled) 0.98f else 1f, tween(130), label = "press")
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .shadow(16.dp, RoundedCornerShape(16.dp), ambientColor = Color(0xFF03ED88), spotColor = Color(0xFF00A86A))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Brush.horizontalGradient(listOf(Color(0xFF03ED88), Color(0xFF00D877))))
+            .border(1.dp, Color.White.copy(alpha = 0.28f), RoundedCornerShape(16.dp))
+            .clickable(interaction, indication = null, enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, color = Color(0xFF02120E), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+    }
+}
+
+@Composable
+internal fun NeonSecondaryButton(text: String, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by androidx.compose.animation.core.animateFloatAsState(if (pressed) 0.98f else 1f, tween(130), label = "press-secondary")
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color(0xFF07110E))
+            .border(1.dp, Color(0xFF1EEA86), RoundedCornerShape(16.dp))
+            .clickable(interaction, indication = null, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, color = BrandText, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
     }
 }
 
@@ -257,27 +303,17 @@ private fun SplashFeature(
     caption: String,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, contentDescription = null, tint = BrandText, modifier = Modifier.size(28.dp))
+        Box(
+            Modifier
+                .size(52.dp)
+                .border(1.5.dp, Color.White.copy(alpha = 0.9f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = BrandText, modifier = Modifier.size(26.dp))
+        }
         Text(title, color = BrandText, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(top = 8.dp))
         Text(caption, color = BrandMuted, fontSize = 11.sp)
     }
-}
-
-@Composable
-private fun BrandButton(text: String, onClick: () -> Unit) {
-    Text(
-        text,
-        color = Color(0xFF04261A),
-        fontWeight = FontWeight.ExtraBold,
-        fontSize = 16.sp,
-        textAlign = TextAlign.Center,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(BrandMint)
-            .clickable(onClick = onClick)
-            .padding(vertical = 16.dp),
-    )
 }
 
 @Composable

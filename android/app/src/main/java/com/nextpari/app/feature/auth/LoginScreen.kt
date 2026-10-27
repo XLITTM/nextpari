@@ -1,7 +1,9 @@
 package com.nextpari.app.feature.auth
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -41,9 +44,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.SpanStyle
@@ -61,6 +70,7 @@ import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.NextpariButton
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.launch.LaunchWordmark
+import com.nextpari.app.feature.launch.NeonPrimaryButton
 
 @Composable
 fun LoginScreen(
@@ -71,27 +81,39 @@ fun LoginScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
     val focus = LocalFocusManager.current
+    val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
     Column(
         Modifier
             .fillMaxSize()
-            .background(colors.bg)
+            .background(if (dark) Color(0xFF05080C) else colors.bg)
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            LaunchWordmark(fontSize = 18, nextColor = colors.text)
-            Spacer(Modifier.weight(1f))
-            Text("RU", color = colors.textSecondary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Box(Modifier.fillMaxWidth().height(if (dark) 292.dp else 44.dp)) {
+            if (dark) {
+                Image(
+                    painter = painterResource(R.drawable.np_login_football_tiger_scene),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.FillWidth,
+                    alignment = Alignment.TopCenter,
+                )
+            }
+            Box(Modifier.align(Alignment.TopStart).padding(start = 2.dp, top = 2.dp)) {
+                LaunchWordmark(height = 30.dp)
+            }
         }
-        Spacer(Modifier.height(18.dp))
         Column(
             Modifier
+                .offset(y = if (dark) (-78).dp else 8.dp)
                 .fillMaxWidth()
+                .shadow(24.dp, RoundedCornerShape(28.dp), ambientColor = Color(0x6603ED88), spotColor = Color.Black)
                 .clip(RoundedCornerShape(28.dp))
-                .background(colors.surface.copy(alpha = if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) 0.92f else 1f))
-                .padding(horizontal = 16.dp, vertical = 20.dp),
+                .background(if (dark) Color(0xF20B1214) else colors.surface)
+                .border(1.dp, colors.accent.copy(alpha = if (dark) 0.28f else 0.45f), RoundedCornerShape(28.dp))
+                .padding(horizontal = 16.dp, vertical = 18.dp),
         ) {
         Text("Авторизация", color = colors.text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
         Text(
@@ -163,18 +185,10 @@ fun LoginScreen(
             Text(state.recoveryNotice ?: "", color = colors.textSecondary, modifier = Modifier.padding(top = 12.dp))
         }
         Spacer(Modifier.height(16.dp))
-        Text(
-            if (state.loading) "Вход…" else "Войти",
-            color = colors.accentInk,
-            fontWeight = FontWeight.ExtraBold,
-            fontSize = 16.sp,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(if (state.loading) colors.accent.copy(alpha = 0.45f) else colors.accent)
-                .clickable(enabled = !state.loading, onClick = viewModel::login)
-                .padding(vertical = 16.dp),
+        NeonPrimaryButton(
+            text = if (state.loading) "Вход…" else "Войти",
+            onClick = viewModel::login,
+            enabled = !state.loading,
         )
         Text(
             buildAnnotatedString {
@@ -196,13 +210,14 @@ fun LoginScreen(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
-        Text(
-            "Google, Apple и Telegram не подключены",
-            color = colors.textSecondary,
-            fontSize = 13.sp,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
+        Row(
+            Modifier.fillMaxWidth().padding(top = 10.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp, Alignment.CenterHorizontally),
+        ) {
+            DisabledProvider("Вход через Google недоступен") { GoogleMark() }
+            DisabledProvider("Вход через Apple недоступен") { AppleMark() }
+            DisabledProvider("Вход через Telegram недоступен") { TelegramMark() }
+        }
         Text(
             "Нажимая «Войти», вы соглашаетесь с Правилами и Условиями",
             color = colors.textMuted,
@@ -211,6 +226,75 @@ fun LoginScreen(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
         }
+    }
+}
+
+@Composable
+private fun DisabledProvider(description: String, mark: @Composable () -> Unit) {
+    Box(
+        Modifier
+            .size(56.dp)
+            .semantics { contentDescription = description }
+            .clip(RoundedCornerShape(14.dp))
+            .background(Color(0xFF1A2428))
+            .border(1.dp, Color.White.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        mark()
+    }
+}
+
+@Composable
+private fun GoogleMark() {
+    Text(
+        "G",
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        style = TextStyle(
+            brush = Brush.linearGradient(
+                listOf(Color(0xFF4285F4), Color(0xFFEA4335), Color(0xFFFBBC05), Color(0xFF34A853)),
+            ),
+        ),
+    )
+}
+
+@Composable
+private fun AppleMark() {
+    Canvas(Modifier.size(22.dp)) {
+        val w = size.width
+        val h = size.height
+        val body = Path().apply {
+            moveTo(w * 0.52f, h * 0.18f)
+            cubicTo(w * 0.78f, h * 0.18f, w * 0.92f, h * 0.38f, w * 0.88f, h * 0.62f)
+            cubicTo(w * 0.84f, h * 0.9f, w * 0.68f, h * 0.98f, w * 0.52f, h * 0.98f)
+            cubicTo(w * 0.36f, h * 0.98f, w * 0.2f, h * 0.9f, w * 0.16f, h * 0.62f)
+            cubicTo(w * 0.12f, h * 0.38f, w * 0.28f, h * 0.18f, w * 0.52f, h * 0.18f)
+            close()
+        }
+        drawPath(body, Color.White)
+        drawLine(
+            Color.White,
+            Offset(w * 0.5f, h * 0.02f),
+            Offset(w * 0.66f, h * 0.16f),
+            strokeWidth = w * 0.08f,
+            cap = StrokeCap.Round,
+        )
+    }
+}
+
+@Composable
+private fun TelegramMark() {
+    Canvas(Modifier.size(22.dp)) {
+        val path = Path().apply {
+            moveTo(size.width * 0.06f, size.height * 0.46f)
+            lineTo(size.width * 0.94f, size.height * 0.16f)
+            lineTo(size.width * 0.72f, size.height * 0.88f)
+            lineTo(size.width * 0.46f, size.height * 0.62f)
+            lineTo(size.width * 0.78f, size.height * 0.3f)
+            lineTo(size.width * 0.34f, size.height * 0.58f)
+            close()
+        }
+        drawPath(path, Color(0xFF2AABEE))
     }
 }
 
@@ -250,8 +334,8 @@ private fun ThemedField(
             focusedLabelColor = colors.accent,
             unfocusedLabelColor = colors.textSecondary,
             cursorColor = colors.accent,
-            focusedContainerColor = colors.surface,
-            unfocusedContainerColor = colors.surface,
+            focusedContainerColor = if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) Color(0xFF16232A) else colors.surface,
+            unfocusedContainerColor = if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) Color(0xFF16232A) else colors.surface,
         ),
     )
 }
@@ -319,7 +403,8 @@ internal fun AuthScaffold(content: @Composable () -> Unit) {
 @Composable
 internal fun LoginModeSwitch(mode: LoginMode, onChange: (LoginMode) -> Unit) {
     val colors = NextpariTheme.colors
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(colors.surface).padding(4.dp)) {
+    val track = if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) Color(0xFF10181C) else colors.surface
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(track).padding(4.dp)) {
         ModeChip("Email / ID", mode == LoginMode.IDENTIFIER, Modifier.weight(1f)) { onChange(LoginMode.IDENTIFIER) }
         ModeChip("Телефон", mode == LoginMode.PHONE, Modifier.weight(1f)) { onChange(LoginMode.PHONE) }
     }
@@ -328,19 +413,30 @@ internal fun LoginModeSwitch(mode: LoginMode, onChange: (LoginMode) -> Unit) {
 @Composable
 private fun ModeChip(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
     val colors = NextpariTheme.colors
-    Box(
+    Column(
         modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(if (selected) colors.accent else Color.Transparent)
+            .background(
+                if (selected) Brush.horizontalGradient(listOf(Color(0xFF03ED88), Color(0xFF00A86A)))
+                else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent)),
+            )
             .clickable(onClick = onClick)
             .height(44.dp),
-        contentAlignment = Alignment.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
     ) {
         Text(
             label,
             fontWeight = FontWeight.ExtraBold,
             fontSize = 14.sp,
-            color = if (selected) colors.accentInk else colors.textSecondary,
+            color = if (selected) Color.White else colors.textSecondary,
+        )
+        Box(
+            Modifier
+                .padding(top = 4.dp)
+                .fillMaxWidth(0.72f)
+                .height(2.dp)
+                .background(if (selected) Color.White.copy(alpha = 0.85f) else Color.Transparent),
         )
     }
 }
