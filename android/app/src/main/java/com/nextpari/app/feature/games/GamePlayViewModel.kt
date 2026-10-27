@@ -49,12 +49,13 @@ data class GameUiState(
     val error: String? = null,
     val stakeText: String,
     val balanceLabel: String = "—",
+    val available: Double? = null,
     val round: PlayerGameRound? = null,
     val sessionNote: String? = null,
 )
 
 class GamePlayViewModel(
-    private val spec: GameSpec,
+    val spec: GameSpec,
     private val games: GameRepository,
     private val readBalance: () -> Pair<Double?, String>,
     private val applyBalance: (Double) -> Unit,
@@ -65,7 +66,11 @@ class GamePlayViewModel(
     private var actionKey: String? = null
 
     fun syncBalance() {
-        ui.value = ui.value.copy(balanceLabel = balanceLabel())
+        val (amount, currency) = readBalance()
+        ui.value = ui.value.copy(
+            available = amount,
+            balanceLabel = if (amount == null) "—" else "${formatServerBalance(amount)} $currency",
+        )
     }
 
     fun setStake(value: String) {
@@ -128,11 +133,14 @@ class GamePlayViewModel(
 
     private fun accept(round: PlayerGameRound) {
         applyBalance(round.balanceAfter)
+        val (amount, currency) = readBalance()
+        val shown = amount ?: round.balanceAfter
         ui.value = ui.value.copy(
             busy = false,
             error = null,
             round = round,
-            balanceLabel = balanceLabel(round.balanceAfter),
+            available = shown,
+            balanceLabel = "${formatServerBalance(shown)} $currency",
             sessionNote = if (round.state == "open") ui.value.sessionNote else null,
         )
     }

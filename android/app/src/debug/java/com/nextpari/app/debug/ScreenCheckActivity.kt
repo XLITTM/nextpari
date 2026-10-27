@@ -9,7 +9,11 @@ import androidx.compose.runtime.setValue
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.games.GameSpecs
+import com.nextpari.app.feature.games.GameStage
+import com.nextpari.app.feature.games.GameUiState
 import com.nextpari.app.feature.games.NativeGameScreen
+import com.nextpari.app.feature.games.PlayerGameRound
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.menu.MenuScreen
 import com.nextpari.app.feature.settings.SettingsScreen
@@ -47,11 +51,22 @@ class ScreenCheckActivity : ComponentActivity() {
                         onLogout = {},
                     )
                     "wallets" -> WalletsScreen(onBack = { page = "settings" })
-                    else -> NativeGameScreen(
-                        gameCode = page,
-                        title = screenTitle(page),
-                        onBack = { finish() },
-                    )
+                    else -> {
+                        val fixture = intent.getStringExtra("fixture")
+                        if (fixture.isNullOrBlank()) {
+                            NativeGameScreen(gameCode = page, title = screenTitle(page), onBack = { finish() })
+                        } else {
+                            GameStage(
+                                title = screenTitle(page),
+                                spec = GameSpecs.forCode(page),
+                                state = previewState(page, fixture),
+                                onBack = { finish() },
+                                onStake = {},
+                                onPlay = {},
+                                onAct = { _, _ -> },
+                            )
+                        }
+                    }
                 }
             }
         }
