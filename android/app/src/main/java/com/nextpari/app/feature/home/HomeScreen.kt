@@ -59,9 +59,18 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
+    val topListState = rememberLazyListState()
+    val sportListState = rememberLazyListState()
+    val esportsListState = rememberLazyListState()
+    val casinoListState = rememberLazyListState()
+    val listState = when (state.mainTabId) {
+        "sport" -> sportListState
+        "esports" -> esportsListState
+        "casino" -> casinoListState
+        else -> topListState
+    }
     Box(Modifier.fillMaxSize().background(colors.bg)) {
         key(state.mainTabId) {
-            val listState = rememberLazyListState()
             LazyColumn(
                 state = listState,
                 modifier = Modifier.fillMaxSize().background(colors.bg),

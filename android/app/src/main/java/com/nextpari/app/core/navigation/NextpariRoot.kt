@@ -322,10 +322,13 @@ internal fun AuthenticatedShell(
             }
         },
     ) { padding ->
+        val gamesOwnsInsets = current == Destinations.GAMES
         NavHost(
             navController = navController,
             startDestination = Destinations.HOME,
-            modifier = Modifier.padding(padding).background(colors.bg),
+            modifier = Modifier
+                .then(if (gamesOwnsInsets) Modifier else Modifier.padding(padding))
+                .background(colors.bg),
             enterTransition = { slideInHorizontally(tween(160)) { width -> width } },
             exitTransition = { ExitTransition.None },
             popEnterTransition = { EnterTransition.None },
