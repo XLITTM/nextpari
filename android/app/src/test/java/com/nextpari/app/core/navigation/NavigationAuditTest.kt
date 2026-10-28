@@ -55,7 +55,8 @@ class NavigationAuditTest {
         assertThat(root).doesNotContain("placeholder(navController, Destinations.CRYSTAL")
         assertThat(root).doesNotContain("placeholder(navController, Destinations.DICE")
         assertThat(root).doesNotContain("placeholder(navController, Destinations.PHARAOH")
-        assertThat(root).contains("NativeGameScreen(")
+        assertThat(root).contains("GameWebViewScreen(")
+        assertThat(root).doesNotContain("NativeGameScreen(")
     }
 
     @Test

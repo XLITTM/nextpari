@@ -24,6 +24,7 @@ class PlayerSessionCoordinator(
     private val sessions: SessionRepository,
     private val store: PlayerStateStore,
     private val json: Json,
+    private val onSessionCleared: () -> Unit = {},
 ) {
     private var pendingOneClick: PlayerMeSnapshot? = null
 
@@ -192,6 +193,7 @@ class PlayerSessionCoordinator(
         cookieJar.clear()
         store.clear()
         sessions.clearImmediate()
+        onSessionCleared()
     }
 }
 

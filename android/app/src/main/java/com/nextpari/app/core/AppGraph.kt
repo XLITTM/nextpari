@@ -22,6 +22,9 @@ import com.nextpari.app.feature.auth.FakeAuthRepository
 import com.nextpari.app.feature.auth.RemoteAuthRepository
 import com.nextpari.app.feature.games.GameRepository
 import com.nextpari.app.feature.games.RemoteGameRepository
+import com.nextpari.app.feature.games.web.WebSessionBridge
+import okhttp3.Cookie
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import com.nextpari.app.feature.history.FakeHistoryRepository
 import com.nextpari.app.feature.history.HistoryRepository
 import com.nextpari.app.feature.home.FakeHomeCatalogRepository
@@ -67,6 +70,7 @@ object AppGraph {
     val historyRepository: HistoryRepository = FakeHistoryRepository()
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
     private var sessionCoordinator: PlayerSessionCoordinator? = null
+    private var secureCookieJar: SecureCookieJar? = null
     private val restorePhase = MutableStateFlow(SessionRestorePhase.Checking)
     private val restoreDetail = MutableStateFlow<String?>(null)
     val sessionRestorePhase: StateFlow<SessionRestorePhase> = restorePhase.asStateFlow()
@@ -84,6 +88,11 @@ object AppGraph {
         preferencesStorage = storage
     }
 
+    fun sessionCookies(): List<Cookie> {
+        val jar = secureCookieJar ?: return emptyList()
+        return jar.loadForRequest("https://nextpari.net/".toHttpUrl())
+    }
+
     fun refreshPlayerState() {
         val coordinator = sessionCoordinator ?: return
         appScope.launch { coordinator.refreshPlayerState() }
@@ -95,6 +104,7 @@ object AppGraph {
     fun bindFromApplication(app: Application) {
         bindPreferences(DataStorePreferencesStorage(app))
         val cookieJar = SecureCookieJar(EncryptedCookiePersistence(app))
+        secureCookieJar = cookieJar
         val coordinatorHolder = arrayOfNulls<PlayerSessionCoordinator>(1)
         val client = NetworkModule.okHttpClient(
             cookieJar = cookieJar,
@@ -109,6 +119,7 @@ object AppGraph {
             sessions = sessionRepository,
             store = playerStateStore,
             json = NetworkModule.json,
+            onSessionCleared = { WebSessionBridge.clear() },
         )
         coordinatorHolder[0] = coordinator
         sessionCoordinator = coordinator

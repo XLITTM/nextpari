@@ -62,7 +62,7 @@ import com.nextpari.app.feature.auth.RegisterMenuScreen
 import com.nextpari.app.feature.auth.RegisterOneClickResultScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
-import com.nextpari.app.feature.games.NativeGameScreen
+import com.nextpari.app.feature.games.web.GameWebViewScreen
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
@@ -327,7 +327,7 @@ internal fun AuthenticatedShell(
             }
         },
     ) { padding ->
-        val gamesOwnsInsets = current == Destinations.GAMES
+        val gamesOwnsInsets = current == Destinations.GAMES || arcade
         val layoutDirection = LocalLayoutDirection.current
         val couponClearance = if (showBottomBar) 20.dp else 0.dp
         NavHost(
@@ -549,22 +549,22 @@ internal fun AuthenticatedShell(
                 PromoUnbeatableScreen(onBack = { navController.popBackStack() })
             }
             composable(Destinations.BLACKJACK) {
-                NativeGameScreen("blackjack", "21 / Очко") { navController.popBackStack() }
+                GameWebViewScreen("blackjack") { navController.popBackStack() }
             }
             composable(Destinations.AVIATOR) {
-                NativeGameScreen("aviator", "Aviator") { navController.popBackStack() }
+                GameWebViewScreen("aviator") { navController.popBackStack() }
             }
             composable(Destinations.APPLES) {
-                NativeGameScreen("apples", "Apple of Fortune") { navController.popBackStack() }
+                GameWebViewScreen("apples") { navController.popBackStack() }
             }
             composable(Destinations.CRYSTAL) {
-                NativeGameScreen("crystal", "Crystal") { navController.popBackStack() }
+                GameWebViewScreen("crystal") { navController.popBackStack() }
             }
             composable(Destinations.DICE) {
-                NativeGameScreen("dice", "Dice") { navController.popBackStack() }
+                GameWebViewScreen("dice") { navController.popBackStack() }
             }
             composable(Destinations.PHARAOH) {
-                NativeGameScreen("pharaoh", "Сокровища Фараона") { navController.popBackStack() }
+                GameWebViewScreen("pharaoh") { navController.popBackStack() }
             }
             composable(Destinations.VIP_CASHBACK) {
                 VipCashbackScreen(onBack = { navController.popBackStack() })

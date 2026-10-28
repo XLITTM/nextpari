@@ -25,7 +25,7 @@ import com.nextpari.app.feature.auth.LoginScreen
 import com.nextpari.app.feature.games.GameSpecs
 import com.nextpari.app.feature.games.GameStage
 import com.nextpari.app.feature.games.GameUiState
-import com.nextpari.app.feature.games.NativeGameScreen
+import com.nextpari.app.feature.games.web.GameWebViewScreen
 import com.nextpari.app.feature.games.PlayerGameRound
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.HomeScreen
@@ -89,7 +89,7 @@ class ScreenCheckActivity : ComponentActivity() {
                     else -> {
                         val fixture = intent.getStringExtra("fixture")
                         if (fixture.isNullOrBlank()) {
-                            NativeGameScreen(gameCode = page, title = screenTitle(page), onBack = { finish() })
+                            GameWebViewScreen(gameCode = page, onBack = { finish() })
                         } else {
                             GameStage(
                                 title = screenTitle(page),
