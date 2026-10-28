@@ -97,6 +97,8 @@ class RemoteGameRepository(
             totalStake = source.num("totalStake", "total_stake") ?: 0.0,
             payout = source.num("payout") ?: 0.0,
             balanceAfter = balanceAfter,
+            walletId = source.str("walletId", "wallet_id"),
+            currency = source.str("currency"),
             serverSeedHash = source.str("serverSeedHash", "server_seed_hash"),
             serverSeed = source.optionalStr("serverSeed") ?: source.optionalStr("server_seed"),
             nonce = source.num("nonce")?.toLong() ?: 0L,

@@ -40,6 +40,19 @@ class GameVisualTest {
             ),
         )
         assertThat(gems.map { it.kind }).containsExactly("coin", "red").inOrder()
+        val playback = crystalFrames(
+            round(
+                "crystal",
+                mapOf(
+                    "startBoard" to """[{"kind":"green"}]""",
+                    "steps" to """[{"board":[{"kind":"red"}],"exploding":[true]},{"board":[{"kind":"coin"}],"exploding":[false]}]""",
+                ),
+            ),
+        )
+        assertThat(playback).hasSize(3)
+        assertThat(playback[0].single().kind).isEqualTo("green")
+        assertThat(playback[1].single().exploding).isTrue()
+        assertThat(playback[2].single().kind).isEqualTo("coin")
         val tiles = pharaohTiles(round("pharaoh", mapOf("tiles" to """[{"id":"ankh"}]""")))
         assertThat(tiles).containsExactly("ankh")
         assertThat(pharaohPrize(round("pharaoh", mapOf("prize" to """{"id":"lotus"}""")))).isEqualTo("lotus")

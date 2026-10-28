@@ -89,9 +89,8 @@ object AppGraph {
         appScope.launch { coordinator.refreshPlayerState() }
     }
 
-    fun applyServerBalance(balanceAfter: Double) {
-        sessionCoordinator?.applyBalanceAfter(balanceAfter)
-    }
+    fun applyServerBalance(balanceAfter: Double, walletId: String = ""): Boolean =
+        sessionCoordinator?.applyBalanceAfter(balanceAfter, walletId) ?: false
 
     fun bindFromApplication(app: Application) {
         bindPreferences(DataStorePreferencesStorage(app))

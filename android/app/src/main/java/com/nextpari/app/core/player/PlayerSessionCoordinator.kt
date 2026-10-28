@@ -144,9 +144,8 @@ class PlayerSessionCoordinator(
         return refreshPlayerState(loginMethod = loginMethod)
     }
 
-    fun applyBalanceAfter(balanceAfter: Double) {
-        store.applyBalanceAfter(balanceAfter)
-    }
+    fun applyBalanceAfter(balanceAfter: Double, expectedWalletId: String = ""): Boolean =
+        store.applyBalanceAfter(balanceAfter, expectedWalletId)
 
     fun onUnauthorized() {
         clearLocal()

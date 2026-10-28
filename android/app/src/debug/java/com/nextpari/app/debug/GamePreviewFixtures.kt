@@ -13,7 +13,9 @@ internal fun previewState(code: String, fixture: String): GameUiState {
         return GameUiState(
             stakeText = spec.defaultStake,
             balanceLabel = "0 TMT",
+            currency = "TMT",
             available = 0.0,
+            balanceVerified = true,
             error = "Недостаточно средств",
         )
     }
@@ -21,7 +23,9 @@ internal fun previewState(code: String, fixture: String): GameUiState {
         return GameUiState(
             stakeText = spec.defaultStake,
             balanceLabel = "20 TMT",
+            currency = "TMT",
             available = 20.0,
+            balanceVerified = true,
             blocked = true,
             error = "Игра на обслуживании",
         )
@@ -30,14 +34,18 @@ internal fun previewState(code: String, fixture: String): GameUiState {
         return GameUiState(
             stakeText = spec.defaultStake,
             balanceLabel = "40 TMT",
+            currency = "TMT",
             available = 40.0,
+            balanceVerified = true,
         )
     }
     val statefulOpen = fixture != "loss" && code in setOf("blackjack", "apples", "aviator")
     return GameUiState(
         stakeText = spec.defaultStake,
         balanceLabel = "40 TMT",
+        currency = "TMT",
         available = 40.0,
+        balanceVerified = true,
         round = previewRound(code, fixture, statefulOpen),
         sessionNote = if (code == "aviator" && fixture != "loss") "Сессия: flying\nМножитель: 2.40" else null,
     )

@@ -24,6 +24,12 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,9 +62,12 @@ fun GameStage(
     onAct: (String, Map<String, String>) -> Unit,
 ) {
     val stake = parseStake(state.stakeText)
-    val short = state.available != null && (state.available < spec.minStake || stake > state.available)
+    val funds = state.available
+    val verified = state.balanceVerified && funds != null
+    val short = !verified || funds!! < spec.minStake || stake > funds
     val open = state.round?.state == "open"
-    val canPlay = !state.busy && !state.blocked && !open && stake >= spec.minStake && !short
+    val withinMax = spec.maxStake == null || stake <= spec.maxStake
+    val canPlay = verified && !state.busy && !state.blocked && !open && withinMax && stake >= spec.minStake && stake <= funds!! && !short
     Box(
         Modifier
             .fillMaxSize()
@@ -144,7 +153,7 @@ private fun AppleScreen(
                 when {
                     state.blocked -> Unit
                     round?.allowedActions?.contains("cashout") == true && cash.isNotBlank() && cash != "0" && cash != "0.0" ->
-                        ActionButton("ЗАБРАТЬ $cash TMTM", Brush.verticalGradient(listOf(Color(0xFFFCD34D), Color(0xFFF97316))), Color(0xFF052E16), !state.busy) {
+                        ActionButton("ЗАБРАТЬ $cash ${state.currency}", Brush.verticalGradient(listOf(Color(0xFFFCD34D), Color(0xFFF97316))), Color(0xFF052E16), !state.busy && state.balanceVerified) {
                             onAct("cashout", emptyMap())
                         }
                     lost && round != null -> {
@@ -203,7 +212,7 @@ private fun PharaohScreen(
             }
             Text(
                 when {
-                    won -> "ВЫИГРЫШ: ${formatServerBalance(round.payout)} TMTM"
+                    won -> "ВЫИГРЫШ: ${formatServerBalance(round.payout)} ${state.currency}"
                     lost -> "ВЫ ПРОИГРАЛИ"
                     state.busy -> "ОТКРЫВАЕМ..."
                     else -> "СДЕЛАЙТЕ СТАВКУ"
@@ -308,7 +317,7 @@ private fun BlackjackScreen(
                 open -> "ВЫБЕРИТЕ ДЕЙСТВИЕ"
                 round != null && round.payout > 0.0 -> (round.publicResult["result"] ?: "ВЫИГРЫШ").uppercase()
                 round != null -> "ПРОИГРЫШ"
-                short -> "МИНИМУМ ${formatServerBalance(spec.minStake)} TMTM"
+                short -> "МИНИМУМ ${formatServerBalance(spec.minStake)} ${state.currency}"
                 else -> "СДЕЛАЙТЕ СТАВКУ"
             },
             color = Ink,
@@ -344,7 +353,7 @@ private fun BlackjackScreen(
                         }
                     }
                 }
-                Text("${state.stakeText} TMTM", color = Color.White, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.CenterHorizontally).clip(CircleShape).background(Brush.verticalGradient(listOf(Color(0xFF8A58C9), Color(0xFF5A2D96)))).border(1.dp, Gold, CircleShape).padding(horizontal = 18.dp, vertical = 6.dp))
+                Text("${state.stakeText} ${state.currency}", color = Color.White, fontWeight = FontWeight.Black, modifier = Modifier.align(Alignment.CenterHorizontally).clip(CircleShape).background(Brush.verticalGradient(listOf(Color(0xFF8A58C9), Color(0xFF5A2D96)))).border(1.dp, Gold, CircleShape).padding(horizontal = 18.dp, vertical = 6.dp))
                 StakeSteps(state, spec, onStake, purple = true)
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     Box(
@@ -440,8 +449,11 @@ private fun AviatorScreen(
                     moveTo(start.x, start.y)
                     quadraticTo(control.x, control.y, end.x, end.y)
                 }
-                drawPath(path, Color(0xFFE9D5FF), style = androidx.compose.ui.graphics.drawscope.Stroke(8f))
-                val t = if (flying || crash != null) ((multiplier?.replace(',', '.')?.toFloatOrNull() ?: 1f) - 1f).coerceIn(0f, 8f) / 8f else 0.08f
+                val flown = multiplier?.replace(',', '.')?.toFloatOrNull()
+                if (flown != null) {
+                    drawPath(path, Color(0xFFE9D5FF), style = androidx.compose.ui.graphics.drawscope.Stroke(8f))
+                }
+                val t = if (flown != null && (flying || crash != null)) ((flown - 1f).coerceIn(0f, 8f) / 8f) else 0f
                 val u = 1f - t
                 val point = androidx.compose.ui.geometry.Offset(
                     u * u * start.x + 2 * u * t * control.x + t * t * end.x,
@@ -492,7 +504,19 @@ private fun CrystalScreen(
     onPlay: (Map<String, String>) -> Unit,
 ) {
     val round = state.round
-    val gems = crystalGems(round).ifEmpty { List(49) { index -> CrystalGem(listOf("green", "cyan", "blue", "red", "purple", "orange", "coin")[index % 7]) } }
+    val frames = crystalFrames(round)
+    var frame by remember(round?.roundId) { mutableIntStateOf(0) }
+    LaunchedEffect(round?.roundId, frames.size) {
+        if (frames.size <= 1) {
+            frame = 0
+            return@LaunchedEffect
+        }
+        for (index in frames.indices) {
+            frame = index
+            delay(420)
+        }
+    }
+    val gems = frames.getOrNull(frame.coerceAtMost(frames.lastIndex.coerceAtLeast(0))).orEmpty()
     val won = round != null && round.state != "open" && round.payout > 0.0
     val lost = round != null && round.state != "open" && round.payout <= 0.0
     Box(Modifier.fillMaxSize()) {
@@ -501,6 +525,9 @@ private fun CrystalScreen(
             GameHeader(onBack, state.balanceLabel, Color(0xFFFDE68A))
             Text("CRYSTAL", color = Color.White, fontWeight = FontWeight.Black, letterSpacing = 3.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(0.35f)).padding(6.dp)) {
+                if (gems.isEmpty()) {
+                    Text("Ожидание результата сервера", color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth().padding(24.dp), textAlign = TextAlign.Center)
+                }
                 gems.take(49).chunked(7).forEach { row ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                         row.forEach { gem ->
@@ -514,7 +541,7 @@ private fun CrystalScreen(
             Box(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(0.5f)).padding(12.dp)) {
                 Text(
                     when {
-                        won -> "Победа!\n${formatServerBalance(round.payout)} TMTM"
+                        won -> "Победа!\n${formatServerBalance(round.payout)} ${state.currency}"
                         lost -> "ПРОИГРЫШ"
                         else -> "Сделайте ставку"
                     },
@@ -548,8 +575,8 @@ private fun DiceScreen(
     onPlay: (Map<String, String>) -> Unit,
 ) {
     val round = state.round
-    val player = diceFaces(round?.publicResult?.get("playerDice")).ifEmpty { listOf(5, 3) }
-    val rival = diceFaces(round?.publicResult?.get("rivalDice")).ifEmpty { listOf(4, 2) }
+    val player = diceFaces(round?.publicResult?.get("playerDice")).takeIf { it.size == 2 }
+    val rival = diceFaces(round?.publicResult?.get("rivalDice")).takeIf { it.size == 2 }
     val settled = round != null && round.state != "open"
     Box(Modifier.fillMaxSize()) {
         Image(painterResource(R.drawable.game_dice_bg), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
@@ -573,18 +600,18 @@ private fun DiceScreen(
             }
             Row(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DieCube(player.getOrElse(0) { 1 }, red = true, rolling = state.busy)
-                    DieCube(player.getOrElse(1) { 1 }, red = true, rolling = state.busy)
+                    DieCube(player?.getOrNull(0) ?: 0, red = true, rolling = state.busy)
+                    DieCube(player?.getOrNull(1) ?: 0, red = true, rolling = state.busy)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DieCube(rival.getOrElse(0) { 1 }, red = false, rolling = state.busy)
-                    DieCube(rival.getOrElse(1) { 1 }, red = false, rolling = state.busy)
+                    DieCube(rival?.getOrNull(0) ?: 0, red = false, rolling = state.busy)
+                    DieCube(rival?.getOrNull(1) ?: 0, red = false, rolling = state.busy)
                 }
             }
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Вы ${if (state.busy) "" else player.sum()}", color = Color(0xFFFFE4E6), fontWeight = FontWeight.Bold)
-                    Text("Соперник ${if (state.busy) "" else rival.sum()}", color = Color(0xFFECFCCB), fontWeight = FontWeight.Bold)
+                    Text("Вы ${if (state.busy || player == null) "—" else player.sum()}", color = Color(0xFFFFE4E6), fontWeight = FontWeight.Bold)
+                    Text("Соперник ${if (state.busy || rival == null) "—" else rival.sum()}", color = Color(0xFFECFCCB), fontWeight = FontWeight.Bold)
                 }
                 StakeSteps(state, spec, onStake)
                 if (round?.state != "open") StakeField(state.stakeText, !state.busy && !state.blocked, onStake)
@@ -599,13 +626,14 @@ private fun DiceScreen(
 
 @Composable
 private fun DieCube(value: Int, red: Boolean, rolling: Boolean) {
-    val pips = when (value.coerceIn(1, 6)) {
+    val pips = when (value) {
         1 -> listOf(4)
         2 -> listOf(0, 8)
         3 -> listOf(0, 4, 8)
         4 -> listOf(0, 2, 6, 8)
         5 -> listOf(0, 2, 4, 6, 8)
-        else -> listOf(0, 2, 3, 5, 6, 8)
+        6 -> listOf(0, 2, 3, 5, 6, 8)
+        else -> emptyList()
     }
     Column(
         Modifier.size(56.dp).clip(RoundedCornerShape(12.dp)).background(if (red) Brush.linearGradient(listOf(Color(0xFFF43F5E), Color(0xFF991B1B))) else Brush.linearGradient(listOf(Color(0xFF3F3F46), Color.Black))).padding(7.dp),

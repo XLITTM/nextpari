@@ -71,18 +71,28 @@ fun diceFaces(raw: String?): List<Int> {
     return array.mapNotNull { it.jsonPrimitive.contentOrNull?.toIntOrNull() }.take(2)
 }
 
-fun crystalGems(round: PlayerGameRound?): List<CrystalGem> {
+fun crystalFrames(round: PlayerGameRound?): List<List<CrystalGem>> {
     val result = round?.publicResult ?: return emptyList()
-    val steps = result["steps"]?.let(::jsonArray)
-    val step = steps?.lastOrNull() as? JsonObject
-    val lastBoard = step?.get("board")?.let { element ->
-        if (element is JsonArray) element else element.toString().let(::jsonArray)
+    val frames = mutableListOf<List<CrystalGem>>()
+    gemsOf(result["startBoard"]?.let(::jsonArray), emptyList()).takeIf { it.isNotEmpty() }?.let(frames::add)
+    val steps = result["steps"]?.let(::jsonArray) ?: return frames
+    steps.forEach { element ->
+        val step = element as? JsonObject ?: return@forEach
+        val board = step["board"]?.let { value ->
+            if (value is JsonArray) value else value.toString().let(::jsonArray)
+        }
+        val exploding = (step["exploding"] as? JsonArray)?.map { flag ->
+            flag.jsonPrimitive.contentOrNull == "true"
+        }.orEmpty()
+        gemsOf(board, exploding).takeIf { it.isNotEmpty() }?.let(frames::add)
     }
-    val start = result["startBoard"]?.let(::jsonArray)
-    val source = lastBoard ?: start ?: return emptyList()
-    val exploding = (step?.get("exploding") as? JsonArray)?.map { element ->
-        element.jsonPrimitive.contentOrNull == "true"
-    }.orEmpty()
+    return frames
+}
+
+fun crystalGems(round: PlayerGameRound?): List<CrystalGem> = crystalFrames(round).lastOrNull().orEmpty()
+
+private fun gemsOf(source: JsonArray?, exploding: List<Boolean>): List<CrystalGem> {
+    if (source == null) return emptyList()
     return source.mapIndexed { index, element ->
         CrystalGem(
             kind = (element as? JsonObject)?.primitive("kind") ?: "green",

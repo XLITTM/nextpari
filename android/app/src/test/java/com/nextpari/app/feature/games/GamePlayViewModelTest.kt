@@ -28,7 +28,7 @@ class GamePlayViewModelTest {
 
     @Test
     fun playSendsOneStartAndAppliesTheServerBalance() = runTest {
-        val games = RecordingGames(settled("dice", 4.0, 20.0))
+        val games = RecordingGames(settled("dice", 4.0, 42.0))
         val viewModel = viewModel(GameSpecs.dice, games, available = 50.0)
 
         viewModel.play()
@@ -36,9 +36,9 @@ class GamePlayViewModelTest {
         assertThat(games.starts).hasSize(1)
         assertThat(games.starts.single().gameCode).isEqualTo("dice")
         assertThat(games.starts.single().stake).isEqualTo(12.0)
-        assertThat(applied).containsExactly(20.0)
+        assertThat(applied).containsExactly(42.0)
         assertThat(viewModel.uiState.value.round?.state).isEqualTo("settled")
-        assertThat(viewModel.uiState.value.balanceLabel).isEqualTo("20 TMT")
+        assertThat(viewModel.uiState.value.balanceLabel).isEqualTo("42 TMT")
     }
 
     @Test
@@ -57,7 +57,7 @@ class GamePlayViewModelTest {
 
     @Test
     fun failedStartReusesTheIdempotencyKey() = runTest {
-        val games = RecordingGames(settled("crystal", 0.0, 10.0), fail = PlayerGameException("GAME_RPC_FAILED", 500))
+        val games = RecordingGames(settled("crystal", 0.0, 38.0), fail = PlayerGameException("GAME_RPC_FAILED", 500))
         val viewModel = viewModel(GameSpecs.crystal, games, available = 50.0)
 
         viewModel.play()
@@ -66,7 +66,7 @@ class GamePlayViewModelTest {
 
         assertThat(games.starts).hasSize(2)
         assertThat(games.starts[0].key).isEqualTo(games.starts[1].key)
-        assertThat(viewModel.uiState.value.round?.balanceAfter).isEqualTo(10.0)
+        assertThat(viewModel.uiState.value.round?.balanceAfter).isEqualTo(38.0)
     }
 
     @Test
@@ -134,22 +134,83 @@ class GamePlayViewModelTest {
         assertThat(text).doesNotContain("Вы выиграли")
     }
 
-    private fun viewModel(spec: GameSpec, games: RecordingGames, available: Double): GamePlayViewModel {
+    @Test
+    fun unknownBalanceDoesNotStartARound() = runTest {
+        val games = RecordingGames(settled("dice", 0.0, 0.0))
+        val viewModel = viewModel(GameSpecs.dice, games, available = null)
+
+        viewModel.play()
+
+        assertThat(games.starts).isEmpty()
+        assertThat(viewModel.uiState.value.error).isEqualTo("Баланс не подтверждён")
+        assertThat(viewModel.uiState.value.balanceVerified).isFalse()
+    }
+
+    @Test
+    fun switchedWalletDoesNotApplyTheStaleBalance() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val games = RecordingGames(settled("dice", 4.0, 42.0), hold = gate)
+        var wallet = ActiveWalletReading("wallet-a", 50.0, "TMT")
+        val viewModel = GamePlayViewModel(
+            spec = GameSpecs.dice,
+            games = games,
+            readWallet = { wallet },
+            applyBalance = { amount, walletId ->
+                if (wallet.walletId != walletId) return@GamePlayViewModel false
+                wallet = wallet.copy(amount = amount)
+                applied += amount
+                true
+            },
+        )
+        viewModel.play()
+        wallet = ActiveWalletReading("wallet-b", 9.0, "USD")
+        gate.complete(Unit)
+
+        assertThat(applied).isEmpty()
+        assertThat(viewModel.uiState.value.blocked).isTrue()
+        assertThat(viewModel.uiState.value.available).isNull()
+    }
+
+    @Test
+    fun inconsistentPayoutDisablesWageringWithoutApplyingBalance() = runTest {
+        val games = RecordingGames(settled("pharaoh", 100.0, 999.0))
+        val viewModel = viewModel(GameSpecs.pharaoh, games, available = 50.0)
+
+        viewModel.play()
+
+        assertThat(applied).isEmpty()
+        assertThat(viewModel.uiState.value.blocked).isTrue()
+        assertThat(viewModel.uiState.value.balanceVerified).isFalse()
+        assertThat(viewModel.uiState.value.round?.payout).isEqualTo(100.0)
+    }
+
+    @Test
+    fun diceAndCrystalStayEmptyUntilTheServerSendsABoard() {
+        assertThat(diceFaces(null)).isEmpty()
+        assertThat(crystalGems(null)).isEmpty()
+        assertThat(expectedBalanceAfterStart(50.0, settled("dice", 4.0, 42.0))).isEqualTo(42.0)
+        assertThat(balancesMatch(42.0, 42.009)).isTrue()
+    }
+
+    private fun viewModel(spec: GameSpec, games: RecordingGames, available: Double?): GamePlayViewModel {
         var balance = available
         return GamePlayViewModel(
             spec = spec,
             games = games,
-            readBalance = { balance to "TMT" },
-            applyBalance = {
-                balance = it
-                applied += it
+            readWallet = {
+                if (balance == null) ActiveWalletReading("wallet-a", null, "") else ActiveWalletReading("wallet-a", balance, "TMT")
+            },
+            applyBalance = { amount, _ ->
+                balance = amount
+                applied += amount
+                true
             },
         )
     }
 
     private fun settled(code: String, payout: Double, balance: Double) = round(code, "settled", payout, balance, emptyList())
 
-    private fun open(code: String, allowed: List<String> = emptyList()) = round(code, "open", 0.0, 40.0, allowed)
+    private fun open(code: String, allowed: List<String> = emptyList()) = round(code, "open", 0.0, 38.0, allowed)
 
     private fun round(
         code: String,
