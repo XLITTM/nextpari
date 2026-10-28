@@ -3,12 +3,14 @@ package com.nextpari.app.feature.games.web
 import com.google.common.truth.Truth.assertThat
 import com.nextpari.app.core.network.session.PlayerCookieNames
 import okhttp3.Cookie
+import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Test
 
 class GameWebPolicyTest {
     @After
     fun resetStore() {
+        WebSessionBridge.resetForTests()
         WebSessionBridge.install(RecordingCookieStore())
     }
 
@@ -51,17 +53,19 @@ class GameWebPolicyTest {
     }
 
     @Test
-    fun handoffCopiesOnlySecureHttpOnlyCookiesForTheSamePlayer() {
+    fun handoffCopiesOnlySecureHttpOnlyCookiesForTheSamePlayer() = runTest {
         val store = RecordingCookieStore()
         WebSessionBridge.install(store)
-        val result = WebSessionBridge.handoff(
+        val plan = WebSessionBridge.prepare(
             cookies = listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token"), sessionCookie(PlayerCookieNames.REFRESH, "refresh-token")),
             authenticated = true,
             playerPublicId = "110790",
             walletCurrency = "TMT",
-        )
-        assertThat(result.accepted).isTrue()
-        assertThat(result.cookieNames).containsExactly(PlayerCookieNames.ACCESS, PlayerCookieNames.REFRESH)
+        ) as WebHandoffPlan.Install
+        assertThat(WebSessionBridge.commit(plan)).isTrue()
+        assertThat(plan.cookieNames).containsExactly(PlayerCookieNames.ACCESS, PlayerCookieNames.REFRESH)
+        assertThat(plan.fingerprint).doesNotContain("access-token")
+        assertThat(plan.fingerprint).doesNotContain("refresh-token")
         val published = store.lines.filter { (_, line) ->
             line.substringAfter('=').startsWith("access-token") || line.substringAfter('=').startsWith("refresh-token")
         }
@@ -80,14 +84,14 @@ class GameWebPolicyTest {
         val store = RecordingCookieStore()
         WebSessionBridge.install(store)
         assertThat(
-            WebSessionBridge.handoff(listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token")), false, "110790", "TMT").accepted,
-        ).isFalse()
+            WebSessionBridge.prepare(listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token")), false, "110790", "TMT"),
+        ).isInstanceOf(WebHandoffPlan.Blocked::class.java)
         assertThat(
-            WebSessionBridge.handoff(emptyList(), true, "110790", "TMT").accepted,
-        ).isFalse()
+            WebSessionBridge.prepare(emptyList(), true, "110790", "TMT"),
+        ).isInstanceOf(WebHandoffPlan.Blocked::class.java)
         assertThat(
-            WebSessionBridge.handoff(listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token")), true, "", "TMT").accepted,
-        ).isFalse()
+            WebSessionBridge.prepare(listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token")), true, "", "TMT"),
+        ).isInstanceOf(WebHandoffPlan.Blocked::class.java)
         val insecure = Cookie.Builder()
             .name(PlayerCookieNames.ACCESS)
             .value("access-token")
@@ -107,6 +111,97 @@ class GameWebPolicyTest {
             .expiresAt(System.currentTimeMillis() + 60_000)
             .build()
         assertThat(sessionLine(foreign)).isNull()
+        val expired = Cookie.Builder()
+            .name(PlayerCookieNames.ACCESS)
+            .value("access-token")
+            .hostOnlyDomain("nextpari.net")
+            .path("/")
+            .secure()
+            .httpOnly()
+            .expiresAt(System.currentTimeMillis() - 1_000)
+            .build()
+        assertThat(sessionLine(expired)).isNull()
+        assertThat(
+            WebSessionBridge.prepare(listOf(expired), true, "110790", "TMT"),
+        ).isInstanceOf(WebHandoffPlan.Blocked::class.java)
+    }
+
+    @Test
+    fun repeatedEntryDoesNotReplaceAnUnchangedSession() = runTest {
+        val store = RecordingCookieStore()
+        WebSessionBridge.install(store)
+        val cookies = listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token"))
+        val first = WebSessionBridge.prepare(cookies, true, "110790", "TMT") as WebHandoffPlan.Install
+        assertThat(WebSessionBridge.commit(first)).isTrue()
+        val written = store.lines.size
+        assertThat(WebSessionBridge.prepare(cookies, true, "110790", "TMT")).isEqualTo(WebHandoffPlan.Reuse)
+        assertThat(store.lines).hasSize(written)
+    }
+
+    @Test
+    fun unfinishedCookieWriteDoesNotCountAsInstalled() = runTest {
+        val store = RecordingCookieStore()
+        store.hold = true
+        WebSessionBridge.install(store)
+        val cookies = listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token"))
+        val plan = WebSessionBridge.prepare(cookies, true, "110790", "TMT") as WebHandoffPlan.Install
+        assertThat(WebSessionBridge.commit(plan)).isFalse()
+        assertThat(WebSessionBridge.prepare(cookies, true, "110790", "TMT")).isInstanceOf(WebHandoffPlan.Install::class.java)
+    }
+
+    @Test
+    fun failedCookieWriteClearsAndBlocksTheNextReuse() = runTest {
+        val store = RecordingCookieStore()
+        store.failLiveCookies = true
+        WebSessionBridge.install(store)
+        val cookies = listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token"))
+        val plan = WebSessionBridge.prepare(cookies, true, "110790", "TMT") as WebHandoffPlan.Install
+        assertThat(WebSessionBridge.commit(plan)).isFalse()
+        assertThat(store.lines.last().second.substringAfter("Max-Age=")).isEqualTo("0")
+        assertThat(WebSessionBridge.prepare(cookies, true, "110790", "TMT")).isInstanceOf(WebHandoffPlan.Install::class.java)
+    }
+
+    @Test
+    fun accountSwitchClearsThePreviousPlayerBeforeInstallingTheNext() = runTest {
+        val store = RecordingCookieStore()
+        WebSessionBridge.install(store)
+        val first = WebSessionBridge.prepare(
+            listOf(sessionCookie(PlayerCookieNames.ACCESS, "player-a-token")),
+            true,
+            "110790",
+            "TMT",
+        ) as WebHandoffPlan.Install
+        assertThat(WebSessionBridge.commit(first)).isTrue()
+        val mark = store.lines.size
+        val second = WebSessionBridge.prepare(
+            listOf(sessionCookie(PlayerCookieNames.ACCESS, "player-b-token")),
+            true,
+            "220791",
+            "USD",
+        ) as WebHandoffPlan.Install
+        assertThat(WebSessionBridge.commit(second)).isTrue()
+        val added = store.lines.drop(mark).map { it.second }
+        val clearAt = added.indexOfFirst { it.substringAfter("Max-Age=") == "0" }
+        val nextAt = added.indexOfFirst { it.contains("player-b-token") }
+        assertThat(clearAt).isAtLeast(0)
+        assertThat(nextAt).isGreaterThan(clearAt)
+        assertThat(WebSessionBridge.prepare(
+            listOf(sessionCookie(PlayerCookieNames.ACCESS, "player-a-token")),
+            true,
+            "110790",
+            "TMT",
+        )).isInstanceOf(WebHandoffPlan.Install::class.java)
+    }
+
+    @Test
+    fun logoutForgetsTheInstalledSession() = runTest {
+        val store = RecordingCookieStore()
+        WebSessionBridge.install(store)
+        val cookies = listOf(sessionCookie(PlayerCookieNames.ACCESS, "access-token"))
+        val plan = WebSessionBridge.prepare(cookies, true, "110790", "TMT") as WebHandoffPlan.Install
+        assertThat(WebSessionBridge.commit(plan)).isTrue()
+        WebSessionBridge.clear()
+        assertThat(WebSessionBridge.prepare(cookies, true, "110790", "TMT")).isInstanceOf(WebHandoffPlan.Install::class.java)
     }
 
     private fun sessionCookie(name: String, value: String): Cookie = Cookie.Builder()
@@ -121,8 +216,17 @@ class GameWebPolicyTest {
 
     private class RecordingCookieStore : WebCookieStore {
         val lines = mutableListOf<Pair<String, String>>()
-        override fun set(url: String, line: String) {
+        var failLiveCookies = false
+        var hold = false
+        val pending = mutableListOf<() -> Unit>()
+        override fun set(url: String, line: String, onResult: (Boolean) -> Unit) {
             lines += url to line
+            val expired = line.substringAfter("Max-Age=") == "0"
+            val ok = url == "https://nextpari.net" && !(failLiveCookies && !expired)
+            if (hold) pending += { onResult(ok) } else onResult(ok)
+        }
+        fun release() {
+            pending.toList().also { pending.clear() }.forEach { it() }
         }
         override fun flush() = Unit
     }

@@ -45,27 +45,64 @@ fun GameWebViewScreen(
     onBack: () -> Unit,
 ) {
     val session by AppGraph.sessionRepository.session.collectAsStateWithLifecycle()
-    val me = AppGraph.playerStateStore.me()
     var seenAuth by remember { mutableStateOf(false) }
+    var retry by remember { mutableStateOf(0) }
+    var phase by remember { mutableStateOf<GameSessionPhase>(GameSessionPhase.Checking) }
     LaunchedEffect(session.isAuthenticated) {
         if (session.isAuthenticated) seenAuth = true
         else if (seenAuth) onBack()
     }
-    BackHandler(onBack = onBack)
-    val handoff = remember(session.isAuthenticated, session.playerPublicId, me?.wallet?.currency) {
-        WebSessionBridge.handoff(
+    LaunchedEffect(session.isAuthenticated, session.playerPublicId, retry) {
+        phase = GameSessionPhase.Checking
+        val snapshot = AppGraph.playerStateStore.me()
+        val plan = WebSessionBridge.prepare(
             cookies = AppGraph.sessionCookies(),
-            authenticated = session.isAuthenticated && me?.playerPublicId == session.playerPublicId,
+            authenticated = session.isAuthenticated && snapshot?.playerPublicId == session.playerPublicId,
             playerPublicId = session.playerPublicId,
-            walletCurrency = me?.wallet?.currency.orEmpty(),
+            walletCurrency = snapshot?.wallet?.currency.orEmpty(),
         )
+        phase = when (plan) {
+            is WebHandoffPlan.Blocked -> GameSessionPhase.Blocked(plan.reason)
+            WebHandoffPlan.Reuse -> {
+                if (session.isAuthenticated) GameSessionPhase.Ready(session.playerPublicId) else GameSessionPhase.Blocked("Сессия не подтверждена")
+            }
+            is WebHandoffPlan.Install -> {
+                val installed = WebSessionBridge.commit(plan)
+                val current = AppGraph.sessionRepository.session.value
+                if (installed && current.isAuthenticated && current.playerPublicId == plan.playerPublicId) {
+                    GameSessionPhase.Ready(plan.playerPublicId)
+                } else {
+                    GameSessionPhase.Blocked("Сессия не подтверждена")
+                }
+            }
+        }
     }
+    BackHandler(onBack = onBack)
     val url = GameWebPolicy.gameUrl(gameCode)
-    if (!handoff.accepted || url == null) {
-        BlockedGame(handoff.reason.ifBlank { "Сессия не подтверждена" }, onBack)
-        return
+    val ready = phase as? GameSessionPhase.Ready
+    when {
+        url == null || phase is GameSessionPhase.Blocked -> {
+            BlockedGame((phase as? GameSessionPhase.Blocked)?.reason ?: "Сессия не подтверждена", onBack)
+        }
+        ready != null && ready.playerPublicId == session.playerPublicId -> {
+            GameDocument(url = url, gameCode = gameCode, onBack = onBack, onRetry = { retry += 1 })
+        }
+        else -> CheckingGame()
     }
-    GameDocument(url = url, gameCode = gameCode, onBack = onBack)
+}
+
+private sealed interface GameSessionPhase {
+    data object Checking : GameSessionPhase
+    data class Blocked(val reason: String) : GameSessionPhase
+    data class Ready(val playerPublicId: String) : GameSessionPhase
+}
+
+@Composable
+private fun CheckingGame() {
+    val colors = NextpariTheme.colors
+    Box(Modifier.fillMaxSize().background(colors.bg).statusBarsPadding().navigationBarsPadding(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator(color = colors.accent)
+    }
 }
 
 @Composable
@@ -82,11 +119,10 @@ private fun BlockedGame(message: String, onBack: () -> Unit) {
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun GameDocument(url: String, gameCode: String, onBack: () -> Unit) {
+private fun GameDocument(url: String, gameCode: String, onBack: () -> Unit, onRetry: () -> Unit) {
     val colors = NextpariTheme.colors
     var loading by remember(url) { mutableStateOf(true) }
     var failed by remember(url) { mutableStateOf(false) }
-    var page by remember { mutableStateOf<WebView?>(null) }
     Box(Modifier.fillMaxSize().background(colors.bg).statusBarsPadding().navigationBarsPadding()) {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
@@ -174,7 +210,6 @@ private fun GameDocument(url: String, gameCode: String, onBack: () -> Unit) {
                         }
                     }
                     loadUrl(url)
-                    page = this
                 }
             },
             onRelease = { view ->
@@ -194,19 +229,7 @@ private fun GameDocument(url: String, gameCode: String, onBack: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("Нет соединения с игрой", color = colors.text)
-                Button(onClick = {
-                    failed = false
-                    loading = true
-                    val current = AppGraph.sessionRepository.session.value
-                    val wallet = AppGraph.playerStateStore.me()
-                    WebSessionBridge.handoff(
-                        cookies = AppGraph.sessionCookies(),
-                        authenticated = current.isAuthenticated && wallet?.playerPublicId == current.playerPublicId,
-                        playerPublicId = current.playerPublicId,
-                        walletCurrency = wallet?.wallet?.currency.orEmpty(),
-                    )
-                    page?.loadUrl(url)
-                }) { Text("Повторить") }
+                Button(onClick = onRetry) { Text("Повторить") }
             }
         }
     }
