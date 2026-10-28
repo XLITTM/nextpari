@@ -69,42 +69,65 @@ class DestinationsTest {
     }
 
     @Test
-    fun bottomNavActiveRouteMatchesWebNavActive() {
+    fun bottomNavFollowsTheOwningTab() {
         assertThat(Destinations.bottomNavActiveRoute(Destinations.HOME)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.FAVORITES)).isEqualTo(Destinations.FAVORITES)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.BETSLIP)).isEqualTo(Destinations.BETSLIP)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.HISTORY)).isEqualTo(Destinations.HISTORY)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.MENU)).isEqualTo(Destinations.MENU)
 
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.MATCH)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.match("42"))).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.AVIATOR)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.LEAGUE)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.league("epl"))).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.GAMES)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.GAMELIST_LIVE)).isEqualTo(Destinations.HOME)
+        listOf(
+            Destinations.MATCH,
+            Destinations.match("42"),
+            Destinations.LEAGUE,
+            Destinations.league("epl"),
+            Destinations.CHAMPIONSHIPS,
+            Destinations.championships("football", "live"),
+            Destinations.SPORTS_LIVE,
+            Destinations.SPORTS_LINE,
+            Destinations.SPORTS_CYBERS,
+            Destinations.GAMELIST_LIVE,
+            Destinations.GAMELIST_LINE,
+            Destinations.GAMES,
+            Destinations.SLOTS,
+            Destinations.LIVE_CASINO,
+            Destinations.APPLES,
+            Destinations.AVIATOR,
+            Destinations.BLACKJACK,
+            Destinations.VIP_CASHBACK,
+            Destinations.PROMO_DETAILS,
+            Destinations.PROMO_MARATHON,
+            Destinations.PROMO_WELCOME,
+            Destinations.PROMO_UNBEATABLE,
+        ).forEach { route ->
+            assertThat(Destinations.bottomNavActiveRoute(route)).isEqualTo(Destinations.HOME)
+        }
 
         assertThat(Destinations.bottomNavActiveRoute(Destinations.BET_DETAILS)).isEqualTo(Destinations.HISTORY)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.betDetails("7"))).isEqualTo(Destinations.HISTORY)
-
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLET)).isEqualTo(Destinations.MENU)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.SETTINGS)).isEqualTo(Destinations.MENU)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.PERSONAL_DATA)).isEqualTo(Destinations.MENU)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLETS)).isEqualTo(Destinations.MENU)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.INFO)).isEqualTo(Destinations.MENU)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO)).isEqualTo(Destinations.MENU)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_LIVE)).isEqualTo(Destinations.MENU)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.SLOTS)).isEqualTo(Destinations.MENU)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.CHAMPIONSHIPS)).isEqualTo(Destinations.MENU)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.INBOX_PLACEHOLDER)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute("not-a-route")).isEqualTo(Destinations.HOME)
+    }
 
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_DETAILS)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_MARATHON)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_WELCOME)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO_UNBEATABLE)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.VIP_CASHBACK)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.BLACKJACK)).isEqualTo(Destinations.HOME)
-        assertThat(Destinations.bottomNavActiveRoute(Destinations.GAMELIST_LINE)).isEqualTo(Destinations.HOME)
+    @Test
+    fun sharedScreensFollowTheParentThatOpenedThem() {
+        val fromMenu = listOf(Destinations.HOME, Destinations.MENU, Destinations.SETTINGS, Destinations.WALLETS)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLETS, fromMenu)).isEqualTo(Destinations.MENU)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SETTINGS, fromMenu)).isEqualTo(Destinations.MENU)
+
+        val fromHome = listOf(Destinations.HOME, Destinations.SETTINGS)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SETTINGS, fromHome)).isEqualTo(Destinations.HOME)
+
+        val fromGames = listOf(Destinations.HOME, Destinations.GAMES, Destinations.WALLET)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLET, fromGames)).isEqualTo(Destinations.HOME)
+        val gamesPromo = listOf(Destinations.HOME, Destinations.GAMES, Destinations.PROMO)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.PROMO, gamesPromo)).isEqualTo(Destinations.HOME)
+
+        val sportPath = listOf(Destinations.HOME, Destinations.league("epl"), Destinations.match("42"))
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.match("42"), sportPath)).isEqualTo(Destinations.HOME)
+        val casinoPath = listOf(Destinations.HOME, Destinations.SLOTS)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SLOTS, casinoPath)).isEqualTo(Destinations.HOME)
     }
 
     @Test

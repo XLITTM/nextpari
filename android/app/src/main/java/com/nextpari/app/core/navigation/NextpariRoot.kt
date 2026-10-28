@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -27,6 +29,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -263,7 +266,9 @@ internal fun AuthenticatedShell(
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val walletsState by walletsViewModel.uiState.collectAsStateWithLifecycle()
     val backStack by navController.currentBackStackEntryAsState()
+    val backStackRoutes by navController.currentBackStack.collectAsStateWithLifecycle()
     val current = backStack?.destination?.route
+    val ancestorRoutes = backStackRoutes.map { it.destination.route.orEmpty() }
     val arcade = current in setOf(
         Destinations.BLACKJACK, Destinations.AVIATOR, Destinations.APPLES,
         Destinations.CRYSTAL, Destinations.DICE, Destinations.PHARAOH,
@@ -315,7 +320,7 @@ internal fun AuthenticatedShell(
         bottomBar = {
             if (showBottomBar) {
                 NextpariBottomNav(
-                    activeRoute = Destinations.bottomNavActiveRoute(current),
+                    activeRoute = Destinations.bottomNavActiveRoute(current, ancestorRoutes),
                     betCount = 0,
                     onSelect = { item -> navController.navigateTab(item.route) },
                 )
@@ -323,11 +328,24 @@ internal fun AuthenticatedShell(
         },
     ) { padding ->
         val gamesOwnsInsets = current == Destinations.GAMES
+        val layoutDirection = LocalLayoutDirection.current
+        val couponClearance = if (showBottomBar) 20.dp else 0.dp
         NavHost(
             navController = navController,
             startDestination = Destinations.HOME,
             modifier = Modifier
-                .then(if (gamesOwnsInsets) Modifier else Modifier.padding(padding))
+                .then(
+                    if (gamesOwnsInsets) {
+                        Modifier
+                    } else {
+                        Modifier.padding(
+                            start = padding.calculateStartPadding(layoutDirection),
+                            top = padding.calculateTopPadding(),
+                            end = padding.calculateEndPadding(layoutDirection),
+                            bottom = padding.calculateBottomPadding() + couponClearance,
+                        )
+                    },
+                )
                 .background(colors.bg),
             enterTransition = { slideInHorizontally(tween(160)) { width -> width } },
             exitTransition = { ExitTransition.None },
@@ -594,5 +612,8 @@ private fun NavHostController.navigateTab(route: String) {
 private fun NavHostController.navigateTo(route: String) {
     if (!Destinations.isConcreteNavigationTarget(route)) return
     if (currentDestination?.route == route) return
-    navigate(route) { launchSingleTop = true }
+    navigate(route) {
+        launchSingleTop = true
+        restoreState = true
+    }
 }

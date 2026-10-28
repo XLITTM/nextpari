@@ -75,27 +75,46 @@ object Destinations {
     }
 
     /**
-     * Mirrors web `navActive` in `src/App.tsx`.
-     * Maps a player destination onto the five bottom-nav sections.
+     * Bottom tab that should stay lit for [route].
+     *
+     * Sports, casino, and Games children belong to Популярное. Bet details belong
+     * to История. Info and inbox belong to Меню. Wallet, settings, promo, and the
+     * wallet list can be opened from more than one tab, so they follow [ancestors]
+     * from the nearest parent to the root. An unknown route stays on Home.
      */
-    fun bottomNavActiveRoute(route: String?): String {
-        val value = route ?: return HOME
+    fun bottomNavActiveRoute(route: String?, ancestors: List<String> = emptyList()): String {
+        val chain = buildList {
+            ancestors.forEach { add(it) }
+            if (route != null && (isEmpty() || last() != route)) add(route)
+        }
+        for (candidate in chain.asReversed()) {
+            fixedBottomTab(candidate)?.let { return it }
+        }
+        return HOME
+    }
+
+    private fun fixedBottomTab(route: String): String? {
+        val value = route.substringBefore("?")
         if (value in bottomNavRoutes) return value
-        if (value == BET_DETAILS || value.startsWith("bet-details/")) return HISTORY
-        if (isHomeParentRoute(value)) return HOME
-        return MENU
+        if (value == BET_DETAILS || value.startsWith("bet-details")) return HISTORY
+        if (isHomeOwned(value)) return HOME
+        if (value == INFO || value == INBOX_PLACEHOLDER) return MENU
+        return null
     }
 
-    private fun isHomeParentRoute(route: String): Boolean {
+    private fun isHomeOwned(route: String): Boolean {
         if (route == MATCH || route.startsWith("match/")) return true
-        if (route == GAMELIST_LIVE || route == GAMELIST_LINE || route.startsWith("gamelist/")) return true
         if (route == LEAGUE || route.startsWith("league/")) return true
-        return route in homeParentExact
+        if (route == CHAMPIONSHIPS || route.startsWith("championships/")) return true
+        if (route.startsWith("gamelist/")) return true
+        if (route.startsWith("sports/")) return true
+        return route in homeOwnedExact
     }
 
-    private val homeParentExact = setOf(
+    private val homeOwnedExact = setOf(
         GAMES, BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK,
         PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, PROMO_UNBEATABLE,
+        SLOTS, LIVE_CASINO, PROVIDER_SPORTSBOOK,
     )
 
     fun showsHeader(route: String?): Boolean =

@@ -1,7 +1,10 @@
 package com.nextpari.app.feature.home
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.CreationExtras
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.navigation.MainTabsSpec
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,9 +37,12 @@ data class HomeUiState(
 
 class HomeViewModel(
     repository: HomeCatalogRepository,
+    private val savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
     private val ui = MutableStateFlow(
         HomeUiState(
+            mainTabId = savedState.get<String>(TAB_KEY) ?: MainTabsSpec.tabs.first().id,
+            selectedSportId = savedState.get<String>(SPORT_KEY) ?: "all",
             sports = repository.sports(),
             promos = repository.promos(),
             liveMatches = repository.liveMatches(),
@@ -53,18 +59,23 @@ class HomeViewModel(
     val uiState: StateFlow<HomeUiState> = ui.asStateFlow()
 
     fun selectTab(id: String) {
+        savedState[TAB_KEY] = id
         ui.value = ui.value.copy(mainTabId = id)
     }
 
     fun selectSport(id: String) {
+        savedState[SPORT_KEY] = id
         ui.value = ui.value.copy(selectedSportId = id)
     }
 
     companion object {
+        private const val TAB_KEY = "mainTabId"
+        private const val SPORT_KEY = "selectedSportId"
+
         val Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return HomeViewModel(AppGraph.homeCatalogRepository) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>, extras: CreationExtras): T {
+                return HomeViewModel(AppGraph.homeCatalogRepository, extras.createSavedStateHandle()) as T
             }
         }
     }
