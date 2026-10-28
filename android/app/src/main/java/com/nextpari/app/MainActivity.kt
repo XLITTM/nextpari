@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -13,6 +14,9 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.ThemeViewModel
 
 class MainActivity : ComponentActivity() {
+    private var leftForeground = false
+    val resumeBrand = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -26,6 +30,19 @@ class MainActivity : ComponentActivity() {
                     onToggleTheme = themeViewModel::toggle,
                 )
             }
+        }
+    }
+
+    override fun onStop() {
+        leftForeground = true
+        super.onStop()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (leftForeground) {
+            leftForeground = false
+            resumeBrand.value = true
         }
     }
 }

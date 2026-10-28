@@ -12,7 +12,8 @@ class ThemeRepository(
         preferences.putString(KEY, theme)
     }
 
-    fun isDark(stored: String?): Boolean = stored == DARK
+    /** Dark VIP Neon unless the player explicitly saved the light theme. */
+    fun isDark(stored: String?): Boolean = stored != LIGHT
 
     companion object {
         const val KEY = "nextpari-theme"

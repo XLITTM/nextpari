@@ -1,5 +1,7 @@
 package com.nextpari.app.core.navigation
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -14,9 +16,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -28,6 +32,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nextpari.app.BuildConfig
+import com.nextpari.app.MainActivity
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.ui.components.NextpariBottomNav
 import com.nextpari.app.core.ui.components.NextpariHeader
@@ -36,6 +41,7 @@ import com.nextpari.app.core.ui.components.PlaceholderScreen
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.SessionRestorePhase
 import com.nextpari.app.feature.auth.AuthViewModel
+import com.nextpari.app.feature.launch.LaunchPresentation
 import com.nextpari.app.feature.launch.SessionRestoreScreen
 import com.nextpari.app.feature.launch.SplashBrandScreen
 import com.nextpari.app.feature.launch.WelcomePreferences
@@ -73,6 +79,7 @@ import com.nextpari.app.feature.wallet.WalletScreen
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsScreen
 import com.nextpari.app.feature.wallets.WalletsViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
@@ -86,53 +93,83 @@ fun NextpariRoot(
     val restorePhase by AppGraph.sessionRestorePhase.collectAsStateWithLifecycle()
     val restoreDetail by AppGraph.sessionRestoreDetail.collectAsStateWithLifecycle()
     var welcomeCompleted by remember { mutableStateOf<Boolean?>(null) }
+    var revisitWelcome by rememberSaveable { mutableStateOf(false) }
+    var holdSplash by remember { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
+    val sessionNow = rememberUpdatedState(session)
+    val activity = LocalContext.current as? MainActivity
+    val resumeBrand = activity?.resumeBrand?.value == true
     LaunchedEffect(Unit) {
         welcomeCompleted = WelcomePreferences(AppGraph.preferencesStorage).isCompleted()
     }
+    LaunchedEffect(holdSplash) {
+        if (holdSplash) {
+            delay(LaunchPresentation.BRAND_MS)
+            holdSplash = false
+        }
+    }
+    LaunchedEffect(resumeBrand) {
+        if (resumeBrand && LaunchPresentation.holdSplashOnResume(sessionNow.value.isAuthenticated)) {
+            holdSplash = true
+        }
+        activity?.resumeBrand?.value = false
+    }
     val checking = !sessionReady || restorePhase == SessionRestorePhase.Checking ||
         (!session.isAuthenticated && welcomeCompleted == null && restorePhase != SessionRestorePhase.Failed)
-    if (checking) {
-        SplashBrandScreen()
-        return
+    val showSplash = holdSplash || (checking && restorePhase != SessionRestorePhase.Failed)
+    val openLogin: () -> Unit = {
+        scope.launch {
+            WelcomePreferences(AppGraph.preferencesStorage).markCompleted()
+            welcomeCompleted = true
+            revisitWelcome = false
+        }
     }
-    if (restorePhase == SessionRestorePhase.Failed && !session.isAuthenticated) {
-        SessionRestoreScreen(
-            message = restoreDetail ?: "Нет соединения с сетью",
-            onRetry = AppGraph::retrySessionRestore,
-        )
-        return
-    }
-    if (!session.isAuthenticated && welcomeCompleted == false) {
-        WelcomeScreen(
-            onContinue = {
-                scope.launch {
-                    WelcomePreferences(AppGraph.preferencesStorage).markCompleted()
-                    welcomeCompleted = true
+    Box(Modifier.fillMaxSize()) {
+        if (!checking || restorePhase == SessionRestorePhase.Failed) {
+            when {
+                restorePhase == SessionRestorePhase.Failed && !session.isAuthenticated -> {
+                    SessionRestoreScreen(
+                        message = restoreDetail ?: "Нет соединения с сетью",
+                        onRetry = AppGraph::retrySessionRestore,
+                    )
                 }
-            },
-            onExistingAccount = {
-                scope.launch {
-                    WelcomePreferences(AppGraph.preferencesStorage).markCompleted()
-                    welcomeCompleted = true
+                !session.isAuthenticated && (welcomeCompleted == false || revisitWelcome) -> {
+                    if (revisitWelcome) {
+                        BackHandler { revisitWelcome = false }
+                    }
+                    WelcomeScreen(
+                        onContinue = openLogin,
+                        onExistingAccount = openLogin,
+                    )
                 }
-            },
-        )
-        return
-    }
-    if (!session.isAuthenticated) {
-        UnauthenticatedNavHost(authViewModel)
-    } else {
-        AuthenticatedShell(
-            authViewModel = authViewModel,
-            darkTheme = darkTheme,
-            onToggleTheme = onToggleTheme,
-        )
+                !session.isAuthenticated -> {
+                    UnauthenticatedNavHost(
+                        authViewModel = authViewModel,
+                        onOpenWelcome = { revisitWelcome = true },
+                        onToggleTheme = onToggleTheme,
+                    )
+                }
+                else -> {
+                    AuthenticatedShell(
+                        authViewModel = authViewModel,
+                        darkTheme = darkTheme,
+                        onToggleTheme = onToggleTheme,
+                    )
+                }
+            }
+        }
+        if (showSplash) {
+            SplashBrandScreen()
+        }
     }
 }
 
 @Composable
-private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
+private fun UnauthenticatedNavHost(
+    authViewModel: AuthViewModel,
+    onOpenWelcome: () -> Unit,
+    onToggleTheme: () -> Unit,
+) {
     val navController = rememberNavController()
     val authState by authViewModel.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(authState.pendingNavigation) {
@@ -150,6 +187,8 @@ private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
                 viewModel = authViewModel,
                 onOpenRegister = { navController.navigate(Destinations.REGISTER) },
                 onForgotPassword = { navController.navigate(Destinations.FORGOT_PASSWORD) },
+                onBack = onOpenWelcome,
+                onToggleTheme = onToggleTheme,
             )
         }
         composable(Destinations.REGISTER) {

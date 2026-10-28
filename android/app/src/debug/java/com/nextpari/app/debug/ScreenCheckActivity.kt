@@ -57,6 +57,8 @@ class ScreenCheckActivity : ComponentActivity() {
                         viewModel = viewModel(factory = AuthViewModel.Factory),
                         onOpenRegister = {},
                         onForgotPassword = {},
+                        onBack = { finish() },
+                        onToggleTheme = {},
                     )
                     "home" -> AuthenticatedFixture(dark)
                     "history" -> HistoryScreen()

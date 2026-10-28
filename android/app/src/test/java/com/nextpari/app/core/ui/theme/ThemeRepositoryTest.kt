@@ -12,7 +12,9 @@ class ThemeRepositoryTest {
         val repository = ThemeRepository(prefs)
 
         assertThat(repository.read()).isNull()
-        assertThat(repository.isDark(null)).isFalse()
+        assertThat(repository.isDark(null)).isTrue()
+        assertThat(repository.isDark(ThemeRepository.DARK)).isTrue()
+        assertThat(repository.isDark(ThemeRepository.LIGHT)).isFalse()
 
         repository.write(ThemeRepository.DARK)
         assertThat(repository.read()).isEqualTo("dark")

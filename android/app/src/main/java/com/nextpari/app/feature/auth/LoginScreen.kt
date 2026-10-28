@@ -1,5 +1,6 @@
 package com.nextpari.app.feature.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -77,11 +78,14 @@ fun LoginScreen(
     viewModel: AuthViewModel,
     onOpenRegister: () -> Unit,
     onForgotPassword: () -> Unit,
+    onBack: () -> Unit,
+    onToggleTheme: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
     val focus = LocalFocusManager.current
     val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
+    BackHandler(onBack = onBack)
     Column(
         Modifier
             .fillMaxSize()
@@ -91,6 +95,30 @@ fun LoginScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Назад",
+                color = colors.text,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable(onClick = onBack)
+                    .padding(vertical = 12.dp, horizontal = 4.dp),
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                if (dark) "Светлая" else "Тёмная",
+                color = if (dark) Color(0xFF03ED88) else colors.accent,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier
+                    .semantics {
+                        contentDescription = if (dark) "Включить светлую тему" else "Включить тёмную тему"
+                    }
+                    .clickable(onClick = onToggleTheme)
+                    .padding(vertical = 12.dp, horizontal = 4.dp),
+            )
+        }
         Box(Modifier.fillMaxWidth().height(if (dark) 292.dp else 44.dp)) {
             if (dark) {
                 Image(

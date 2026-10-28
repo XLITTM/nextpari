@@ -17,10 +17,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -64,10 +67,10 @@ private val BrandMuted = Color(0xFF91AEC7)
 
 @Composable
 fun SplashBrandScreen() {
-    val progress by rememberInfiniteTransition(label = "splash-progress").animateFloat(
-        initialValue = 0.18f,
-        targetValue = 0.92f,
-        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Reverse),
+    val travel by rememberInfiniteTransition(label = "splash-progress").animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
         label = "splash-bar",
     )
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -92,7 +95,7 @@ fun SplashBrandScreen() {
                 contentScale = ContentScale.Fit,
             )
             Spacer(Modifier.weight(0.38f))
-            Box(
+            BoxWithConstraints(
                 Modifier
                     .fillMaxWidth()
                     .height(8.dp)
@@ -100,10 +103,12 @@ fun SplashBrandScreen() {
                     .clip(RoundedCornerShape(99.dp))
                     .background(Color(0xFF10241C)),
             ) {
+                val segment = maxWidth * 0.34f
                 Box(
                     Modifier
+                        .offset(x = (maxWidth + segment) * travel - segment)
+                        .width(segment)
                         .fillMaxHeight()
-                        .fillMaxWidth(progress)
                         .background(Brush.horizontalGradient(listOf(Color(0xFF03ED88), Color(0xFFB8FFE4)))),
                 )
             }
