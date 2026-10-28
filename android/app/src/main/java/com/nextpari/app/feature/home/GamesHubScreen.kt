@@ -1,7 +1,10 @@
 package com.nextpari.app.feature.home
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +16,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,6 +32,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
@@ -47,9 +53,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -68,11 +77,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.components.HeaderWalletSwitcher
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
+import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.session.AuthSession
+import com.nextpari.app.feature.wallets.WalletsUiState
 
 private val GamesGold = Color(0xFFC8962E)
 
@@ -80,8 +92,14 @@ private val GamesGold = Color(0xFFC8962E)
 fun GamesHubScreen(
     session: AuthSession,
     balanceLabel: String,
+    darkTheme: Boolean,
+    walletsState: WalletsUiState,
     onBack: () -> Unit,
     onNavigate: (String) -> Unit,
+    onRefreshWallets: () -> Unit,
+    onSelectWallet: (String) -> Boolean,
+    onAddWallet: (String) -> Boolean,
+    onConsumeWalletNotice: () -> Unit,
     viewModel: GamesHubViewModel = viewModel(factory = GamesHubViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -98,7 +116,12 @@ fun GamesHubScreen(
             onBack = onBack,
             onToggleSearch = viewModel::toggleSearch,
             onQuery = viewModel::setQuery,
-            onToggleWallet = viewModel::toggleWalletMenu,
+            darkTheme = darkTheme,
+            walletsState = walletsState,
+            onRefreshWallets = onRefreshWallets,
+            onSelectWallet = onSelectWallet,
+            onAddWallet = onAddWallet,
+            onConsumeWalletNotice = onConsumeWalletNotice,
             onDeposit = { onNavigate(Destinations.WALLET) },
         )
         if (state.lobby == "all") {
@@ -109,30 +132,25 @@ fun GamesHubScreen(
                 onCategory = viewModel::setCategory,
             )
         }
-        Box(Modifier.weight(1f)) {
-            when (state.lobby) {
-                "bonuses" -> LobbyPanel(
-                    title = "Бонусы",
-                    text = "Акции и бонусы появятся после подключения бонусной системы. Сейчас в Promo — предварительная информация.",
-                    action = "Открыть Promo",
-                    onAction = { onNavigate(Destinations.PROMO) },
-                )
-                "cashback" -> LobbyPanel(
-                    title = "VIP кешбэк",
-                    text = "VIP-программа и кешбэк появятся после подключения бонусной системы.",
-                    action = "Открыть VIP кешбэк",
-                    onAction = { onNavigate(Destinations.VIP_CASHBACK) },
-                )
-                else -> GameGrid(
-                    games = state.games,
-                    favorites = state.favorites,
-                    emptyText = if (state.lobby == "favorites") "В избранном пока пусто" else "Игры не найдены",
-                    onOpen = { onNavigate(it.route) },
-                    onFavorite = viewModel::toggleFavorite,
-                )
-            }
+        Box(Modifier.weight(1f).fillMaxWidth().background(colors.bg)) {
+            GameGrid(
+                games = state.games,
+                favorites = state.favorites,
+                emptyText = if (state.lobby == "favorites") "В избранном пока пусто" else "Игры не найдены",
+                onOpen = { onNavigate(it.route) },
+                onFavorite = viewModel::toggleFavorite,
+            )
         }
-        GamesLobbyBar(active = state.lobby, onSelect = viewModel::setLobby)
+        GamesLobbyBar(
+            active = state.lobby,
+            onSelect = { id ->
+                when (id) {
+                    "bonuses" -> onNavigate(Destinations.PROMO)
+                    "cashback" -> onNavigate(Destinations.VIP_CASHBACK)
+                    else -> viewModel.setLobby(id)
+                }
+            },
+        )
     }
 }
 
@@ -144,7 +162,12 @@ private fun GamesHeaderBar(
     onBack: () -> Unit,
     onToggleSearch: () -> Unit,
     onQuery: (String) -> Unit,
-    onToggleWallet: () -> Unit,
+    darkTheme: Boolean,
+    walletsState: WalletsUiState,
+    onRefreshWallets: () -> Unit,
+    onSelectWallet: (String) -> Boolean,
+    onAddWallet: (String) -> Boolean,
+    onConsumeWalletNotice: () -> Unit,
     onDeposit: () -> Unit,
 ) {
     val colors = NextpariTheme.colors
@@ -220,32 +243,28 @@ private fun GamesHeaderBar(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(
-                Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(colors.surface)
-                    .clickable(onClick = onToggleWallet)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    Modifier.size(32.dp).clip(CircleShape).background(Color(0x3322C55E)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(NextpariWebIcons.Wallet, contentDescription = null, tint = Color(0xFF6EE7B7), modifier = Modifier.size(16.dp))
-                }
-                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                    Text(balanceLabel, color = colors.text, fontWeight = FontWeight.Black, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    if (session.playerPublicId.isNotBlank()) {
-                        Text("ID #${session.playerPublicId.filter { it.isDigit() }.ifBlank { session.playerPublicId }}", color = colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-                Icon(
-                    NextpariWebIcons.ChevronDown,
-                    contentDescription = null,
-                    tint = colors.textMuted,
-                    modifier = Modifier.rotate(if (state.walletMenu) 180f else 0f),
+                HeaderWalletSwitcher(
+                    balanceLabel = balanceLabel,
+                    darkTheme = darkTheme,
+                    state = walletsState,
+                    closeKey = state.lobby + state.category,
+                    onRefresh = onRefreshWallets,
+                    onSelect = onSelectWallet,
+                    onAdd = onAddWallet,
+                    onConsumeNotice = onConsumeWalletNotice,
                 )
+                if (session.playerPublicId.isNotBlank()) {
+                    Text(
+                        "ID #${session.playerPublicId.filter { it.isDigit() }.ifBlank { session.playerPublicId }}",
+                        color = colors.textMuted,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
             }
             Row(
                 Modifier
@@ -260,20 +279,6 @@ private fun GamesHeaderBar(
                 Text("Пополнить", color = colors.accentInk, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             }
         }
-        if (state.walletMenu) {
-            Text(
-                "Основной счёт · TMTM" + if (session.playerPublicId.isNotBlank()) " · #${session.playerPublicId.filter { it.isDigit() }.ifBlank { session.playerPublicId }}" else "",
-                color = colors.textSecondary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(colors.surface)
-                    .padding(12.dp),
-            )
-        }
     }
 }
 
@@ -285,6 +290,7 @@ private fun CategoryRow(
     onCategory: (String) -> Unit,
 ) {
     val colors = NextpariTheme.colors
+    val selectedFill = if (colors.bg == NextpariColors.Dark.bg) colors.accent else GamesGold
     LazyRow(
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -293,7 +299,7 @@ private fun CategoryRow(
         item(key = "sort") {
             Box(
                 Modifier
-                    .size(36.dp)
+                    .size(48.dp)
                     .vipNeonFrame(
                         selected = sortAz,
                         gold = true,
@@ -301,7 +307,7 @@ private fun CategoryRow(
                         chrome = VipNeonChrome.Glow,
                     )
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (sortAz) GamesGold else colors.surface)
+                    .background(if (sortAz) selectedFill else colors.surface)
                     .clickable(onClick = onSort),
                 contentAlignment = Alignment.Center,
             ) {
@@ -323,9 +329,9 @@ private fun CategoryRow(
                         chrome = if (active) VipNeonChrome.Glow else VipNeonChrome.PressOnly,
                     )
                     .clip(CircleShape)
-                    .background(if (active) GamesGold else colors.surface)
+                    .background(if (active) selectedFill else colors.surface)
                     .clickable { onCategory(item.id) }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
             )
         }
     }
@@ -371,13 +377,26 @@ private fun GameCard(
     onFavorite: () -> Unit,
 ) {
     val colors = NextpariTheme.colors
-    Column(Modifier.vipNeonFrame(shape = RoundedCornerShape(16.dp), chrome = VipNeonChrome.PressOnly)) {
+    val dark = colors.bg == NextpariColors.Dark.bg
+    val interaction = remember(game.id) { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.98f else 1f, tween(120), label = "game-press")
+    val heart by animateFloatAsState(if (liked) 1.12f else 1f, tween(160), label = "game-heart")
+    Column(
+        Modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .shadow(if (dark) 10.dp else 4.dp, RoundedCornerShape(18.dp), ambientColor = colors.accent, spotColor = Color.Black)
+            .clip(RoundedCornerShape(18.dp))
+            .background(colors.surface)
+            .border(1.dp, if (dark) colors.accent.copy(alpha = 0.35f) else colors.border, RoundedCornerShape(18.dp))
+            .clickable(interactionSource = interaction, indication = null, onClick = onOpen)
+            .padding(8.dp),
+    ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 10f)
-                .clip(RoundedCornerShape(16.dp))
-                .clickable(onClick = onOpen),
+                .clip(RoundedCornerShape(16.dp)),
         ) {
             Image(
                 painter = painterResource(game.coverRes),
@@ -427,44 +446,14 @@ private fun GameCard(
             Text(game.name, color = colors.text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             Icon(
                 if (liked) NextpariWebIcons.Heart else NextpariWebIcons.Heart,
-                contentDescription = "Избранное",
+                contentDescription = if (liked) "Убрать из избранного" else "В избранное",
                 tint = if (liked) Color(0xFFF43F5E) else colors.textMuted,
-                modifier = Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onFavorite).padding(4.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun LobbyPanel(title: String, text: String, action: String, onAction: () -> Unit) {
-    val colors = NextpariTheme.colors
-    Column(Modifier.padding(12.dp)) {
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(colors.surface)
-                .padding(16.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(NextpariWebIcons.Gift, contentDescription = null, tint = colors.premiumGold)
-                Spacer(Modifier.width(8.dp))
-                Text(title, color = colors.text, fontWeight = FontWeight.Black, fontSize = 16.sp)
-            }
-            Text(text, color = colors.textSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 8.dp))
-            Text(
-                action,
-                color = colors.accentInk,
-                fontWeight = FontWeight.Black,
-                fontSize = 14.sp,
                 modifier = Modifier
-                    .padding(top = 16.dp)
-                    .fillMaxWidth()
+                    .size(48.dp)
+                    .graphicsLayer { scaleX = heart; scaleY = heart }
                     .clip(RoundedCornerShape(12.dp))
-                    .background(GamesGold)
-                    .clickable(onClick = onAction)
-                    .padding(vertical = 10.dp),
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    .clickable(onClick = onFavorite)
+                    .padding(12.dp),
             )
         }
     }
@@ -473,6 +462,7 @@ private fun LobbyPanel(title: String, text: String, action: String, onAction: ()
 @Composable
 private fun GamesLobbyBar(active: String, onSelect: (String) -> Unit) {
     val colors = NextpariTheme.colors
+    val selectedTint = if (colors.bg == NextpariColors.Dark.bg) colors.accent else colors.premiumGold
     Row(
         Modifier
             .fillMaxWidth()
@@ -483,11 +473,18 @@ private fun GamesLobbyBar(active: String, onSelect: (String) -> Unit) {
         GamesCatalog.lobbyTabs.forEach { tab ->
             val selected = active == tab.id
             Column(
-                Modifier.weight(1f).clickable { onSelect(tab.id) }.padding(vertical = 8.dp),
+                Modifier.weight(1f).heightIn(min = 48.dp).clickable { onSelect(tab.id) }.padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
             ) {
-                Icon(lobbyIcon(tab.id), contentDescription = tab.label, tint = if (selected) colors.premiumGold else colors.textMuted, modifier = Modifier.size(20.dp))
-                Text(tab.label, color = if (selected) colors.premiumGold else colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Icon(lobbyIcon(tab.id), contentDescription = tab.label, tint = if (selected) selectedTint else colors.textMuted, modifier = Modifier.size(20.dp))
+                Text(tab.label, color = if (selected) selectedTint else colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Box(
+                    Modifier
+                        .padding(top = 4.dp)
+                        .size(width = 18.dp, height = 2.dp)
+                        .background(if (selected) selectedTint else Color.Transparent),
+                )
             }
         }
     }

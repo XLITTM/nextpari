@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.nextpari.app.core.navigation.AuthenticatedShell
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.ui.components.NextpariBottomNav
@@ -58,6 +59,11 @@ class ScreenCheckActivity : ComponentActivity() {
                         onOpenRegister = {},
                         onForgotPassword = {},
                         onBack = { finish() },
+                        onToggleTheme = {},
+                    )
+                    "shell" -> AuthenticatedShell(
+                        authViewModel = viewModel(factory = AuthViewModel.Factory),
+                        darkTheme = dark,
                         onToggleTheme = {},
                     )
                     "home" -> AuthenticatedFixture(dark)

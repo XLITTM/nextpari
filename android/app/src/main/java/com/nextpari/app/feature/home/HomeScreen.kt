@@ -23,8 +23,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,10 +59,14 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(colors.bg),
-        contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
+    Box(Modifier.fillMaxSize().background(colors.bg)) {
+        key(state.mainTabId) {
+            val listState = rememberLazyListState()
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().background(colors.bg),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
         when (state.mainTabId) {
             "casino" -> {
                 item(key = "casino") {
@@ -196,6 +202,8 @@ fun HomeScreen(
                 }
             }
         }
+        }
+    }
     }
 }
 

@@ -1,6 +1,12 @@
 package com.nextpari.app.core.navigation
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -181,7 +187,14 @@ private fun UnauthenticatedNavHost(
             }
         }
     }
-    NavHost(navController = navController, startDestination = Destinations.LOGIN) {
+    NavHost(
+        navController = navController,
+        startDestination = Destinations.LOGIN,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None },
+    ) {
         composable(Destinations.LOGIN) {
             LoginScreen(
                 viewModel = authViewModel,
@@ -237,7 +250,7 @@ private fun UnauthenticatedNavHost(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AuthenticatedShell(
+internal fun AuthenticatedShell(
     authViewModel: AuthViewModel,
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
@@ -312,19 +325,53 @@ private fun AuthenticatedShell(
         NavHost(
             navController = navController,
             startDestination = Destinations.HOME,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier.padding(padding).background(colors.bg),
+            enterTransition = { slideInHorizontally(tween(160)) { width -> width } },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { slideOutHorizontally(tween(160)) { width -> width } },
         ) {
-            composable(Destinations.HOME) {
+            composable(
+                Destinations.HOME,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 HomeScreen(viewModel = homeViewModel, onNavigate = { navController.navigateTo(it) })
             }
-            composable(Destinations.FAVORITES) {
+            composable(
+                Destinations.FAVORITES,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 PlaceholderScreen("Избранное", message = "В избранном пока нет событий")
             }
-            composable(Destinations.BETSLIP) {
+            composable(
+                Destinations.BETSLIP,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 PlaceholderScreen("Купон", message = "Купон пуст")
             }
-            composable(Destinations.HISTORY) { HistoryScreen() }
-            composable(Destinations.MENU) {
+            composable(
+                Destinations.HISTORY,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) { HistoryScreen() }
+            composable(
+                Destinations.MENU,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 MenuScreen(
                     session = session,
                     balanceLabel = balanceLabel,
@@ -352,13 +399,25 @@ private fun AuthenticatedShell(
                     onLogout = { authViewModel.logout() },
                 )
             }
-            composable(Destinations.GAMES) {
-                GamesHubScreen(
-                    session = session,
-                    balanceLabel = balanceLabel,
-                    onBack = { navController.popBackStack() },
-                    onNavigate = { navController.navigateTo(it) },
-                )
+            composable(
+                Destinations.GAMES,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
+            GamesHubScreen(
+                session = session,
+                balanceLabel = balanceLabel,
+                darkTheme = darkTheme,
+                walletsState = walletsState,
+                onBack = { navController.popBackStack() },
+                onNavigate = { navController.navigateTo(it) },
+                onRefreshWallets = walletsViewModel::refresh,
+                onSelectWallet = walletsViewModel::activate,
+                onAddWallet = walletsViewModel::addCurrency,
+                onConsumeWalletNotice = walletsViewModel::consumeNotice,
+            )
             }
             placeholder(navController, Destinations.BET_DETAILS, "Детали ставки")
             composable(Destinations.PROMO) {
@@ -521,6 +580,7 @@ private fun NavGraphBuilder.placeholder(
 
 private fun NavHostController.navigateTab(route: String) {
     if (!Destinations.isConcreteNavigationTarget(route)) return
+    if (currentDestination?.route == route) return
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true

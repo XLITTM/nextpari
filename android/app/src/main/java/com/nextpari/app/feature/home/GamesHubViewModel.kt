@@ -24,7 +24,11 @@ data class GamesHubUiState(
 class GamesHubViewModel(
     private val preferences: PreferencesStorage,
 ) : ViewModel() {
-    private val ui = MutableStateFlow(GamesHubUiState())
+    private val ui = MutableStateFlow(
+        GamesHubUiState(
+            games = GamesCatalog.visibleGames("all", "all", "", emptySet(), false),
+        ),
+    )
     val uiState: StateFlow<GamesHubUiState> = ui.asStateFlow()
 
     init {
