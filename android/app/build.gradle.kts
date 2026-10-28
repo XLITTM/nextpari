@@ -14,6 +14,8 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
+        // The next owner-signed release uses versionCode 2 or higher.
+        // Each published release increments versionCode by 1 and never reuses it.
         versionName = "0.2.0-a002"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -22,8 +24,24 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"https://nextpari.net/\"")
     }
 
+    val releaseStoreFile = System.getenv("NEXTPARI_RELEASE_STORE_FILE")
+
+    signingConfigs {
+        if (!releaseStoreFile.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = System.getenv("NEXTPARI_RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("NEXTPARI_RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("NEXTPARI_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (!releaseStoreFile.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

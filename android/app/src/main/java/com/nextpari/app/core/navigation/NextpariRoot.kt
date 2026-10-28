@@ -27,6 +27,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -63,6 +64,7 @@ import com.nextpari.app.feature.auth.RegisterOneClickResultScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
 import com.nextpari.app.feature.games.web.GameWebViewScreen
+import com.nextpari.app.feature.update.ReleaseUpdateCard
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
@@ -279,6 +281,7 @@ internal fun AuthenticatedShell(
     val balanceLabel = WalletsCatalog.headerBalanceLabel(fallbackBalance, walletsState)
     val colors = NextpariTheme.colors
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = colors.bg,
         topBar = {
@@ -587,6 +590,18 @@ internal fun AuthenticatedShell(
                 Text("Введите название события или чемпионата", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
             }
         }
+    }
+    if (!arcade && current != Destinations.GAMES && !searchOpen) {
+        ReleaseUpdateCard(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    bottom = if (showBottomBar) 96.dp else 24.dp,
+                    start = 16.dp,
+                    end = 16.dp,
+                ),
+        )
+    }
     }
 }
 
