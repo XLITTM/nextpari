@@ -2,10 +2,12 @@ package com.nextpari.app.feature.history
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -21,6 +23,7 @@ fun HistoryScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
+    LaunchedEffect(Unit) { viewModel.refresh() }
     Column(Modifier.fillMaxSize().background(colors.bg)) {
         Text(
             "История",
@@ -28,15 +31,22 @@ fun HistoryScreen(
             style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(20.dp),
         )
-        if (state.bets.isEmpty()) {
-            EmptyState("Ставок пока нет")
-        } else {
-            Column(Modifier.padding(16.dp)) {
+        when {
+            state.loading -> Text("Загрузка ставок...", color = colors.textMuted, modifier = Modifier.padding(20.dp))
+            state.error != null -> Text(state.error.orEmpty(), color = colors.textMuted, modifier = Modifier.padding(20.dp))
+            state.bets.isEmpty() -> EmptyState("Ставок пока нет")
+            else -> Column(Modifier.padding(16.dp)) {
                 state.bets.forEach { row ->
                     NextpariCard {
                         Text(row.title, color = colors.text)
+                        if (row.status.isNotBlank()) Text(row.status, color = colors.textMuted)
+                        val money = listOf(row.stake, row.currency).filter { it.isNotBlank() }.joinToString(" ")
+                        val odds = if (row.odds.isBlank()) "" else " · ${row.odds}"
+                        if (money.isNotBlank() || odds.isNotBlank()) {
+                            Text(money + odds, color = colors.text)
+                        }
                     }
-                    androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 8.dp))
+                    Spacer(Modifier.padding(bottom = 8.dp))
                 }
             }
         }

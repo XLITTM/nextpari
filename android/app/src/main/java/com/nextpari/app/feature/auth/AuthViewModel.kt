@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
+import com.nextpari.app.feature.account.AccountMessages
+import com.nextpari.app.feature.settings.AccountSecurityResult
 import com.nextpari.app.core.network.ApiResult
 import com.nextpari.app.core.network.userMessage
 import com.nextpari.app.core.session.SessionRepository
@@ -25,6 +27,7 @@ data class AuthUiState(
     val registerError: String? = null,
     val registerNotice: String? = null,
     val recoveryNotice: String? = null,
+    val recoveryStep: String = "identifier",
     val pendingNavigation: String? = null,
     val oneClickPlayerId: String? = null,
     val oneClickPassword: String? = null,
@@ -35,6 +38,8 @@ class AuthViewModel(
     private val authRepository: AuthRepository,
     sessionRepository: SessionRepository,
 ) : ViewModel() {
+    private var recoveryChallenge: String = ""
+    private var recoveryTicket: String = ""
     val session = sessionRepository.session
     val sessionReady = sessionRepository.ready
     private val ui = MutableStateFlow(AuthUiState())
@@ -215,6 +220,59 @@ class AuthViewModel(
                     loading = false,
                     registerError = result.error.userMessage(),
                 )
+            }
+        }
+    }
+
+    fun startRecovery(identifier: String) {
+        if (ui.value.loading) return
+        ui.value = ui.value.copy(loading = true, recoveryNotice = null)
+        viewModelScope.launch {
+            when (val result = AppGraph.accountGateway.startRecovery(identifier)) {
+                is AccountSecurityResult.Accepted -> {
+                    recoveryChallenge = result.token
+                    ui.value = ui.value.copy(loading = false, recoveryStep = "code", recoveryNotice = result.message)
+                }
+                is AccountSecurityResult.Invalid -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                is AccountSecurityResult.Unavailable -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                AccountSecurityResult.Ready -> ui.value = ui.value.copy(loading = false)
+            }
+        }
+    }
+
+    fun verifyRecovery(code: String) {
+        if (ui.value.loading) return
+        ui.value = ui.value.copy(loading = true, recoveryNotice = null)
+        viewModelScope.launch {
+            when (val result = AppGraph.accountGateway.verifyRecovery(recoveryChallenge, code)) {
+                is AccountSecurityResult.Accepted -> {
+                    recoveryTicket = result.token
+                    ui.value = ui.value.copy(loading = false, recoveryStep = "password", recoveryNotice = null)
+                }
+                is AccountSecurityResult.Invalid -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                is AccountSecurityResult.Unavailable -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                AccountSecurityResult.Ready -> ui.value = ui.value.copy(loading = false)
+            }
+        }
+    }
+
+    fun resetRecovery(password: String, confirm: String) {
+        if (ui.value.loading) return
+        ui.value = ui.value.copy(loading = true, recoveryNotice = null)
+        viewModelScope.launch {
+            when (val result = AppGraph.accountGateway.resetPassword(recoveryTicket, password, confirm)) {
+                is AccountSecurityResult.Accepted -> {
+                    recoveryTicket = ""
+                    recoveryChallenge = ""
+                    ui.value = ui.value.copy(
+                        loading = false,
+                        recoveryStep = "done",
+                        recoveryNotice = result.message.ifBlank { AccountMessages.RECOVERY_DONE },
+                    )
+                }
+                is AccountSecurityResult.Invalid -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                is AccountSecurityResult.Unavailable -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                AccountSecurityResult.Ready -> ui.value = ui.value.copy(loading = false)
             }
         }
     }

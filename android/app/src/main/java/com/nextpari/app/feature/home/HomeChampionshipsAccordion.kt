@@ -27,6 +27,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,7 +69,10 @@ fun HomeChampionshipsAccordion(
     val dark = colors.bg == NextpariColors.Dark.bg
     var expanded by rememberSaveable { mutableStateOf("") }
     var userInteracted by rememberSaveable { mutableStateOf(false) }
-    var favorites by rememberSaveable { mutableStateOf(setOf<String>()) }
+    val storedFavorites by com.nextpari.app.core.AppGraph.sportsFavorites.favorites.collectAsStateWithLifecycle()
+    val favoriteScope = androidx.compose.runtime.rememberCoroutineScope()
+    LaunchedEffect(Unit) { com.nextpari.app.core.AppGraph.sportsFavorites.load() }
+    val favorites = storedFavorites.leagueIds
 
     LaunchedEffect(groups.map { it.country }.joinToString()) {
         expanded = HomeAccordionExpansion.resolve(groups, expanded, userInteracted)
@@ -94,7 +99,7 @@ fun HomeChampionshipsAccordion(
                     onNavigate(Destinations.league(LeagueIds.toLeagueId(league.country, league.name)))
                 },
                 onFavorite = { name ->
-                    favorites = if (name in favorites) favorites - name else favorites + name
+                    favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleLeague(name) }
                 },
             )
         }

@@ -1,11 +1,28 @@
 package com.nextpari.app.feature.profile
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.After
+import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.time.LocalDate
 
 class PersonalDataCatalogTest {
+    @Before
+    fun setMain() {
+        Dispatchers.setMain(UnconfinedTestDispatcher())
+    }
+
+    @After
+    fun resetMain() {
+        Dispatchers.resetMain()
+    }
+
     @Test
     fun cardsFieldsAndDocumentTypesMatchProduction() {
         assertThat(PersonalDataCatalog.cardOrder).containsExactly(
@@ -98,7 +115,7 @@ class PersonalDataCatalogTest {
     }
 
     @Test
-    fun localValidationMirrorsProductionDateAndCatalogRules() {
+    fun localValidationMirrorsProductionDateAndCatalogRules() = runTest {
         val tomorrow = LocalDate.now().plusDays(1).toString()
         val today = LocalDate.now().toString()
         val yesterday = LocalDate.now().minusDays(1).toString()

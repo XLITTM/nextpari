@@ -3,6 +3,8 @@ package com.nextpari.app.feature.settings
 sealed class AccountSecurityResult {
     data class Invalid(val message: String) : AccountSecurityResult()
     data class Unavailable(val message: String) : AccountSecurityResult()
+    data class Accepted(val message: String, val token: String = "") : AccountSecurityResult()
+    data object Ready : AccountSecurityResult()
 }
 
 object AccountSecurity {
@@ -15,19 +17,19 @@ object AccountSecurity {
     ): AccountSecurityResult {
         val invalid = validatePasswordChange(currentPassword, newPassword, confirmPassword)
         if (invalid != null) return AccountSecurityResult.Invalid(invalid)
-        return AccountSecurityResult.Unavailable(SettingsCatalog.SESSION_REQUIRED)
+        return AccountSecurityResult.Ready
     }
 
     fun startEmailBinding(email: String): AccountSecurityResult {
         if (!isValidEmail(email)) return AccountSecurityResult.Invalid(SettingsCatalog.INVALID_EMAIL)
-        return AccountSecurityResult.Unavailable(SettingsCatalog.SESSION_REQUIRED)
+        return AccountSecurityResult.Ready
     }
 
     fun verifyEmailCode(code: String): AccountSecurityResult {
         if (!code.matches(Regex("^\\d{6}$"))) {
             return AccountSecurityResult.Invalid("Неверный код подтверждения")
         }
-        return AccountSecurityResult.Unavailable(SettingsCatalog.SESSION_REQUIRED)
+        return AccountSecurityResult.Ready
     }
 
     fun validatePasswordChange(

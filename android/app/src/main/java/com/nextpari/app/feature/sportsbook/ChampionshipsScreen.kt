@@ -31,6 +31,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -69,7 +71,11 @@ fun ChampionshipsScreen(
     LaunchedEffect(groups.map { it.country }) {
         expanded = CountryGrouping.nextExpanded(groups, expanded)
     }
-    var favorites by rememberSaveable { mutableStateOf(setOf<String>()) }
+    val storedFavorites by com.nextpari.app.core.AppGraph.sportsFavorites.favorites.collectAsStateWithLifecycle()
+    val favoriteScope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) { com.nextpari.app.core.AppGraph.sportsFavorites.load() }
+    var actionNotice by rememberSaveable { mutableStateOf("") }
+    val favorites = storedFavorites.leagueIds
     val sportName = SportsListCatalog.sportName(sport)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF3F4F6))) {
@@ -82,7 +88,11 @@ fun ChampionshipsScreen(
                     NextpariWebIcons.Globe to "Страна",
                     NextpariWebIcons.Tv to "Трансляции",
                 ),
+                onAction = { actionNotice = sportsActionMessage(it) },
             )
+            if (actionNotice.isNotBlank()) {
+                Text(actionNotice, color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
             SportsbookSegmentedTabs(
                 tabs = listOf("live" to "LIVE", "line" to "Линия"),
                 activeId = tab,
@@ -119,7 +129,7 @@ fun ChampionshipsScreen(
                             onNavigate(Destinations.league(LeagueIds.toLeagueId(league.country, league.name)))
                         },
                         onFavorite = { name ->
-                            favorites = if (name in favorites) favorites - name else favorites + name
+                            favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleLeague(name) }
                         },
                     )
                 }

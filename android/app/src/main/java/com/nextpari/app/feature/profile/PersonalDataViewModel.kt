@@ -2,10 +2,13 @@ package com.nextpari.app.feature.profile
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
+import com.nextpari.app.core.AppGraph
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
 class PersonalDataViewModel(
     private val repository: PersonalDataRepository,
@@ -17,16 +20,39 @@ class PersonalDataViewModel(
         ui.update { it.copy(fields = transform(it.fields), notice = null) }
     }
 
+    fun refresh() {
+        viewModelScope.launch {
+            val result = repository.refresh()
+            val questionnaire = result.getOrNull()
+            if (questionnaire == null) {
+                ui.update { it.copy(notice = result.exceptionOrNull()?.message) }
+                return@launch
+            }
+            ui.update {
+                it.copy(
+                    questionnaire = questionnaire,
+                    fields = fieldsOf(questionnaire),
+                )
+            }
+        }
+    }
+
     fun save() {
         val current = ui.value
         if (current.saving) return
         ui.update { it.copy(saving = true, notice = null) }
-        val result = repository.save(current.fields)
-        ui.update {
-            it.copy(
-                saving = false,
-                notice = result.exceptionOrNull()?.message ?: PersonalDataCatalog.SESSION_UNAVAILABLE,
-            )
+        viewModelScope.launch {
+            val result = repository.save(current.fields)
+            val saved = result.getOrNull()
+            if (saved != null) AppGraph.refreshPlayerState()
+            ui.update {
+                it.copy(
+                    saving = false,
+                    questionnaire = saved ?: it.questionnaire,
+                    fields = saved?.let(::fieldsOf) ?: it.fields,
+                    notice = result.exceptionOrNull()?.message ?: "Данные сохранены",
+                )
+            }
         }
     }
 
@@ -46,27 +72,29 @@ class PersonalDataViewModel(
         val questionnaire = repository.load()
         return PersonalDataUiState(
             questionnaire = questionnaire,
-            fields = PersonalDataFields(
-                firstName = questionnaire.firstName,
-                lastName = questionnaire.lastName,
-                middleName = questionnaire.middleName,
-                dateOfBirth = questionnaire.dateOfBirth,
-                citizenshipCountryCode = questionnaire.citizenshipCountryCode,
-                residenceCountryCode = questionnaire.residenceCountryCode,
-                residenceCity = questionnaire.residenceCity,
-                addressLine1 = questionnaire.addressLine1,
-                addressLine2 = questionnaire.addressLine2,
-                postalCode = questionnaire.postalCode,
-                documentType = questionnaire.documentType,
-                documentIssuingCountryCode = questionnaire.documentIssuingCountryCode,
-                documentSeries = questionnaire.documentSeries,
-                documentNumber = questionnaire.documentNumber,
-                documentIssueDate = questionnaire.documentIssueDate,
-                documentExpiryDate = questionnaire.documentExpiryDate,
-                documentIssuingAuthority = questionnaire.documentIssuingAuthority,
-            ),
+            fields = fieldsOf(questionnaire),
         )
     }
+
+    private fun fieldsOf(questionnaire: PersonalDataQuestionnaire): PersonalDataFields = PersonalDataFields(
+        firstName = questionnaire.firstName,
+        lastName = questionnaire.lastName,
+        middleName = questionnaire.middleName,
+        dateOfBirth = questionnaire.dateOfBirth,
+        citizenshipCountryCode = questionnaire.citizenshipCountryCode,
+        residenceCountryCode = questionnaire.residenceCountryCode,
+        residenceCity = questionnaire.residenceCity,
+        addressLine1 = questionnaire.addressLine1,
+        addressLine2 = questionnaire.addressLine2,
+        postalCode = questionnaire.postalCode,
+        documentType = questionnaire.documentType,
+        documentIssuingCountryCode = questionnaire.documentIssuingCountryCode,
+        documentSeries = questionnaire.documentSeries,
+        documentNumber = questionnaire.documentNumber,
+        documentIssueDate = questionnaire.documentIssueDate,
+        documentExpiryDate = questionnaire.documentExpiryDate,
+        documentIssuingAuthority = questionnaire.documentIssuingAuthority,
+    )
 
     companion object {
         val Factory = object : ViewModelProvider.Factory {

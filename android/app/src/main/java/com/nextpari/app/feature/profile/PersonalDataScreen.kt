@@ -2,6 +2,7 @@ package com.nextpari.app.feature.profile
 
 import android.app.DatePickerDialog
 import android.widget.Toast
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -82,6 +83,8 @@ fun PersonalDataScreen(
     val locked = data.identityLocked
     val verified = data.verificationStatus == "VERIFIED"
     val countryOptions = Iso3166Countries.playerOptions.map { it.value to it.label }
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     LaunchedEffect(state.notice) {
         val notice = state.notice ?: return@LaunchedEffect
@@ -532,7 +535,11 @@ private fun FieldLabel(text: String) {
 @Composable
 private fun EmailBindDialog(dark: Boolean, onClose: () -> Unit) {
     var email by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    var step by remember { mutableStateOf("email") }
     var error by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Box(
             Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(onClick = onClose),
@@ -548,7 +555,11 @@ private fun EmailBindDialog(dark: Boolean, onClose: () -> Unit) {
                     .padding(20.dp),
             ) {
                 Text("Привязать почту", color = NextpariTheme.colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                FieldInput("Email", email, "email@example.com", dark, false) { email = it; error = "" }
+                if (step == "email") {
+                    FieldInput("Email", email, "email@example.com", dark, false) { email = it; error = "" }
+                } else {
+                    FieldInput("Код", code, "6 цифр", dark, false) { code = it.filter(Char::isDigit).take(6); error = "" }
+                }
                 if (error.isNotBlank()) {
                     Text(error, color = Color(0xFFEF4444), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
                 }
@@ -557,16 +568,38 @@ private fun EmailBindDialog(dark: Boolean, onClose: () -> Unit) {
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
                         .background(BrandGreen)
-                        .clickable {
-                            error = when (val result = AccountSecurity.startEmailBinding(email)) {
-                                is AccountSecurityResult.Invalid -> result.message
-                                is AccountSecurityResult.Unavailable -> result.message
+                        .clickable(enabled = !busy) {
+                            if (busy) return@clickable
+                            val local = if (step == "email") AccountSecurity.startEmailBinding(email) else AccountSecurity.verifyEmailCode(code)
+                            if (local is AccountSecurityResult.Invalid) {
+                                error = local.message
+                                return@clickable
+                            }
+                            busy = true
+                            scope.launch {
+                                val result = if (step == "email") {
+                                    com.nextpari.app.core.AppGraph.accountGateway.startEmail(email)
+                                } else {
+                                    com.nextpari.app.core.AppGraph.accountGateway.verifyEmail(code)
+                                }
+                                busy = false
+                                when (result) {
+                                    is AccountSecurityResult.Invalid -> error = result.message
+                                    is AccountSecurityResult.Unavailable -> error = result.message
+                                    is AccountSecurityResult.Accepted -> if (step == "email") {
+                                        step = "code"
+                                        error = ""
+                                    } else {
+                                        onClose()
+                                    }
+                                    AccountSecurityResult.Ready -> error = ""
+                                }
                             }
                         }
                         .padding(vertical = 14.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("Продолжить", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(if (step == "email") "Продолжить" else "Подтвердить", color = Color.White, fontWeight = FontWeight.Bold)
                 }
                 Text(
                     "Отмена",

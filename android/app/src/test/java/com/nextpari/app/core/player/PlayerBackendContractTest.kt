@@ -672,7 +672,17 @@ class PlayerBackendContractTest {
         assertThat(profile.phone).isEqualTo("+99365123456")
         assertThat(profile.email).isEqualTo("player@nextpari.net")
         assertThat(profile.emailVerified).isTrue()
-        assertThat(harness.profile.save(com.nextpari.app.feature.profile.PersonalDataFields(firstName = "Aman")).isFailure).isTrue()
+        server.enqueue(
+            okhttp3.mockwebserver.MockResponse()
+                .setResponseCode(400)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"ok":false,"error":"PERSONAL_DATA_FIRST_NAME_INVALID"}"""),
+        )
+        val saved = harness.profile.save(com.nextpari.app.feature.profile.PersonalDataFields(firstName = "Aman"))
+        assertThat(saved.isFailure).isTrue()
+        repeat(4) { server.takeRequest() }
+        assertThat(server.takeRequest().path).isEqualTo("/api/player/personal-data")
+        assertThat(saved.exceptionOrNull()?.message).doesNotContain("сохранен")
     }
 
     @Test
@@ -916,14 +926,24 @@ class PlayerBackendContractTest {
         return Harness(
             coordinator = coordinator,
             auth = RemoteAuthRepository(coordinator),
-            wallet = RemoteWalletRepository(store),
+            wallet = RemoteWalletRepository(
+                store,
+                api,
+                NetworkModule.json,
+                hasSession = { jar.hasPlayerSessionCookies() },
+            ),
             wallets = RemoteWalletsRepository(
                 store = store,
                 api = api,
                 json = NetworkModule.json,
                 hasSession = { jar.hasPlayerSessionCookies() },
             ),
-            profile = RemotePersonalDataRepository(store),
+            profile = RemotePersonalDataRepository(
+                store,
+                api,
+                NetworkModule.json,
+                hasSession = { jar.hasPlayerSessionCookies() },
+            ),
             games = RemoteGameRepository(api, NetworkModule.json),
             sessions = sessions,
             store = store,

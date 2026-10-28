@@ -107,6 +107,7 @@ fun GamesHubScreen(
     viewModel: GamesHubViewModel = viewModel(factory = GamesHubViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    androidx.compose.runtime.LaunchedEffect(session.playerPublicId) { viewModel.bindPlayer(session.playerPublicId) }
     val colors = NextpariTheme.colors
     Column(
         Modifier

@@ -17,6 +17,9 @@ import com.nextpari.app.core.session.SessionRepository
 import com.nextpari.app.core.storage.DataStorePreferencesStorage
 import com.nextpari.app.core.storage.InMemoryPreferencesStorage
 import com.nextpari.app.core.storage.PreferencesStorage
+import com.nextpari.app.feature.account.PlayerAccountGateway
+import com.nextpari.app.feature.account.RemoteAccountGateway
+import com.nextpari.app.feature.account.UnavailableAccountGateway
 import com.nextpari.app.feature.auth.AuthRepository
 import com.nextpari.app.feature.auth.FakeAuthRepository
 import com.nextpari.app.feature.auth.RemoteAuthRepository
@@ -25,8 +28,10 @@ import com.nextpari.app.feature.games.RemoteGameRepository
 import com.nextpari.app.feature.games.web.WebSessionBridge
 import okhttp3.Cookie
 import okhttp3.HttpUrl.Companion.toHttpUrl
+import com.nextpari.app.feature.favorites.SportsFavoritesStore
 import com.nextpari.app.feature.history.FakeHistoryRepository
 import com.nextpari.app.feature.history.HistoryRepository
+import com.nextpari.app.feature.history.RemoteHistoryRepository
 import com.nextpari.app.feature.home.FakeHomeCatalogRepository
 import com.nextpari.app.feature.home.HomeCatalogRepository
 import com.nextpari.app.feature.profile.FakePersonalDataRepository
@@ -67,7 +72,12 @@ object AppGraph {
         private set
     var gameRepository: GameRepository? = null
         private set
-    val historyRepository: HistoryRepository = FakeHistoryRepository()
+    var historyRepository: HistoryRepository = FakeHistoryRepository()
+        private set
+    var accountGateway: PlayerAccountGateway = UnavailableAccountGateway()
+        private set
+    var sportsFavorites: SportsFavoritesStore = SportsFavoritesStore(preferencesStorage)
+        private set
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
     private var sessionCoordinator: PlayerSessionCoordinator? = null
     private var secureCookieJar: SecureCookieJar? = null
@@ -86,6 +96,7 @@ object AppGraph {
 
     fun bindPreferences(storage: PreferencesStorage) {
         preferencesStorage = storage
+        sportsFavorites = SportsFavoritesStore(storage) { playerStateStore.me()?.playerPublicId.orEmpty() }
     }
 
     fun sessionCookies(): List<Cookie> {
@@ -124,14 +135,17 @@ object AppGraph {
         coordinatorHolder[0] = coordinator
         sessionCoordinator = coordinator
         authRepository = RemoteAuthRepository(coordinator)
-        walletRepository = RemoteWalletRepository(playerStateStore)
+        val sessionReady = { cookieJar.hasPlayerSessionCookies() }
+        accountGateway = RemoteAccountGateway(api, NetworkModule.json, sessionReady)
+        walletRepository = RemoteWalletRepository(playerStateStore, api, NetworkModule.json, sessionReady)
+        historyRepository = RemoteHistoryRepository(api, NetworkModule.json, sessionReady)
         walletsRepository = RemoteWalletsRepository(
             store = playerStateStore,
             api = api,
             json = NetworkModule.json,
             hasSession = { cookieJar.hasPlayerSessionCookies() },
         )
-        personalDataRepository = RemotePersonalDataRepository(playerStateStore)
+        personalDataRepository = RemotePersonalDataRepository(playerStateStore, api, NetworkModule.json, sessionReady)
         gameRepository = RemoteGameRepository(api, NetworkModule.json)
         sessionRepository.setReady(false)
         restorePhase.value = SessionRestorePhase.Checking

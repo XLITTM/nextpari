@@ -31,13 +31,17 @@ class GamesHubViewModel(
     private val ui = MutableStateFlow(restoredState())
     val uiState: StateFlow<GamesHubUiState> = ui.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            val stored = preferences.getString(FAVORITES_KEY).orEmpty()
-            val favorites = stored.split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
-            publish(ui.value.copy(favorites = favorites))
-        }
+    private var playerKey: String = "device"
+
+    fun bindPlayer(playerPublicId: String) {
+        playerKey = playerPublicId.ifBlank { "device" }
+        viewModelScope.launch { publish(ui.value.copy(favorites = readFavorites())) }
     }
+
+    private suspend fun readFavorites(): Set<String> =
+        preferences.getString(favoritesKey()).orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+
+    private fun favoritesKey(): String = "$FAVORITES_KEY:$playerKey"
 
     fun setQuery(value: String) {
         publish(ui.value.copy(query = value))
@@ -68,7 +72,7 @@ class GamesHubViewModel(
         val next = ui.value.favorites.toMutableSet()
         if (!next.add(id)) next.remove(id)
         publish(ui.value.copy(favorites = next))
-        viewModelScope.launch { preferences.putString(FAVORITES_KEY, next.joinToString(",")) }
+        viewModelScope.launch { preferences.putString(favoritesKey(), next.joinToString(",")) }
     }
 
     private fun restoredState(): GamesHubUiState {

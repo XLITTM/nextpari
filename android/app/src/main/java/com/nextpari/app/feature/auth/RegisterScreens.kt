@@ -177,14 +177,48 @@ fun RegisterOneClickResultScreen(viewModel: AuthViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-fun ForgotPasswordScreen(onBack: () -> Unit, onPlaceholder: () -> Unit) {
+fun ForgotPasswordScreen(onBack: () -> Unit, onPlaceholder: () -> Unit, viewModel: AuthViewModel) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var identifier by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    var confirm by rememberSaveable { mutableStateOf("") }
     AuthScaffold {
         Text("Забыли пароль?", color = Color(0xFF07182F), fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
         Spacer(Modifier.height(8.dp))
-        Text("Для восстановления пароля обратитесь в поддержку.", color = Color(0xFF64748B))
+        when (state.recoveryStep) {
+            "code" -> NextpariField(code, { code = it.filter(Char::isDigit).take(6) }, "Код из письма", KeyboardType.Number)
+            "password", "done" -> {
+                NextpariField(password, { password = it }, "Новый пароль", KeyboardType.Password, password = true)
+                Spacer(Modifier.height(12.dp))
+                NextpariField(confirm, { confirm = it }, "Повторите пароль", KeyboardType.Password, password = true)
+            }
+            else -> NextpariField(identifier, { identifier = it }, "Email или ID", KeyboardType.Email)
+        }
+        if (state.recoveryNotice != null) {
+            Text(state.recoveryNotice.orEmpty(), color = Color(0xFF334155), modifier = Modifier.padding(top = 12.dp))
+        }
         Spacer(Modifier.height(20.dp))
-        NextpariButton(text = "Понятно", onClick = onPlaceholder, containerColor = Color(0xFF16A34A))
-        Text("Назад", color = Color(0xFF16A34A), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp).clickable(onClick = onBack))
+        if (state.recoveryStep != "done") {
+            NextpariButton(
+                text = if (state.loading) "Отправка..." else "Продолжить",
+                onClick = {
+                    when (state.recoveryStep) {
+                        "code" -> viewModel.verifyRecovery(code)
+                        "password" -> viewModel.resetRecovery(password, confirm)
+                        else -> viewModel.startRecovery(identifier)
+                    }
+                },
+                enabled = !state.loading,
+                containerColor = Color(0xFF16A34A),
+            )
+        }
+        Text(
+            "Назад",
+            color = Color(0xFF16A34A),
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(top = 16.dp).clickable(onClick = if (state.recoveryStep == "done") onPlaceholder else onBack),
+        )
     }
 }
 

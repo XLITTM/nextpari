@@ -242,10 +242,8 @@ private fun UnauthenticatedNavHost(
         composable(Destinations.FORGOT_PASSWORD) {
             ForgotPasswordScreen(
                 onBack = { navController.popBackStack() },
-                onPlaceholder = {
-                    authViewModel.markRecoveryPlaceholder()
-                    navController.popBackStack()
-                },
+                onPlaceholder = { navController.popBackStack() },
+                viewModel = authViewModel,
             )
         }
     }
@@ -368,7 +366,7 @@ internal fun AuthenticatedShell(
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None },
             ) {
-                PlaceholderScreen("Избранное", message = "В избранном пока нет событий")
+                com.nextpari.app.feature.favorites.FavoritesScreen()
             }
             composable(
                 Destinations.BETSLIP,
@@ -377,7 +375,10 @@ internal fun AuthenticatedShell(
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None },
             ) {
-                PlaceholderScreen("Купон", message = "Купон пуст")
+                PlaceholderScreen(
+                    "Купон",
+                    message = "Купон пуст. Приём ставок выключен: лента событий не подключена, а канонический спортбук не включён.",
+                )
             }
             composable(
                 Destinations.HISTORY,
@@ -530,9 +531,9 @@ internal fun AuthenticatedShell(
                     )
                 }
             }
-            placeholder(navController, Destinations.SLOTS, "Слоты")
-            placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино")
-            placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера")
+            placeholder(navController, Destinations.SLOTS, "Слоты", "Слоты недоступны: казино-провайдер не подключён.")
+            placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино", "Лайв-казино недоступно: казино-провайдер не подключён.")
+            placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера", "Спортбук провайдера недоступен: запуск не включён.")
             composable(Destinations.PROMO_DETAILS) {
                 PromoDetailsScreen(onBack = { navController.popBackStack() })
             }
@@ -593,9 +594,10 @@ private fun NavGraphBuilder.placeholder(
     navController: NavHostController,
     route: String,
     title: String,
+    message: String = "Этот раздел скоро откроется.",
 ) {
     composable(route) {
-        PlaceholderScreen(title, onBack = { navController.popBackStack() })
+        PlaceholderScreen(title, onBack = { navController.popBackStack() }, message = message)
     }
 }
 

@@ -30,6 +30,11 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 
 val SportsbookGold = Color(0xFFD9822B)
 
+fun sportsActionMessage(label: String): String = when (label) {
+    "Трансляции" -> "Трансляции недоступны: провайдер не подключён."
+    else -> "Поиск событий недоступен: лента матчей не подключена."
+}
+
 @Composable
 fun SportsbookScreenHeader(
     title: String,
