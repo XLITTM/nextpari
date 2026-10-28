@@ -48,7 +48,9 @@ import { PharaohTreasure } from './games/pharaoh/PharaohTreasure';
 import { VipCashbackScreen } from './screens/VipCashbackScreen';
 import { LeagueScreen } from './screens/LeagueScreen';
 import { BetHistoryProvider } from './BetHistoryContext';
+import { AndroidDownloadBanner } from './components/AndroidDownloadBanner';
 import { InstallPwaPrompt } from './components/InstallPwaPrompt';
+import { AndroidDownloadPage } from './pages/AndroidDownloadPage';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PLAYER_PASSWORD_CHANGED_NOTICE, clearDemoPlayerState, fetchPlayerMe, signOutPlayer } from './lib/playerAuth';
 import { useUserStore } from './stores/userStore';
@@ -664,6 +666,14 @@ export default function App() {
     );
   }
 
+  if ((window.location.pathname.replace(/\/+$/, '') || '/') === '/download') {
+    return (
+      <ThemeProvider>
+        <AndroidDownloadPage />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
       <BetSlipProvider>
@@ -676,6 +686,7 @@ export default function App() {
                     <ErrorBoundary>
                       <AppContent />
                       <QuickBetSheet />
+                      <AndroidDownloadBanner />
                       <InstallPwaPrompt />
                     </ErrorBoundary>
                   </BetHistoryProvider>

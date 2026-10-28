@@ -6,6 +6,7 @@ import {
   subscribePwaPrompt,
   type BeforeInstallPromptEvent,
 } from '../lib/pwa';
+import { loadAndroidRelease } from '../lib/androidRelease';
 
 const DISMISS_KEY = 'pwa-banner-dismissed';
 
@@ -23,6 +24,7 @@ export function InstallPwaPrompt() {
   );
   const [visible, setVisible] = useState(false);
   const [installing, setInstalling] = useState(false);
+  const [apkPublished, setApkPublished] = useState(false);
 
   useEffect(() => {
     if (isBannerDismissed() || isStandaloneTab()) {
@@ -47,6 +49,10 @@ export function InstallPwaPrompt() {
 
     const onInstalled = () => setVisible(false);
     window.addEventListener('appinstalled', onInstalled);
+    const android = /Android/i.test(navigator.userAgent);
+    void loadAndroidRelease().then((release) => {
+      if (android && release.published) setApkPublished(true);
+    });
 
     return () => {
       unsubscribe();
@@ -80,7 +86,7 @@ export function InstallPwaPrompt() {
   if (typeof window !== 'undefined' && (isStandaloneTab() || isBannerDismissed())) {
     return null;
   }
-  if (!visible || !promptEvent) return null;
+  if (!visible || !promptEvent || apkPublished) return null;
 
   return (
     <div
@@ -89,7 +95,7 @@ export function InstallPwaPrompt() {
     >
       <div
         role="dialog"
-        aria-label="Скачать приложение"
+        aria-label="Установить веб-приложение"
         className="pointer-events-auto relative flex items-center gap-3 rounded-2xl border border-accent-500/25 bg-ink-900 p-3 text-white shadow-2xl shadow-black/40"
       >
         <img
@@ -100,8 +106,8 @@ export function InstallPwaPrompt() {
           className="h-12 w-12 shrink-0 rounded-xl"
         />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold leading-snug">Скачать приложение</p>
-          <p className="mt-0.5 text-xs text-slate-400">Быстрый доступ без браузера</p>
+          <p className="text-sm font-semibold leading-snug">Установить веб-приложение</p>
+          <p className="mt-0.5 text-xs text-slate-400">Ярлык сайта в браузере, не файл APK</p>
         </div>
         <button
           type="button"
@@ -110,7 +116,7 @@ export function InstallPwaPrompt() {
           className="flex shrink-0 items-center gap-1.5 rounded-xl bg-accent-500 px-3 py-2 text-xs font-bold text-ink-900 transition-transform active:scale-95 disabled:opacity-70"
         >
           <Download className="h-4 w-4" strokeWidth={2.4} />
-          {installing ? '…' : 'Скачать'}
+          {installing ? '…' : 'Установить'}
         </button>
         <button
           type="button"

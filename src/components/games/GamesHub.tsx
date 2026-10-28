@@ -204,6 +204,9 @@ export function GamesHub({ onBack, onNavigate }: GamesHubProps) {
           ) : (
             <h1 className="min-w-0 flex-1 text-center text-[15px] font-black tracking-tight">Nextpari Games</h1>
           )}
+          <a href="/download" className="shrink-0 px-1 text-[11px] font-bold text-emerald-300">
+            Android
+          </a>
           <button
             type="button"
             onClick={() => {

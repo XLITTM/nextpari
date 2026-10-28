@@ -37,7 +37,7 @@
     "games:engine:test": "tsx --tsconfig tsconfig.server.json --test server/games/engine.test.ts server/games/report.test.ts server/player/playerGames.test.ts server/games/ui.regression.test.ts server/games/crystal.layout.test.ts server/games/blackjack.cutover.test.ts server/games/dice.cutover.test.ts",
     "games:rtp:test": "tsx --tsconfig tsconfig.server.json --test server/games/rtp.test.ts",
     "games:math:test": "tsx --tsconfig tsconfig.server.json --test server/owner/ownedGamesMath.test.ts server/games/rtp.test.ts server/games/dice.cutover.test.ts server/games/blackjack.cutover.test.ts",
-    "betconstruct:iframe:test": "tsx --tsconfig tsconfig.server.json --test server/betconstruct/betconstruct.iframe.test.ts",
+    "android:release:test": "tsx --tsconfig tsconfig.server.json --test server/android/androidRelease.test.ts src/lib/androidRelease.test.ts",
     "betconstruct:wallet:test": "tsx --tsconfig tsconfig.server.json --test server/betconstruct/betconstruct.wallet.test.ts",
     "start": "node -e \"console.log('Nextpari: no default production worker configured')\"",
     "sports:acceptance:test": "tsx --tsconfig tsconfig.server.json --test server/sports/acceptanceIntegrity.test.ts",
