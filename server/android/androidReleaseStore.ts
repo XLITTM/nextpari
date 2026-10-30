@@ -1,6 +1,8 @@
 import { createServiceRoleClient } from '../supabase/admin.js';
 import { staffError } from '../staff/errors.js';
+import { verifyPreparedApk, androidBuildToolsRunner } from './apkVerify.js';
 import {
+  ANDROID_DOWNLOAD_URL_TTL_SECONDS,
   emptySettings,
   type AndroidArtifactStore,
   type AndroidDownloadSettings,
@@ -110,12 +112,38 @@ export class SupabaseAndroidArtifactStore implements AndroidArtifactStore {
   }
 
   async read(key: string): Promise<Buffer | null> {
-    const bucket = process.env.ANDROID_RELEASE_BUCKET?.trim();
-    if (!bucket || key.includes('..') || key.startsWith('/') || key.includes('://')) return null;
+    const bucket = this.bucket();
+    if (!bucket || !safeObjectKey(key)) return null;
     const db = serviceClient();
     const { data, error } = await db.storage.from(bucket).download(key);
     if (error || !data) return null;
     return Buffer.from(await data.arrayBuffer());
+  }
+
+  async signedDownloadUrl(key: string): Promise<string | null> {
+    const bucket = this.bucket();
+    if (!bucket || !safeObjectKey(key)) return null;
+    const db = serviceClient();
+    const { data, error } = await db.storage.from(bucket).createSignedUrl(key, ANDROID_DOWNLOAD_URL_TTL_SECONDS);
+    if (error || !data?.signedUrl) return null;
+    return data.signedUrl;
+  }
+
+  private bucket(): string | null {
+    const bucket = process.env.ANDROID_RELEASE_BUCKET?.trim() ?? '';
+    return bucket && !bucket.includes('/') && !bucket.includes('..') ? bucket : null;
+  }
+}
+
+function safeObjectKey(key: string): boolean {
+  return Boolean(key) && !key.includes('..') && !key.startsWith('/') && !key.includes('://');
+}
+
+function storageHost(): string {
+  try {
+    return new URL(process.env.SUPABASE_URL ?? '').host;
+  } catch {
+    return '';
   }
 }
 
@@ -125,5 +153,7 @@ export function productionAndroidReleasePorts(): AndroidReleasePorts {
     repo: new SupabaseAndroidReleaseRepository(),
     artifacts: new SupabaseAndroidArtifactStore(),
     certificateSha256: fingerprint,
+    storageHost: storageHost(),
+    verifyApk: (bytes) => verifyPreparedApk(bytes, androidBuildToolsRunner()),
   };
 }

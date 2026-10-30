@@ -3,6 +3,7 @@ import { staffError } from '../staff/errors.js';
 
 export const ANDROID_PACKAGE = 'com.nextpari.app';
 export const ANDROID_DOWNLOAD_PATH = '/api/android/release/download';
+export const ANDROID_DOWNLOAD_URL_TTL_SECONDS = 60;
 export const ANDROID_MIN_SDK = 26;
 export const ANDROID_MAX_APK_BYTES = 80_000_000;
 
@@ -51,9 +52,19 @@ export type AndroidReleaseRepository = {
   audit(entry: AndroidReleaseAudit): Promise<void>;
 };
 
+export type ApkIdentity = {
+  packageName: string;
+  versionCode: number;
+  certificateSha256: string;
+  sha256: string;
+  schemeV2: boolean;
+  schemeV3: boolean;
+};
+
 export type AndroidArtifactStore = {
   configured(): boolean;
   read(key: string): Promise<Buffer | null>;
+  signedDownloadUrl(key: string): Promise<string | null>;
 };
 
 export type AndroidReleasePorts = {
@@ -61,6 +72,9 @@ export type AndroidReleasePorts = {
   artifacts: AndroidArtifactStore;
   /** SHA-256 of the owner release certificate. Not a private key. */
   certificateSha256: string | null;
+  /** Host allowed to serve the temporary APK URL. Not a caller-supplied address. */
+  storageHost: string;
+  verifyApk: (bytes: Buffer) => Promise<ApkIdentity>;
   now?: () => Date;
 };
 
@@ -102,18 +116,19 @@ export function sha256Hex(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
 
-export function inspectApk(bytes: Buffer): void {
-  if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b || bytes[2] !== 0x03 || bytes[3] !== 0x04) {
-    throw staffError('APK_NOT_ZIP', 400);
+export function assertSignedDownloadUrl(raw: string, artifactKey: string, storageHost: string): string {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw staffError('APK_REDIRECT_UNTRUSTED', 502);
   }
-  if (bytes.length > ANDROID_MAX_APK_BYTES) throw staffError('APK_TOO_LARGE', 400);
-  const text = bytes.toString('latin1');
-  if (!text.includes('AndroidManifest.xml')) throw staffError('APK_MANIFEST_MISSING', 400);
-  if (!/META-INF\/[A-Za-z0-9._-]+\.SF/.test(text) || !/META-INF\/[A-Za-z0-9._-]+\.(?:RSA|EC|DSA)/.test(text)) {
-    throw staffError('APK_SIGNATURE_MISSING', 400);
-  }
-  if (text.includes(`${ANDROID_PACKAGE}.debug`)) throw staffError('APK_DEBUG_PACKAGE', 400);
-  if (!text.includes(ANDROID_PACKAGE)) throw staffError('APK_PACKAGE_MISMATCH', 400);
+  if (url.protocol !== 'https:' || url.username || url.password) throw staffError('APK_REDIRECT_UNTRUSTED', 502);
+  if (!storageHost || url.host !== storageHost) throw staffError('APK_REDIRECT_UNTRUSTED', 502);
+  if (/[\r\n]/.test(url.toString())) throw staffError('APK_REDIRECT_UNTRUSTED', 502);
+  const path = decodeURIComponent(url.pathname);
+  if (!path.includes(`/${artifactKey}`)) throw staffError('APK_REDIRECT_UNTRUSTED', 502);
+  return url.toString();
 }
 
 function assertSha(value: string, code: string): string {
@@ -255,7 +270,15 @@ export class AndroidReleaseService {
     if (bytes.length !== row.sizeBytes) throw staffError('APK_SIZE_MISMATCH', 400);
     const actual = sha256Hex(bytes);
     if (!sameSha(actual, row.sha256)) throw staffError('APK_SHA256_MISMATCH', 400);
-    inspectApk(bytes);
+    const identity = await this.ports.verifyApk(bytes);
+    if (!identity.schemeV2 && !identity.schemeV3) throw staffError('APK_SIGNATURE_INVALID', 400);
+    if (identity.packageName === `${ANDROID_PACKAGE}.debug` || identity.packageName.endsWith('.debug')) {
+      throw staffError('APK_DEBUG_PACKAGE', 400);
+    }
+    if (identity.packageName !== ANDROID_PACKAGE) throw staffError('APK_PACKAGE_MISMATCH', 400);
+    if (identity.versionCode !== row.versionCode) throw staffError('APK_VERSION_CODE_MISMATCH', 400);
+    if (!sameSha(identity.sha256, row.sha256)) throw staffError('APK_SHA256_MISMATCH', 400);
+    if (!sameSha(identity.certificateSha256, row.certificateSha256)) throw staffError('CERT_SHA256_MISMATCH', 400);
     const now = (this.ports.now ?? (() => new Date()))().toISOString();
     for (const current of releases) {
       if (current.status === 'published') {
@@ -345,25 +368,12 @@ export class AndroidReleaseService {
     return next;
   }
 
-  async download(): Promise<{ bytes: Buffer; headers: Record<string, string> }> {
+  async downloadRedirect(): Promise<{ location: string }> {
     const current = (await this.ports.repo.list()).find((row) => row.status === 'published');
     if (!current || !this.ports.artifacts.configured()) throw staffError('ANDROID_RELEASE_UNPUBLISHED', 404);
-    const bytes = await this.ports.artifacts.read(current.artifactKey);
-    if (!bytes || !sameSha(sha256Hex(bytes), current.sha256)) {
-      throw staffError('ANDROID_RELEASE_UNPUBLISHED', 404);
-    }
-    const safeName = current.versionName.replace(/[^0-9A-Za-z._-]/g, '');
-    return {
-      bytes,
-      headers: {
-        'Content-Type': 'application/vnd.android.package-archive',
-        'Content-Disposition': `attachment; filename="nextpari-${safeName}.apk"`,
-        'Content-Length': String(bytes.length),
-        'Cache-Control': 'public, max-age=31536000, immutable',
-        'X-Content-Type-Options': 'nosniff',
-        ETag: `"${current.sha256}"`,
-      },
-    };
+    const signed = await this.ports.artifacts.signedDownloadUrl(current.artifactKey);
+    if (!signed) throw staffError('ANDROID_RELEASE_UNPUBLISHED', 404);
+    return { location: assertSignedDownloadUrl(signed, current.artifactKey, this.ports.storageHost) };
   }
 
   private assertCertificate(presented: string): void {
@@ -437,5 +447,10 @@ export class MemoryArtifactStore implements AndroidArtifactStore {
   async read(key: string): Promise<Buffer | null> {
     const found = this.objects.get(key);
     return found ? Buffer.from(found) : null;
+  }
+
+  async signedDownloadUrl(key: string): Promise<string | null> {
+    if (!this.ready || !this.objects.has(key)) return null;
+    return `https://storage.nextpari.test/storage/v1/object/sign/android-releases/${key}?token=temp`;
   }
 }

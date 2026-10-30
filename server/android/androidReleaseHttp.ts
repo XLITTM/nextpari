@@ -92,10 +92,12 @@ export async function handlePublicAndroidDownload(
   }
   try {
     const service = new AndroidReleaseService(deps.ports ?? productionAndroidReleasePorts());
-    const file = await service.download();
-    res.status(200);
-    for (const [name, value] of Object.entries(file.headers)) res.setHeader(name, value);
-    res.end(file.bytes);
+    const redirect = await service.downloadRedirect();
+    res.status(302);
+    res.setHeader('Location', redirect.location);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('CDN-Cache-Control', 'no-store');
+    res.end();
   } catch (error) {
     fail(res, error instanceof StaffOnboardingError ? error : new StaffOnboardingError('ANDROID_RELEASE_UNPUBLISHED', 404));
   }

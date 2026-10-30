@@ -9,9 +9,9 @@ import {
   MemoryAndroidReleaseRepository,
   MemoryArtifactStore,
   artifactKeyFor,
-  inspectApk,
   sha256Hex,
   type AndroidReleasePorts,
+  type ApkIdentity,
 } from './androidRelease.js';
 import { handleOwnerAndroidRelease, handlePublicAndroidDownload, handlePublicAndroidRelease } from './androidReleaseHttp.js';
 
@@ -87,11 +87,30 @@ function draftFrom(bytes: Buffer, versionCode = 2, versionName = '0.3.0') {
   };
 }
 
-function service(bytes?: Buffer, ready = true, fingerprint: string | null = CERT) {
+function identityFor(bytes: Buffer, versionCode = 2): ApkIdentity {
+  const text = bytes.toString('latin1');
+  return {
+    packageName: text.includes('com.nextpari.app.debug') ? 'com.nextpari.app.debug' : 'com.nextpari.app',
+    versionCode: text.includes(' build-2') ? 3 : versionCode,
+    certificateSha256: CERT,
+    sha256: sha256Hex(bytes),
+    schemeV2: true,
+    schemeV3: false,
+  };
+}
+
+function service(bytes?: Buffer, ready = true, fingerprint: string | null = CERT, verifyApk?: AndroidReleasePorts['verifyApk']) {
   const repo = new MemoryAndroidReleaseRepository();
   const artifacts = new MemoryArtifactStore(ready);
   if (bytes) artifacts.put(artifactKeyFor(2, sha256Hex(bytes)), bytes);
-  const ports: AndroidReleasePorts = { repo, artifacts, certificateSha256: fingerprint, now: () => new Date('2026-10-28T12:00:00.000Z') };
+  const ports: AndroidReleasePorts = {
+    repo,
+    artifacts,
+    certificateSha256: fingerprint,
+    storageHost: 'storage.nextpari.test',
+    verifyApk: verifyApk ?? (async (body) => identityFor(body)),
+    now: () => new Date('2026-10-28T12:00:00.000Z'),
+  };
   return { service: new AndroidReleaseService(ports), repo, artifacts, ports };
 }
 
@@ -135,9 +154,9 @@ describe('android release catalog', () => {
       /ARTIFACT_URL_FORBIDDEN/,
     );
     const debug = officialApk('com.nextpari.app.debug');
-    assert.throws(() => inspectApk(debug), /APK_DEBUG_PACKAGE/);
-    const unsigned = zip({ 'AndroidManifest.xml': 'package=com.nextpari.app' });
-    assert.throws(() => inspectApk(unsigned), /APK_SIGNATURE_MISSING/);
+    const { service: debugRelease } = service(debug, true, CERT, async (body) => identityFor(body));
+    await debugRelease.createDraft('owner-1', draftFrom(debug));
+    await assert.rejects(() => debugRelease.publish('owner-1', 2), /APK_DEBUG_PACKAGE/);
     const bytes = officialApk();
     const { service: ready, artifacts } = service(bytes);
     await ready.createDraft('owner-1', draftFrom(bytes));
@@ -145,22 +164,52 @@ describe('android release catalog', () => {
     tampered[tampered.length - 8] ^= 0xff;
     artifacts.put(artifactKeyFor(2, sha256Hex(bytes)), tampered);
     await assert.rejects(() => ready.publish('owner-1', 2), /APK_SHA256_MISMATCH/);
+    const jarOnly = officialApk();
+    const { service: unsigned } = service(jarOnly, true, CERT, async () => ({
+      packageName: 'com.nextpari.app',
+      versionCode: 2,
+      certificateSha256: CERT,
+      sha256: sha256Hex(jarOnly),
+      schemeV2: false,
+      schemeV3: false,
+    }));
+    await unsigned.createDraft('owner-1', draftFrom(jarOnly));
+    await assert.rejects(() => unsigned.publish('owner-1', 2), /APK_SIGNATURE_INVALID/);
+    const { service: wrongVersion } = service(jarOnly, true, CERT, async (body) => ({
+      ...identityFor(body),
+      versionCode: 9,
+    }));
+    await wrongVersion.createDraft('owner-1', draftFrom(jarOnly));
+    await assert.rejects(() => wrongVersion.publish('owner-1', 2), /APK_VERSION_CODE_MISMATCH/);
   });
 
-  it('publishes only after the stored bytes match, then serves immutable APK headers', async () => {
+  it('redirects the latest download and does not cache or return the APK bytes', async () => {
     const bytes = officialApk();
-    const { service: ready, ports, repo } = service(bytes);
+    const { service: ready, ports, repo, artifacts } = service(bytes);
+    let readCalled = false;
+    const original = artifacts.read.bind(artifacts);
+    artifacts.read = async (key) => {
+      readCalled = true;
+      return original(key);
+    };
     await ready.createDraft('owner-1', draftFrom(bytes));
     const published = await ready.publish('owner-1', 2);
     assert.equal(published.status, 'published');
-    assert.equal(published.artifactKey, `com.nextpari.app/2/${sha256Hex(bytes)}.apk`);
     const again = await ready.publish('owner-1', 2);
     assert.equal(again.publishedAt, published.publishedAt);
-    const file = await ready.download();
-    assert.equal(file.headers['Content-Type'], 'application/vnd.android.package-archive');
-    assert.equal(file.headers['Cache-Control'], 'public, max-age=31536000, immutable');
-    assert.equal(file.headers['X-Content-Type-Options'], 'nosniff');
-    assert.equal(file.bytes.length, bytes.length);
+    assert.equal(published.artifactKey, `com.nextpari.app/2/${sha256Hex(bytes)}.apk`);
+    readCalled = false;
+    const redirect = await ready.downloadRedirect();
+    assert.equal(readCalled, false);
+    assert.equal(redirect.location.startsWith('https://storage.nextpari.test/'), true);
+    assert.equal(redirect.location.includes(published.artifactKey), true);
+    const download = response();
+    await handlePublicAndroidDownload({ method: 'GET', headers: {} }, download.res, { ports });
+    assert.equal(download.state.status, 302);
+    assert.equal(download.state.headers.Location, redirect.location);
+    assert.equal(download.state.headers['Cache-Control'], 'no-store');
+    assert.equal(String(download.state.headers['Cache-Control']).includes('immutable'), false);
+    assert.equal(download.state.body, undefined);
     const { res, state } = response();
     await handlePublicAndroidRelease({ method: 'GET', headers: {} }, res, { ports });
     const body = state.body as { published: boolean; downloadPath: string; sha256: string };
@@ -236,6 +285,10 @@ describe('android release catalog', () => {
     assert.equal(source.includes('wallet_ledger'), false);
     assert.equal(source.includes('artifactUrl'), true);
     assert.equal(source.includes('downloadPath: ANDROID_DOWNLOAD_PATH'), true);
+    assert.equal(source.includes('res.end(file.bytes)'), false);
+    assert.equal(source.includes('immutable'), false);
+    assert.equal(source.includes('META-INF'), false);
+    assert.equal(source.includes('createSignedUrl(key, ANDROID_DOWNLOAD_URL_TTL_SECONDS)'), true);
     const hash = createHash('sha256').update(officialApk()).digest('hex');
     assert.equal(hash.length, 64);
   });
