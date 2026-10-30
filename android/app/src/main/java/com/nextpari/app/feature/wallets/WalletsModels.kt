@@ -83,6 +83,9 @@ object WalletsCatalog {
         return displayCurrencies.filter { it.value !in ownedDisplay }
     }
 
+    fun headerFallbackLabel(displayBalance: String, currency: String?): String =
+        "$displayBalance ${displayCurrency(currency)}"
+
     fun headerBalanceLabel(fallback: String, state: WalletsUiState): String {
         val active = state.owned.firstOrNull { it.isActive } ?: return fallback
         return "${active.availableBalance} ${displayCurrency(active.currency)}"

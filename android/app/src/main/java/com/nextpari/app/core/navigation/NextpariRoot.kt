@@ -277,7 +277,8 @@ internal fun AuthenticatedShell(
     val showHeader = Destinations.showsHeader(current)
     val showMainTabs = Destinations.showsMainTabs(current)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    val fallbackBalance = "${AppGraph.walletRepository.snapshot().displayBalance} ${AppGraph.walletRepository.snapshot().currency}"
+    val walletSnapshot = AppGraph.walletRepository.snapshot()
+    val fallbackBalance = WalletsCatalog.headerFallbackLabel(walletSnapshot.displayBalance, walletSnapshot.currency)
     val balanceLabel = WalletsCatalog.headerBalanceLabel(fallbackBalance, walletsState)
     val colors = NextpariTheme.colors
 
