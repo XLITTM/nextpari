@@ -5,7 +5,7 @@
       "destination": "/api/betsapi/:path*"
     },
     {
-      "source": "/((?!api/|images/|icons/|favicon\\.svg|manifest\\.json|sw\\.js|apple-touch-icon\\.png|25534\\.png).*)",
+      "source": "/((?!api/|images/|icons/|favicon\\.svg|manifest\\.json|sw\\.js|apple-touch-icon\\.png|25534\\.png|og-nextpari\\.jpg).*)",
       "destination": "/index.html"
     }
   ]
