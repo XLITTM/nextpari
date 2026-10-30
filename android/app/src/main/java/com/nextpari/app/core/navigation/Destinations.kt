@@ -75,6 +75,30 @@ object Destinations {
     }
 
     /**
+     * Ancestor chain for the bottom bar, built from routes the public NavController
+     * API can see. Home stays first because tab switches pop back to it. At most one
+     * other bottom-nav route is above Home. The previous destination is kept so a
+     * shared screen such as settings still follows the tab that opened it.
+     */
+    fun shellAncestorRoutes(
+        currentRoute: String?,
+        previousRoute: String?,
+        routesOnStack: Set<String>,
+    ): List<String> {
+        val chain = mutableListOf<String>()
+        if (HOME in routesOnStack) chain += HOME
+        val secondaryTabs = bottomNavRoutes.filter { it != HOME && it in routesOnStack }
+        val secondary = secondaryTabs.firstOrNull { it == currentRoute || it == previousRoute }
+            ?: secondaryTabs.singleOrNull()
+        if (secondary != null && chain.lastOrNull() != secondary) chain += secondary
+        if (!previousRoute.isNullOrBlank() && previousRoute != currentRoute && previousRoute !in chain) {
+            chain += previousRoute
+        }
+        if (!currentRoute.isNullOrBlank() && chain.lastOrNull() != currentRoute) chain += currentRoute
+        return chain
+    }
+
+    /**
      * Bottom tab that should stay lit for [route].
      *
      * Sports, casino, and Games children belong to Популярное. Bet details belong

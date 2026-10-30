@@ -111,6 +111,37 @@ class DestinationsTest {
     }
 
     @Test
+    fun publicBackStackKeepsTheTabThatOpenedASharedScreen() {
+        val fromMenu = Destinations.shellAncestorRoutes(
+            currentRoute = Destinations.SETTINGS,
+            previousRoute = Destinations.WALLETS,
+            routesOnStack = setOf(Destinations.HOME, Destinations.MENU),
+        )
+        assertThat(fromMenu).containsExactly(
+            Destinations.HOME,
+            Destinations.MENU,
+            Destinations.WALLETS,
+            Destinations.SETTINGS,
+        ).inOrder()
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SETTINGS, fromMenu)).isEqualTo(Destinations.MENU)
+
+        val fromHome = Destinations.shellAncestorRoutes(
+            currentRoute = Destinations.SETTINGS,
+            previousRoute = Destinations.HOME,
+            routesOnStack = setOf(Destinations.HOME),
+        )
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.SETTINGS, fromHome)).isEqualTo(Destinations.HOME)
+
+        val restoredFavorites = Destinations.shellAncestorRoutes(
+            currentRoute = Destinations.FAVORITES,
+            previousRoute = Destinations.HOME,
+            routesOnStack = setOf(Destinations.HOME, Destinations.FAVORITES),
+        )
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.FAVORITES, restoredFavorites))
+            .isEqualTo(Destinations.FAVORITES)
+    }
+
+    @Test
     fun sharedScreensFollowTheParentThatOpenedThem() {
         val fromMenu = listOf(Destinations.HOME, Destinations.MENU, Destinations.SETTINGS, Destinations.WALLETS)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.WALLETS, fromMenu)).isEqualTo(Destinations.MENU)

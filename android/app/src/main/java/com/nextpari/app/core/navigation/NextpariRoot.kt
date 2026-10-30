@@ -19,6 +19,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +36,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -266,9 +269,17 @@ internal fun AuthenticatedShell(
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val walletsState by walletsViewModel.uiState.collectAsStateWithLifecycle()
     val backStack by navController.currentBackStackEntryAsState()
-    val backStackRoutes by navController.currentBackStack.collectAsStateWithLifecycle()
     val current = backStack?.destination?.route
-    val ancestorRoutes = backStackRoutes.map { it.destination.route.orEmpty() }
+    val ancestorRoutes = remember { mutableStateListOf<String>() }
+    DisposableEffect(navController) {
+        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
+            val next = controller.shellAncestorRoutes(destination.route)
+            ancestorRoutes.clear()
+            ancestorRoutes.addAll(next)
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
     val arcade = current in setOf(
         Destinations.BLACKJACK, Destinations.AVIATOR, Destinations.APPLES,
         Destinations.CRYSTAL, Destinations.DICE, Destinations.PHARAOH,
@@ -614,6 +625,26 @@ private fun NavGraphBuilder.placeholder(
     composable(route) {
         PlaceholderScreen(title, onBack = { navController.popBackStack() }, message = message)
     }
+}
+
+private fun NavController.shellAncestorRoutes(currentRoute: String?): List<String> {
+    val onStack = try {
+        Destinations.bottomNavRoutes.mapNotNull { route ->
+            try {
+                getBackStackEntry(route)
+                route
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }.toSet()
+    } catch (_: IllegalStateException) {
+        emptySet()
+    }
+    return Destinations.shellAncestorRoutes(
+        currentRoute = currentRoute,
+        previousRoute = previousBackStackEntry?.destination?.route,
+        routesOnStack = onStack,
+    )
 }
 
 private fun NavHostController.navigateTab(route: String) {
