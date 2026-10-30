@@ -242,7 +242,15 @@ private fun CasinoCategoryTile(card: CasinoCategoryCard, onOpen: () -> Unit) {
         Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.TopEnd).size(28.dp))
         Column(Modifier.align(Alignment.BottomStart)) {
             Text("Casino", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text(card.name, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+            Text(
+                card.name,
+                color = Color.White,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

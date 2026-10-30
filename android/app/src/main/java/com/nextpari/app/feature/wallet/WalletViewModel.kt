@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
+import com.nextpari.app.feature.wallets.WalletsCatalog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -94,7 +95,7 @@ class WalletViewModel(
                 it.copy(
                     loading = false,
                     financialsLoaded = true,
-                    balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, snapshot.currency),
+                    balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, WalletsCatalog.displayCurrency(snapshot.currency)),
                     currency = snapshot.currency,
                     publicId = repository.publicId(),
                     available = repository.availableAmount(),
@@ -202,7 +203,7 @@ class WalletViewModel(
     private fun refreshLocal() {
         val snapshot = repository.snapshot()
         ui.value = initialState().copy(
-            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, snapshot.currency),
+            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, WalletsCatalog.displayCurrency(snapshot.currency)),
             currency = snapshot.currency,
             publicId = repository.publicId(),
             available = repository.availableAmount(),
@@ -220,7 +221,7 @@ class WalletViewModel(
     private fun initialState(): WalletUiState {
         val snapshot = repository.snapshot()
         return WalletUiState(
-            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, snapshot.currency),
+            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, WalletsCatalog.displayCurrency(snapshot.currency)),
             currency = snapshot.currency,
             publicId = repository.publicId(),
             available = repository.availableAmount(),

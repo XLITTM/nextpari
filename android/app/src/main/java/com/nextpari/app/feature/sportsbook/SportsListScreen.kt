@@ -34,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -91,7 +92,16 @@ fun SportsListScreen(
                 ) {
                     Image(painterResource(SportIconRes.drawable(row.id)), contentDescription = null, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text(row.name, color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    Text(
+                        row.name,
+                        color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937),
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    )
                     Box(
                         Modifier.size(32.dp).clickable {
                             favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleSport(row.id) }

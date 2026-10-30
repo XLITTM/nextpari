@@ -57,6 +57,7 @@ class WalletCatalogTest {
         assertThat(repo.snapshot().displayBalance).isEqualTo("—")
         assertThat(repo.snapshot().currency).isEqualTo("TMTM")
         assertThat(WalletCatalog.balanceText(repo.snapshot().displayBalance, repo.snapshot().currency)).isEqualTo("— TMTM")
+        assertThat(WalletViewModel(repo).uiState.value.balanceLabel).isEqualTo("— TMT")
         assertThat(repo.availableAmount()).isNull()
         assertThat(repo.publicId()).isEmpty()
         assertThat(repo.profileComplete()).isFalse()

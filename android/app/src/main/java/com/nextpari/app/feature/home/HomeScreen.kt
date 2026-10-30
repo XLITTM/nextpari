@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -248,14 +249,16 @@ private fun SportsSelector(
                     containerSize = 36.dp,
                     iconSize = 28.dp,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     sport.name,
                     color = if (active) TabActiveGold else colors.text,
-                    fontSize = 9.sp,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
         }
@@ -290,12 +293,13 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
                 Text(
                     promo.title,
                     color = colors.textSecondary,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.width(110.dp),
+                    modifier = Modifier.width(110.dp).heightIn(min = 28.dp),
                 )
             }
         }
@@ -382,7 +386,15 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
                             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
                             .padding(12.dp),
                     ) {
-                        Text(item.name, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                        Text(
+                            item.name,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            lineHeight = 20.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }

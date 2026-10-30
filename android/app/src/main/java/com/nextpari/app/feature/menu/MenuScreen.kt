@@ -35,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
@@ -80,7 +81,7 @@ fun MenuScreen(
             .fillMaxSize()
             .background(colors.bg)
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 112.dp),
+            .padding(bottom = 24.dp),
     ) {
         Column(Modifier.background(colors.surface).padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -211,14 +212,35 @@ private fun MenuRow(item: MenuItem, tab: String, onNavigate: (String) -> Unit) {
             glyph.vector,
             contentDescription = null,
             tint = glyph.tint,
-            modifier = Modifier.size(24.dp).padding(end = 4.dp),
+            modifier = Modifier.size(24.dp),
         )
-        Column(Modifier.weight(1f).padding(start = 8.dp)) {
-            Text(item.label, color = if (specialBrush != null) Color.White else colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-            Text(item.desc, color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textSecondary, fontSize = 12.sp)
+        Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+            Text(
+                item.label,
+                color = if (specialBrush != null) Color.White else colors.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                item.desc,
+                color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textSecondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         if (item.soon) {
-            Text("Скоро", color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Скоро",
+                color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textMuted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
         } else {
             Icon(NextpariWebIcons.ChevronRight, contentDescription = null, tint = if (specialBrush != null) Color.White else colors.textMuted, modifier = Modifier.size(20.dp))
         }

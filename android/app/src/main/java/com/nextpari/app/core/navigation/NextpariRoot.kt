@@ -331,7 +331,7 @@ internal fun AuthenticatedShell(
     ) { padding ->
         val gamesOwnsInsets = current == Destinations.GAMES || arcade
         val layoutDirection = LocalLayoutDirection.current
-        val couponClearance = if (showBottomBar) 20.dp else 0.dp
+        val couponClearance = if (showBottomBar) 32.dp else 0.dp
         NavHost(
             navController = navController,
             startDestination = Destinations.HOME,
