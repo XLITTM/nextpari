@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Ban, Banknote, BarChart3, Building2, CheckCircle2, Download, Landmark,
-  LayoutDashboard, LogOut, Mail, RefreshCw, Scale, Shield, Snowflake,
+  LayoutDashboard, LogOut, Mail, RefreshCw, Scale, Shield, Smartphone, Snowflake,
   TrendingUp, User, UserCog, Users, Wallet, X,
 } from 'lucide-react';
 import { useOwnerAuth } from './auth/OwnerAuthProvider';
@@ -66,7 +66,7 @@ import {
   type OwnerSecuritySportsSummary,
   type VerticalKpi,
 } from './services';
-import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
+import { AndroidReleasePanel } from './AndroidReleasePanel';
 import {
   OWNER_SECURITY_ACCOUNT_LABEL,
   OWNER_SECURITY_DOSSIER_LABEL,
@@ -77,7 +77,7 @@ import {
   requireOwnerSecurityAccountReason,
 } from './securityAccountActions';
 
-type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk' | 'winPattern' | 'withdrawalReviews';
+type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk' | 'winPattern' | 'withdrawalReviews' | 'androidReleases';
 
 export function ManagerDashboardScreen() {
   const { loading, staff, deniedMessage, signOut } = useOwnerAuth();
@@ -229,6 +229,7 @@ function BackofficeShell({
             label="Выводы на проверке"
             badge={reviewSummary?.active ?? 0}
           />
+          <NavBtn active={tab === 'androidReleases'} onClick={() => setTab('androidReleases')} icon={Smartphone} label="Приложение и обновления" />
         </nav>
         <div className="mt-auto p-3">
           <button
@@ -255,6 +256,7 @@ function BackofficeShell({
         {tab === 'withdrawalReviews' && (
           <WithdrawalAttributionReviewPanel base="/api/owner" />
         )}
+        {tab === 'androidReleases' && <AndroidReleasePanel />}
       </main>
     </div>
   );
