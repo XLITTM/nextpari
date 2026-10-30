@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
+import com.nextpari.app.feature.account.AccountMessages
+import com.nextpari.app.feature.settings.AccountSecurityResult
 import com.nextpari.app.core.network.ApiResult
 import com.nextpari.app.core.network.userMessage
 import com.nextpari.app.core.session.SessionRepository
@@ -19,20 +21,42 @@ data class AuthUiState(
     val identifier: String = "",
     val password: String = "",
     val passwordVisible: Boolean = false,
+    val rememberLogin: Boolean = false,
     val loading: Boolean = false,
     val error: String? = null,
+    val registerError: String? = null,
     val registerNotice: String? = null,
     val recoveryNotice: String? = null,
+    val recoveryStep: String = "identifier",
+    val pendingNavigation: String? = null,
+    val oneClickPlayerId: String? = null,
+    val oneClickPassword: String? = null,
+    val oneClickCanEnter: Boolean = false,
 )
 
 class AuthViewModel(
     private val authRepository: AuthRepository,
     sessionRepository: SessionRepository,
 ) : ViewModel() {
+    private var recoveryChallenge: String = ""
+    private var recoveryTicket: String = ""
     val session = sessionRepository.session
     val sessionReady = sessionRepository.ready
     private val ui = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = ui.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            val saved = AppGraph.preferencesStorage.getString(REMEMBER_KEY).orEmpty()
+            if (saved.isNotBlank()) {
+                ui.value = ui.value.copy(identifier = saved, rememberLogin = true)
+            }
+        }
+    }
+
+    fun setRememberLogin(value: Boolean) {
+        ui.value = ui.value.copy(rememberLogin = value)
+    }
 
     fun setMode(mode: LoginMode) {
         ui.value = ui.value.copy(mode = mode, error = null)
@@ -66,7 +90,15 @@ class AuthViewModel(
                 }
             }
             when (val result = authRepository.login(identifier, current.password)) {
-                is ApiResult.Ok -> ui.value = ui.value.copy(loading = false, password = "")
+                is ApiResult.Ok -> {
+                    val remembered = ui.value.identifier.trim()
+                    if (ui.value.rememberLogin && remembered.isNotEmpty()) {
+                        AppGraph.preferencesStorage.putString(REMEMBER_KEY, remembered)
+                    } else {
+                        AppGraph.preferencesStorage.putString(REMEMBER_KEY, "")
+                    }
+                    ui.value = ui.value.copy(loading = false, password = "")
+                }
                 is ApiResult.Err -> ui.value = ui.value.copy(
                     loading = false,
                     error = result.error.userMessage(),
@@ -79,10 +111,170 @@ class AuthViewModel(
         viewModelScope.launch { authRepository.logout() }
     }
 
-    fun markRegisterPrepared(kind: String) {
-        ui.value = ui.value.copy(
-            registerNotice = "Регистрация будет доступна в ближайшее время.",
+    fun registerEmail(email: String, password: String, ageConfirmed: Boolean, currency: String) {
+        submitRegistration(
+            RegistrationRequest(
+                method = "email",
+                email = email,
+                password = password,
+                ageConfirmed = ageConfirmed,
+                currency = currency,
+            ),
         )
+    }
+
+    fun registerPhone(phone: String, password: String, ageConfirmed: Boolean, currency: String) {
+        submitRegistration(
+            RegistrationRequest(
+                method = "phone",
+                phone = phone,
+                password = password,
+                ageConfirmed = ageConfirmed,
+                currency = currency,
+            ),
+        )
+    }
+
+    fun registerOneClick(ageConfirmed: Boolean, currency: String) {
+        submitRegistration(
+            RegistrationRequest(
+                method = "one_click",
+                ageConfirmed = ageConfirmed,
+                currency = currency,
+            ),
+        )
+    }
+
+    fun continueOneClick() {
+        if (ui.value.loading) return
+        viewModelScope.launch {
+            ui.value = ui.value.copy(loading = true, registerError = null)
+            when (val result = authRepository.continueOneClick()) {
+                is OneClickContinue.Entered -> ui.value = ui.value.copy(
+                    loading = false,
+                    oneClickPlayerId = null,
+                    oneClickPassword = null,
+                    oneClickCanEnter = false,
+                )
+                is OneClickContinue.NeedLogin -> {
+                    val playerId = ui.value.oneClickPlayerId.orEmpty()
+                    val issued = ui.value.oneClickPassword.orEmpty()
+                    ui.value = ui.value.copy(
+                        loading = false,
+                        mode = LoginMode.IDENTIFIER,
+                        identifier = playerId.ifBlank { ui.value.identifier },
+                        password = issued.ifBlank { ui.value.password },
+                        oneClickPlayerId = null,
+                        oneClickPassword = null,
+                        oneClickCanEnter = false,
+                        registerNotice = result.notice,
+                        pendingNavigation = "one_click_login",
+                    )
+                }
+                is OneClickContinue.Failed -> ui.value = ui.value.copy(
+                    loading = false,
+                    registerError = result.error.userMessage(),
+                )
+            }
+        }
+    }
+
+    fun dismissOneClick() {
+        ui.value = ui.value.copy(
+            oneClickPlayerId = null,
+            oneClickPassword = null,
+            oneClickCanEnter = false,
+            pendingNavigation = null,
+        )
+    }
+
+    fun consumeNavigation(): String? {
+        val value = ui.value.pendingNavigation ?: return null
+        ui.value = ui.value.copy(pendingNavigation = null)
+        return value
+    }
+
+    private fun submitRegistration(request: RegistrationRequest) {
+        if (ui.value.loading) return
+        viewModelScope.launch {
+            ui.value = ui.value.copy(loading = true, registerError = null, pendingNavigation = null)
+            when (val result = authRepository.register(request)) {
+                is RegistrationResult.Authenticated -> ui.value = ui.value.copy(loading = false, password = "")
+                is RegistrationResult.EmailConfirmationRequired -> ui.value = ui.value.copy(
+                    loading = false,
+                    password = "",
+                    error = null,
+                    registerNotice = RegistrationCopy.CONFIRM_EMAIL,
+                    pendingNavigation = "email_confirmation",
+                )
+                is RegistrationResult.OneClickIssued -> ui.value = ui.value.copy(
+                    loading = false,
+                    password = "",
+                    error = null,
+                    oneClickPlayerId = result.playerId,
+                    oneClickPassword = result.password,
+                    oneClickCanEnter = result.canEnter,
+                    pendingNavigation = "one_click",
+                )
+                is RegistrationResult.Failed -> ui.value = ui.value.copy(
+                    loading = false,
+                    registerError = result.error.userMessage(),
+                )
+            }
+        }
+    }
+
+    fun startRecovery(identifier: String) {
+        if (ui.value.loading) return
+        ui.value = ui.value.copy(loading = true, recoveryNotice = null)
+        viewModelScope.launch {
+            when (val result = AppGraph.accountGateway.startRecovery(identifier)) {
+                is AccountSecurityResult.Accepted -> {
+                    recoveryChallenge = result.token
+                    ui.value = ui.value.copy(loading = false, recoveryStep = "code", recoveryNotice = result.message)
+                }
+                is AccountSecurityResult.Invalid -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                is AccountSecurityResult.Unavailable -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                AccountSecurityResult.Ready -> ui.value = ui.value.copy(loading = false)
+            }
+        }
+    }
+
+    fun verifyRecovery(code: String) {
+        if (ui.value.loading) return
+        ui.value = ui.value.copy(loading = true, recoveryNotice = null)
+        viewModelScope.launch {
+            when (val result = AppGraph.accountGateway.verifyRecovery(recoveryChallenge, code)) {
+                is AccountSecurityResult.Accepted -> {
+                    recoveryTicket = result.token
+                    ui.value = ui.value.copy(loading = false, recoveryStep = "password", recoveryNotice = null)
+                }
+                is AccountSecurityResult.Invalid -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                is AccountSecurityResult.Unavailable -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                AccountSecurityResult.Ready -> ui.value = ui.value.copy(loading = false)
+            }
+        }
+    }
+
+    fun resetRecovery(password: String, confirm: String) {
+        if (ui.value.loading) return
+        ui.value = ui.value.copy(loading = true, recoveryNotice = null)
+        viewModelScope.launch {
+            when (val result = AppGraph.accountGateway.resetPassword(recoveryTicket, password, confirm)) {
+                is AccountSecurityResult.Accepted -> {
+                    recoveryTicket = ""
+                    recoveryChallenge = ""
+                    ui.value = ui.value.copy(
+                        loading = false,
+                        recoveryStep = "done",
+                        recoveryNotice = result.message.ifBlank { AccountMessages.RECOVERY_DONE },
+                    )
+                }
+                is AccountSecurityResult.Invalid -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                is AccountSecurityResult.Unavailable -> ui.value = ui.value.copy(loading = false, recoveryNotice = result.message)
+                AccountSecurityResult.Ready -> ui.value = ui.value.copy(loading = false)
+            }
+        }
     }
 
     fun markRecoveryPlaceholder() {
@@ -92,6 +284,8 @@ class AuthViewModel(
     }
 
     companion object {
+        private const val REMEMBER_KEY = "nextpari-remembered-identifier"
+
         val Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {

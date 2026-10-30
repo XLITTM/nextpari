@@ -10,6 +10,8 @@ data class PlayerGameRound(
     val totalStake: Double,
     val payout: Double,
     val balanceAfter: Double,
+    val walletId: String = "",
+    val currency: String = "",
     val serverSeedHash: String,
     val serverSeed: String?,
     val nonce: Long,

@@ -6,4 +6,12 @@
         <item name="android:windowBackground">@color/np_bg</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <style name="Theme.Nextpari.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/np_bg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/np_splash_neon_logo_medallion</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/np_bg</item>
+        <item name="windowSplashScreenAnimationDuration">0</item>
+        <item name="postSplashScreenTheme">@style/Theme.Nextpari</item>
+    </style>
 </resources>

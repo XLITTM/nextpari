@@ -6,6 +6,7 @@ object Destinations {
     const val REGISTER_EMAIL = "register/email"
     const val REGISTER_PHONE = "register/phone"
     const val REGISTER_ONE_CLICK = "register/one-click"
+    const val REGISTER_ONE_CLICK_RESULT = "register/one-click-result"
     const val FORGOT_PASSWORD = "forgot-password"
 
     const val HOME = "home"
@@ -52,6 +53,7 @@ object Destinations {
         REGISTER_EMAIL,
         REGISTER_PHONE,
         REGISTER_ONE_CLICK,
+        REGISTER_ONE_CLICK_RESULT,
         FORGOT_PASSWORD,
     )
 
@@ -73,27 +75,70 @@ object Destinations {
     }
 
     /**
-     * Mirrors web `navActive` in `src/App.tsx`.
-     * Maps a player destination onto the five bottom-nav sections.
+     * Ancestor chain for the bottom bar, built from routes the public NavController
+     * API can see. Home stays first because tab switches pop back to it. At most one
+     * other bottom-nav route is above Home. The previous destination is kept so a
+     * shared screen such as settings still follows the tab that opened it.
      */
-    fun bottomNavActiveRoute(route: String?): String {
-        val value = route ?: return HOME
+    fun shellAncestorRoutes(
+        currentRoute: String?,
+        previousRoute: String?,
+        routesOnStack: Set<String>,
+    ): List<String> {
+        val chain = mutableListOf<String>()
+        if (HOME in routesOnStack) chain += HOME
+        val secondaryTabs = bottomNavRoutes.filter { it != HOME && it in routesOnStack }
+        val secondary = secondaryTabs.firstOrNull { it == currentRoute || it == previousRoute }
+            ?: secondaryTabs.singleOrNull()
+        if (secondary != null && chain.lastOrNull() != secondary) chain += secondary
+        if (!previousRoute.isNullOrBlank() && previousRoute != currentRoute && previousRoute !in chain) {
+            chain += previousRoute
+        }
+        if (!currentRoute.isNullOrBlank() && chain.lastOrNull() != currentRoute) chain += currentRoute
+        return chain
+    }
+
+    /**
+     * Bottom tab that should stay lit for [route].
+     *
+     * Sports, casino, and Games children belong to Популярное. Bet details belong
+     * to История. Info and inbox belong to Меню. Wallet, settings, promo, and the
+     * wallet list can be opened from more than one tab, so they follow [ancestors]
+     * from the nearest parent to the root. An unknown route stays on Home.
+     */
+    fun bottomNavActiveRoute(route: String?, ancestors: List<String> = emptyList()): String {
+        val chain = buildList {
+            ancestors.forEach { add(it) }
+            if (route != null && (isEmpty() || last() != route)) add(route)
+        }
+        for (candidate in chain.asReversed()) {
+            fixedBottomTab(candidate)?.let { return it }
+        }
+        return HOME
+    }
+
+    private fun fixedBottomTab(route: String): String? {
+        val value = route.substringBefore("?")
         if (value in bottomNavRoutes) return value
-        if (value == BET_DETAILS || value.startsWith("bet-details/")) return HISTORY
-        if (isHomeParentRoute(value)) return HOME
-        return MENU
+        if (value == BET_DETAILS || value.startsWith("bet-details")) return HISTORY
+        if (isHomeOwned(value)) return HOME
+        if (value == INFO || value == INBOX_PLACEHOLDER) return MENU
+        return null
     }
 
-    private fun isHomeParentRoute(route: String): Boolean {
+    private fun isHomeOwned(route: String): Boolean {
         if (route == MATCH || route.startsWith("match/")) return true
-        if (route == GAMELIST_LIVE || route == GAMELIST_LINE || route.startsWith("gamelist/")) return true
         if (route == LEAGUE || route.startsWith("league/")) return true
-        return route in homeParentExact
+        if (route == CHAMPIONSHIPS || route.startsWith("championships/")) return true
+        if (route.startsWith("gamelist/")) return true
+        if (route.startsWith("sports/")) return true
+        return route in homeOwnedExact
     }
 
-    private val homeParentExact = setOf(
+    private val homeOwnedExact = setOf(
         GAMES, BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK,
         PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, PROMO_UNBEATABLE,
+        SLOTS, LIVE_CASINO, PROVIDER_SPORTSBOOK,
     )
 
     fun showsHeader(route: String?): Boolean =

@@ -42,7 +42,9 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -51,8 +53,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,6 +113,7 @@ fun SettingsScreen(
     var view by rememberSaveable { mutableStateOf("root") }
     var passwordOpen by rememberSaveable { mutableStateOf(false) }
     var emailOpen by rememberSaveable { mutableStateOf(false) }
+    var logoutConfirm by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val dark = NextpariTheme.colors.bg == NextpariColors.Dark.bg
     val screenBg = if (dark) ScreenDark else ScreenLight
@@ -157,6 +162,15 @@ fun SettingsScreen(
                     label = "Вывести",
                     dark = dark,
                     onClick = { onNavigate(Destinations.WALLET) },
+                )
+                SettingsDivider(dark)
+                SettingsRow(
+                    icon = NextpariWebIcons.Wallet,
+                    iconBg = if (dark) BrandIconDarkBg else BrandIconLightBg,
+                    iconTint = if (dark) BrandIconDarkFg else BrandGreen,
+                    label = "Кошелёк и валюты",
+                    dark = dark,
+                    onClick = { onNavigate(Destinations.WALLETS) },
                 )
             }
 
@@ -253,13 +267,37 @@ fun SettingsScreen(
                     labelColor = if (dark) LogoutDarkFg else LogoutFg,
                     hideChevron = true,
                     dark = dark,
-                    onClick = onLogout,
+                    onClick = { logoutConfirm = true },
                 )
             }
         }
 
+        if (logoutConfirm) {
+            val colors = NextpariTheme.colors
+            AlertDialog(
+                onDismissRequest = { logoutConfirm = false },
+                containerColor = if (dark) GroupDark else Color.White,
+                titleContentColor = colors.text,
+                textContentColor = colors.textSecondary,
+                title = { Text("Выйти из аккаунта?") },
+                text = { Text("Текущая сессия на этом устройстве будет завершена.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        logoutConfirm = false
+                        onLogout()
+                    }) {
+                        Text("Выйти", color = if (dark) LogoutDarkFg else LogoutFg)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { logoutConfirm = false }) {
+                        Text("Отмена", color = colors.textSecondary)
+                    }
+                },
+            )
+        }
         if (passwordOpen) {
-            ChangePasswordModal(dark = dark, onClose = { passwordOpen = false })
+            ChangePasswordModal(dark = dark, onClose = { passwordOpen = false }, onChanged = onLogout)
         }
         if (emailOpen) {
             EmailBindModal(
@@ -531,7 +569,7 @@ private fun SoonBadge() {
 }
 
 @Composable
-private fun ChangePasswordModal(dark: Boolean, onClose: () -> Unit) {
+private fun ChangePasswordModal(dark: Boolean, onClose: () -> Unit, onChanged: () -> Unit) {
     var current by rememberSaveable { mutableStateOf("") }
     var next by rememberSaveable { mutableStateOf("") }
     var confirm by rememberSaveable { mutableStateOf("") }
@@ -539,7 +577,28 @@ private fun ChangePasswordModal(dark: Boolean, onClose: () -> Unit) {
     var showNew by rememberSaveable { mutableStateOf(false) }
     var showConfirm by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf("") }
+    var busy by rememberSaveable { mutableStateOf(false) }
     val focus = LocalFocusManager.current
+    val scope = rememberCoroutineScope()
+    fun submit() {
+        val local = AccountSecurity.changePassword(current, next, confirm)
+        if (local is AccountSecurityResult.Invalid) {
+            error = local.message
+            return
+        }
+        if (busy) return
+        busy = true
+        scope.launch {
+            val result = com.nextpari.app.core.AppGraph.accountGateway.changePassword(current, next, confirm)
+            busy = false
+            when (result) {
+                is AccountSecurityResult.Invalid -> error = result.message
+                is AccountSecurityResult.Unavailable -> error = result.message
+                is AccountSecurityResult.Accepted -> onChanged()
+                AccountSecurityResult.Ready -> error = ""
+            }
+        }
+    }
     SettingsSheet(dark = dark, onClose = onClose) {
         SheetHeader(
             icon = NextpariWebIcons.ShieldCheck,
@@ -562,10 +621,7 @@ private fun ChangePasswordModal(dark: Boolean, onClose: () -> Unit) {
             error = ""
         }, { showConfirm = !showConfirm }) {
             focus.clearFocus()
-            error = when (val result = AccountSecurity.changePassword(current, next, confirm)) {
-                is AccountSecurityResult.Invalid -> result.message
-                is AccountSecurityResult.Unavailable -> result.message
-            }
+            submit()
         }
         if (error.isNotBlank()) {
             Text(error, color = Color(0xFFEF4444), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
@@ -576,12 +632,7 @@ private fun ChangePasswordModal(dark: Boolean, onClose: () -> Unit) {
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(BrandGreen)
-                .clickable {
-                    error = when (val result = AccountSecurity.changePassword(current, next, confirm)) {
-                        is AccountSecurityResult.Invalid -> result.message
-                        is AccountSecurityResult.Unavailable -> result.message
-                    }
-                }
+                .clickable(enabled = !busy) { submit() }
                 .padding(vertical = 14.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -604,6 +655,36 @@ private fun EmailBindModal(dark: Boolean, verifiedEmail: String, onClose: () -> 
     var code by rememberSaveable { mutableStateOf("") }
     var step by rememberSaveable { mutableStateOf("email") }
     var error by rememberSaveable { mutableStateOf("") }
+    var busy by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    fun send(start: Boolean) {
+        val local = if (start) AccountSecurity.startEmailBinding(email) else AccountSecurity.verifyEmailCode(code)
+        if (local is AccountSecurityResult.Invalid) {
+            error = local.message
+            return
+        }
+        if (busy) return
+        busy = true
+        scope.launch {
+            val result = if (start) {
+                com.nextpari.app.core.AppGraph.accountGateway.startEmail(email)
+            } else {
+                com.nextpari.app.core.AppGraph.accountGateway.verifyEmail(code)
+            }
+            busy = false
+            when (result) {
+                is AccountSecurityResult.Invalid -> error = result.message
+                is AccountSecurityResult.Unavailable -> error = result.message
+                is AccountSecurityResult.Accepted -> if (start) {
+                    step = "code"
+                    error = ""
+                } else {
+                    onClose()
+                }
+                AccountSecurityResult.Ready -> error = ""
+            }
+        }
+    }
     SettingsSheet(dark = dark, onClose = onClose) {
         SheetHeader(
             icon = NextpariWebIcons.Mail,
@@ -622,22 +703,12 @@ private fun EmailBindModal(dark: Boolean, verifiedEmail: String, onClose: () -> 
                 dark = dark,
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Done,
-                onDone = {
-                    error = when (val result = AccountSecurity.startEmailBinding(email)) {
-                        is AccountSecurityResult.Invalid -> result.message
-                        is AccountSecurityResult.Unavailable -> result.message
-                    }
-                },
+                onDone = { send(true) },
             )
             if (error.isNotBlank()) {
                 Text(error, color = Color(0xFFEF4444), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
             }
-            PrimaryButton("Отправить код") {
-                error = when (val result = AccountSecurity.startEmailBinding(email)) {
-                    is AccountSecurityResult.Invalid -> result.message
-                    is AccountSecurityResult.Unavailable -> result.message
-                }
-            }
+            PrimaryButton("Отправить код") { send(true) }
         } else {
             Text("На указанный адрес отправлен код", color = NextpariTheme.colors.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(12.dp))
@@ -648,22 +719,12 @@ private fun EmailBindModal(dark: Boolean, verifiedEmail: String, onClose: () -> 
                 dark = dark,
                 keyboardType = KeyboardType.Number,
                 imeAction = ImeAction.Done,
-                onDone = {
-                    error = when (val result = AccountSecurity.verifyEmailCode(code)) {
-                        is AccountSecurityResult.Invalid -> result.message
-                        is AccountSecurityResult.Unavailable -> result.message
-                    }
-                },
+                onDone = { send(false) },
             )
             if (error.isNotBlank()) {
                 Text(error, color = Color(0xFFEF4444), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 12.dp))
             }
-            PrimaryButton("Подтвердить") {
-                error = when (val result = AccountSecurity.verifyEmailCode(code)) {
-                    is AccountSecurityResult.Invalid -> result.message
-                    is AccountSecurityResult.Unavailable -> result.message
-                }
-            }
+            PrimaryButton("Подтвердить") { send(false) }
         }
         Text(
             "Отмена",

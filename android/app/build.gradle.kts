@@ -13,8 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.2.0-a002"
+        versionCode = 2
+        // versionCode 2 is the first owner-signed release.
+        // Each published release increments versionCode by 1 and never reuses it.
+        versionName = "0.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
@@ -22,8 +24,24 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"https://nextpari.net/\"")
     }
 
+    val releaseStoreFile = System.getenv("NEXTPARI_RELEASE_STORE_FILE")
+
+    signingConfigs {
+        if (!releaseStoreFile.isNullOrBlank()) {
+            create("release") {
+                storeFile = file(releaseStoreFile)
+                storePassword = System.getenv("NEXTPARI_RELEASE_STORE_PASSWORD")
+                keyAlias = System.getenv("NEXTPARI_RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("NEXTPARI_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (!releaseStoreFile.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -63,6 +81,7 @@ android {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

@@ -43,12 +43,20 @@ class NavigationAuditTest {
         ).forEach { route ->
             assertThat(root).contains(routeConstant(route))
         }
-        assertThat(root).contains("PlaceholderScreen(\"Избранное\"")
-        assertThat(root).contains("PlaceholderScreen(\"Купон\"")
+        assertThat(root).contains("FavoritesScreen()")
+        assertThat(root).contains("Купон пуст. Приём ставок выключен")
         assertThat(root).contains("placeholder(navController, Destinations.SLOTS")
         assertThat(root).contains("placeholder(navController, Destinations.LIVE_CASINO")
         assertThat(root).contains("placeholder(navController, Destinations.PROVIDER_SPORTSBOOK")
         assertThat(root).contains("composable(Destinations.INBOX_PLACEHOLDER)")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.BLACKJACK")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.AVIATOR")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.APPLES")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.CRYSTAL")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.DICE")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.PHARAOH")
+        assertThat(root).contains("GameWebViewScreen(")
+        assertThat(root).doesNotContain("NativeGameScreen(")
     }
 
     @Test

@@ -2,20 +2,19 @@ package com.nextpari.app.feature.history
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.ui.components.EmptyState
@@ -28,46 +27,32 @@ fun HistoryScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { viewModel.refresh() }
     Column(Modifier.fillMaxSize().background(colors.bg)) {
         Text(
             "История",
             color = colors.text,
-            style = androidx.compose.material3.MaterialTheme.typography.headlineMedium,
-            modifier = Modifier.padding(20.dp),
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
         )
-        TabRow(
-            selectedTabIndex = tab,
-            containerColor = colors.bg,
-            contentColor = colors.text,
-            indicator = { positions ->
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(positions[tab]),
-                    color = colors.accent,
-                )
-            },
-        ) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Ставки") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Транзакции") })
-        }
-        if (tab == 0) {
-            if (state.bets.isEmpty()) {
-                EmptyState("Ставок пока нет")
-            } else {
-                Column(Modifier.padding(16.dp)) {
-                    state.bets.forEach { Text(it.title, color = colors.text) }
-                }
-            }
-        } else {
-            Column(Modifier.padding(16.dp)) {
-                state.transactions.forEach { row ->
+        when {
+            state.loading -> Text("Загрузка ставок...", color = colors.textMuted, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp))
+            state.error != null -> Text(state.error.orEmpty(), color = colors.textMuted, fontSize = 14.sp, modifier = Modifier.padding(horizontal = 16.dp))
+            state.bets.isEmpty() -> EmptyState("Ставок пока нет")
+            else -> Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
+                state.bets.forEach { row ->
                     NextpariCard {
                         Text(row.title, color = colors.text)
-                        Text(row.amount, color = colors.textSecondary)
+                        if (row.status.isNotBlank()) Text(row.status, color = colors.textMuted)
+                        val money = listOf(row.stake, row.currency).filter { it.isNotBlank() }.joinToString(" ")
+                        val odds = if (row.odds.isBlank()) "" else " · ${row.odds}"
+                        if (money.isNotBlank() || odds.isNotBlank()) {
+                            Text(money + odds, color = colors.text)
+                        }
                     }
-                    androidx.compose.foundation.layout.Spacer(Modifier.padding(bottom = 8.dp))
+                    Spacer(Modifier.padding(bottom = 8.dp))
                 }
-                Text("Операций пока нет", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
             }
         }
     }

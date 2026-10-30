@@ -4,17 +4,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
+import com.nextpari.app.feature.wallets.WalletsCatalog
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class WalletViewModel(
     private val repository: WalletRepository,
 ) : ViewModel() {
     private val ui = MutableStateFlow(initialState())
     val uiState: StateFlow<WalletUiState> = ui.asStateFlow()
+    private var idempotencyKey: String = UUID.randomUUID().toString()
+    private var idempotencyFingerprint: String = ""
 
     init {
         refreshLocal()
@@ -78,7 +82,34 @@ class WalletViewModel(
     }
 
     fun retryDestinations() {
-        viewModelScope.launch { loadDestinations() }
+        refreshFinancials()
+    }
+
+    fun refreshFinancials() {
+        if (ui.value.loading) return
+        ui.update { it.copy(loading = true, cashDestinationsLoading = true, cashDestinationsError = "") }
+        viewModelScope.launch {
+            val financials = repository.loadFinancials()
+            val snapshot = repository.snapshot()
+            ui.update {
+                it.copy(
+                    loading = false,
+                    financialsLoaded = true,
+                    balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, WalletsCatalog.displayCurrency(snapshot.currency)),
+                    currency = snapshot.currency,
+                    publicId = repository.publicId(),
+                    available = repository.availableAmount(),
+                    profileComplete = repository.profileComplete(),
+                    withdrawals = financials.withdrawals,
+                    withdrawalsError = financials.withdrawalsError,
+                    cashDestinations = financials.destinations,
+                    cashDestinationsLoaded = true,
+                    cashDestinationsLoading = false,
+                    cashDestinationsError = financials.destinationsError,
+                    quoteTargets = financials.quoteTargets,
+                )
+            }
+        }
     }
 
     fun markPlayerIdCopied(copied: Boolean) {
@@ -100,15 +131,79 @@ class WalletViewModel(
             ui.update { it.copy(restrictionOpen = true) }
             return
         }
-        ui.update { it.copy(notice = WalletCatalog.SESSION_UNAVAILABLE, submitting = false) }
+        val amount = withdrawalAmount(state.amount)
+        if (amount == null) {
+            ui.update { it.copy(notice = WalletCatalog.INVALID_AMOUNT) }
+            return
+        }
+        if (ui.value.submitting) return
+        val point = state.cashDestinations.firstOrNull { it.id == state.cashPointId }
+        val fingerprint = listOf(
+            state.withdrawMethod.id,
+            amount.toString(),
+            state.detail,
+            state.cashCity,
+            point?.label.orEmpty(),
+            state.cashPointId,
+        ).joinToString("|")
+        if (fingerprint != idempotencyFingerprint) {
+            idempotencyFingerprint = fingerprint
+            idempotencyKey = UUID.randomUUID().toString()
+        }
+        val key = idempotencyKey
+        ui.update { it.copy(submitting = true, notice = null) }
+        viewModelScope.launch {
+            val result = repository.submitWithdrawal(
+                WithdrawalSubmission(
+                    method = state.withdrawMethod.id,
+                    methodLabel = state.withdrawMethod.label,
+                    amount = amount,
+                    destinationRef = if (state.withdrawMethod == WalletWithdrawMethod.CASH) "" else state.detail,
+                    city = state.cashCity,
+                    point = point?.label.orEmpty(),
+                    payoutDestinationId = if (state.withdrawMethod == WalletWithdrawMethod.CASH) state.cashPointId else "",
+                    idempotencyKey = key,
+                ),
+            )
+            result.onSuccess {
+                idempotencyFingerprint = ""
+                AppGraph.refreshPlayerState()
+            }
+            val refreshed = if (result.isSuccess) repository.loadFinancials() else null
+            ui.update {
+                it.copy(
+                    submitting = false,
+                    notice = result.exceptionOrNull()?.message ?: WalletCatalog.UNDER_REVIEW,
+                    withdrawalFormOpen = result.isFailure,
+                    withdrawals = refreshed?.withdrawals ?: it.withdrawals,
+                    withdrawalsError = refreshed?.withdrawalsError ?: it.withdrawalsError,
+                )
+            }
+        }
     }
 
-    fun requestUsdtQuote(): String = WalletCatalog.SESSION_UNAVAILABLE
+    fun requestUsdtQuote(rawAmount: String) {
+        val amount = rawAmount.trim()
+        if (!amount.matches(Regex("^(?:0|[1-9]\\d{0,17})(?:\\.\\d{1,18})?$")) || !amount.any { it in '1'..'9' }) {
+            ui.update { it.copy(quoteNotice = WalletCatalog.INVALID_AMOUNT) }
+            return
+        }
+        val target = ui.value.quoteTargets.firstOrNull { it.currency == ui.value.currency }
+            ?: ui.value.quoteTargets.firstOrNull()
+        if (target == null) {
+            ui.update { it.copy(quoteNotice = WalletCatalog.ADD_CURRENCY_FIRST) }
+            return
+        }
+        viewModelScope.launch {
+            val result = repository.quoteUsdt(amount, target.walletId)
+            ui.update { it.copy(quoteNotice = result.getOrElse { error -> error.message ?: WalletMessages.QUOTE_FAILED }) }
+        }
+    }
 
     private fun refreshLocal() {
         val snapshot = repository.snapshot()
         ui.value = initialState().copy(
-            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, snapshot.currency),
+            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, WalletsCatalog.displayCurrency(snapshot.currency)),
             currency = snapshot.currency,
             publicId = repository.publicId(),
             available = repository.availableAmount(),
@@ -123,25 +218,10 @@ class WalletViewModel(
         )
     }
 
-    private fun loadDestinations() {
-        ui.update { it.copy(cashDestinationsLoading = true, cashDestinationsError = "") }
-        val rows = repository.payoutDestinations()
-        ui.update {
-            it.copy(
-                cashDestinations = rows,
-                cashDestinationsLoaded = true,
-                cashDestinationsLoading = false,
-                cashDestinationsError = "",
-                cashCity = "",
-                cashPointId = "",
-            )
-        }
-    }
-
     private fun initialState(): WalletUiState {
         val snapshot = repository.snapshot()
         return WalletUiState(
-            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, snapshot.currency),
+            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, WalletsCatalog.displayCurrency(snapshot.currency)),
             currency = snapshot.currency,
             publicId = repository.publicId(),
             available = repository.availableAmount(),

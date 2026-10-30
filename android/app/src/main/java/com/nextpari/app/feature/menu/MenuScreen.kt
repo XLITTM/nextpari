@@ -35,9 +35,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.ui.components.WalletDropdownMenu
 import com.nextpari.app.core.ui.components.WalletSwitcherEffects
@@ -53,7 +56,6 @@ fun MenuScreen(
     session: AuthSession,
     balanceLabel: String,
     onNavigate: (String) -> Unit,
-    onLogout: () -> Unit,
     onInbox: () -> Unit,
     walletsState: WalletsUiState,
     onRefreshWallets: () -> Unit,
@@ -77,32 +79,28 @@ fun MenuScreen(
     Column(
         Modifier
             .fillMaxSize()
-            .background(if (colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg) Color(0xFF111827) else Color(0xFFF3F4F6))
+            .background(colors.bg)
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 112.dp),
+            .padding(bottom = 24.dp),
     ) {
-        Column(Modifier.background(colors.surface).padding(16.dp)) {
+        Column(Modifier.background(colors.surface).padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(56.dp).clip(CircleShape).background(colors.surfaceMuted),
+                    Modifier.size(36.dp).clip(CircleShape).background(colors.surfaceMuted),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(NextpariWebIcons.User, contentDescription = null, tint = colors.textSecondary)
+                    Icon(NextpariWebIcons.User, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(18.dp))
                 }
-                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(session.displayName.ifBlank { "Игрок" }, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    Text("ID: ${session.playerPublicId.ifBlank { "—" }}", color = colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Row {
-                        Text("Заполнить профиль →", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onNavigate(Destinations.PERSONAL_DATA) })
-                        Spacer(Modifier.size(8.dp))
-                        Text("Кошелёк и валюты →", color = colors.accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { onNavigate(Destinations.WALLETS) })
-                    }
+                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                    Text(session.displayName.ifBlank { "Игрок" }, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+                    Text("ID: ${session.playerPublicId.ifBlank { "—" }}", color = colors.textMuted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
                 }
                 IconButtonBox("Входящие", NextpariWebIcons.Mail, onInbox)
+                Spacer(Modifier.size(6.dp))
                 IconButtonBox("Настройки", NextpariWebIcons.Settings) { onNavigate(Destinations.SETTINGS) }
             }
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(Modifier.weight(1f)) {
                     Row(
                         Modifier
@@ -110,19 +108,19 @@ fun MenuScreen(
                             .clip(RoundedCornerShape(12.dp))
                             .background(colors.surfaceMuted)
                             .clickable { walletsOpen = nextWalletDropdownOpen(walletsOpen, onRefreshWallets) }
-                            .padding(12.dp),
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(NextpariWebIcons.Wallet, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
-                        Column(Modifier.padding(start = 8.dp).weight(1f)) {
-                            Text("Баланс", color = colors.textMuted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                            Text(balanceLabel, color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                        Icon(NextpariWebIcons.Wallet, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(16.dp))
+                        Column(Modifier.padding(start = 6.dp).weight(1f)) {
+                            Text("Баланс", color = colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                            Text(balanceLabel, color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, maxLines = 1)
                         }
                         Icon(
                             NextpariWebIcons.ChevronDown,
                             contentDescription = "Кошелёк и валюты",
                             tint = colors.textMuted,
-                            modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = chevronRotation },
+                            modifier = Modifier.size(14.dp).graphicsLayer { rotationZ = chevronRotation },
                         )
                     }
                     WalletDropdownMenu(
@@ -136,14 +134,15 @@ fun MenuScreen(
                 }
                 Row(
                     Modifier
-                        .clip(RoundedCornerShape(16.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Color(0xFF16A34A))
+                        .vipNeonFrame(shape = RoundedCornerShape(12.dp), chrome = VipNeonChrome.PressOnly)
                         .clickable { onNavigate(Destinations.WALLET) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(NextpariWebIcons.Plus, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                    Text("Пополнить", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp))
+                    Icon(NextpariWebIcons.Plus, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Text("Пополнить", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
                 }
             }
         }
@@ -153,6 +152,7 @@ fun MenuScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .vipNeonFrame(selected = active, chrome = VipNeonChrome.Glow)
                         .clickable { tab = label }
                         .padding(top = 8.dp, bottom = 4.dp)
                         .drawBehind {
@@ -179,25 +179,6 @@ fun MenuScreen(
                 MenuRow(item, tab, onNavigate)
             }
         }
-        Box(
-            Modifier
-                .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Color(0xFFFEF2F2))
-                .clickable(onClick = onLogout)
-                .padding(16.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape).background(Color(0xFFFEE2E2)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(NextpariWebIcons.LogOut, contentDescription = null, tint = Color(0xFFEF4444), modifier = Modifier.size(20.dp))
-                }
-                Text("Выйти из аккаунта", color = Color(0xFFEF4444), fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.padding(start = 12.dp).weight(1f))
-                Icon(NextpariWebIcons.ChevronRight, contentDescription = null, tint = Color(0xFFF87171), modifier = Modifier.size(20.dp))
-            }
-        }
         Text("nextpari v2.0.1 · © 2026", color = colors.textMuted, fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
     }
 }
@@ -214,6 +195,11 @@ private fun MenuRow(item: MenuItem, tab: String, onNavigate: (String) -> Unit) {
     val click = if (item.soon) null else item.route?.let { { onNavigate(it) } }
     val modifier = Modifier
         .fillMaxWidth()
+        .vipNeonFrame(
+            enabled = click != null,
+            shape = RoundedCornerShape(16.dp),
+            chrome = if (specialBrush == null) VipNeonChrome.Card else VipNeonChrome.PressOnly,
+        )
         .clip(RoundedCornerShape(16.dp))
         .then(
             if (specialBrush != null) Modifier.background(specialBrush) else Modifier.background(colors.surface),
@@ -226,14 +212,35 @@ private fun MenuRow(item: MenuItem, tab: String, onNavigate: (String) -> Unit) {
             glyph.vector,
             contentDescription = null,
             tint = glyph.tint,
-            modifier = Modifier.size(24.dp).padding(end = 4.dp),
+            modifier = Modifier.size(24.dp),
         )
-        Column(Modifier.weight(1f).padding(start = 8.dp)) {
-            Text(item.label, color = if (specialBrush != null) Color.White else colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
-            Text(item.desc, color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textSecondary, fontSize = 12.sp)
+        Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+            Text(
+                item.label,
+                color = if (specialBrush != null) Color.White else colors.text,
+                fontWeight = FontWeight.ExtraBold,
+                fontSize = 14.sp,
+                lineHeight = 18.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                item.desc,
+                color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textSecondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         if (item.soon) {
-            Text("Скоро", color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Скоро",
+                color = if (specialBrush != null) Color.White.copy(alpha = 0.9f) else colors.textMuted,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
         } else {
             Icon(NextpariWebIcons.ChevronRight, contentDescription = null, tint = if (specialBrush != null) Color.White else colors.textMuted, modifier = Modifier.size(20.dp))
         }
@@ -246,13 +253,14 @@ private fun IconButtonBox(description: String, icon: ImageVector, onClick: () ->
     val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
     Box(
         Modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(32.dp)
+            .vipNeonFrame(shape = RoundedCornerShape(10.dp), chrome = VipNeonChrome.PressOnly)
+            .clip(RoundedCornerShape(10.dp))
             .background(if (dark) Color(0xFF1E293B) else Color(0xFFF3F4F6))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = description, tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF4B5563), modifier = Modifier.size(20.dp))
+        Icon(icon, contentDescription = description, tint = if (dark) Color(0xFFE5E7EB) else Color(0xFF4B5563), modifier = Modifier.size(16.dp))
     }
 }
 

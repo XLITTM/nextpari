@@ -19,7 +19,11 @@ class SettingsCatalogTest {
             "Настройки приложения",
             "О приложении",
         ).inOrder()
-        assertThat(SettingsCatalog.accountLabels).containsExactly("Пополнить", "Вывести").inOrder()
+        assertThat(SettingsCatalog.accountLabels).containsExactly(
+            "Пополнить",
+            "Вывести",
+            "Кошелёк и валюты",
+        ).inOrder()
         assertThat(SettingsCatalog.securityLabels).containsExactly(
             "Электронная почта",
             "Привязать почту",
@@ -57,6 +61,8 @@ class SettingsCatalogTest {
         assertThat(screen).contains("О приложении")
         assertThat(screen).contains("Пополнить")
         assertThat(screen).contains("Вывести")
+        assertThat(screen).contains("Кошелёк и валюты")
+        assertThat(screen).contains("Destinations.WALLETS")
         assertThat(screen).contains("Электронная почта")
         assertThat(screen).contains("Сменить пароль")
         assertThat(screen).contains("Провод ставки")
@@ -73,6 +79,9 @@ class SettingsCatalogTest {
         assertThat(SettingsCatalog.shareText).contains("https://nextpari.net/")
         assertThat(screen).doesNotContain("localhost")
         assertThat(screen).contains("onLogout")
+        assertThat(screen).contains("Выйти из аккаунта?")
+        assertThat(screen).contains("logoutConfirm = true")
+        assertThat(screen).doesNotContain("onClick = onLogout")
         assertThat(screen).contains("Destinations.WALLET")
     }
 
@@ -110,10 +119,9 @@ class SettingsCatalogTest {
     }
 
     @Test
-    fun accountSecurityNeverMutatesPasswordEmailOrMoney() {
-        val valid = AccountSecurity.changePassword("current-pass", "new-password", "new-password")
-        assertThat(valid).isInstanceOf(AccountSecurityResult.Unavailable::class.java)
-        assertThat((valid as AccountSecurityResult.Unavailable).message).isEqualTo(SettingsCatalog.SESSION_REQUIRED)
+    fun accountSecurityValidatesLocallyAndDoesNotClaimSuccess() {
+        assertThat(AccountSecurity.changePassword("current-pass", "new-password", "new-password"))
+            .isEqualTo(AccountSecurityResult.Ready)
         assertThat(AccountSecurity.changePassword("", "new-password", "new-password"))
             .isEqualTo(AccountSecurityResult.Invalid(SettingsCatalog.CURRENT_PASSWORD_INVALID))
         assertThat(AccountSecurity.changePassword("old-pass", "short", "short"))
@@ -121,11 +129,13 @@ class SettingsCatalogTest {
         assertThat(AccountSecurity.changePassword("old-pass", "new-password", "other-password"))
             .isEqualTo(AccountSecurityResult.Invalid(SettingsCatalog.PASSWORD_MISMATCH))
         assertThat(AccountSecurity.startEmailBinding("player@nextpari.net"))
-            .isInstanceOf(AccountSecurityResult.Unavailable::class.java)
+            .isEqualTo(AccountSecurityResult.Ready)
         assertThat(AccountSecurity.startEmailBinding("not-an-email"))
             .isEqualTo(AccountSecurityResult.Invalid(SettingsCatalog.INVALID_EMAIL))
         assertThat(AccountSecurity.verifyEmailCode("123456"))
-            .isInstanceOf(AccountSecurityResult.Unavailable::class.java)
+            .isEqualTo(AccountSecurityResult.Ready)
+        assertThat(AccountSecurity.verifyEmailCode("12"))
+            .isInstanceOf(AccountSecurityResult.Invalid::class.java)
 
         val sources = listOf(
             "src/main/java/com/nextpari/app/feature/settings/SettingsScreen.kt",

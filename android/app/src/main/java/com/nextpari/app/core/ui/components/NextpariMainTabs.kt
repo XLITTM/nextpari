@@ -22,6 +22,8 @@ import com.nextpari.app.core.navigation.MainTabSpec
 import com.nextpari.app.core.navigation.MainTabsSpec
 import com.nextpari.app.core.ui.icons.NextpariSectionIcons
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -39,6 +41,7 @@ fun NextpariMainTabs(
             Column(
                 modifier = Modifier
                     .weight(1f)
+                    .vipNeonFrame(selected = active, chrome = VipNeonChrome.Glow)
                     .clickable { onChange(tab) }
                     .drawBehind {
                         if (active) {

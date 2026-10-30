@@ -46,6 +46,7 @@ fun GameListScreen(
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(if (initialMode == "line") "line" else "live") }
+    var actionNotice by rememberSaveable { mutableStateOf("") }
     val matches = viewModel.pool(tab)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFE5E7EB))) {
@@ -54,7 +55,11 @@ fun GameListScreen(
                 title = "Список игр",
                 onBack = onBack,
                 actions = listOf(NextpariWebIcons.Search to "Поиск"),
+                onAction = { actionNotice = sportsActionMessage(it) },
             )
+            if (actionNotice.isNotBlank()) {
+                Text(actionNotice, color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
             Row(
                 Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),

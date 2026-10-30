@@ -1,9 +1,17 @@
 package com.nextpari.app.core.navigation
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
@@ -11,15 +19,24 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -28,19 +45,29 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.nextpari.app.BuildConfig
+import com.nextpari.app.MainActivity
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.ui.components.NextpariBottomNav
 import com.nextpari.app.core.ui.components.NextpariHeader
 import com.nextpari.app.core.ui.components.NextpariMainTabs
 import com.nextpari.app.core.ui.components.PlaceholderScreen
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.core.SessionRestorePhase
 import com.nextpari.app.feature.auth.AuthViewModel
+import com.nextpari.app.feature.launch.LaunchPresentation
+import com.nextpari.app.feature.launch.SessionRestoreScreen
+import com.nextpari.app.feature.launch.SplashBrandScreen
+import com.nextpari.app.feature.launch.WelcomePreferences
+import com.nextpari.app.feature.launch.WelcomeScreen
 import com.nextpari.app.feature.auth.ForgotPasswordScreen
 import com.nextpari.app.feature.auth.LoginScreen
 import com.nextpari.app.feature.auth.RegisterEmailScreen
 import com.nextpari.app.feature.auth.RegisterMenuScreen
+import com.nextpari.app.feature.auth.RegisterOneClickResultScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
+import com.nextpari.app.feature.games.web.GameWebViewScreen
+import com.nextpari.app.feature.update.ReleaseUpdateCard
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
 import com.nextpari.app.feature.home.HomeScreen
@@ -66,6 +93,8 @@ import com.nextpari.app.feature.wallet.WalletScreen
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsScreen
 import com.nextpari.app.feature.wallets.WalletsViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @Composable
 fun NextpariRoot(
@@ -75,34 +104,112 @@ fun NextpariRoot(
 ) {
     val session by authViewModel.session.collectAsStateWithLifecycle()
     val sessionReady by authViewModel.sessionReady.collectAsStateWithLifecycle()
-    if (!sessionReady) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(if (darkTheme) Color(0xFF09090B) else Color(0xFFF4F4F5)),
-        )
-        return
+    val restorePhase by AppGraph.sessionRestorePhase.collectAsStateWithLifecycle()
+    val restoreDetail by AppGraph.sessionRestoreDetail.collectAsStateWithLifecycle()
+    var welcomeCompleted by remember { mutableStateOf<Boolean?>(null) }
+    var revisitWelcome by rememberSaveable { mutableStateOf(false) }
+    var holdSplash by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+    val sessionNow = rememberUpdatedState(session)
+    val activity = LocalContext.current as? MainActivity
+    val resumeBrand = activity?.resumeBrand?.value == true
+    LaunchedEffect(Unit) {
+        welcomeCompleted = WelcomePreferences(AppGraph.preferencesStorage).isCompleted()
     }
-    if (!session.isAuthenticated) {
-        UnauthenticatedNavHost(authViewModel)
-    } else {
-        AuthenticatedShell(
-            authViewModel = authViewModel,
-            darkTheme = darkTheme,
-            onToggleTheme = onToggleTheme,
-        )
+    LaunchedEffect(holdSplash) {
+        if (holdSplash) {
+            delay(LaunchPresentation.BRAND_MS)
+            holdSplash = false
+        }
+    }
+    LaunchedEffect(resumeBrand) {
+        if (resumeBrand && LaunchPresentation.holdSplashOnResume(sessionNow.value.isAuthenticated)) {
+            holdSplash = true
+        }
+        activity?.resumeBrand?.value = false
+    }
+    val checking = !sessionReady || restorePhase == SessionRestorePhase.Checking ||
+        (!session.isAuthenticated && welcomeCompleted == null && restorePhase != SessionRestorePhase.Failed)
+    val showSplash = holdSplash || (checking && restorePhase != SessionRestorePhase.Failed)
+    val openLogin: () -> Unit = {
+        scope.launch {
+            WelcomePreferences(AppGraph.preferencesStorage).markCompleted()
+            welcomeCompleted = true
+            revisitWelcome = false
+        }
+    }
+    Box(Modifier.fillMaxSize()) {
+        if (!checking || restorePhase == SessionRestorePhase.Failed) {
+            when {
+                restorePhase == SessionRestorePhase.Failed && !session.isAuthenticated -> {
+                    SessionRestoreScreen(
+                        message = restoreDetail ?: "Нет соединения с сетью",
+                        onRetry = AppGraph::retrySessionRestore,
+                    )
+                }
+                !session.isAuthenticated && (welcomeCompleted == false || revisitWelcome) -> {
+                    if (revisitWelcome) {
+                        BackHandler { revisitWelcome = false }
+                    }
+                    WelcomeScreen(
+                        onContinue = openLogin,
+                        onExistingAccount = openLogin,
+                    )
+                }
+                !session.isAuthenticated -> {
+                    UnauthenticatedNavHost(
+                        authViewModel = authViewModel,
+                        onOpenWelcome = { revisitWelcome = true },
+                        onToggleTheme = onToggleTheme,
+                    )
+                }
+                else -> {
+                    AuthenticatedShell(
+                        authViewModel = authViewModel,
+                        darkTheme = darkTheme,
+                        onToggleTheme = onToggleTheme,
+                    )
+                }
+            }
+        }
+        if (showSplash) {
+            SplashBrandScreen()
+        }
     }
 }
 
 @Composable
-private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
+private fun UnauthenticatedNavHost(
+    authViewModel: AuthViewModel,
+    onOpenWelcome: () -> Unit,
+    onToggleTheme: () -> Unit,
+) {
     val navController = rememberNavController()
-    NavHost(navController = navController, startDestination = Destinations.LOGIN) {
+    val authState by authViewModel.uiState.collectAsStateWithLifecycle()
+    LaunchedEffect(authState.pendingNavigation) {
+        when (authViewModel.consumeNavigation()) {
+            "email_confirmation", "one_click_login" ->
+                navController.popBackStack(Destinations.LOGIN, inclusive = false)
+            "one_click" -> navController.navigate(Destinations.REGISTER_ONE_CLICK_RESULT) {
+                launchSingleTop = true
+            }
+        }
+    }
+    NavHost(
+        navController = navController,
+        startDestination = Destinations.LOGIN,
+        enterTransition = { EnterTransition.None },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = { EnterTransition.None },
+        popExitTransition = { ExitTransition.None },
+    ) {
         composable(Destinations.LOGIN) {
             LoginScreen(
                 viewModel = authViewModel,
                 onOpenRegister = { navController.navigate(Destinations.REGISTER) },
                 onForgotPassword = { navController.navigate(Destinations.FORGOT_PASSWORD) },
+                onBack = onOpenWelcome,
+                onToggleTheme = onToggleTheme,
             )
         }
         composable(Destinations.REGISTER) {
@@ -115,38 +222,33 @@ private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
         }
         composable(Destinations.REGISTER_EMAIL) {
             RegisterEmailScreen(
+                viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onPrepared = {
-                    authViewModel.markRegisterPrepared("email")
-                    navController.popBackStack(Destinations.LOGIN, inclusive = false)
-                },
             )
         }
         composable(Destinations.REGISTER_PHONE) {
             RegisterPhoneScreen(
+                viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onPrepared = {
-                    authViewModel.markRegisterPrepared("phone")
-                    navController.popBackStack(Destinations.LOGIN, inclusive = false)
-                },
             )
         }
         composable(Destinations.REGISTER_ONE_CLICK) {
             RegisterOneClickScreen(
+                viewModel = authViewModel,
                 onBack = { navController.popBackStack() },
-                onPrepared = {
-                    authViewModel.markRegisterPrepared("one-click")
-                    navController.popBackStack(Destinations.LOGIN, inclusive = false)
-                },
+            )
+        }
+        composable(Destinations.REGISTER_ONE_CLICK_RESULT) {
+            RegisterOneClickResultScreen(
+                viewModel = authViewModel,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(Destinations.FORGOT_PASSWORD) {
             ForgotPasswordScreen(
                 onBack = { navController.popBackStack() },
-                onPlaceholder = {
-                    authViewModel.markRecoveryPlaceholder()
-                    navController.popBackStack()
-                },
+                onPlaceholder = { navController.popBackStack() },
+                viewModel = authViewModel,
             )
         }
     }
@@ -154,7 +256,7 @@ private fun UnauthenticatedNavHost(authViewModel: AuthViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AuthenticatedShell(
+internal fun AuthenticatedShell(
     authViewModel: AuthViewModel,
     darkTheme: Boolean,
     onToggleTheme: () -> Unit,
@@ -168,6 +270,16 @@ private fun AuthenticatedShell(
     val walletsState by walletsViewModel.uiState.collectAsStateWithLifecycle()
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
+    val ancestorRoutes = remember { mutableStateListOf<String>() }
+    DisposableEffect(navController) {
+        val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
+            val next = controller.shellAncestorRoutes(destination.route)
+            ancestorRoutes.clear()
+            ancestorRoutes.addAll(next)
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
     val arcade = current in setOf(
         Destinations.BLACKJACK, Destinations.AVIATOR, Destinations.APPLES,
         Destinations.CRYSTAL, Destinations.DICE, Destinations.PHARAOH,
@@ -176,10 +288,12 @@ private fun AuthenticatedShell(
     val showHeader = Destinations.showsHeader(current)
     val showMainTabs = Destinations.showsMainTabs(current)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    val fallbackBalance = "${AppGraph.walletRepository.snapshot().displayBalance} ${AppGraph.walletRepository.snapshot().currency}"
+    val walletSnapshot = AppGraph.walletRepository.snapshot()
+    val fallbackBalance = WalletsCatalog.headerFallbackLabel(walletSnapshot.displayBalance, walletSnapshot.currency)
     val balanceLabel = WalletsCatalog.headerBalanceLabel(fallbackBalance, walletsState)
     val colors = NextpariTheme.colors
 
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
         containerColor = colors.bg,
         topBar = {
@@ -219,34 +333,86 @@ private fun AuthenticatedShell(
         bottomBar = {
             if (showBottomBar) {
                 NextpariBottomNav(
-                    activeRoute = Destinations.bottomNavActiveRoute(current),
+                    activeRoute = Destinations.bottomNavActiveRoute(current, ancestorRoutes),
                     betCount = 0,
                     onSelect = { item -> navController.navigateTab(item.route) },
                 )
             }
         },
     ) { padding ->
+        val gamesOwnsInsets = current == Destinations.GAMES || arcade
+        val layoutDirection = LocalLayoutDirection.current
+        val couponClearance = if (showBottomBar) 32.dp else 0.dp
         NavHost(
             navController = navController,
             startDestination = Destinations.HOME,
-            modifier = Modifier.padding(padding),
+            modifier = Modifier
+                .then(
+                    if (gamesOwnsInsets) {
+                        Modifier
+                    } else {
+                        Modifier.padding(
+                            start = padding.calculateStartPadding(layoutDirection),
+                            top = padding.calculateTopPadding(),
+                            end = padding.calculateEndPadding(layoutDirection),
+                            bottom = padding.calculateBottomPadding() + couponClearance,
+                        )
+                    },
+                )
+                .background(colors.bg),
+            enterTransition = { slideInHorizontally(tween(160)) { width -> width } },
+            exitTransition = { ExitTransition.None },
+            popEnterTransition = { EnterTransition.None },
+            popExitTransition = { slideOutHorizontally(tween(160)) { width -> width } },
         ) {
-            composable(Destinations.HOME) {
+            composable(
+                Destinations.HOME,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 HomeScreen(viewModel = homeViewModel, onNavigate = { navController.navigateTo(it) })
             }
-            composable(Destinations.FAVORITES) {
-                PlaceholderScreen("Избранное", message = "В избранном пока нет событий")
+            composable(
+                Destinations.FAVORITES,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
+                com.nextpari.app.feature.favorites.FavoritesScreen()
             }
-            composable(Destinations.BETSLIP) {
-                PlaceholderScreen("Купон", message = "Купон пуст")
+            composable(
+                Destinations.BETSLIP,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
+                PlaceholderScreen(
+                    "Купон",
+                    message = "Купон пуст. Приём ставок выключен: лента событий не подключена, а канонический спортбук не включён.",
+                )
             }
-            composable(Destinations.HISTORY) { HistoryScreen() }
-            composable(Destinations.MENU) {
+            composable(
+                Destinations.HISTORY,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) { HistoryScreen() }
+            composable(
+                Destinations.MENU,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
                 MenuScreen(
                     session = session,
                     balanceLabel = balanceLabel,
                     onNavigate = { navController.navigateTo(it) },
-                    onLogout = { authViewModel.logout() },
                     onInbox = { navController.navigateTo(Destinations.INBOX_PLACEHOLDER) },
                     walletsState = walletsState,
                     onRefreshWallets = walletsViewModel::refresh,
@@ -269,13 +435,25 @@ private fun AuthenticatedShell(
                     onLogout = { authViewModel.logout() },
                 )
             }
-            composable(Destinations.GAMES) {
-                GamesHubScreen(
-                    session = session,
-                    balanceLabel = balanceLabel,
-                    onBack = { navController.popBackStack() },
-                    onNavigate = { navController.navigateTo(it) },
-                )
+            composable(
+                Destinations.GAMES,
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+            ) {
+            GamesHubScreen(
+                session = session,
+                balanceLabel = balanceLabel,
+                darkTheme = darkTheme,
+                walletsState = walletsState,
+                onBack = { navController.popBackStack() },
+                onNavigate = { navController.navigateTo(it) },
+                onRefreshWallets = walletsViewModel::refresh,
+                onSelectWallet = walletsViewModel::activate,
+                onAddWallet = walletsViewModel::addCurrency,
+                onConsumeWalletNotice = walletsViewModel::consumeNotice,
+            )
             }
             placeholder(navController, Destinations.BET_DETAILS, "Детали ставки")
             composable(Destinations.PROMO) {
@@ -367,9 +545,9 @@ private fun AuthenticatedShell(
                     )
                 }
             }
-            placeholder(navController, Destinations.SLOTS, "Слоты")
-            placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино")
-            placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера")
+            placeholder(navController, Destinations.SLOTS, "Слоты", "Слоты недоступны: казино-провайдер не подключён.")
+            placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино", "Лайв-казино недоступно: казино-провайдер не подключён.")
+            placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера", "Спортбук провайдера недоступен: запуск не включён.")
             composable(Destinations.PROMO_DETAILS) {
                 PromoDetailsScreen(onBack = { navController.popBackStack() })
             }
@@ -385,12 +563,24 @@ private fun AuthenticatedShell(
             composable(Destinations.PROMO_UNBEATABLE) {
                 PromoUnbeatableScreen(onBack = { navController.popBackStack() })
             }
-            placeholder(navController, Destinations.BLACKJACK, "21 / Очко")
-            placeholder(navController, Destinations.AVIATOR, "Aviator")
-            placeholder(navController, Destinations.APPLES, "Apple of Fortune")
-            placeholder(navController, Destinations.CRYSTAL, "Crystal")
-            placeholder(navController, Destinations.DICE, "Dice")
-            placeholder(navController, Destinations.PHARAOH, "Сокровища Фараона")
+            composable(Destinations.BLACKJACK) {
+                GameWebViewScreen("blackjack") { navController.popBackStack() }
+            }
+            composable(Destinations.AVIATOR) {
+                GameWebViewScreen("aviator") { navController.popBackStack() }
+            }
+            composable(Destinations.APPLES) {
+                GameWebViewScreen("apples") { navController.popBackStack() }
+            }
+            composable(Destinations.CRYSTAL) {
+                GameWebViewScreen("crystal") { navController.popBackStack() }
+            }
+            composable(Destinations.DICE) {
+                GameWebViewScreen("dice") { navController.popBackStack() }
+            }
+            composable(Destinations.PHARAOH) {
+                GameWebViewScreen("pharaoh") { navController.popBackStack() }
+            }
             composable(Destinations.VIP_CASHBACK) {
                 VipCashbackScreen(onBack = { navController.popBackStack() })
             }
@@ -412,20 +602,54 @@ private fun AuthenticatedShell(
             }
         }
     }
+    if (!arcade && current != Destinations.GAMES && !searchOpen) {
+        ReleaseUpdateCard(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .padding(
+                    bottom = if (showBottomBar) 96.dp else 24.dp,
+                    start = 16.dp,
+                    end = 16.dp,
+                ),
+        )
+    }
+    }
 }
 
 private fun NavGraphBuilder.placeholder(
     navController: NavHostController,
     route: String,
     title: String,
+    message: String = "Этот раздел скоро откроется.",
 ) {
     composable(route) {
-        PlaceholderScreen(title, onBack = { navController.popBackStack() })
+        PlaceholderScreen(title, onBack = { navController.popBackStack() }, message = message)
     }
+}
+
+private fun NavController.shellAncestorRoutes(currentRoute: String?): List<String> {
+    val onStack = try {
+        Destinations.bottomNavRoutes.mapNotNull { route ->
+            try {
+                getBackStackEntry(route)
+                route
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        }.toSet()
+    } catch (_: IllegalStateException) {
+        emptySet()
+    }
+    return Destinations.shellAncestorRoutes(
+        currentRoute = currentRoute,
+        previousRoute = previousBackStackEntry?.destination?.route,
+        routesOnStack = onStack,
+    )
 }
 
 private fun NavHostController.navigateTab(route: String) {
     if (!Destinations.isConcreteNavigationTarget(route)) return
+    if (currentDestination?.route == route) return
     navigate(route) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
@@ -436,5 +660,8 @@ private fun NavHostController.navigateTab(route: String) {
 private fun NavHostController.navigateTo(route: String) {
     if (!Destinations.isConcreteNavigationTarget(route)) return
     if (currentDestination?.route == route) return
-    navigate(route) { launchSingleTop = true }
+    navigate(route) {
+        launchSingleTop = true
+        restoreState = true
+    }
 }

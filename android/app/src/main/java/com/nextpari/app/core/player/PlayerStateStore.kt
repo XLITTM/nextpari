@@ -51,14 +51,21 @@ class PlayerStateStore {
         synchronized(lock) { profile = questionnaire }
     }
 
-    fun applyBalanceAfter(balanceAfter: Double) {
-        if (!balanceAfter.isFinite() || balanceAfter < 0) return
+    fun applyBalanceAfter(balanceAfter: Double, expectedWalletId: String = ""): Boolean {
+        if (!balanceAfter.isFinite() || balanceAfter < 0) return false
         synchronized(lock) {
-            val current = me ?: return
-            me = current.copy(wallet = current.wallet.copy(balance = balanceAfter))
-            wallets = wallets.map { row ->
-                if (row.isActive) row.copy(availableBalance = formatServerBalance(balanceAfter)) else row
+            val active = wallets.firstOrNull { it.isActive }
+            if (expectedWalletId.isNotBlank() && (active == null || active.walletId != expectedWalletId)) {
+                return false
             }
+            val current = me ?: return false
+            me = current.copy(wallet = current.wallet.copy(balance = balanceAfter))
+            if (active != null) {
+                wallets = wallets.map { row ->
+                    if (row.walletId == active.walletId) row.copy(availableBalance = formatServerBalance(balanceAfter)) else row
+                }
+            }
+            return true
         }
     }
 

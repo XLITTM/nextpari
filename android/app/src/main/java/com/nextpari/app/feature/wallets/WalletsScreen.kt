@@ -26,14 +26,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.nextpari.app.core.ui.theme.NextpariColors
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
@@ -44,12 +43,11 @@ fun WalletsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
-    val dark = colors.bg == NextpariColors.Dark.bg
     val context = LocalContext.current
-    val screenBg = if (dark) Color(0xFF111827) else Color.White
-    val cardBg = if (dark) Color(0xFF1F2937) else Color.White
-    val border = if (dark) Color(0xFF374151) else Color(0xFFE5E7EB)
-    val addBg = if (dark) Color(0xFF374151) else Color(0xFFF3F4F6)
+    val screenBg = colors.bg
+    val cardBg = colors.surface
+    val border = colors.border
+    val addBg = colors.surfaceMuted
 
     LaunchedEffect(state.notice) {
         val notice = state.notice ?: return@LaunchedEffect
@@ -73,8 +71,8 @@ fun WalletsScreen(
                 Modifier
                     .size(36.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(if (dark) Color(0xFF1F2937) else Color.White)
-                    .border(1.dp, if (dark) Color(0xFF4B5563) else Color(0xFFD1D5DB), RoundedCornerShape(12.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                     .clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
@@ -100,6 +98,11 @@ fun WalletsScreen(
                     Modifier
                         .fillMaxWidth()
                         .padding(bottom = 12.dp)
+                        .vipNeonFrame(
+                            selected = row.isActive,
+                            enabled = !state.busy,
+                            shape = RoundedCornerShape(16.dp),
+                        )
                         .clip(RoundedCornerShape(16.dp))
                         .background(cardBg)
                         .border(1.dp, border, RoundedCornerShape(16.dp))
@@ -135,6 +138,10 @@ fun WalletsScreen(
                         Modifier
                             .padding(bottom = 8.dp)
                             .fillMaxWidth()
+                            .vipNeonFrame(
+                                enabled = !state.busy,
+                                shape = RoundedCornerShape(12.dp),
+                            )
                             .clip(RoundedCornerShape(12.dp))
                             .background(addBg)
                             .clickable(enabled = !state.busy) { viewModel.addCurrency(option.value) }

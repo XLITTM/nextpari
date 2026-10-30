@@ -2,6 +2,7 @@ package com.nextpari.app.core.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -30,6 +32,8 @@ import com.nextpari.app.core.navigation.BottomNavItem
 import com.nextpari.app.core.navigation.BottomNavSpec
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
@@ -62,7 +66,11 @@ fun NextpariBottomNav(
             BottomNavSpec.items.forEach { item ->
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     if (item.center) {
-                        CouponButton(betCount = betCount, onClick = { onSelect(item) })
+                        CouponButton(
+                            betCount = betCount,
+                            selected = activeRoute == item.route,
+                            onClick = { onSelect(item) },
+                        )
                     } else {
                         val selected = activeRoute == item.route ||
                             (item.route == Destinations.HOME && activeRoute == Destinations.HOME)
@@ -77,7 +85,7 @@ fun NextpariBottomNav(
 }
 
 @Composable
-private fun CouponButton(betCount: Int, onClick: () -> Unit) {
+private fun CouponButton(betCount: Int, selected: Boolean, onClick: () -> Unit) {
     val colors = NextpariTheme.colors
     Box(
         modifier = Modifier
@@ -90,6 +98,11 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
                 .offset(y = (-20).dp)
                 .zIndex(1f)
                 .size(58.dp)
+                .vipNeonFrame(
+                    selected = selected,
+                    shape = CircleShape,
+                    chrome = if (selected) VipNeonChrome.Glow else VipNeonChrome.PressOnly,
+                )
                 .shadow(12.dp, CircleShape)
                 .clip(CircleShape)
                 .background(colors.accent)
@@ -120,7 +133,9 @@ private fun CouponButton(betCount: Int, onClick: () -> Unit) {
             color = colors.accent,
             fontSize = 10.sp,
             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 8.dp),
         )
     }
 }
@@ -137,20 +152,25 @@ private fun NavItem(
     Column(
         modifier = Modifier
             .height(64.dp)
+            .vipNeonFrame(selected = active, chrome = VipNeonChrome.Glow)
             .clickable(onClick = onClick)
-            .padding(top = 8.dp),
+            .padding(bottom = 8.dp, start = 2.dp, end = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Bottom,
     ) {
         Icon(
             navIcon(route, active),
             contentDescription = label,
             tint = if (active) accent else muted,
-            modifier = Modifier.size(18.dp),
+            modifier = Modifier.size(20.dp),
         )
         Text(
             label,
             color = if (active) accent else muted,
             fontSize = 10.sp,
+            lineHeight = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             fontWeight = if (active) androidx.compose.ui.text.font.FontWeight.SemiBold else androidx.compose.ui.text.font.FontWeight.Medium,
         )
     }

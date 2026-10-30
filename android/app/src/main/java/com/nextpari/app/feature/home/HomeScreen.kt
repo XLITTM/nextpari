@@ -1,11 +1,8 @@
 package com.nextpari.app.feature.home
 
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,16 +24,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +48,8 @@ import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.core.ui.components.ProductSectionHeader
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
 
@@ -60,10 +60,23 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val colors = NextpariTheme.colors
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(colors.bg),
-        contentPadding = PaddingValues(bottom = 24.dp),
-    ) {
+    val topListState = rememberLazyListState()
+    val sportListState = rememberLazyListState()
+    val esportsListState = rememberLazyListState()
+    val casinoListState = rememberLazyListState()
+    val listState = when (state.mainTabId) {
+        "sport" -> sportListState
+        "esports" -> esportsListState
+        "casino" -> casinoListState
+        else -> topListState
+    }
+    Box(Modifier.fillMaxSize().background(colors.bg)) {
+        key(state.mainTabId) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize().background(colors.bg),
+                contentPadding = PaddingValues(bottom = 24.dp),
+            ) {
         when (state.mainTabId) {
             "casino" -> {
                 item(key = "casino") {
@@ -199,6 +212,8 @@ fun HomeScreen(
                 }
             }
         }
+        }
+    }
     }
 }
 
@@ -216,18 +231,14 @@ private fun SportsSelector(
     ) {
         items(sports, key = { it.id }) { sport ->
             val active = sport.id == state.selectedSportId
-            val interaction = remember { MutableInteractionSource() }
-            val pressed by interaction.collectIsPressedAsState()
-            val scale by animateFloatAsState(if (pressed) 0.96f else 1f, label = "sport-press")
-            val dark = colors.bg == com.nextpari.app.core.ui.theme.NextpariColors.Dark.bg
             Column(
                 modifier = Modifier
                     .widthIn(min = 70.dp)
-                    .graphicsLayer { scaleX = scale; scaleY = scale }
+                    .vipNeonFrame(selected = active, shape = RoundedCornerShape(16.dp))
                     .shadow(if (active) 6.dp else 2.dp, RoundedCornerShape(16.dp))
                     .clip(RoundedCornerShape(16.dp))
-                    .background(if (dark) Color(0xFF27272A) else Color.White)
-                    .clickable(interactionSource = interaction, indication = null) { onSport(sport.id) }
+                    .background(colors.surface)
+                    .clickable { onSport(sport.id) }
                     .padding(12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -238,14 +249,16 @@ private fun SportsSelector(
                     containerSize = 36.dp,
                     iconSize = 28.dp,
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     sport.name,
-                    color = if (active) TabActiveGold else if (dark) Color(0xFFD1D5DB) else Color(0xFF374151),
-                    fontSize = 9.sp,
+                    color = if (active) TabActiveGold else colors.text,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.Medium,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
             }
         }
@@ -254,19 +267,17 @@ private fun SportsSelector(
 
 @Composable
 private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
+    val colors = NextpariTheme.colors
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(promos, key = { it.route }) { promo ->
-            val interaction = remember { MutableInteractionSource() }
-            val pressed by interaction.collectIsPressedAsState()
-            val scale by animateFloatAsState(if (pressed) 0.97f else 1f, label = "promo-press")
             Column(
                 modifier = Modifier
                     .width(110.dp)
-                    .graphicsLayer { scaleX = scale; scaleY = scale }
-                    .clickable(interactionSource = interaction, indication = null) { onNavigate(promo.route) },
+                    .vipNeonFrame(chrome = VipNeonChrome.PressOnly)
+                    .clickable { onNavigate(promo.route) },
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Image(
@@ -281,13 +292,14 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Text(
                     promo.title,
-                    color = Color(0xFF6B7280),
-                    fontSize = 10.sp,
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.width(110.dp),
+                    modifier = Modifier.width(110.dp).heightIn(min = 28.dp),
                 )
             }
         }
@@ -374,7 +386,15 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
                             .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
                             .padding(12.dp),
                     ) {
-                        Text(item.name, color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                        Text(
+                            item.name,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            lineHeight = 20.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
                 }
             }

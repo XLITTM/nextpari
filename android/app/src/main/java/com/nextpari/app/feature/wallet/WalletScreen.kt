@@ -104,6 +104,8 @@ fun WalletScreen(
     val context = LocalContext.current
     val screenBg = if (dark) Color(0xFF111827) else Color.White
 
+    LaunchedEffect(Unit) { viewModel.refreshFinancials() }
+
     LaunchedEffect(state.notice) {
         val message = state.notice ?: return@LaunchedEffect
         Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -161,7 +163,8 @@ fun WalletScreen(
         DepositModal(
             publicId = state.publicId,
             copied = state.copiedPlayerId,
-            quoteTargets = emptyList(),
+            quoteTargets = state.quoteTargets,
+            quoteNotice = state.quoteNotice,
             onClose = viewModel::closeDeposit,
             onCopyId = {
                 val digits = WalletCatalog.digitsId(state.publicId)
@@ -172,9 +175,7 @@ fun WalletScreen(
                     viewModel.markPlayerIdCopied(true)
                 }
             },
-            onQuote = {
-                Toast.makeText(context, viewModel.requestUsdtQuote(), Toast.LENGTH_SHORT).show()
-            },
+            onQuote = viewModel::requestUsdtQuote,
         )
     }
 
@@ -454,7 +455,8 @@ private fun HistorySection(
         return
     }
     when {
-        state.loading -> Text(WalletCatalog.LOADING_WITHDRAWALS, color = colors.textMuted, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        state.loading || !state.financialsLoaded -> Text(WalletCatalog.LOADING_WITHDRAWALS, color = colors.textMuted, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        state.withdrawalsError.isNotBlank() -> Text(state.withdrawalsError, color = colors.textMuted, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         state.withdrawals.isEmpty() -> Text(WalletCatalog.EMPTY_WITHDRAWALS, color = colors.textMuted, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
         else -> state.withdrawals.forEach { item -> WithdrawalCard(item, dark, onCopyPin) }
     }
@@ -523,10 +525,12 @@ private fun DepositModal(
     publicId: String,
     copied: Boolean,
     quoteTargets: List<UsdtQuoteTarget>,
+    quoteNotice: String?,
     onClose: () -> Unit,
     onCopyId: () -> Unit,
-    onQuote: () -> Unit,
+    onQuote: (String) -> Unit,
 ) {
+    var quoteAmount by androidx.compose.runtime.saveable.rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     ModalBottomSheet(
         onDismissRequest = onClose,
@@ -581,7 +585,30 @@ private fun DepositModal(
             if (quoteTargets.isEmpty()) {
                 Text(WalletCatalog.ADD_CURRENCY_FIRST, color = Color(0xFF94A3B8), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
             } else {
-                Text(WalletCatalog.GET_QUOTE, color = Color.White, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp).clickable(onClick = onQuote))
+                androidx.compose.material3.TextField(
+                    value = quoteAmount,
+                    onValueChange = { quoteAmount = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    placeholder = { Text("Сумма USDT", color = Color(0xFF94A3B8)) },
+                    singleLine = true,
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Black.copy(alpha = 0.3f),
+                        unfocusedContainerColor = Color.Black.copy(alpha = 0.3f),
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    modifier = Modifier.padding(top = 8.dp).fillMaxWidth(),
+                )
+                Text(
+                    WalletCatalog.GET_QUOTE,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp).clickable { onQuote(quoteAmount) },
+                )
+                if (!quoteNotice.isNullOrBlank()) {
+                    Text(quoteNotice, color = Color(0xFFCBD5E1), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                }
             }
             Box(
                 Modifier

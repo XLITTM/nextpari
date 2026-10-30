@@ -22,7 +22,10 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -31,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -51,7 +55,11 @@ fun SportsListScreen(
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(initialMode) }
     val rows = viewModel.sportRows(tab)
-    var favorites by rememberSaveable { mutableStateOf(setOf<String>()) }
+    val storedFavorites by com.nextpari.app.core.AppGraph.sportsFavorites.favorites.collectAsStateWithLifecycle()
+    val favoriteScope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.compose.runtime.LaunchedEffect(Unit) { com.nextpari.app.core.AppGraph.sportsFavorites.load() }
+    var actionNotice by rememberSaveable { mutableStateOf("") }
+    val favorites = storedFavorites.sportIds
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF3F4F6))) {
         Column(Modifier.background(if (dark) Color(0xFF1E293B) else Color.White)) {
@@ -59,7 +67,11 @@ fun SportsListScreen(
                 title = "Виды спорта",
                 onBack = onBack,
                 actions = listOf(NextpariWebIcons.Search to "Поиск"),
+                onAction = { actionNotice = sportsActionMessage(it) },
             )
+            if (actionNotice.isNotBlank()) {
+                Text(actionNotice, color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            }
             SportsbookSegmentedTabs(
                 tabs = listOf("live" to "LIVE", "line" to "Линия", "cybers" to "Киберы"),
                 activeId = tab,
@@ -80,9 +92,20 @@ fun SportsListScreen(
                 ) {
                     Image(painterResource(SportIconRes.drawable(row.id)), contentDescription = null, modifier = Modifier.size(24.dp))
                     Spacer(Modifier.width(12.dp))
-                    Text(row.name, color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937), fontSize = 15.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                    Text(
+                        row.name,
+                        color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937),
+                        fontSize = 15.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    )
                     Box(
-                        Modifier.size(32.dp).clickable { favorites = if (row.id in favorites) favorites - row.id else favorites + row.id },
+                        Modifier.size(32.dp).clickable {
+                            favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleSport(row.id) }
+                        },
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(

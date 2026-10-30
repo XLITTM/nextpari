@@ -73,6 +73,19 @@ class HeaderWalletSwitcherTest {
     }
 
     @Test
+    fun missingWalletHeaderShowsMappedDisplayCurrency() {
+        assertThat(WalletsCatalog.headerFallbackLabel("—", "TMTM")).isEqualTo("— TMT")
+        assertThat(WalletsCatalog.headerFallbackLabel("—", "TMT")).isEqualTo("— TMT")
+        assertThat(WalletsCatalog.headerFallbackLabel("—", "USD")).isEqualTo("— USD")
+        assertThat(WalletsCatalog.headerFallbackLabel("—", "TRY")).isEqualTo("— TRY")
+        val empty = WalletsUiState()
+        val fallback = WalletsCatalog.headerFallbackLabel("—", "TMTM")
+        assertThat(WalletsCatalog.headerBalanceLabel(fallback, empty)).isEqualTo("— TMT")
+        val root = moduleFile("src/main/java/com/nextpari/app/core/navigation/NextpariRoot.kt").readText()
+        assertThat(root).contains("WalletsCatalog.headerFallbackLabel(")
+    }
+
+    @Test
     fun headerBalanceUsesActiveOwnedWalletWithoutFabricating() {
         val fallback = "— TMTM"
         val empty = WalletsUiState()

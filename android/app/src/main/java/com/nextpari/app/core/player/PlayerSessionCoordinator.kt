@@ -7,6 +7,10 @@ import com.nextpari.app.core.network.session.SecureCookieJar
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.session.SessionRepository
 import com.nextpari.app.feature.auth.LoginIdentifier
+import com.nextpari.app.feature.auth.OneClickContinue
+import com.nextpari.app.feature.auth.RegistrationCopy
+import com.nextpari.app.feature.auth.RegistrationRequest
+import com.nextpari.app.feature.auth.RegistrationResult
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -20,7 +24,10 @@ class PlayerSessionCoordinator(
     private val sessions: SessionRepository,
     private val store: PlayerStateStore,
     private val json: Json,
+    private val onSessionCleared: () -> Unit = {},
 ) {
+    private var pendingOneClick: PlayerMeSnapshot? = null
+
     suspend fun login(identifier: LoginIdentifier, password: String): ApiResult<AuthSession> {
         val value = identifier.raw().trim()
         if (value.isEmpty() || password.isBlank()) {
@@ -33,14 +40,62 @@ class PlayerSessionCoordinator(
         if (!response.isSuccessful) {
             return ApiResult.Err(PlayerJsonMapper.mapAuthError(PlayerJsonMapper.errorCode(body)))
         }
-        val loginSnapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
-        val meResult = refreshPlayerState(loginMethod = method)
-        if (meResult is ApiResult.Ok) return meResult
-        if (loginSnapshot != null) {
-            runCatching { refreshSecondaryReads() }
-            return hydrateAuthenticated(loginSnapshot, method)
+        return refreshPlayerState(loginMethod = method)
+    }
+
+    suspend fun register(request: RegistrationRequest): RegistrationResult {
+        RegistrationCopy.clientError(request)?.let { return RegistrationResult.Failed(it) }
+        val currency = RegistrationCopy.normalizeCurrency(request.currency)
+            ?: return RegistrationResult.Failed(NetworkError.Unknown(RegistrationCopy.CURRENCY))
+        val response = runCatching { api.register(request.wireBody(currency)) }
+            .getOrElse { return RegistrationResult.Failed(com.nextpari.app.core.network.ApiErrorMapper.fromThrowable(it)) }
+        val body = response.jsonBody(json)
+        val code = PlayerJsonMapper.errorCode(body)
+        if (response.code() == 409 && code == "EMAIL_CONFIRMATION_REQUIRED") {
+            pendingOneClick = null
+            return RegistrationResult.EmailConfirmationRequired
         }
-        return meResult
+        if (!response.isSuccessful) {
+            return RegistrationResult.Failed(
+                PlayerJsonMapper.mapAuthError(code, NetworkError.Unknown(RegistrationCopy.FAILED)),
+            )
+        }
+        val oneClick = body?.obj("oneClick")
+        if (request.method == "one_click" || oneClick != null) {
+            val playerId = PlayerJsonMapper.parsePublicPlayerId(
+                oneClick?.str("playerId").orEmpty().ifBlank { body?.obj("player")?.str("publicId").orEmpty() },
+            )
+            val issuedPassword = oneClick?.str("password").orEmpty()
+            if (playerId.isBlank() || issuedPassword.length < 8) {
+                pendingOneClick = null
+                return RegistrationResult.Failed(NetworkError.Unknown(RegistrationCopy.FAILED))
+            }
+            val snapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
+            pendingOneClick = snapshot
+            return RegistrationResult.OneClickIssued(
+                playerId = playerId,
+                password = issuedPassword,
+                canEnter = snapshot != null,
+            )
+        }
+        pendingOneClick = null
+        val snapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
+        if (snapshot == null) return RegistrationResult.EmailConfirmationRequired
+        return when (val established = establishSession(request.method)) {
+            is ApiResult.Ok -> RegistrationResult.Authenticated(established.data)
+            is ApiResult.Err -> RegistrationResult.Failed(established.error)
+        }
+    }
+
+    suspend fun continueOneClick(): OneClickContinue {
+        if (pendingOneClick == null) return OneClickContinue.NeedLogin(RegistrationCopy.ONE_CLICK_LOGIN)
+        return when (val established = establishSession("one_click")) {
+            is ApiResult.Ok -> {
+                pendingOneClick = null
+                OneClickContinue.Entered(established.data)
+            }
+            is ApiResult.Err -> OneClickContinue.Failed(established.error)
+        }
     }
 
     suspend fun logout() {
@@ -86,9 +141,12 @@ class PlayerSessionCoordinator(
         return hydrateAuthenticated(snapshot, loginMethod ?: sessions.session.value.loginMethod)
     }
 
-    fun applyBalanceAfter(balanceAfter: Double) {
-        store.applyBalanceAfter(balanceAfter)
+    private suspend fun establishSession(loginMethod: String): ApiResult<AuthSession> {
+        return refreshPlayerState(loginMethod = loginMethod)
     }
+
+    fun applyBalanceAfter(balanceAfter: Double, expectedWalletId: String = ""): Boolean =
+        store.applyBalanceAfter(balanceAfter, expectedWalletId)
 
     fun onUnauthorized() {
         clearLocal()
@@ -131,9 +189,33 @@ class PlayerSessionCoordinator(
     }
 
     private fun clearLocal() {
+        pendingOneClick = null
         cookieJar.clear()
         store.clear()
         sessions.clearImmediate()
+        onSessionCleared()
+    }
+}
+
+private fun RegistrationRequest.wireBody(currency: String): JsonObject = when (method) {
+    "email" -> buildJsonObject {
+        put("method", "email")
+        put("email", email.trim())
+        put("password", password)
+        put("ageConfirmed", true)
+        put("currency", currency)
+    }
+    "phone" -> buildJsonObject {
+        put("method", "phone")
+        put("phone", RegistrationCopy.compactPhone(phone))
+        put("password", password)
+        put("ageConfirmed", true)
+        put("currency", currency)
+    }
+    else -> buildJsonObject {
+        put("method", "one_click")
+        put("ageConfirmed", true)
+        put("currency", currency)
     }
 }
 

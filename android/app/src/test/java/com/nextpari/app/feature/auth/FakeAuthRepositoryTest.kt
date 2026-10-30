@@ -56,4 +56,24 @@ class FakeAuthRepositoryTest {
         assertThat(sessions.session.value.isAuthenticated).isFalse()
         assertThat(sessions.session.value).isEqualTo(com.nextpari.app.core.session.AuthSession.Anonymous)
     }
+
+    @Test
+    fun registerDoesNotCreateASession() = runTest {
+        val sessions = InMemorySessionRepository()
+        val repository = FakeAuthRepository(sessions)
+
+        val result = repository.register(
+            RegistrationRequest(
+                method = "email",
+                email = "player@nextpari.net",
+                password = "password1",
+                ageConfirmed = true,
+                currency = "TMT",
+            ),
+        )
+
+        assertThat(result).isInstanceOf(RegistrationResult.Failed::class.java)
+        assertThat(sessions.session.value.isAuthenticated).isFalse()
+        assertThat(repository.continueOneClick()).isInstanceOf(OneClickContinue.NeedLogin::class.java)
+    }
 }

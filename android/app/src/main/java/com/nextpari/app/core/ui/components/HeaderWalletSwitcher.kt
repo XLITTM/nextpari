@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
+import com.nextpari.app.core.ui.neon.VipNeonChrome
+import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.wallets.WalletsCatalog
 import com.nextpari.app.feature.wallets.WalletsUiState
@@ -47,8 +49,8 @@ fun WalletDropdownMenu(
     onAdd: (String) -> Boolean,
 ) {
     val colors = NextpariTheme.colors
-    val menuBg = if (darkTheme) Color(0xFF18181B) else Color.White
-    val menuBorder = if (darkTheme) Color(0xFF374151) else Color(0xFFE5E7EB)
+    val menuBg = colors.surface
+    val menuBorder = colors.border
     DropdownMenu(
         expanded = expanded,
         onDismissRequest = onDismiss,
@@ -62,7 +64,7 @@ fun WalletDropdownMenu(
     ) {
         Text(
             WalletsCatalog.MY_CURRENCIES,
-            color = Color(0xFF6B7280),
+            color = colors.textMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.6.sp,
@@ -71,7 +73,7 @@ fun WalletDropdownMenu(
         if (state.owned.isEmpty()) {
             Text(
                 WalletsCatalog.EMPTY_WALLETS,
-                color = Color(0xFF6B7280),
+                color = colors.textMuted,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
             )
@@ -80,6 +82,11 @@ fun WalletDropdownMenu(
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        .vipNeonFrame(
+                            selected = row.isActive,
+                            enabled = !state.busy,
+                            chrome = VipNeonChrome.Glow,
+                        )
                         .clickable(enabled = !state.busy) {
                             if (onSelect(row.currency)) onDismiss()
                         }
@@ -104,11 +111,11 @@ fun WalletDropdownMenu(
         }
         HorizontalDivider(
             modifier = Modifier.padding(top = 4.dp),
-            color = if (darkTheme) Color(0xFF27272A) else Color(0xFFF3F4F6),
+            color = colors.border,
         )
         Text(
             WalletsCatalog.ADD_CURRENCY_MENU,
-            color = Color(0xFF6B7280),
+            color = colors.textMuted,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -116,11 +123,12 @@ fun WalletDropdownMenu(
         state.addable.forEach { option ->
             Text(
                 option.label,
-                color = if (darkTheme) Color(0xFF86EFAC) else Color(0xFF15803D),
+                color = colors.accent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .vipNeonFrame(enabled = !state.busy, chrome = VipNeonChrome.PressOnly)
                     .clickable(enabled = !state.busy) {
                         if (onAdd(option.value)) onDismiss()
                     }
@@ -180,9 +188,10 @@ fun HeaderWalletSwitcher(
     Box {
         Row(
             modifier = Modifier
+                .vipNeonFrame(shape = RoundedCornerShape(50), chrome = VipNeonChrome.PressOnly)
                 .clip(RoundedCornerShape(50))
-                .border(1.dp, if (darkTheme) Color(0xFF374151) else Color(0xFFE5E7EB), RoundedCornerShape(50))
-                .background(if (darkTheme) Color(0xFF1E293B) else Color(0xFFF3F4F6))
+                .border(1.dp, colors.border, RoundedCornerShape(50))
+                .background(colors.surface)
                 .clickable { open = nextWalletDropdownOpen(open, onRefresh) }
                 .padding(start = 4.dp, end = 10.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -196,7 +205,7 @@ fun HeaderWalletSwitcher(
             Icon(
                 NextpariWebIcons.ChevronDown,
                 contentDescription = WalletsCatalog.SWITCHER_LABEL,
-                tint = Color(0xFF6B7280),
+                tint = colors.textMuted,
                 modifier = Modifier
                     .padding(start = 4.dp)
                     .size(16.dp)
