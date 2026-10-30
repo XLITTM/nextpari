@@ -70,6 +70,10 @@ class ReleaseUpdateTest {
         assertThat(gradle).contains("NEXTPARI_RELEASE_STORE_FILE")
         assertThat(gradle).doesNotContain("storePassword = \"")
         assertThat(gradle).doesNotContain(".jks")
-        assertThat(gradle).contains("versionCode = 1")
+        assertThat(gradle).contains("versionCode = 2")
+        assertThat(gradle).contains("versionName = \"0.2.0\"")
+        assertThat(gradle).doesNotContain("0.2.0-a002")
+        assertThat(gradle).doesNotContain("signingConfig = signingConfigs.getByName(\"debug\")")
+        assertThat(gradle).doesNotContain("isDebuggable = true")
     }
 }
