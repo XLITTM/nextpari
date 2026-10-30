@@ -72,7 +72,6 @@ class ScreenCheckActivity : ComponentActivity() {
                         session = AuthSession.Anonymous,
                         balanceLabel = "—",
                         onNavigate = { page = it },
-                        onLogout = {},
                         onInbox = {},
                         walletsState = WalletsUiState(),
                         onRefreshWallets = {},

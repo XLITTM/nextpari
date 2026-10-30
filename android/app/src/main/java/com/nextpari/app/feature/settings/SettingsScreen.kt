@@ -42,7 +42,9 @@ import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.VpnKey
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -111,6 +113,7 @@ fun SettingsScreen(
     var view by rememberSaveable { mutableStateOf("root") }
     var passwordOpen by rememberSaveable { mutableStateOf(false) }
     var emailOpen by rememberSaveable { mutableStateOf(false) }
+    var logoutConfirm by rememberSaveable { mutableStateOf(false) }
     val context = LocalContext.current
     val dark = NextpariTheme.colors.bg == NextpariColors.Dark.bg
     val screenBg = if (dark) ScreenDark else ScreenLight
@@ -264,11 +267,35 @@ fun SettingsScreen(
                     labelColor = if (dark) LogoutDarkFg else LogoutFg,
                     hideChevron = true,
                     dark = dark,
-                    onClick = onLogout,
+                    onClick = { logoutConfirm = true },
                 )
             }
         }
 
+        if (logoutConfirm) {
+            val colors = NextpariTheme.colors
+            AlertDialog(
+                onDismissRequest = { logoutConfirm = false },
+                containerColor = if (dark) GroupDark else Color.White,
+                titleContentColor = colors.text,
+                textContentColor = colors.textSecondary,
+                title = { Text("Выйти из аккаунта?") },
+                text = { Text("Текущая сессия на этом устройстве будет завершена.") },
+                confirmButton = {
+                    TextButton(onClick = {
+                        logoutConfirm = false
+                        onLogout()
+                    }) {
+                        Text("Выйти", color = if (dark) LogoutDarkFg else LogoutFg)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { logoutConfirm = false }) {
+                        Text("Отмена", color = colors.textSecondary)
+                    }
+                },
+            )
+        }
         if (passwordOpen) {
             ChangePasswordModal(dark = dark, onClose = { passwordOpen = false }, onChanged = onLogout)
         }

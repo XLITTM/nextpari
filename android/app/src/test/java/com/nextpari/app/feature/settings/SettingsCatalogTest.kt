@@ -79,6 +79,9 @@ class SettingsCatalogTest {
         assertThat(SettingsCatalog.shareText).contains("https://nextpari.net/")
         assertThat(screen).doesNotContain("localhost")
         assertThat(screen).contains("onLogout")
+        assertThat(screen).contains("Выйти из аккаунта?")
+        assertThat(screen).contains("logoutConfirm = true")
+        assertThat(screen).doesNotContain("onClick = onLogout")
         assertThat(screen).contains("Destinations.WALLET")
     }
 

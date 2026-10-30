@@ -43,6 +43,12 @@ class MenuCatalogTest {
         )
         assertThat(MenuCatalog.itemsFor("Разное").first { it.label == "Управление счетом" }.route).isEqualTo("wallet")
         assertThat(MenuCatalog.itemsFor("Топ").first { it.label == "Аутентификатор" }.soon).isTrue()
+        val screen = moduleFile("src/main/java/com/nextpari/app/feature/menu/MenuScreen.kt").readText()
+        assertThat(screen).doesNotContain("Выйти из аккаунта")
+        assertThat(screen).doesNotContain("onLogout")
+        assertThat(screen).contains(".size(36.dp)")
+        assertThat(screen).contains("Пополнить")
+        assertThat(screen).contains("WalletDropdownMenu")
     }
 
     @Test

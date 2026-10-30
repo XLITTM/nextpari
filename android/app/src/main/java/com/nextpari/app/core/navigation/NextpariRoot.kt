@@ -401,7 +401,6 @@ internal fun AuthenticatedShell(
                     session = session,
                     balanceLabel = balanceLabel,
                     onNavigate = { navController.navigateTo(it) },
-                    onLogout = { authViewModel.logout() },
                     onInbox = { navController.navigateTo(Destinations.INBOX_PLACEHOLDER) },
                     walletsState = walletsState,
                     onRefreshWallets = walletsViewModel::refresh,

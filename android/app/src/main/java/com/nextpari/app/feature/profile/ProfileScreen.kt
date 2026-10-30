@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.nextpari.app.core.session.AuthSession
-import com.nextpari.app.core.ui.components.NextpariButton
 import com.nextpari.app.core.ui.components.NextpariCard
 import com.nextpari.app.core.ui.theme.NpBackground
 import com.nextpari.app.core.ui.theme.NpText
@@ -24,7 +23,6 @@ import com.nextpari.app.core.ui.theme.NpTextSecondary
 fun ProfileScreen(
     session: AuthSession,
     onOpenSettings: () -> Unit,
-    onLogout: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -46,8 +44,6 @@ fun ProfileScreen(
             Text("Настройки", color = NpText)
             Text("Тема и служебные параметры", color = NpTextMuted)
         }
-        Spacer(Modifier.height(16.dp))
-        NextpariButton(text = "Выйти", onClick = onLogout)
     }
 }
 
