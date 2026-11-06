@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { assertEnvironmentIsolation, EnvironmentIsolationError } from '../config/environmentIsolation.js';
 import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, redactForLog } from '../staff/errors.js';
 import {
@@ -96,6 +97,7 @@ export async function handleBetConstructRequest(
   const method = input.method.toUpperCase();
   void input.body;
   try {
+    assertEnvironmentIsolation(env);
     if (path === PLAYER_BETCONSTRUCT_SPORTSBOOK_LAUNCH_PATH) {
       if (method !== 'POST') throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
       return toStaffResult(await requestBetConstructLaunch({
@@ -133,6 +135,12 @@ export async function handleBetConstructRequest(
         status: error.httpStatus,
         body: { ok: false, error: error.code, ...error.payload },
         headers: error.httpStatus === 405 ? { Allow: 'POST' } : undefined,
+      });
+    }
+    if (error instanceof EnvironmentIsolationError) {
+      return toStaffResult({
+        status: error.httpStatus,
+        body: { ok: false, error: error.code },
       });
     }
     log.error('betconstruct_unhandled', {

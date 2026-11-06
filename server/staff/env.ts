@@ -1,3 +1,5 @@
+import { assertEnvironmentIsolation } from '../config/environmentIsolation.js';
+
 function readEnv(name: string): string {
   return (process.env[name] ?? '').trim();
 }
@@ -20,6 +22,7 @@ export interface StaffOnboardingEnv extends OwnerAuthEnv {
 }
 
 export function loadOwnerAuthEnv(): OwnerAuthEnv {
+  assertEnvironmentIsolation(process.env);
   if (readEnv('VITE_SUPABASE_SERVICE_ROLE_KEY')) {
     throw new Error('VITE_SUPABASE_SERVICE_ROLE_KEY_FORBIDDEN');
   }
