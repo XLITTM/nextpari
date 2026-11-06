@@ -1,0 +1,128 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { authenticateGroupOwner, authorizeStaffSubject } from '../../server/group/access.ts';
+import { GroupControlError } from '../../server/group/errors.ts';
+import { sumMoney } from '../../server/group/reporting.ts';
+import { GroupOwnerApp } from './GroupOwnerApp.tsx';
+import { DEMO_PLAYERS, DEMO_SNAPSHOTS } from './demoData.ts';
+import {
+  DEMO_GRANTS,
+  employeeDraftReceipt,
+  financeLines,
+  overviewCounts,
+  playerIdsLeakAcrossBrands,
+  playersForBrand,
+  publicIdsAreGloballyUnique,
+  buildGroupReport,
+} from './viewModel.ts';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+function html(page: 'overview' | 'players' | 'finance' | 'employees', brand: 'all' | '001' | '002' | '003' = 'all'): string {
+  return renderToStaticMarkup(createElement(GroupOwnerApp, { initialPage: page, initialBrand: brand }));
+}
+
+describe('group owner dashboard', () => {
+  it('renders the separate overview with labeled demonstration counts', () => {
+    const markup = html('overview');
+    assert.match(markup, /Демонстрационные данные/);
+    assert.match(markup, /Кабинет владельца NextPari не заменяется/);
+    assert.match(markup, /NextPari/);
+    assert.match(markup, /RYXO/);
+    assert.match(markup, /Будущий бренд/);
+    const counts = overviewCounts(buildGroupReport().brands);
+    assert.equal(counts.brandCount, 3);
+    assert.equal(counts.playerCount, 6);
+    assert.match(markup, />6</);
+  });
+
+  it('filters players to the selected brand', () => {
+    assert.equal(publicIdsAreGloballyUnique(DEMO_PLAYERS), true);
+    assert.equal(playerIdsLeakAcrossBrands(DEMO_PLAYERS, '001'), false);
+    assert.deepEqual(playersForBrand(DEMO_PLAYERS, '002').map((player) => player.publicId), ['910001', '910002']);
+    const nextpari = html('players', '001');
+    assert.match(nextpari, /900001/);
+    assert.doesNotMatch(nextpari, /910001/);
+    const future = html('players', '003');
+    assert.match(future, /нет демонстрационных игроков/);
+    assert.doesNotMatch(future, /900001/);
+    assert.doesNotMatch(future, /910001/);
+  });
+
+  it('keeps finance split by brand and currency', () => {
+    const lines = financeLines(buildGroupReport(), 'all');
+    assert.deepEqual(lines.map((line) => `${line.brandCode}:${line.currency}`), ['001:TMT', '002:USD']);
+    assert.throws(() => sumMoney(lines, 'deposits'), (error: unknown) => {
+      return error instanceof GroupControlError && error.code === 'MIXED_CURRENCY_TOTAL';
+    });
+    const markup = html('finance', 'all');
+    assert.match(markup, /TMT/);
+    assert.match(markup, /USD/);
+    assert.doesNotMatch(markup, /Итого/);
+    assert.equal(financeLines(buildGroupReport(), '003').length, 0);
+    assert.equal(DEMO_SNAPSHOTS[0]?.financials.currency, 'TMT');
+  });
+
+  it('validates the employee form and never reports an account was created', () => {
+    const empty = employeeDraftReceipt({
+      brandCode: '',
+      identity: '',
+      role: '',
+      permissions: [],
+      status: '',
+    });
+    assert.equal(empty.accountCreated, false);
+    assert.equal(empty.invitationSent, false);
+    assert.deepEqual(empty.errors, ['brandCode', 'identity', 'role', 'permissions', 'status']);
+
+    const email = employeeDraftReceipt({
+      brandCode: '001',
+      identity: 'owner@nextpari.com',
+      role: 'manager',
+      permissions: ['players'],
+      status: 'active',
+    });
+    assert.deepEqual(email.errors, ['identity']);
+
+    const valid = employeeDraftReceipt({
+      brandCode: '002',
+      identity: 'Демо Кассир',
+      role: 'cashier',
+      permissions: ['balances'],
+      status: 'suspended',
+    });
+    assert.deepEqual(valid.errors, []);
+    assert.equal(valid.accountCreated, false);
+    const markup = html('employees', '001');
+    assert.match(markup, /Отправить приглашение/);
+    assert.match(markup, /disabled/);
+  });
+
+  it('denies cross-brand staff and display-name owner login', () => {
+    const subject = DEMO_GRANTS[0]?.staffSubject ?? '';
+    assert.equal(authorizeStaffSubject(DEMO_GRANTS, '001', subject, 'players'), '001');
+    assert.throws(() => authorizeStaffSubject(DEMO_GRANTS, '002', subject, 'players'), (error: unknown) => {
+      return error instanceof GroupControlError && error.code === 'CROSS_BRAND_ACCESS_DENIED';
+    });
+    assert.throws(() => authenticateGroupOwner([], 'group-owner'), (error: unknown) => {
+      return error instanceof GroupControlError && error.code === 'OWNER_SUBJECT_INVALID';
+    });
+  });
+
+  it('stays off the production owner entry and does not embed a service token', () => {
+    const index = readFileSync(join(root, 'index.html'), 'utf8');
+    const vercel = readFileSync(join(root, 'vercel.json'), 'utf8');
+    const app = readFileSync(join(root, 'src', 'group-owner', 'GroupOwnerApp.tsx'), 'utf8');
+    const main = readFileSync(join(root, 'src', 'group-owner', 'main.tsx'), 'utf8');
+    assert.match(index, /src\/main\.tsx/);
+    assert.doesNotMatch(index, /group-owner/);
+    assert.doesNotMatch(vercel, /group-owner|group_control|GROUP_SERVICE/);
+    assert.doesNotMatch(`${app}\n${main}`, /service_role|GROUP_SERVICE|VITE_|password|bypass/i);
+    assert.doesNotMatch(app, /src\/owner\//);
+  });
+});
