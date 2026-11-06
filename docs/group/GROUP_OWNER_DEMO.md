@@ -68,11 +68,11 @@ Use a Chrome profile that is not signed in to Vercel. A private window is enough
 
 The dashboard now starts at a group-owner login. It is not the NextPari owner login. Cookies are `np_group_access` and `np_group_refresh`, HttpOnly, and separate from `nextpari_owner_access`.
 
-Password sign-in uses the Supabase anon key on the server. Reads require an `aal2` session. A password-only session cannot open data. MFA enrollment and verification are `POST /api/group-owner/auth/enroll` and `POST /api/group-owner/auth/mfa`.
+Password sign-in uses the Supabase anon key on the server. The server loads `owner_identities` before it allows TOTP enrollment. A password-only session cannot open data. Reads require an `aal2` session. MFA enrollment and verification are `POST /api/group-owner/auth/enroll` and `POST /api/group-owner/auth/mfa`.
 
-After `aal2`, the server loads `group_control.owner_identities` and `group_control.owner_permissions` with the service-role key. A brand staff UUID is not an owner. Rows are limited to `brand_owners` for that owner. The browser bundle does not contain the service-role key.
+After `aal2`, the server reads `group_control` with the `group_control_reader` database role over a pooled TLS connection. It does not use PostgREST and it does not use the service-role key. A brand staff UUID is not an owner. Rows are limited to `brand_owners` for that owner. The browser bundle does not contain the database URL.
 
-This pull request does not create an owner account. Add the owner in Supabase Auth, enroll TOTP, then insert the auth user id into `owner_identities`, `owner_permissions`, and `brand_owners`.
+This pull request does not create an owner account. The manual steps are in `docs/group/GROUP_OWNER_BOOTSTRAP.md`.
 
 ## Read API
 
@@ -80,11 +80,13 @@ This pull request does not create an owner account. Add the owner in Supabase Au
 
 `POST /api/group-owner/treasury` returns `TREASURY_WRITES_DISABLED`. `POST /api/group-owner/staff` returns `STAFF_WRITES_DISABLED`. Player-id cutover and RYXO registration are not called.
 
-PostgREST currently exposes only `public` and `graphql_public`. Until `group_control` can be read by the server service role, the API returns `GROUP_SCHEMA_NOT_EXPOSED` and the screen shows that error instead of figures. Do not expose the schema to the anon key.
+Do not add `group_control` to the Supabase Data API exposed schemas. The reader compares the live catalog with `server/group/schemaContract.ts` and returns `GROUP_COLUMN_MISMATCH` when a required column is absent.
 
-NextPari `owner_dashboard_stats` is called with the user JWT only. Its money totals are not shown, because that function does not separate currency. The response reason is `NEXTPARI_STATS_HAVE_NO_CURRENCY` or `NEXTPARI_OWNER_CONTEXT_REQUIRED`.
+NextPari brand reports are not loaded with the group owner JWT. The response reason is `NEXTPARI_REPORT_ADAPTER_REQUIRED` until a separate server-to-server adapter exists.
 
-Server environment for the group-owner project, after approval: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Never copy them into `VITE_` variables.
+On the group-owner project set `GROUP_OWNER_DEPLOYMENT=1`. Middleware then returns 404 for every `/api` route except `/api/group-owner`. Leave that variable unset on NextPari.
+
+Server environment, after approval: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `GROUP_CONTROL_DATABASE_URL`. Never copy the database URL into a `VITE_` variable. Do not put `SUPABASE_SERVICE_ROLE_KEY` on this project.
 
 ## What the demo does not do
 

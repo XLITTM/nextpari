@@ -71,9 +71,7 @@ function ports(overrides: Partial<GroupOwnerPorts> = {}): GroupOwnerPorts {
     async loadModel() {
       return model();
     },
-    async readNextpariStats() {
-      return 'unavailable';
-    },
+    auditAuthFailure() {},
   };
   return { ...base, ...overrides };
 }
@@ -120,6 +118,74 @@ describe('group owner authentication', () => {
     assert.equal(overview.body.error, 'MFA_REQUIRED');
   });
 
+  it('rejects a non-owner and a disabled owner before MFA enrollment', async () => {
+    let enrolled = 0;
+    let verified = 0;
+    const events: string[] = [];
+    const gate = ports({
+      async enrollTotp() {
+        enrolled += 1;
+        return { factorId: 'factor-1', uri: 'otpauth://totp/secret-value' };
+      },
+      async verifyTotp() {
+        verified += 1;
+        return { accessToken: token(OWNER, 'aal2'), refreshToken: 'refresh-2' };
+      },
+      auditAuthFailure(event) {
+        events.push(JSON.stringify(event));
+      },
+    });
+    const stranger = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/login',
+      body: { email: 'stranger@example.invalid', password: 'secret' },
+      secure: true,
+    }, ports({
+      ...gate,
+      async loadOwner() {
+        return null;
+      },
+      async signInWithPassword() {
+        return { accessToken: token(STAFF, 'aal1'), refreshToken: 'refresh' };
+      },
+    }));
+    assert.equal(stranger.status, 403);
+    assert.equal(stranger.body.error, 'OWNER_UNKNOWN');
+    assert.equal(JSON.stringify(stranger.cookies ?? []).includes('header.'), false);
+    const enroll = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/enroll',
+      cookie: cookie(token(STAFF, 'aal1')),
+    }, ports({
+      ...gate,
+      async loadOwner() {
+        return null;
+      },
+    }));
+    assert.equal(enroll.status, 403);
+    const disabled = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/mfa',
+      cookie: cookie(token(OWNER, 'aal1')),
+      body: { factorId: 'factor-1', code: '123456' },
+    }, ports({
+      ...gate,
+      async loadOwner() {
+        return { id: OWNER, status: 'disabled', permissions: ['brands.read'] };
+      },
+    }));
+    assert.equal(disabled.status, 403);
+    assert.equal(disabled.body.error, 'OWNER_DISABLED');
+    assert.equal(enrolled, 0);
+    assert.equal(verified, 0);
+    const auditText = events.join('\n');
+    assert.match(auditText, /OWNER_UNKNOWN/);
+    assert.match(auditText, /OWNER_DISABLED/);
+    assert.equal(auditText.includes('secret'), false);
+    assert.equal(auditText.includes('otpauth'), false);
+    assert.equal(auditText.includes('header.'), false);
+  });
+
   it('isolates brands and keeps money split and read-only', async () => {
     const result = await handleGroupOwnerRequest({
       method: 'GET',
@@ -133,6 +199,9 @@ describe('group owner authentication', () => {
     assert.deepEqual(data.finance.map((line) => line.currency), ['TMT']);
     assert.equal(JSON.stringify(result.body).includes('turnover'), false);
     assert.equal(JSON.stringify(result.body).includes('email'), false);
+    const nextpari = result.body.nextpari as { available: boolean; reason: string };
+    assert.equal(nextpari.available, false);
+    assert.equal(nextpari.reason, 'NEXTPARI_REPORT_ADAPTER_REQUIRED');
 
     const denied = await handleGroupOwnerRequest({
       method: 'GET',
@@ -190,6 +259,9 @@ describe('group owner authentication', () => {
     assert.equal(vercel.includes('group-owner'), false);
     assert.equal(playerIds.includes('group_control'), false);
     assert.equal(live.includes('allocate_player_id'), false);
+    assert.equal(live.includes('createServiceRoleClient'), false);
+    assert.equal(live.includes('owner_dashboard_stats'), false);
+    assert.equal(live.includes(".schema('group_control')"), false);
     assert.equal(ui.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
     assert.equal(ui.includes('createServiceRoleClient'), false);
   });

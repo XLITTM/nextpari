@@ -194,7 +194,9 @@ export function GroupOwnerApp({
         <main className="content">
           <p className="note">Источник: group_control. Показатели появляются только из ответа API.</p>
           {snapshot?.schemaError ? <div className="warning" role="status">{snapshot.schemaError}</div> : null}
-          {snapshot?.nextpariReason ? <p className="note">{snapshot.nextpariReason}</p> : null}
+          {snapshot?.nextpariReason === 'NEXTPARI_REPORT_ADAPTER_REQUIRED'
+            ? <p className="note">Отчёт NextPari не подключён отдельным серверным доступом.</p>
+            : null}
           {page === 'overview' ? <Overview reportBrands={visible} /> : null}
           {page === 'brands' ? <Brands filter={brand} rows={visible} /> : null}
           {page === 'employees' ? <Employees filter={brand} grants={snapshot?.grants ?? []} /> : null}
@@ -616,21 +618,43 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
   const [code, setCode] = useState('');
   const [factorId, setFactorId] = useState('');
   const [mfa, setMfa] = useState(false);
+  const [setupUri, setSetupUri] = useState('');
   const [message, setMessage] = useState('');
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setMessage('');
+    try {
     const response = await fetch(mfa ? '/api/group-owner/auth/mfa' : '/api/group-owner/auth/login', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(mfa ? { factorId, code } : { email, password }),
     });
-    const body = await response.json() as { ok?: boolean; mfaRequired?: boolean; factorId?: string | null };
+    const body = await response.json() as {
+      ok?: boolean;
+      mfaRequired?: boolean;
+      enrollmentRequired?: boolean;
+      factorId?: string | null;
+    };
     if (body.mfaRequired) {
       setMfa(true);
       if (body.factorId) setFactorId(body.factorId);
+      if (body.enrollmentRequired) {
+        const enrolled = await fetch('/api/group-owner/auth/enroll', {
+          method: 'POST',
+          credentials: 'include',
+        });
+        const enrolledBody = await enrolled.json() as { ok?: boolean; factorId?: string; uri?: string };
+        if (!enrolled.ok || !enrolledBody.ok || !enrolledBody.factorId || !enrolledBody.uri) {
+          setMessage('Вход не выполнен.');
+          return;
+        }
+        setFactorId(enrolledBody.factorId);
+        setSetupUri(enrolledBody.uri);
+        setMessage('Добавьте адрес MFA в приложение и введите код. Данные не открыты.');
+        return;
+      }
       setMessage('Нужен код MFA. Данные не открыты.');
       return;
     }
@@ -645,6 +669,9 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
       return;
     }
     onSignedIn({ ownerId: sessionBody.ownerId, permissions: sessionBody.permissions ?? [] });
+    } catch {
+      setMessage('Вход не выполнен.');
+    }
   }
 
   return (
@@ -661,6 +688,9 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
           </label>
           {mfa ? (
             <>
+              {setupUri ? <label className="field">Адрес MFA
+                <input aria-label="Адрес MFA" type="text" readOnly value={setupUri} />
+              </label> : null}
               <label className="field">Код MFA
                 <input aria-label="Код MFA" type="text" value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" />
               </label>

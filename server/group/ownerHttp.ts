@@ -1,4 +1,5 @@
 import { GroupControlError } from './errors.js';
+import { sanitizeAuthAudit, type GroupAuthAudit } from './ownerAudit.js';
 import {
   GROUP_OWNER_ACCESS_COOKIE,
   GROUP_OWNER_REFRESH_COOKIE,
@@ -28,8 +29,8 @@ export interface GroupOwnerPorts {
   verifyTotp(accessToken: string, factorId: string, code: string): Promise<{ accessToken: string; refreshToken: string }>;
   enrollTotp(accessToken: string): Promise<{ factorId: string; uri: string }>;
   loadOwner(userId: string): Promise<GroupOwnerRecord | null>;
-  loadModel(): Promise<GroupReadModel>;
-  readNextpariStats(accessToken: string): Promise<'unavailable' | 'no-currency'>;
+  loadModel(ownerId: string): Promise<GroupReadModel>;
+  auditAuthFailure(event: GroupAuthAudit): void;
 }
 
 export interface GroupOwnerHttpResult {
@@ -91,6 +92,16 @@ function fail(status: number, error: string, secure = false): GroupOwnerHttpResu
     headers: { 'Cache-Control': 'no-store' },
     cookies: status === 401 ? clearCookies(secure) : undefined,
   };
+}
+
+function recordFailure(
+  ports: GroupOwnerPorts,
+  pathname: string,
+  code: string,
+  userId: string | null,
+): void {
+  const event = sanitizeAuthAudit({ code, pathname, userId });
+  if (event) ports.auditAuthFailure(event);
 }
 
 function ownerError(error: unknown, secure: boolean): GroupOwnerHttpResult {
@@ -164,6 +175,12 @@ export async function handleGroupOwnerRequest(
       if (!email || !password) return fail(400, 'EMAIL_PASSWORD_REQUIRED', secure);
       const tokens = await ports.signInWithPassword(email, password);
       const access = await ports.verifyAccessToken(tokens.accessToken);
+      const owner = await ports.loadOwner(access.userId);
+      if (!owner || owner.status !== 'active') {
+        const code = owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN';
+        recordFailure(ports, path, code, access.userId);
+        return { ...fail(403, code), cookies: clearCookies(secure) };
+      }
       if (access.aal === 'aal2') {
         return {
           status: 200,
@@ -186,6 +203,13 @@ export async function handleGroupOwnerRequest(
       const factorId = String(body.factorId ?? '');
       const code = String(body.code ?? '').trim();
       if (!token || !factorId || !/^[0-9]{6}$/.test(code)) return fail(400, 'MFA_CODE_REQUIRED', secure);
+      const pending = await ports.verifyAccessToken(token);
+      const owner = await ports.loadOwner(pending.userId);
+      if (!owner || owner.status !== 'active') {
+        const code = owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN';
+        recordFailure(ports, path, code, pending.userId);
+        return { ...fail(403, code), cookies: clearCookies(secure) };
+      }
       const tokens = await ports.verifyTotp(token, factorId, code);
       const access = await ports.verifyAccessToken(tokens.accessToken);
       if (access.aal !== 'aal2') return fail(401, 'MFA_REQUIRED', secure);
@@ -199,8 +223,17 @@ export async function handleGroupOwnerRequest(
 
     if (path === '/api/group-owner/auth/enroll' && method === 'POST') {
       const token = readCookie(input.cookie, GROUP_OWNER_ACCESS_COOKIE);
-      if (!token) return fail(401, 'AUTH_REQUIRED', secure);
-      await ports.verifyAccessToken(token);
+      if (!token) {
+        recordFailure(ports, path, 'AUTH_REQUIRED', null);
+        return fail(401, 'AUTH_REQUIRED', secure);
+      }
+      const pending = await ports.verifyAccessToken(token);
+      const owner = await ports.loadOwner(pending.userId);
+      if (!owner || owner.status !== 'active') {
+        const code = owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN';
+        recordFailure(ports, path, code, pending.userId);
+        return { ...fail(403, code), cookies: clearCookies(secure) };
+      }
       const enrolled = await ports.enrollTotp(token);
       return {
         status: 200,
@@ -215,11 +248,18 @@ export async function handleGroupOwnerRequest(
 
     if (path === '/api/group-owner/auth/session' && method === 'GET') {
       const token = readCookie(input.cookie, GROUP_OWNER_ACCESS_COOKIE);
-      if (!token) return fail(401, 'AUTH_REQUIRED');
+      if (!token) {
+        recordFailure(ports, path, 'AUTH_REQUIRED', null);
+        return fail(401, 'AUTH_REQUIRED');
+      }
       const access = await ports.verifyAccessToken(token);
       if (access.aal !== 'aal2') return { status: 200, body: { ok: true, mfaRequired: true }, headers: { 'Cache-Control': 'no-store' } };
       const owner = await ports.loadOwner(access.userId);
-      if (!owner || owner.status !== 'active') return fail(403, owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN');
+      if (!owner || owner.status !== 'active') {
+        const code = owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN';
+        recordFailure(ports, path, code, access.userId);
+        return { ...fail(403, code), cookies: clearCookies(secure) };
+      }
       return {
         status: 200,
         body: { ok: true, mfa: 'aal2', ownerId: owner.id, permissions: [...owner.permissions] },
@@ -228,34 +268,35 @@ export async function handleGroupOwnerRequest(
     }
 
     if (path === '/api/group-owner/treasury' && method === 'POST') {
+      recordFailure(ports, path, 'TREASURY_WRITES_DISABLED', null);
       return fail(403, 'TREASURY_WRITES_DISABLED');
     }
     if (path === '/api/group-owner/staff' && method === 'POST') {
+      recordFailure(ports, path, 'STAFF_WRITES_DISABLED', null);
       return fail(403, 'STAFF_WRITES_DISABLED');
     }
 
     const permission = READS[path];
     if (!permission || method !== 'GET') return fail(404, 'NOT_FOUND');
-    const { owner, token } = await requireOwner(ports, input.cookie, permission);
-    const model = scopeReadModel(await ports.loadModel(), owner.id);
-    const nextpari = permission === 'brands.read' || owner.permissions.includes('reports.read')
-      ? await ports.readNextpariStats(token)
-      : 'unavailable';
+    const { owner } = await requireOwner(ports, input.cookie, permission);
+    const model = scopeReadModel(await ports.loadModel(owner.id), owner.id);
     return {
       status: 200,
       body: {
         ok: true,
         source: 'group_control',
         synthetic: false,
-        nextpari: nextpari === 'no-currency'
-          ? { available: true, brandCode: '001', currencySeparated: false, reason: 'NEXTPARI_STATS_HAVE_NO_CURRENCY' }
-          : { available: false, reason: 'NEXTPARI_OWNER_CONTEXT_REQUIRED' },
+        nextpari: { available: false, reason: 'NEXTPARI_REPORT_ADAPTER_REQUIRED' },
         data: stripPrivateFields(payloadFor(path, model)),
       },
       headers: { 'Cache-Control': 'no-store' },
     };
   } catch (error) {
-    return ownerError(error, secure);
+    const result = ownerError(error, secure);
+    if (result.status === 401 || result.status === 403) {
+      recordFailure(ports, path, String(result.body.error ?? 'AUTH_FAILED'), null);
+    }
+    return result;
   }
 }
 

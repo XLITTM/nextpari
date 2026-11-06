@@ -63,6 +63,8 @@ describe('group owner demo build', () => {
       /SHARED_KEY/i,
       /sk_live/,
       /postgres:\/\//i,
+      /GROUP_CONTROL_DATABASE_URL/,
+      /group_control_reader/,
       /979426/,
       /\/api\/owner/i,
       /\/api\/player/i,

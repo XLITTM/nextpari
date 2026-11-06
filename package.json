@@ -13,6 +13,7 @@
     "group:foundation:test": "tsx --tsconfig tsconfig.server.json --test server/group/groupFoundation.test.ts",
     "group:owner:test": "tsx --tsconfig tsconfig.app.json --test src/group-owner/groupOwnerDashboard.test.ts",
     "group:owner:auth:test": "tsx --tsconfig tsconfig.server.json --test server/group/ownerHttp.test.ts",
+    "group:owner:db:test": "tsx --tsconfig tsconfig.server.json --test server/group/ownerDb.test.ts server/group/deploymentGate.test.ts",
     "group:owner:demo:test": "tsx --tsconfig tsconfig.server.json --test src/group-owner/groupOwnerDemoBuild.test.ts",
     "build:group-owner": "vite build --config vite.group-owner.config.ts",
     "server:sentry:test": "tsx --tsconfig tsconfig.server.json --test server/observability/sentry.test.ts",
@@ -72,6 +73,7 @@
     "@vercel/functions": "^3.9.7",
     "amqplib": "^2.0.1",
     "lucide-react": "^0.446.0",
+    "pg": "^8.23.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "trade360-nodejs-sdk": "^3.10.9",
@@ -81,6 +83,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@types/pg": "^8.23.1",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@types/ws": "^8.18.1",
