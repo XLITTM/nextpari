@@ -1,3 +1,5 @@
+import { assertEnvironmentIsolation } from '../config/environmentIsolation.js';
+
 export type LsportsFlow = 'inplay' | 'prematch';
 
 export class LsportsConfigError extends Error {
@@ -99,6 +101,7 @@ function readCredential(env: EnvMap, specificKey: string, sharedKey: string, cod
 }
 
 export function resolveLsportsRmqConfig(flow: LsportsFlow, env: EnvMap = process.env): LsportsRmqConfig {
+  assertEnvironmentIsolation(env);
   const defaults = DEFAULTS[flow];
   const prefix = flow === 'inplay' ? 'LSPORTS_INPLAY' : 'LSPORTS_PREMATCH';
   const host = readRequired(env, `${prefix}_HOST`, defaults.host, 'CONFIG_HOST_MISSING');

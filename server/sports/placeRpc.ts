@@ -1,3 +1,4 @@
+import { guardStagingMonetaryRpc } from '../config/stagingEnforcement.js';
 import { createServiceRoleClient } from '../supabase/admin.js';
 import { loadStaffOnboardingEnv } from '../staff/env.js';
 import { mapPlayerGameRpcError } from '../player/playerGameRpc.js';
@@ -30,6 +31,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 export function createSportsPlaceAsPlayerRpc(): SportsPlaceAsPlayer {
   return async (args) => {
+    guardStagingMonetaryRpc(SPORTS_PLACE_SERVER_RPC);
     const staff = loadStaffOnboardingEnv();
     const client = createServiceRoleClient(staff.supabaseUrl, staff.supabaseServiceRoleKey);
     const { data, error } = await client.rpc(SPORTS_PLACE_SERVER_RPC, {

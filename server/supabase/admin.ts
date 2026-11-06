@@ -1,6 +1,8 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { assertSupabaseTarget } from '../config/stagingEnforcement.js';
 
 export function createAnonAuthClient(url: string, anonKey: string): SupabaseClient {
+  assertSupabaseTarget(url);
   if (!url.trim()) {
     throw new Error('SUPABASE_URL_REQUIRED');
   }
@@ -18,6 +20,7 @@ export function createAnonAuthClient(url: string, anonKey: string): SupabaseClie
 }
 
 export function createServiceRoleClient(url: string, serviceRoleKey: string): SupabaseClient {
+  assertSupabaseTarget(url);
   if (!url.trim()) {
     throw new Error('SUPABASE_URL_REQUIRED');
   }
@@ -44,6 +47,7 @@ export function createUserJwtClient(
   anonKey: string,
   accessToken: string,
 ): SupabaseClient {
+  assertSupabaseTarget(url);
   if (!url.trim()) {
     throw new Error('SUPABASE_URL_REQUIRED');
   }

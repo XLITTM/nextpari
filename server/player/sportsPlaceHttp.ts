@@ -9,6 +9,7 @@ import {
   type StaffHttpResult,
   type StaffJsonResponse,
 } from '../staff/httpHandler.js';
+import { stagingHttpDenial, stagingMoneyDenial } from '../config/stagingEnforcement.js';
 import { GAME_NO_STORE_HEADERS } from '../games/httpCache.js';
 import { requestIsSecure } from './playerCookies.js';
 import {
@@ -62,6 +63,8 @@ export async function handlePlayerSportsRequest(
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
   const secure = input.cookieSecure === true;
+  const moneyDenied = stagingMoneyDenial(path, method, env);
+  if (moneyDenied) return moneyDenied;
 
   try {
     if (path === PLAYER_SPORTS_PLACE_PATH) {
@@ -120,6 +123,11 @@ export async function attachPlayerSportsHttp(
   const pathname = (req.url ?? '').split('?')[0] ?? '';
   if (!isPlayerSportsPath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'GET';
     const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
     const result = await handlePlayerSportsRequest(
@@ -162,6 +170,11 @@ export async function handleVercelPlayerSports(
   ports?: SportsPlacePorts,
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const cookie = req.headers.cookie;
   const result = await handlePlayerSportsRequest(
     {

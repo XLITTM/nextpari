@@ -2,11 +2,18 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import { ownerStaffOnboardingPlugin } from './plugins/owner-staff-onboarding';
+import { assertStagingClientBuild } from './server/config/stagingEnforcement';
 
 function sentryBuildMeta(env: Record<string, string | undefined>): {
-  environment: 'production' | 'preview' | 'development';
+  environment: 'production' | 'preview' | 'development' | 'staging';
   release: string;
 } {
+  if (String(env.NEXTPARI_ENV || '').trim() === 'staging') {
+    return {
+      environment: 'staging',
+      release: String(env.VERCEL_GIT_COMMIT_SHA || env.VITE_SENTRY_RELEASE || '').trim(),
+    };
+  }
   const vercelEnv = String(env.VERCEL_ENV || env.VITE_SENTRY_ENVIRONMENT || '').trim();
   const environment =
     vercelEnv === 'production' || vercelEnv === 'preview' || vercelEnv === 'development'
@@ -20,7 +27,9 @@ function sentryBuildMeta(env: Record<string, string | undefined>): {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
-  const sentry = sentryBuildMeta({ ...env, ...process.env });
+  const merged = { ...env, ...process.env };
+  assertStagingClientBuild(merged);
+  const sentry = sentryBuildMeta(merged);
 
   process.env.VITE_SUPABASE_URL ??= env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || '';
   process.env.VITE_SUPABASE_ANON_KEY ??= env.VITE_SUPABASE_ANON_KEY || env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || '';

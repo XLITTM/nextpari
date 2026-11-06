@@ -1,3 +1,4 @@
+import { guardStagingMonetaryRpc } from '../config/stagingEnforcement.js';
 import { createUserJwtClient } from '../supabase/admin.js';
 import { loadOwnerAuthEnv } from '../staff/env.js';
 import { extractErrorCode, rpcMessage, staffError, StaffOnboardingError } from '../staff/errors.js';
@@ -80,6 +81,7 @@ export function livePlayerWalletPorts(): PlayerWalletPorts {
     async add(accessToken, currency) {
       const display = normalizeRegistrationCurrency(currency);
       if (!display) throw staffError('CURRENCY_UNSUPPORTED', 400);
+      guardStagingMonetaryRpc('player_add_wallet');
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
       const { data, error } = await client.rpc('player_add_wallet', { p_currency: display });
       if (error) throw mapPlayerWalletError(error);
@@ -105,6 +107,7 @@ export function livePlayerWalletPorts(): PlayerWalletPorts {
       return asRecord(stripTmtm(data));
     },
     async createUsdtQuote(accessToken, input) {
+      guardStagingMonetaryRpc('player_create_usdt_quote');
       const sourceAmount = parseExactPositiveDecimal(input.sourceAmount, 'USDT_AMOUNT_INVALID');
       if (!input.walletId) throw staffError('WALLET_NOT_OWNED', 400);
       const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);

@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
+    "staging:isolation:test": "tsx --tsconfig tsconfig.server.json --test server/config/environmentIsolation.test.ts server/config/stagingEnforcement.test.ts",
+    "staging:check": "tsx --tsconfig tsconfig.server.json server/config/checkStagingEnv.ts",
     "server:sentry:test": "tsx --tsconfig tsconfig.server.json --test server/observability/sentry.test.ts",
     "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts server/staff/esmImportSmoke.test.ts",
     "owner:auth:test": "tsx --tsconfig tsconfig.server.json --test src/owner/auth/ownerAuth.test.ts server/staff/ownerAuthGateway.test.ts src/security/auth/securityAuth.test.ts server/staff/securityAuthGateway.test.ts",

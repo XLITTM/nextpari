@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { stagingHttpDenial } from '../config/stagingEnforcement.js';
 import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, redactForLog, staffError } from './errors.js';
 import { loadStaffOnboardingEnv } from './env.js';
@@ -255,6 +256,11 @@ export async function attachOwnerStaffHttp(
   }
 
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const body = await readJsonBody(req);
     const header = req.headers.authorization;
     const authorization = Array.isArray(header) ? header[0] : header;

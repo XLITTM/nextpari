@@ -1,4 +1,5 @@
 import { generateInternalAuthEmail } from '../auth/oneClickPassword.js';
+import { syntheticAccountEmailFailure } from '../config/stagingEnforcement.js';
 import { createAuthAdminPort } from './staffAuthAdmin.js';
 import { loadStaffOnboardingEnv } from './env.js';
 import { StaffOnboardingError, staffError } from './errors.js';
@@ -62,6 +63,8 @@ export async function provisionAuthThenBind(
   log: StaffLog,
 ): Promise<unknown> {
   const email = normalizeEmail(input.email);
+  const syntheticCode = syntheticAccountEmailFailure(email);
+  if (syntheticCode) throw staffError(syntheticCode, 403);
   const password = normalizePassword(input.temporaryPassword);
   const created = await ports.admin.createUser(email, password);
   try {

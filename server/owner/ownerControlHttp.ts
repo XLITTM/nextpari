@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { stagingHttpDenial, stagingMoneyDenial } from '../config/stagingEnforcement.js';
 import {
   parseJsonPayload,
   readJsonBody,
@@ -1084,6 +1085,8 @@ export async function handleOwnerControlRequest(
     if (matched === 'method') {
       throw staffError('METHOD_NOT_ALLOWED', 405);
     }
+    const moneyDenied = stagingMoneyDenial(path, method);
+    if (moneyDenied) return moneyDenied;
 
     const sessionPorts = deps.sessionPorts ?? liveOwnerAuthPorts();
     const resolved = await resolveOwnerSession(sessionPorts, input.cookie, secure);
@@ -1219,6 +1222,11 @@ export async function attachOwnerControlHttp(
   const { pathname, search } = pathnameAndSearch(raw, '/');
   if (!isOwnerControlPath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'GET';
     const body = method === 'GET' ? {} : await readJsonBody(req);
     const result = await handleOwnerControlRequest(
@@ -1262,6 +1270,11 @@ export async function handleVercelOwnerControl(
   deps: OwnerControlDeps = {},
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const cookie = req.headers.cookie;
   let { pathname, search } = pathnameAndSearch(req.url ?? '', fallbackPathname);
   if (!search && req.query) {

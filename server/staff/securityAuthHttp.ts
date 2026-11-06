@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { stagingHttpDenial } from '../config/stagingEnforcement.js';
 import { StaffOnboardingError, redactForLog, staffError } from './errors.js';
 import {
   parseJsonPayload,
@@ -121,6 +122,11 @@ export async function attachSecurityAuthHttp(
   const pathname = (req.url ?? '').split('?')[0] ?? '';
   if (!isSecurityAuthPath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'GET';
     const body = method === 'GET' ? {} : await readJsonBody(req);
     const result = await handleSecurityAuthRequest(
@@ -154,9 +160,14 @@ export async function handleVercelSecurityAuth(
   },
   res: StaffJsonResponse,
   pathname: string,
-  ports: SecurityAuthGatewayPorts = liveSecurityAuthPorts(),
+  ports?: SecurityAuthGatewayPorts,
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const cookie = req.headers.cookie;
   const result = await handleSecurityAuthRequest(
     {
@@ -166,7 +177,7 @@ export async function handleVercelSecurityAuth(
       cookieSecure: requestIsSecure(req.headers),
       body: req.body,
     },
-    ports,
+    ports ?? liveSecurityAuthPorts(),
     log,
   );
   writeStaffJson(res, toStaffResult(result));
