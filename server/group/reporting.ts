@@ -26,7 +26,7 @@ export interface BrandReport {
   managerCount: number;
   cashierCount: number;
   securityCount: number;
-  financials: BrandFinancialSummary;
+  financials: BrandFinancialSummary[];
   staffSubjects: Array<{ role: StaffRole; staffSubject: string }>;
 }
 
@@ -56,31 +56,48 @@ export function assertAggregateSnapshot(snapshot: BrandOperationalSnapshot): voi
   }
 }
 
+export function sumMoney(lines: readonly BrandFinancialSummary[], field: keyof Pick<BrandFinancialSummary, 'deposits' | 'withdrawals' | 'ggr'>): string {
+  if (lines.length === 0) return '0';
+  const currency = lines[0]?.currency;
+  if (lines.some((line) => line.currency !== currency)) {
+    throw new GroupControlError('MIXED_CURRENCY_TOTAL');
+  }
+  const total = lines.reduce((sum, line) => sum + Number(line[field]), 0);
+  return total.toFixed(2);
+}
+
 export function aggregateGroupReport(
   snapshots: readonly BrandOperationalSnapshot[],
   grants: readonly BrandStaffGrant[],
 ): GroupReport {
-  const byBrand = new Map<BrandCode, BrandOperationalSnapshot>();
+  const byBrand = new Map<BrandCode, BrandOperationalSnapshot[]>();
   for (const snapshot of snapshots) {
     assertAggregateSnapshot(snapshot);
-    if (byBrand.has(snapshot.brandCode)) throw new GroupControlError('DUPLICATE_BRAND_SNAPSHOT');
-    byBrand.set(snapshot.brandCode, snapshot);
+    const rows = byBrand.get(snapshot.brandCode) ?? [];
+    if (rows.some((row) => row.financials.currency === snapshot.financials.currency)) {
+      throw new GroupControlError('DUPLICATE_BRAND_CURRENCY');
+    }
+    if (rows.some((row) => row.playerCount !== snapshot.playerCount || row.operationalStatus !== snapshot.operationalStatus)) {
+      throw new GroupControlError('BRAND_SNAPSHOT_CONFLICT');
+    }
+    rows.push(snapshot);
+    byBrand.set(snapshot.brandCode, rows);
   }
 
   const brands: BrandReport[] = GROUP_BRANDS.map((brand) => {
-    const snapshot = byBrand.get(brand.code);
+    const rows = byBrand.get(brand.code) ?? [];
     const staff = grants.filter((grant) => grant.brandCode === brand.code);
     const count = (role: StaffRole) => staff.filter((grant) => grant.role === role).length;
     return {
       code: brand.code,
       slug: brand.slug,
       displayName: brand.displayName,
-      operationalStatus: snapshot?.operationalStatus ?? brand.status,
-      playerCount: snapshot?.playerCount ?? 0,
+      operationalStatus: rows[0]?.operationalStatus ?? brand.status,
+      playerCount: rows[0]?.playerCount ?? 0,
       managerCount: count('manager'),
       cashierCount: count('cashier'),
       securityCount: count('security'),
-      financials: snapshot?.financials ?? { currency: 'TMTM', deposits: '0', withdrawals: '0', ggr: '0' },
+      financials: rows.map((row) => row.financials),
       staffSubjects: staff.map((grant) => ({ role: grant.role, staffSubject: grant.staffSubject })),
     };
   });

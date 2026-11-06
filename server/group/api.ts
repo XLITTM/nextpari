@@ -1,8 +1,10 @@
 import { timingSafeEqual } from 'node:crypto';
-import { authorizeBrandStaff, type BrandResource, type BrandStaffGrant, type OwnerIdentity } from './access.js';
+import { authenticateGroupOwner, authorizeStaffSubject, type BrandResource, type BrandStaffGrant, type OwnerIdentity } from './access.js';
 import { CentralPlayerIdAllocator } from './allocator.js';
-import { GROUP_BRANDS, isBrandCode } from './catalog.js';
+import { GROUP_BRANDS, isBrandCode, type BrandCode } from './catalog.js';
+import { CUTOVER_GATES_CLOSED, type CutoverGates } from './cutover.js';
 import { GroupControlError } from './errors.js';
+import { NEXTPARI_LOGIN_TODAY, type LoginContract } from './ids.js';
 import { aggregateGroupReport, type BrandOperationalSnapshot } from './reporting.js';
 
 export type CallerKind = 'internal-service' | 'android' | 'browser';
@@ -18,6 +20,8 @@ export interface GroupControlState {
   grants: BrandStaffGrant[];
   owners: OwnerIdentity[];
   snapshots: BrandOperationalSnapshot[];
+  gates: CutoverGates;
+  loginByBrand: Record<BrandCode, LoginContract>;
 }
 
 export function tokensMatch(provided: string, expected: string): boolean {
@@ -68,6 +72,8 @@ export async function handleGroupControlRequest(
       const publicId = await state.allocator.allocate({
         brandCode,
         idempotencyKey: String(body.idempotencyKey ?? ''),
+        gates: state.gates,
+        login: state.loginByBrand[brandCode],
       });
       return { status: 200, body: { ok: true, brandCode, publicId } };
     }
@@ -83,17 +89,18 @@ export async function handleGroupControlRequest(
     }
     if (input.action === 'authorize') {
       const body = asRecord(input.body);
-      const grant = state.grants.find((item) => item.staffSubject === String(body.staffSubject ?? '').toLowerCase());
-      if (!grant) throw new GroupControlError('STAFF_GRANT_NOT_FOUND');
-      const brandCode = authorizeBrandStaff(
-        grant,
+      const brandCode = authorizeStaffSubject(
+        state.grants,
         String(body.brandCode ?? ''),
+        String(body.staffSubject ?? ''),
         String(body.resource ?? 'players') as BrandResource,
       );
-      return { status: 200, body: { ok: true, brandCode, role: grant.role } };
+      const grant = state.grants.find((item) => item.brandCode === brandCode && item.staffSubject === String(body.staffSubject ?? '').toLowerCase());
+      return { status: 200, body: { ok: true, brandCode, role: grant?.role ?? null } };
     }
-    const owner = state.owners.find((item) => item.id === 'group-owner');
-    if (!owner?.permissions.includes('reports.read')) throw new GroupControlError('OWNER_PERMISSION_DENIED');
+    const body = asRecord(input.body);
+    const owner = authenticateGroupOwner(state.owners, String(body.ownerId ?? ''));
+    if (!owner.permissions.includes('reports.read')) throw new GroupControlError('OWNER_PERMISSION_DENIED');
     const report = aggregateGroupReport(state.snapshots, state.grants);
     return { status: 200, body: { ok: true, report } };
   } catch (error) {
@@ -109,7 +116,13 @@ export function emptyGroupState(allocator: CentralPlayerIdAllocator): GroupContr
     allocator,
     available: true,
     grants: [],
-    owners: [{ id: 'group-owner', permissions: ['brands.read', 'reports.read', 'brands.register', 'staff.map', 'ids.reserve'] }],
+    owners: [],
     snapshots: [],
+    gates: CUTOVER_GATES_CLOSED,
+    loginByBrand: {
+      '001': NEXTPARI_LOGIN_TODAY,
+      '002': NEXTPARI_LOGIN_TODAY,
+      '003': NEXTPARI_LOGIN_TODAY,
+    },
   };
 }

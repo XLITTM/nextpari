@@ -28,8 +28,47 @@ export function formatGlobalPlayerId(value: bigint): string {
   return raw;
 }
 
+export interface LegacyIdSources {
+  profiles: readonly (string | null | undefined)[];
+  wallets: readonly (string | null | undefined)[];
+  appUsers: readonly (string | null | undefined)[];
+}
+
 /**
- * Group counter after a read-only import of NextPari IDs.
+ * Union of every public ID the read-only export found.
+ * Wallet-only IDs are included. Blank values are skipped.
+ * The result is not a fixed production count.
+ */
+export function collectLegacyPublicIds(sources: LegacyIdSources): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const list of [sources.profiles, sources.wallets, sources.appUsers]) {
+    for (const raw of list) {
+      if (raw == null || String(raw).trim() === '') continue;
+      const id = assertPublicId(String(raw));
+      if (seen.has(id)) continue;
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return ids;
+}
+
+export interface LoginContract {
+  minDigits: number;
+  maxDigits: number;
+}
+
+/** NextPari login today accepts exactly six digits. */
+export const NEXTPARI_LOGIN_TODAY: LoginContract = { minDigits: 6, maxDigits: 6 };
+
+export function loginAcceptsPublicId(publicId: string, contract: LoginContract): boolean {
+  const id = assertPublicId(publicId);
+  return id.length >= contract.minDigits && id.length <= contract.maxDigits;
+}
+
+/**
+ * Floor for the group counter after a read-only import.
  * Never returns a value below the production counter, and never writes that counter.
  */
 export function planGroupCounter(input: {

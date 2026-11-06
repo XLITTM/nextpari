@@ -101,14 +101,15 @@ CREATE TABLE IF NOT EXISTS group_control.audit_events (
 );
 
 CREATE TABLE IF NOT EXISTS group_control.brand_report_snapshots (
-    brand_code TEXT PRIMARY KEY REFERENCES group_control.brands (code),
+    brand_code TEXT NOT NULL REFERENCES group_control.brands (code),
+    currency TEXT NOT NULL,
     player_count INTEGER NOT NULL CHECK (player_count >= 0),
     operational_status TEXT NOT NULL,
-    currency TEXT NOT NULL,
     deposits TEXT NOT NULL,
     withdrawals TEXT NOT NULL,
     ggr TEXT NOT NULL,
-    reported_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    reported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (brand_code, currency)
 );
 
 REVOKE ALL ON SCHEMA group_control FROM PUBLIC;
@@ -118,7 +119,10 @@ GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA group_control TO service_ro
 
 CREATE OR REPLACE FUNCTION group_control.allocate_player_id(
     p_brand_code TEXT,
-    p_idempotency_key TEXT
+    p_idempotency_key TEXT,
+    p_nextpari_central BOOLEAN,
+    p_ryxo_enabled BOOLEAN,
+    p_login_max_digits INTEGER
 )
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -132,8 +136,20 @@ DECLARE
     v_candidate TEXT;
     v_numeric BIGINT;
 BEGIN
-    IF p_brand_code NOT IN ('001', '002', '003') THEN
-        RAISE EXCEPTION 'BRAND_UNKNOWN';
+    IF p_brand_code = '003' OR p_brand_code NOT IN ('001', '002') THEN
+        RAISE EXCEPTION 'BRAND_REGISTRATION_DISABLED';
+    END IF;
+    IF p_nextpari_central IS DISTINCT FROM TRUE THEN
+        IF p_brand_code = '002' THEN
+            RAISE EXCEPTION 'RYXO_BEFORE_NEXTPARI_CUTOVER';
+        END IF;
+        RAISE EXCEPTION 'NEXTPARI_CENTRAL_ALLOCATION_DISABLED';
+    END IF;
+    IF p_brand_code = '002' AND p_ryxo_enabled IS DISTINCT FROM TRUE THEN
+        RAISE EXCEPTION 'RYXO_REGISTRATION_DISABLED';
+    END IF;
+    IF p_login_max_digits IS NULL OR p_login_max_digits < 6 THEN
+        RAISE EXCEPTION 'LOGIN_CONTRACT_INVALID';
     END IF;
     IF p_idempotency_key !~ '^[A-Za-z0-9._:-]{8,128}$' THEN
         RAISE EXCEPTION 'IDEMPOTENCY_KEY_INVALID';
@@ -176,6 +192,9 @@ BEGIN
             v_candidate := v_next::TEXT;
         END IF;
         v_numeric := v_next;
+        IF char_length(v_candidate) > p_login_max_digits THEN
+            RAISE EXCEPTION 'SEVEN_DIGIT_LOGIN_UNSUPPORTED';
+        END IF;
 
         IF NOT EXISTS (
             SELECT 1
@@ -208,7 +227,7 @@ BEGIN
 END;
 $fn$;
 
-REVOKE ALL ON FUNCTION group_control.allocate_player_id(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION group_control.allocate_player_id(TEXT, TEXT) TO service_role;
+REVOKE ALL ON FUNCTION group_control.allocate_player_id(TEXT, TEXT, BOOLEAN, BOOLEAN, INTEGER) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION group_control.allocate_player_id(TEXT, TEXT, BOOLEAN, BOOLEAN, INTEGER) TO service_role;
 
 COMMIT;

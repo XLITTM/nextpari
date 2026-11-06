@@ -43,6 +43,37 @@ export function requireOwnerPermission(owner: OwnerIdentity, permission: OwnerPe
  * Brand staff are scoped to one brand. A manager, cashier, or security
  * identity from brand A cannot read players, balances, transactions, or staff of brand B.
  */
+/**
+ * Test fixture only. Production owner access is a verified subject from the
+ * group control-plane auth project, looked up in owner_identities.
+ */
+export const TEST_FIXTURE_OWNER_SUBJECT = '00000000-0000-4000-8000-000000000001';
+
+const OWNER_SUBJECT_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function authenticateGroupOwner(owners: readonly OwnerIdentity[], subject: string): OwnerIdentity {
+  const id = subject.trim().toLowerCase();
+  if (!OWNER_SUBJECT_RE.test(id)) throw new GroupControlError('OWNER_SUBJECT_INVALID');
+  const owner = owners.find((item) => item.id === id);
+  if (!owner) throw new GroupControlError('OWNER_UNKNOWN');
+  return owner;
+}
+
+export function authorizeStaffSubject(
+  grants: readonly BrandStaffGrant[],
+  requestedBrand: string,
+  staffSubject: string,
+  resource: BrandResource,
+): BrandCode {
+  const subject = assertStaffSubject(staffSubject);
+  const exact = grants.find((grant) => grant.brandCode === requestedBrand && grant.staffSubject === subject);
+  if (exact) return authorizeBrandStaff(exact, requestedBrand, resource);
+  if (grants.some((grant) => grant.staffSubject === subject)) {
+    throw new GroupControlError('CROSS_BRAND_ACCESS_DENIED');
+  }
+  throw new GroupControlError('STAFF_GRANT_NOT_FOUND');
+}
+
 export function authorizeBrandStaff(
   grant: BrandStaffGrant,
   requestedBrand: string,
