@@ -23,7 +23,9 @@ import {
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-function html(page: 'overview' | 'players' | 'finance' | 'employees', brand: 'all' | '001' | '002' | '003' = 'all'): string {
+const PAGES = ['overview', 'brands', 'employees', 'players', 'finance', 'access', 'audit'] as const;
+
+function html(page: (typeof PAGES)[number], brand: 'all' | '001' | '002' | '003' = 'all'): string {
   return renderToStaticMarkup(createElement(GroupOwnerApp, { initialPage: page, initialBrand: brand }));
 }
 
@@ -112,6 +114,31 @@ describe('group owner dashboard', () => {
     assert.throws(() => authenticateGroupOwner([], 'group-owner'), (error: unknown) => {
       return error instanceof GroupControlError && error.code === 'OWNER_SUBJECT_INVALID';
     });
+  });
+
+  it('renders every page and keeps writes disabled', () => {
+    const expected: Record<(typeof PAGES)[number], RegExp> = {
+      overview: /Операционные статусы/,
+      brands: /Создать бренд/,
+      employees: /Форма назначения/,
+      players: /Публичный ID/,
+      finance: /Разные валюты не складываются/,
+      access: /не содержит обхода прав/,
+      audit: /Демонстрационный субъект/,
+    };
+    for (const page of PAGES) {
+      const markup = html(page, '002');
+      assert.match(markup, /Демонстрационные данные/);
+      assert.match(markup, expected[page]);
+      assert.doesNotMatch(markup, /900001/);
+    }
+    assert.match(html('players', '002'), /910001/);
+    const brands = html('brands');
+    assert.match(brands, /disabled/);
+    assert.match(brands, /Кнопка не пишет в базу/);
+    const ryxoFinance = html('finance', '002');
+    assert.match(ryxoFinance, /USD/);
+    assert.doesNotMatch(ryxoFinance, /TMT/);
   });
 
   it('stays off the production owner entry and does not embed a service token', () => {

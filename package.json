@@ -12,6 +12,7 @@
     "typecheck:server": "tsc --noEmit -p tsconfig.server.json",
     "group:foundation:test": "tsx --tsconfig tsconfig.server.json --test server/group/groupFoundation.test.ts",
     "group:owner:test": "tsx --tsconfig tsconfig.app.json --test src/group-owner/groupOwnerDashboard.test.ts",
+    "group:owner:demo:test": "tsx --tsconfig tsconfig.server.json --test src/group-owner/groupOwnerDemoBuild.test.ts",
     "build:group-owner": "vite build --config vite.group-owner.config.ts",
     "server:sentry:test": "tsx --tsconfig tsconfig.server.json --test server/observability/sentry.test.ts",
     "staff:onboarding:test": "tsx --tsconfig tsconfig.server.json --test server/staff/staffOnboarding.test.ts server/staff/vercelAdapter.test.ts server/staff/esmImportSmoke.test.ts",
