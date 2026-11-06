@@ -1,10 +1,9 @@
 import { OWNER_PERMISSIONS, type BrandStaffGrant, type StaffRole } from '../../server/group/access.ts';
 import { GROUP_BRANDS, type BrandCode, type BrandStatus } from '../../server/group/catalog.ts';
-import { aggregateGroupReport, type BrandReport, type GroupReport } from '../../server/group/reporting.ts';
-import { DEMO_AUDIT, DEMO_GRANTS, DEMO_PLAYERS, DEMO_SNAPSHOTS, type DemoAuditEvent, type DemoPlayer } from './demoData.ts';
+import { aggregateGroupReport, type BrandOperationalSnapshot, type BrandReport, type GroupReport } from '../../server/group/reporting.ts';
+import type { DemoAuditEvent, DemoPlayer } from './demoData.ts';
 
-export const DEMO_BANNER = 'Демонстрационные данные. Это не статистика production и не живые остатки.';
-export const WRITE_DISABLED = 'Запись отключена, пока нет API, аутентификации и базы control-plane.';
+export const WRITE_DISABLED = 'Запись отключена. Казначейские и денежные операции не открыты.';
 export const ACCOUNT_NOT_CREATED = 'Учётная запись не создана. Приглашение не отправлено.';
 
 export const PAGES = ['overview', 'brands', 'employees', 'players', 'finance', 'access', 'audit'] as const;
@@ -76,8 +75,11 @@ export function employeeFieldMessage(field: EmployeeField): string {
   }
 }
 
-export function buildGroupReport(): GroupReport {
-  return aggregateGroupReport(DEMO_SNAPSHOTS, DEMO_GRANTS);
+export function buildGroupReport(
+  snapshots: readonly BrandOperationalSnapshot[] = [],
+  grants: readonly BrandStaffGrant[] = [],
+): GroupReport {
+  return aggregateGroupReport(snapshots, grants);
 }
 
 export function brandsForFilter(report: GroupReport, filter: BrandFilter): BrandReport[] {
@@ -85,7 +87,7 @@ export function brandsForFilter(report: GroupReport, filter: BrandFilter): Brand
   return report.brands.filter((brand) => brand.code === filter);
 }
 
-export function playersForBrand(players: readonly DemoPlayer[], filter: BrandFilter): DemoPlayer[] {
+export function playersForBrand<T extends { brandCode: BrandCode }>(players: readonly T[], filter: BrandFilter): T[] {
   if (filter === 'all') return [...players];
   return players.filter((player) => player.brandCode === filter);
 }
@@ -208,5 +210,3 @@ export function playerIdsLeakAcrossBrands(players: readonly DemoPlayer[], filter
   if (filter === 'all') return false;
   return playersForBrand(players, filter).some((player) => player.brandCode !== filter);
 }
-
-export { DEMO_AUDIT, DEMO_GRANTS, DEMO_PLAYERS };

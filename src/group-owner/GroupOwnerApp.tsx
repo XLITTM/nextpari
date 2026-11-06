@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import {
   Building2,
   Landmark,
@@ -10,13 +10,11 @@ import {
   Users,
 } from 'lucide-react';
 import { GROUP_BRANDS, type BrandCode } from '../../server/group/catalog.ts';
-import type { StaffRole } from '../../server/group/access.ts';
+import type { BrandStaffGrant, StaffRole } from '../../server/group/access.ts';
+import type { BrandOperationalSnapshot } from '../../server/group/reporting.ts';
+import type { DemoAuditEvent } from './demoData.ts';
 import {
   ACCOUNT_NOT_CREATED,
-  DEMO_AUDIT,
-  DEMO_BANNER,
-  DEMO_GRANTS,
-  DEMO_PLAYERS,
   OWNER_PERMISSION_LIST,
   STAFF_PERMISSIONS,
   WRITE_DISABLED,
@@ -38,6 +36,28 @@ import {
   type EmployeeField,
   type GroupOwnerPage,
 } from './viewModel.ts';
+
+export interface GroupDashboardPlayer {
+  brandCode: BrandCode;
+  publicId: string;
+  label: string;
+  source: string;
+}
+
+export interface GroupDashboardData {
+  grants: readonly BrandStaffGrant[];
+  players: readonly GroupDashboardPlayer[];
+  operational: readonly BrandOperationalSnapshot[];
+  audit: readonly DemoAuditEvent[];
+  permissions: readonly string[];
+  schemaError: string | null;
+  nextpariReason: string | null;
+}
+
+export interface GroupOwnerSession {
+  ownerId: string;
+  permissions: readonly string[];
+}
 
 const NAV: Array<{ id: GroupOwnerPage; label: string; icon: typeof LayoutDashboard }> = [
   { id: 'overview', label: 'Обзор', icon: LayoutDashboard },
@@ -66,15 +86,54 @@ function statusClass(status: string): string {
 export function GroupOwnerApp({
   initialPage = 'overview',
   initialBrand = 'all',
+  initialSession = null,
+  initialSnapshot = null,
 }: {
   initialPage?: GroupOwnerPage;
   initialBrand?: BrandFilter;
+  initialSession?: GroupOwnerSession | null;
+  initialSnapshot?: GroupDashboardData | null;
 }) {
   const [page, setPage] = useState<GroupOwnerPage>(initialPage);
   const [brand, setBrand] = useState<BrandFilter>(initialBrand);
   const [navOpen, setNavOpen] = useState(false);
-  const report = useMemo(() => buildGroupReport(), []);
+  const [session, setSession] = useState<GroupOwnerSession | null>(initialSession);
+  const [snapshot, setSnapshot] = useState<GroupDashboardData | null>(initialSnapshot);
+  const report = useMemo(
+    () => buildGroupReport(snapshot?.operational ?? [], snapshot?.grants ?? []),
+    [snapshot],
+  );
+  const present = useMemo(() => new Set([
+    ...(snapshot?.operational ?? []).map((row) => row.brandCode),
+    ...(snapshot?.grants ?? []).map((row) => row.brandCode),
+    ...(snapshot?.players ?? []).map((row) => row.brandCode),
+  ]), [snapshot]);
+  const visible = brandsForFilter(report, brand).filter((item) => present.has(item.code));
   const title = NAV.find((item) => item.id === page)?.label ?? 'Обзор';
+
+  useEffect(() => {
+    if (!session || initialSnapshot) return undefined;
+    let cancelled = false;
+    fetch('/api/group-owner/overview', { credentials: 'include' })
+      .then(async (response) => {
+        const body = await response.json() as { ok?: boolean; error?: string; data?: Record<string, unknown>; nextpari?: { reason?: string } };
+        if (cancelled) return;
+        if (!response.ok || !body.data) {
+          setSnapshot(emptySnapshot(String(body.error ?? 'GROUP_SCHEMA_UNAVAILABLE')));
+          return;
+        }
+        setSnapshot(snapshotFromOverview(body.data, body.nextpari?.reason ?? null));
+      })
+      .catch(() => {
+        if (!cancelled) setSnapshot(emptySnapshot('GROUP_SCHEMA_UNAVAILABLE'));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [session, initialSnapshot]);
+  if (!session) {
+    return <Login onSignedIn={setSession} />;
+  }
 
   return (
     <div className={navOpen ? 'shell nav-open' : 'shell'}>
@@ -133,14 +192,16 @@ export function GroupOwnerApp({
           </div>
         </header>
         <main className="content">
-          <div className="banner" role="status">{DEMO_BANNER}</div>
-          {page === 'overview' ? <Overview reportBrands={brandsForFilter(report, brand)} /> : null}
-          {page === 'brands' ? <Brands filter={brand} /> : null}
-          {page === 'employees' ? <Employees filter={brand} /> : null}
-          {page === 'players' ? <Players filter={brand} /> : null}
-          {page === 'finance' ? <Finance filter={brand} /> : null}
-          {page === 'access' ? <Access filter={brand} /> : null}
-          {page === 'audit' ? <Audit filter={brand} /> : null}
+          <p className="note">Источник: group_control. Показатели появляются только из ответа API.</p>
+          {snapshot?.schemaError ? <div className="warning" role="status">{snapshot.schemaError}</div> : null}
+          {snapshot?.nextpariReason ? <p className="note">{snapshot.nextpariReason}</p> : null}
+          {page === 'overview' ? <Overview reportBrands={visible} /> : null}
+          {page === 'brands' ? <Brands filter={brand} rows={visible} /> : null}
+          {page === 'employees' ? <Employees filter={brand} grants={snapshot?.grants ?? []} /> : null}
+          {page === 'players' ? <Players filter={brand} players={snapshot?.players ?? []} /> : null}
+          {page === 'finance' ? <Finance filter={brand} report={report} visible={visible.map((item) => item.code)} /> : null}
+          {page === 'access' ? <Access filter={brand} grants={snapshot?.grants ?? []} permissions={snapshot?.permissions ?? session.permissions} /> : null}
+          {page === 'audit' ? <Audit filter={brand} events={snapshot?.audit ?? []} /> : null}
         </main>
       </div>
     </div>
@@ -152,11 +213,11 @@ function Overview({ reportBrands }: { reportBrands: ReturnType<typeof brandsForF
   return (
     <>
       <section className="cards" aria-label="Сводные показатели">
-        <article className="card"><span>Бренды</span><strong>{counts.brandCount}</strong><em>ДЕМО</em></article>
-        <article className="card"><span>Игроки</span><strong>{counts.playerCount}</strong><em>ДЕМО</em></article>
-        <article className="card"><span>Менеджеры</span><strong>{counts.managerCount}</strong><em>ДЕМО</em></article>
-        <article className="card"><span>Кассиры</span><strong>{counts.cashierCount}</strong><em>ДЕМО</em></article>
-        <article className="card"><span>Безопасность</span><strong>{counts.securityCount}</strong><em>ДЕМО</em></article>
+        <article className="card"><span>Бренды</span><strong>{counts.brandCount}</strong></article>
+        <article className="card"><span>Игроки</span><strong>{counts.playerCount}</strong></article>
+        <article className="card"><span>Менеджеры</span><strong>{counts.managerCount}</strong></article>
+        <article className="card"><span>Кассиры</span><strong>{counts.cashierCount}</strong></article>
+        <article className="card"><span>Безопасность</span><strong>{counts.securityCount}</strong></article>
       </section>
       <section className="panel">
         <h2>Операционные статусы</h2>
@@ -191,8 +252,8 @@ function Overview({ reportBrands }: { reportBrands: ReturnType<typeof brandsForF
   );
 }
 
-function Brands({ filter }: { filter: BrandFilter }) {
-  const rows = GROUP_BRANDS.filter((item) => filter === 'all' || item.code === filter);
+function Brands({ filter, rows }: { filter: BrandFilter; rows: ReturnType<typeof brandsForFilter> }) {
+  void filter;
   return (
     <section className="panel">
       <h2>Бренды сети</h2>
@@ -212,7 +273,7 @@ function Brands({ filter }: { filter: BrandFilter }) {
               <tr key={item.code}>
                 <td>{item.code}</td>
                 <td>{brandLabel(item.code)}</td>
-                <td><span className={statusClass(item.status)}>{statusLabel(item.status)}</span></td>
+                <td><span className={statusClass(item.operationalStatus)}>{statusLabel(item.operationalStatus)}</span></td>
                 <td>не назначен</td>
               </tr>
             ))}
@@ -235,11 +296,11 @@ function Brands({ filter }: { filter: BrandFilter }) {
   );
 }
 
-function Employees({ filter }: { filter: BrandFilter }) {
+function Employees({ filter, grants: allGrants }: { filter: BrandFilter; grants: readonly BrandStaffGrant[] }) {
   const [draft, setDraft] = useState<EmployeeDraft>({ ...EMPTY_DRAFT, brandCode: filter === 'all' ? '001' : filter });
   const [errors, setErrors] = useState<EmployeeField[]>([]);
   const [notice, setNotice] = useState('');
-  const grants = grantsForBrand(DEMO_GRANTS, filter);
+  const grants = grantsForBrand(allGrants, filter);
 
   function update(partial: Partial<EmployeeDraft>) {
     setDraft((current) => ({ ...current, ...partial }));
@@ -277,10 +338,10 @@ function Employees({ filter }: { filter: BrandFilter }) {
                 <td>{brandLabel(grant.brandCode)}</td>
                 <td>{roleLabel(grant.role)}</td>
                 <td>{grant.staffSubject}</td>
-                <td><span className="chip wait">демо, не учётная запись</span></td>
+                <td><span className="chip wait">только чтение</span></td>
               </tr>
             ))}
-            {grants.length === 0 ? <tr><td colSpan={4}>Для выбранного бренда нет демонстрационных назначений.</td></tr> : null}
+            {grants.length === 0 ? <tr><td colSpan={4}>Для выбранного бренда нет назначений.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -354,8 +415,8 @@ function Employees({ filter }: { filter: BrandFilter }) {
   );
 }
 
-function Players({ filter }: { filter: BrandFilter }) {
-  const rows = playersForBrand(DEMO_PLAYERS, filter);
+function Players({ filter, players }: { filter: BrandFilter; players: readonly GroupDashboardPlayer[] }) {
+  const rows = playersForBrand(players, filter);
   return (
     <section className="panel">
       <h2>Игроки</h2>
@@ -376,10 +437,10 @@ function Players({ filter }: { filter: BrandFilter }) {
                 <td>{player.publicId}</td>
                 <td>{brandLabel(player.brandCode)}</td>
                 <td>{player.label}</td>
-                <td>{player.state === 'demo-active' ? 'демо-активен' : 'демо-ограничен'}</td>
+                <td>{player.source}</td>
               </tr>
             ))}
-            {rows.length === 0 ? <tr><td colSpan={4}>У этого бренда нет демонстрационных игроков.</td></tr> : null}
+            {rows.length === 0 ? <tr><td colSpan={4}>У этого бренда нет записей игроков.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -387,8 +448,8 @@ function Players({ filter }: { filter: BrandFilter }) {
   );
 }
 
-function Finance({ filter }: { filter: BrandFilter }) {
-  const lines = financeLines(buildGroupReport(), filter);
+function Finance({ filter, report, visible }: { filter: BrandFilter; report: ReturnType<typeof buildGroupReport>; visible: string[] }) {
+  const lines = financeLines(report, filter).filter((line) => visible.includes(line.brandCode));
   return (
     <section className="panel">
       <h2>Финансы только для чтения</h2>
@@ -422,14 +483,14 @@ function Finance({ filter }: { filter: BrandFilter }) {
   );
 }
 
-function Access({ filter }: { filter: BrandFilter }) {
-  const grants = grantsForBrand(DEMO_GRANTS, filter);
+function Access({ filter, grants: allGrants, permissions }: { filter: BrandFilter; grants: readonly BrandStaffGrant[]; permissions: readonly string[] }) {
+  const grants = grantsForBrand(allGrants, filter);
   return (
     <section className="panel">
       <h2>Доступ владельца группы</h2>
       <p className="note">Вход владельца группы будет проверяться по UUID в базе control-plane. Этот экран не выполняет вход и не содержит обхода прав.</p>
       <ul>
-        {OWNER_PERMISSION_LIST.map((permission) => <li key={permission}>{permissionLabel(permission)}</li>)}
+        {(permissions.length > 0 ? permissions : OWNER_PERMISSION_LIST).map((permission) => <li key={permission}>{permissionLabel(permission)}</li>)}
       </ul>
       <h2>Назначения внутри брендов</h2>
       <div className="table-wrap">
@@ -449,7 +510,7 @@ function Access({ filter }: { filter: BrandFilter }) {
                 <td>{grant.staffSubject}</td>
               </tr>
             ))}
-            {grants.length === 0 ? <tr><td colSpan={3}>Нет демонстрационных назначений.</td></tr> : null}
+            {grants.length === 0 ? <tr><td colSpan={3}>Нет назначений.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -457,8 +518,8 @@ function Access({ filter }: { filter: BrandFilter }) {
   );
 }
 
-function Audit({ filter }: { filter: BrandFilter }) {
-  const events = auditForBrand(DEMO_AUDIT, filter);
+function Audit({ filter, events: allEvents }: { filter: BrandFilter; events: readonly DemoAuditEvent[] }) {
+  const events = auditForBrand(allEvents, filter);
   return (
     <section className="panel">
       <h2>Журнал</h2>
@@ -486,5 +547,132 @@ function Audit({ filter }: { filter: BrandFilter }) {
         </table>
       </div>
     </section>
+  );
+}
+
+function emptySnapshot(schemaError: string): GroupDashboardData {
+  return {
+    grants: [],
+    players: [],
+    operational: [],
+    audit: [],
+    permissions: [],
+    schemaError,
+    nextpariReason: null,
+  };
+}
+
+function snapshotFromOverview(data: Record<string, unknown>, nextpariReason: string | null): GroupDashboardData {
+  const list = (value: unknown): Record<string, unknown>[] => (
+    Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object') : []
+  );
+  const code = (value: unknown): BrandCode | null => (value === '001' || value === '002' || value === '003' ? value : null);
+  return {
+    schemaError: null,
+    nextpariReason,
+    permissions: [],
+    grants: list(data.grants).flatMap((row) => {
+      const brandCode = code(row.brandCode);
+      const role = row.role;
+      if (!brandCode || (role !== 'manager' && role !== 'cashier' && role !== 'security')) return [];
+      return [{ brandCode, role, staffSubject: String(row.staffSubject ?? '') }];
+    }),
+    players: list(data.players).flatMap((row) => {
+      const brandCode = code(row.brandCode);
+      if (!brandCode) return [];
+      const publicId = String(row.publicId ?? '');
+      return [{ brandCode, publicId, label: publicId, source: String(row.source ?? '') }];
+    }),
+    operational: list(data.finance).flatMap((row) => {
+      const brandCode = code(row.brandCode);
+      if (!brandCode) return [];
+      const status = String(row.operationalStatus ?? 'planned');
+      const operationalStatus = status === 'active' || status === 'registered' || status === 'planned' || status === 'provisioning' || status === 'suspended'
+        ? status
+        : 'planned';
+      return [{
+        brandCode,
+        playerCount: Number(row.playerCount ?? 0),
+        operationalStatus,
+        financials: {
+          currency: String(row.currency ?? ''),
+          deposits: String(row.deposits ?? '0'),
+          withdrawals: String(row.withdrawals ?? '0'),
+          ggr: String(row.ggr ?? '0'),
+        },
+      }];
+    }),
+    audit: list(data.audit).flatMap((row) => {
+      const brandCode = code(row.brandCode);
+      if (!brandCode) return [];
+      return [{ id: String(row.id ?? ''), brandCode, actor: String(row.actor ?? ''), action: String(row.action ?? ''), at: String(row.at ?? '') }];
+    }),
+  };
+}
+
+function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => void }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [factorId, setFactorId] = useState('');
+  const [mfa, setMfa] = useState(false);
+  const [message, setMessage] = useState('');
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setMessage('');
+    const response = await fetch(mfa ? '/api/group-owner/auth/mfa' : '/api/group-owner/auth/login', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mfa ? { factorId, code } : { email, password }),
+    });
+    const body = await response.json() as { ok?: boolean; mfaRequired?: boolean; factorId?: string | null };
+    if (body.mfaRequired) {
+      setMfa(true);
+      if (body.factorId) setFactorId(body.factorId);
+      setMessage('Нужен код MFA. Данные не открыты.');
+      return;
+    }
+    if (!response.ok || !body.ok) {
+      setMessage('Вход не выполнен.');
+      return;
+    }
+    const sessionResponse = await fetch('/api/group-owner/auth/session', { credentials: 'include' });
+    const sessionBody = await sessionResponse.json() as { mfa?: string; ownerId?: string; permissions?: string[] };
+    if (sessionBody.mfa !== 'aal2' || !sessionBody.ownerId) {
+      setMessage('Сессия не подтверждена.');
+      return;
+    }
+    onSignedIn({ ownerId: sessionBody.ownerId, permissions: sessionBody.permissions ?? [] });
+  }
+
+  return (
+    <main className="content" style={{ maxWidth: 460, margin: '10vh auto' }}>
+      <section className="panel">
+        <h2>Вход владельца группы</h2>
+        <p className="note">Сессия проверяется на сервере по owner_identities и owner_permissions. Обхода нет.</p>
+        <form onSubmit={submit} className="form-grid">
+          <label className="field">Почта
+            <input aria-label="Почта" type="text" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" />
+          </label>
+          <label className="field">Пароль
+            <input aria-label="Пароль" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
+          </label>
+          {mfa ? (
+            <>
+              <label className="field">Код MFA
+                <input aria-label="Код MFA" type="text" value={code} onChange={(event) => setCode(event.target.value)} inputMode="numeric" />
+              </label>
+              <label className="field">Фактор
+                <input aria-label="Фактор" type="text" value={factorId} onChange={(event) => setFactorId(event.target.value)} />
+              </label>
+            </>
+          ) : null}
+          <button className="primary" type="submit">Войти</button>
+        </form>
+        {message ? <p className="warning" role="status">{message}</p> : null}
+      </section>
+    </main>
   );
 }

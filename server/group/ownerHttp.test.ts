@@ -1,0 +1,196 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { describe, it } from 'node:test';
+import { fileURLToPath } from 'node:url';
+import { GroupControlError } from './errors.js';
+import { handleGroupOwnerRequest, type GroupOwnerPorts, type VerifiedGroupAccess } from './ownerHttp.js';
+import { readJwtClaims, scopeReadModel, stripPrivateFields, type GroupReadModel } from './ownerReadModel.js';
+
+const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const OWNER = '00000000-0000-4000-8000-0000000000aa';
+const STAFF = '00000000-0000-4000-8000-0000000000b1';
+
+function token(sub: string, aal: 'aal1' | 'aal2'): string {
+  const payload = Buffer.from(JSON.stringify({ sub, aal })).toString('base64url');
+  return `header.${payload}.sig`;
+}
+
+function model(): GroupReadModel {
+  return {
+    brands: [
+      { code: '001', slug: 'nextpari', displayName: 'NextPari', status: 'active', domain: null },
+      { code: '002', slug: 'ryxo', displayName: 'RYXO', status: 'registered', domain: null },
+    ],
+    brandOwners: [
+      { ownerId: OWNER, brandCode: '001' },
+    ],
+    grants: [
+      { brandCode: '001', role: 'manager', staffSubject: STAFF },
+      { brandCode: '002', role: 'cashier', staffSubject: STAFF },
+    ],
+    players: [
+      { brandCode: '001', publicId: '100001', source: 'legacy' },
+      { brandCode: '002', publicId: '200001', source: 'legacy' },
+    ],
+    finance: [
+      { brandCode: '001', currency: 'TMT', playerCount: 1, operationalStatus: 'active', deposits: '5.00', withdrawals: '1.00', ggr: '0.50' },
+      { brandCode: '002', currency: 'USD', playerCount: 1, operationalStatus: 'registered', deposits: '9.00', withdrawals: '2.00', ggr: '1.00' },
+    ],
+    audit: [
+      { id: '1', brandCode: '001', actor: 'owner', action: 'read', at: '2026-11-07T00:00:00Z' },
+      { id: '2', brandCode: '002', actor: 'owner', action: 'read', at: '2026-11-07T00:00:00Z' },
+    ],
+  };
+}
+
+function ports(overrides: Partial<GroupOwnerPorts> = {}): GroupOwnerPorts {
+  const access = token(OWNER, 'aal2');
+  const base: GroupOwnerPorts = {
+    async signInWithPassword() {
+      return { accessToken: access, refreshToken: 'refresh' };
+    },
+    async verifyAccessToken(value): Promise<VerifiedGroupAccess> {
+      const claims = readJwtClaims(value);
+      if (!claims) throw new GroupControlError('JWT_INVALID');
+      return { userId: claims.sub, aal: claims.aal === 'aal2' ? 'aal2' : 'aal1' };
+    },
+    async listVerifiedTotpFactor() {
+      return 'factor-1';
+    },
+    async verifyTotp() {
+      return { accessToken: access, refreshToken: 'refresh-2' };
+    },
+    async enrollTotp() {
+      return { factorId: 'factor-1', uri: 'otpauth://totp/group-owner' };
+    },
+    async loadOwner(userId) {
+      if (userId !== OWNER) return null;
+      return { id: OWNER, status: 'active', permissions: ['brands.read', 'reports.read', 'staff.map'] };
+    },
+    async loadModel() {
+      return model();
+    },
+    async readNextpariStats() {
+      return 'unavailable';
+    },
+  };
+  return { ...base, ...overrides };
+}
+
+function cookie(value: string): string {
+  return `np_group_access=${encodeURIComponent(value)}`;
+}
+
+describe('group owner authentication', () => {
+  it('rejects a display-name subject and a brand staff uuid', async () => {
+    assert.equal(readJwtClaims(token('group-owner', 'aal2')), null);
+    const staffToken = token(STAFF, 'aal2');
+    const result = await handleGroupOwnerRequest({
+      method: 'GET',
+      pathname: '/api/group-owner/overview',
+      cookie: cookie(staffToken),
+    }, ports());
+    assert.equal(result.status, 403);
+    assert.equal(result.body.error, 'OWNER_UNKNOWN');
+  });
+
+  it('does not open reads before MFA', async () => {
+    const pending = token(OWNER, 'aal1');
+    const login = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/login',
+      body: { email: 'owner@example.invalid', password: 'secret' },
+      secure: true,
+    }, ports({
+      async signInWithPassword() {
+        return { accessToken: pending, refreshToken: 'refresh' };
+      },
+    }));
+    assert.equal(login.status, 200);
+    assert.equal(login.body.mfaRequired, true);
+    assert.equal(login.body.factorId, 'factor-1');
+    assert.equal(JSON.stringify(login.body).includes('header.'), false);
+    const overview = await handleGroupOwnerRequest({
+      method: 'GET',
+      pathname: '/api/group-owner/overview',
+      cookie: cookie(pending),
+    }, ports());
+    assert.equal(overview.status, 403);
+    assert.equal(overview.body.error, 'MFA_REQUIRED');
+  });
+
+  it('isolates brands and keeps money split and read-only', async () => {
+    const result = await handleGroupOwnerRequest({
+      method: 'GET',
+      pathname: '/api/group-owner/overview',
+      cookie: cookie(token(OWNER, 'aal2')),
+    }, ports());
+    assert.equal(result.status, 200);
+    assert.equal(result.body.synthetic, false);
+    const data = result.body.data as { players: Array<{ publicId: string }>; finance: Array<{ currency: string }> };
+    assert.deepEqual(data.players.map((player) => player.publicId), ['100001']);
+    assert.deepEqual(data.finance.map((line) => line.currency), ['TMT']);
+    assert.equal(JSON.stringify(result.body).includes('turnover'), false);
+    assert.equal(JSON.stringify(result.body).includes('email'), false);
+
+    const denied = await handleGroupOwnerRequest({
+      method: 'GET',
+      pathname: '/api/group-owner/finance',
+      cookie: cookie(token(OWNER, 'aal2')),
+    }, ports({
+      async loadOwner() {
+        return { id: OWNER, status: 'active', permissions: ['brands.read'] };
+      },
+    }));
+    assert.equal(denied.status, 403);
+    assert.equal(denied.body.error, 'OWNER_PERMISSION_DENIED');
+
+    const treasury = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/treasury',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { amount: '10.00' },
+    }, ports());
+    assert.equal(treasury.status, 403);
+    assert.equal(treasury.body.error, 'TREASURY_WRITES_DISABLED');
+
+    const staffWrite = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff',
+      body: { role: 'cashier' },
+    }, ports());
+    assert.equal(staffWrite.status, 403);
+    assert.equal(staffWrite.body.error, 'STAFF_WRITES_DISABLED');
+  });
+
+  it('fails closed when the schema is not exposed and strips private fields', async () => {
+    const result = await handleGroupOwnerRequest({
+      method: 'GET',
+      pathname: '/api/group-owner/players',
+      cookie: cookie(token(OWNER, 'aal2')),
+    }, ports({
+      async loadModel() {
+        throw new GroupControlError('GROUP_SCHEMA_NOT_EXPOSED');
+      },
+    }));
+    assert.equal(result.status, 503);
+    assert.equal(result.body.error, 'GROUP_SCHEMA_NOT_EXPOSED');
+    const stripped = stripPrivateFields({ publicId: '100001', email: 'a@b.c', balance: '1' });
+    assert.deepEqual(stripped, { publicId: '100001' });
+    const scoped = scopeReadModel(model(), OWNER);
+    assert.equal(scoped.players.some((player) => player.brandCode === '002'), false);
+  });
+
+  it('leaves NextPari production routing and player registration untouched', () => {
+    const vercel = readFileSync(join(root, 'vercel.json'), 'utf8');
+    const playerIds = readFileSync(join(root, 'server', 'player', 'playerPublicId.ts'), 'utf8');
+    const live = readFileSync(join(root, 'server', 'group', 'ownerLive.ts'), 'utf8');
+    const ui = readFileSync(join(root, 'src', 'group-owner', 'GroupOwnerApp.tsx'), 'utf8');
+    assert.equal(vercel.includes('group-owner'), false);
+    assert.equal(playerIds.includes('group_control'), false);
+    assert.equal(live.includes('allocate_player_id'), false);
+    assert.equal(ui.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
+    assert.equal(ui.includes('createServiceRoleClient'), false);
+  });
+});

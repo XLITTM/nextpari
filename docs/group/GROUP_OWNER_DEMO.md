@@ -64,6 +64,28 @@ Use a Chrome profile that is not signed in to Vercel. A private window is enough
 5. Sign out of Vercel, or use the private window again, and confirm `/` returns to the sign-in wall.
 6. Only after those checks, send the URL to people who already have access to the Vercel project. Do not post it publicly.
 
+## Authentication
+
+The dashboard now starts at a group-owner login. It is not the NextPari owner login. Cookies are `np_group_access` and `np_group_refresh`, HttpOnly, and separate from `nextpari_owner_access`.
+
+Password sign-in uses the Supabase anon key on the server. Reads require an `aal2` session. A password-only session cannot open data. MFA enrollment and verification are `POST /api/group-owner/auth/enroll` and `POST /api/group-owner/auth/mfa`.
+
+After `aal2`, the server loads `group_control.owner_identities` and `group_control.owner_permissions` with the service-role key. A brand staff UUID is not an owner. Rows are limited to `brand_owners` for that owner. The browser bundle does not contain the service-role key.
+
+This pull request does not create an owner account. Add the owner in Supabase Auth, enroll TOTP, then insert the auth user id into `owner_identities`, `owner_permissions`, and `brand_owners`.
+
+## Read API
+
+`GET /api/group-owner/overview|brands|staff|players|finance|access|audit|treasury`
+
+`POST /api/group-owner/treasury` returns `TREASURY_WRITES_DISABLED`. `POST /api/group-owner/staff` returns `STAFF_WRITES_DISABLED`. Player-id cutover and RYXO registration are not called.
+
+PostgREST currently exposes only `public` and `graphql_public`. Until `group_control` can be read by the server service role, the API returns `GROUP_SCHEMA_NOT_EXPOSED` and the screen shows that error instead of figures. Do not expose the schema to the anon key.
+
+NextPari `owner_dashboard_stats` is called with the user JWT only. Its money totals are not shown, because that function does not separate currency. The response reason is `NEXTPARI_STATS_HAVE_NO_CURRENCY` or `NEXTPARI_OWNER_CONTEXT_REQUIRED`.
+
+Server environment for the group-owner project, after approval: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Never copy them into `VITE_` variables.
+
 ## What the demo does not do
 
-Figures are labeled demonstration data. The employee form never creates an account. Finance is read-only and does not add different currencies. Group owner sign-in, the control-plane database, and staff invitations are not connected.
+Authenticated screens do not ship demonstration counts. The employee form never creates an account. Finance is read-only and does not add different currencies. Treasury movement stays closed.

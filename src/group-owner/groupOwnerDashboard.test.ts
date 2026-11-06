@@ -8,10 +8,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { authenticateGroupOwner, authorizeStaffSubject } from '../../server/group/access.ts';
 import { GroupControlError } from '../../server/group/errors.ts';
 import { sumMoney } from '../../server/group/reporting.ts';
-import { GroupOwnerApp } from './GroupOwnerApp.tsx';
-import { DEMO_PLAYERS, DEMO_SNAPSHOTS } from './demoData.ts';
+import { DEMO_AUDIT, DEMO_GRANTS, DEMO_PLAYERS, DEMO_SNAPSHOTS } from './demoData.ts';
+import { GroupOwnerApp, type GroupDashboardData } from './GroupOwnerApp.tsx';
 import {
-  DEMO_GRANTS,
   employeeDraftReceipt,
   financeLines,
   overviewCounts,
@@ -21,24 +20,52 @@ import {
   buildGroupReport,
 } from './viewModel.ts';
 
+const session = { ownerId: '00000000-0000-4000-8000-0000000000aa', permissions: ['brands.read', 'reports.read', 'staff.map'] };
+const snapshot: GroupDashboardData = {
+  grants: DEMO_GRANTS,
+  players: DEMO_PLAYERS.map((player) => ({
+    brandCode: player.brandCode,
+    publicId: player.publicId,
+    label: player.label,
+    source: player.state,
+  })),
+  operational: DEMO_SNAPSHOTS,
+  audit: DEMO_AUDIT,
+  permissions: session.permissions,
+  schemaError: null,
+  nextpariReason: null,
+};
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const PAGES = ['overview', 'brands', 'employees', 'players', 'finance', 'access', 'audit'] as const;
 
 function html(page: (typeof PAGES)[number], brand: 'all' | '001' | '002' | '003' = 'all'): string {
-  return renderToStaticMarkup(createElement(GroupOwnerApp, { initialPage: page, initialBrand: brand }));
+  return renderToStaticMarkup(createElement(GroupOwnerApp, {
+    initialPage: page,
+    initialBrand: brand,
+    initialSession: session,
+    initialSnapshot: snapshot,
+  }));
 }
 
 describe('group owner dashboard', () => {
-  it('renders the separate overview with labeled demonstration counts', () => {
+  it('asks for group owner sign-in before showing any figures', () => {
+    const markup = renderToStaticMarkup(createElement(GroupOwnerApp));
+    assert.match(markup, /Вход владельца группы/);
+    assert.doesNotMatch(markup, /900001/);
+    assert.doesNotMatch(markup, /120\.00/);
+  });
+
+  it('renders the separate overview from the supplied rows', () => {
     const markup = html('overview');
-    assert.match(markup, /Демонстрационные данные/);
+    assert.match(markup, /Источник: group_control/);
     assert.match(markup, /Кабинет владельца NextPari не заменяется/);
     assert.match(markup, /NextPari/);
     assert.match(markup, /RYXO/);
     assert.match(markup, /Будущий бренд/);
-    const counts = overviewCounts(buildGroupReport().brands);
-    assert.equal(counts.brandCount, 3);
+    const counts = overviewCounts(buildGroupReport(DEMO_SNAPSHOTS, DEMO_GRANTS).brands.filter((brand) => brand.code !== '003'));
+    assert.equal(counts.brandCount, 2);
     assert.equal(counts.playerCount, 6);
     assert.match(markup, />6</);
   });
@@ -51,13 +78,13 @@ describe('group owner dashboard', () => {
     assert.match(nextpari, /900001/);
     assert.doesNotMatch(nextpari, /910001/);
     const future = html('players', '003');
-    assert.match(future, /нет демонстрационных игроков/);
+    assert.match(future, /нет записей игроков/);
     assert.doesNotMatch(future, /900001/);
     assert.doesNotMatch(future, /910001/);
   });
 
   it('keeps finance split by brand and currency', () => {
-    const lines = financeLines(buildGroupReport(), 'all');
+    const lines = financeLines(buildGroupReport(DEMO_SNAPSHOTS, DEMO_GRANTS), 'all');
     assert.deepEqual(lines.map((line) => `${line.brandCode}:${line.currency}`), ['001:TMT', '002:USD']);
     assert.throws(() => sumMoney(lines, 'deposits'), (error: unknown) => {
       return error instanceof GroupControlError && error.code === 'MIXED_CURRENCY_TOTAL';
@@ -66,7 +93,7 @@ describe('group owner dashboard', () => {
     assert.match(markup, /TMT/);
     assert.match(markup, /USD/);
     assert.doesNotMatch(markup, /Итого/);
-    assert.equal(financeLines(buildGroupReport(), '003').length, 0);
+    assert.equal(financeLines(buildGroupReport(DEMO_SNAPSHOTS, DEMO_GRANTS), '003').length, 0);
     assert.equal(DEMO_SNAPSHOTS[0]?.financials.currency, 'TMT');
   });
 
@@ -128,7 +155,7 @@ describe('group owner dashboard', () => {
     };
     for (const page of PAGES) {
       const markup = html(page, '002');
-      assert.match(markup, /Демонстрационные данные/);
+      assert.match(markup, /Источник: group_control/);
       assert.match(markup, expected[page]);
       assert.doesNotMatch(markup, /900001/);
     }
@@ -149,7 +176,7 @@ describe('group owner dashboard', () => {
     assert.match(index, /src\/main\.tsx/);
     assert.doesNotMatch(index, /group-owner/);
     assert.doesNotMatch(vercel, /group-owner|group_control|GROUP_SERVICE/);
-    assert.doesNotMatch(`${app}\n${main}`, /service_role|GROUP_SERVICE|VITE_|password|bypass/i);
+    assert.doesNotMatch(`${app}\n${main}`, /service_role|GROUP_SERVICE|VITE_|bypass/i);
     assert.doesNotMatch(app, /src\/owner\//);
   });
 });

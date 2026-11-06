@@ -71,8 +71,10 @@ describe('group owner demo build', () => {
     for (const pattern of forbidden) {
       assert.equal(pattern.test(bundled), false, `bundle matched ${pattern}`);
     }
-    assert.match(bundled, /Демонстрационные данные/);
+    assert.match(bundled, /Вход владельца группы/);
     assert.match(bundled, /Учётная запись не создана/);
+    assert.equal(bundled.includes('900001'), false);
+    assert.equal(bundled.includes('Демонстрационные данные'), false);
     const shipped = filesIn(outDir).map((path) => relative(outDir, path).replaceAll('\\', '/'));
     assert.ok(shipped.includes('index.html'));
     assert.equal(shipped.includes('sw.js'), false);
