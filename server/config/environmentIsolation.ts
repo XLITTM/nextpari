@@ -161,7 +161,7 @@ function readPublicHost(value: string): { ok: true; host: string } | { ok: false
   return { ok: true, host };
 }
 
-function supabaseRefFromUrl(value: string): string | null {
+export function supabaseProjectRef(value: string): string | null {
   let parsed: URL;
   try {
     parsed = new URL(value);
@@ -233,7 +233,7 @@ function collectStagingFailures(env: NodeJS.ProcessEnv): string[] {
   }
 
   const supabaseUrl = read(env, 'SUPABASE_URL');
-  const urlRef = supabaseRefFromUrl(supabaseUrl);
+  const urlRef = supabaseProjectRef(supabaseUrl);
   if (!supabaseUrl) codes.push('STAGING_SUPABASE_URL_REQUIRED');
   else if (!urlRef) codes.push('STAGING_SUPABASE_URL_INVALID');
   else if (PROJECT_REF.test(stagingRef) && urlRef !== stagingRef) codes.push('STAGING_SUPABASE_URL_MISMATCH');
@@ -347,7 +347,55 @@ function collectStagingFailures(env: NodeJS.ProcessEnv): string[] {
     }
   }
 
+  codes.push(...collectDeploymentHostFailures(env));
   return unique(codes);
+}
+
+const TRUSTED_DEPLOYMENT_HOST_KEYS = [
+  'VERCEL_URL',
+  'VERCEL_PROJECT_PRODUCTION_URL',
+  'VERCEL_BRANCH_URL',
+  'RAILWAY_PUBLIC_DOMAIN',
+  'RAILWAY_STATIC_URL',
+] as const;
+
+export function hostFromAuthority(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  try {
+    if (trimmed.includes('://')) return new URL(trimmed).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+  return trimmed.toLowerCase().replace(/^\/*/, '').split('/')[0].split(',')[0].replace(/:\d+$/, '');
+}
+
+export function trustedDeploymentHosts(env: NodeJS.ProcessEnv): string[] {
+  const hosts: string[] = [];
+  for (const key of TRUSTED_DEPLOYMENT_HOST_KEYS) {
+    const host = hostFromAuthority(read(env, key));
+    if (host && !hosts.includes(host)) hosts.push(host);
+  }
+  return hosts;
+}
+
+export function configuredPublicHost(env: NodeJS.ProcessEnv): string {
+  const origin = readPublicHost(read(env, 'NEXTPARI_PUBLIC_ORIGIN'));
+  return origin.ok ? origin.host : '';
+}
+
+export function collectDeploymentHostFailures(env: NodeJS.ProcessEnv): string[] {
+  const codes: string[] = [];
+  const hosts = trustedDeploymentHosts(env);
+  for (const host of hosts) {
+    if (isProductionHost(host)) codes.push('STAGING_DEPLOYMENT_HOST_IS_PRODUCTION');
+  }
+  if (isDeployed(env) && hosts.length === 0) codes.push('STAGING_DEPLOYMENT_HOST_REQUIRED');
+  const originHost = configuredPublicHost(env);
+  if (originHost && hosts.length > 0 && !hosts.includes(originHost)) {
+    codes.push('STAGING_DEPLOYMENT_HOST_MISMATCH');
+  }
+  return codes;
 }
 
 function collectCrossEnvironmentFailures(env: NodeJS.ProcessEnv, role: RuntimeRole): string[] {

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { stagingHttpDenial, stagingMoneyDenial } from '../config/stagingEnforcement.js';
 import {
   parseJsonPayload,
   readJsonBody,
@@ -402,6 +403,8 @@ export async function handleCashierControlRequest(
     if (matched === 'method') {
       throw staffError('METHOD_NOT_ALLOWED', 405);
     }
+    const moneyDenied = stagingMoneyDenial(path, method);
+    if (moneyDenied) return moneyDenied;
 
     const sessionPorts = deps.sessionPorts ?? liveCashierAuthPorts();
     const resolved = await resolveCashierSession(sessionPorts, input.cookie, secure);
@@ -488,6 +491,11 @@ export async function attachCashierControlHttp(
   const { pathname, search } = pathnameAndSearch(raw, '/');
   if (!isCashierControlPath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'GET';
     const body = method === 'GET' ? {} : await readJsonBody(req);
     const result = await handleCashierControlRequest(
@@ -531,6 +539,11 @@ export async function handleVercelCashierControl(
   deps: CashierControlDeps = {},
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const cookie = req.headers.cookie;
   let { pathname, search } = pathnameAndSearch(req.url ?? '', fallbackPathname);
   if (!search && req.query) {

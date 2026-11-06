@@ -1,3 +1,4 @@
+import { guardStagingMonetaryRpc } from '../config/stagingEnforcement.js';
 import { createServiceRoleClient } from '../supabase/admin.js';
 import type { CanonicalProviderEvent } from './types.js';
 
@@ -29,6 +30,7 @@ export async function ingestProviderTransactionWithServiceRole(
   event: CanonicalProviderEvent,
   clientFactory: typeof createServiceRoleClient = createServiceRoleClient,
 ): Promise<unknown> {
+  guardStagingMonetaryRpc(PROVIDER_INGEST_RPC);
   const client = clientFactory(env.supabaseUrl, env.supabaseServiceRoleKey);
   const { data, error } = await client.rpc(PROVIDER_INGEST_RPC, providerIngestRpcArgs(event));
   if (error) throw error;

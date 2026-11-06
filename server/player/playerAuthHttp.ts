@@ -31,6 +31,7 @@ import {
   PLAYER_EMAIL_START_PATH,
   PLAYER_EMAIL_VERIFY_PATH,
 } from '../email/playerEmailService.js';
+import { stagingHttpDenial, stagingMoneyDenial } from '../config/stagingEnforcement.js';
 import { ensurePlayerDeviceCookie, requestIsSecure } from './playerCookies.js';
 import {
   createPlayerSecurityObserver,
@@ -167,6 +168,8 @@ export async function handlePlayerAuthRequest(
 ): Promise<PlayerAuthHttpResult> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
+  const moneyDenied = stagingMoneyDenial(path, method);
+  if (moneyDenied) return moneyDenied;
   const secure = input.cookieSecure === true;
   const device = ensurePlayerDeviceCookie(input.cookie, secure);
   void input.forwardedFor;
@@ -475,6 +478,11 @@ export async function attachPlayerAuthHttp(
   const pathname = (req.url ?? '').split('?')[0] ?? '';
   if (!isPlayerAuthPath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'GET';
     const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
     const result = await handlePlayerAuthRequest(
@@ -521,6 +529,11 @@ export async function handleVercelPlayerAuth(
   ports?: PlayerAuthGatewayPorts,
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const cookie = req.headers.cookie;
   const userAgent = req.headers['user-agent'];
   const result = await handlePlayerAuthRequest(

@@ -18,6 +18,7 @@ import {
   type PlayerProfileFields,
 } from './playerValidators.js';
 import { generateOneClickPassword, publicAuthEmail } from '../auth/oneClickPassword.js';
+import { syntheticRegistrationFailure } from '../config/stagingEnforcement.js';
 import {
   claimPlayerLoginPhone,
   createManagedPasswordUser,
@@ -633,6 +634,15 @@ export async function registerPlayerWithPassword(
     return {
       status: 400,
       body: { ok: false, authenticated: false, error: 'REGISTRATION_CURRENCY_REQUIRED' },
+      cookies: clearPlayerCookies(secure),
+    };
+  }
+
+  const syntheticCode = syntheticRegistrationFailure(input);
+  if (syntheticCode) {
+    return {
+      status: 403,
+      body: { ok: false, authenticated: false, error: syntheticCode },
       cookies: clearPlayerCookies(secure),
     };
   }

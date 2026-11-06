@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { assertEnvironmentIsolation, EnvironmentIsolationError } from '../config/environmentIsolation.js';
+import { stagingHttpDenial, stagingMoneyDenial } from '../config/stagingEnforcement.js';
 import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError, redactForLog } from '../staff/errors.js';
 import {
@@ -97,6 +98,8 @@ export async function handleBetConstructRequest(
   const method = input.method.toUpperCase();
   void input.body;
   try {
+    const moneyDenied = stagingMoneyDenial(path, method, env);
+    if (moneyDenied) return toStaffResult(moneyDenied);
     assertEnvironmentIsolation(env);
     if (path === PLAYER_BETCONSTRUCT_SPORTSBOOK_LAUNCH_PATH) {
       if (method !== 'POST') throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
@@ -164,6 +167,11 @@ export async function attachBetConstructHttp(
   const pathname = (req.url ?? '').split('?')[0] ?? '';
   if (!isBetConstructPath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'GET';
     const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
     const result = await handleBetConstructRequest(
@@ -207,6 +215,11 @@ export async function handleVercelBetConstruct(
   pathname: string,
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const cookie = req.headers.cookie;
   const result = await handleBetConstructRequest(
     {

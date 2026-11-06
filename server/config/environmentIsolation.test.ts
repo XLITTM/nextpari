@@ -46,6 +46,7 @@ function validStaging(): NodeJS.ProcessEnv {
     NEXTPARI_PLAYER_EMAIL_DOMAIN: 'staging.nextpari.test',
     NEXTPARI_COOKIE_DOMAIN: '',
     NEXTPARI_PUBLIC_ORIGIN: 'https://nextpari-staging.vercel.app',
+    VERCEL_URL: 'nextpari-staging.vercel.app',
     NEXTPARI_PRODUCTION_SUPABASE_PROJECT_REF: productionRef,
     NEXTPARI_STAGING_SUPABASE_PROJECT_REF: stagingRef,
     SUPABASE_URL: url,
@@ -170,6 +171,17 @@ describe('staging environment isolation', () => {
       assert.ok(failuresOf({ LSPORTS_INPLAY_PACKAGE_ID: packageId }).includes('STAGING_LSPORTS_FORBIDDEN'), packageId);
     }
     assert.ok(failuresOf({ LSPORTS_INPLAY_PACKAGE_ID: '9999' }).includes('STAGING_LSPORTS_FORBIDDEN'));
+  });
+
+  it('checks the platform host, not only the configured origin', () => {
+    assert.ok(failuresOf({ VERCEL_URL: 'nextpari.net' }).includes('STAGING_DEPLOYMENT_HOST_IS_PRODUCTION'));
+    assert.ok(failuresOf({
+      VERCEL_URL: 'nextpari-production.up.railway.app',
+    }).includes('STAGING_DEPLOYMENT_HOST_IS_PRODUCTION'));
+    assert.ok(failuresOf({ VERCEL_URL: '' }).includes('STAGING_DEPLOYMENT_HOST_REQUIRED'));
+    assert.ok(failuresOf({
+      VERCEL_URL: 'other-staging.vercel.app',
+    }).includes('STAGING_DEPLOYMENT_HOST_MISMATCH'));
   });
 
   it('keeps production LSports defaults and blocks them on staging', () => {

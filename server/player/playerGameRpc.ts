@@ -1,3 +1,4 @@
+import { guardStagingMonetaryRpc } from '../config/stagingEnforcement.js';
 import { createUserJwtClient } from '../supabase/admin.js';
 import { loadOwnerAuthEnv } from '../staff/env.js';
 import { extractErrorCode, rpcMessage, staffError, StaffOnboardingError } from '../staff/errors.js';
@@ -116,6 +117,7 @@ export function createPlayerJwtGameRpc(accessToken: string): PlayerGameRpcPort {
   const client = createUserJwtClient(env.supabaseUrl, env.supabaseAnonKey, accessToken);
   return {
     async invoke(name, args) {
+      guardStagingMonetaryRpc(name);
       const { data, error } = await client.rpc(name, args);
       if (error) throw mapPlayerGameRpcError(error);
       return data;

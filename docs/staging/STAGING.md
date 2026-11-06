@@ -80,7 +80,23 @@ The process exits the request or the worker with `EnvironmentIsolationError` whe
 
 Current production, with `NEXTPARI_ENV` unset, does not need these variables. `NEXTPARI_ENV=test` and `NEXTPARI_ENV=development` are local roles. A deployed Vercel or Railway process cannot use them.
 
-Wallet balances live in the Supabase project named by `SUPABASE_URL`. Synthetic wallet mode plus a separate project keeps staging balances off the production ledger. This does not add a second wallet engine and does not add tenant ids.
+## Deployment identity
+
+Staging checks the platform host in addition to `NEXTPARI_PUBLIC_ORIGIN`.
+
+On Vercel the trusted hosts are `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, and `VERCEL_BRANCH_URL`. On Railway they are `RAILWAY_PUBLIC_DOMAIN` and `RAILWAY_STATIC_URL`. When any of those is present, the host of `NEXTPARI_PUBLIC_ORIGIN` must be exactly one of them. A production host in those variables fails the check. A deployed staging process with none of them fails the check.
+
+Every guarded HTTP entry reads `X-Forwarded-Host`, then `Host`. A production host is refused. On a deployed staging process the request host must be one of the trusted platform hosts. Locally, an empty host or `localhost` is accepted, and any other host must equal `NEXTPARI_PUBLIC_ORIGIN`.
+
+The Vite build runs the same staging check before it embeds `VITE_SUPABASE_URL`. A staging build whose client URL differs from `SUPABASE_URL` fails. When `NEXTPARI_ENV=staging`, the client Sentry environment is `staging` even though Vercel sets `VERCEL_ENV=production` on that project's main branch.
+
+## Accounts and money
+
+Registration on staging accepts one-click accounts, which use an internal `auth.nextpari.invalid` mailbox, and email accounts on `NEXTPARI_PLAYER_EMAIL_DOMAIN`. Phone registration is refused. Staff provisioning uses the same email rule. These checks run before Auth admin calls.
+
+Player, staff, cashier, manager, owner, security, sports, and provider handlers call the isolation check before they open a Supabase client. The client URL must be the staging project. Supabase client factories enforce that URL on every connection.
+
+`NEXTPARI_WALLET_MODE=synthetic` records the intended mode. It does not implement a synthetic wallet. Monetary HTTP routes and monetary RPCs return `STAGING_MONEY_SIDE_EFFECT_FORBIDDEN`. That covers game start and action, sports place and settlement, deposits, withdrawals, cashier funding and collection, owner debit, capital-in, currency funding, and provider ingest. Reading a wallet, listing withdrawals, and `ensure_player_account` remain available so a synthetic user can sign in with a zero balance on the staging project. No staging request can move a balance until a synthetic wallet implementation is reviewed in a later change.
 
 ## Synthetic users
 
@@ -147,6 +163,9 @@ Later, after approval, expect a separate Supabase project, a separate Vercel pro
 ## Risks
 
 - Setting `NEXTPARI_ENV=staging` on the production Vercel project or the production Railway service fail-closes that process. Leave production unset.
+- Monetary routes stay closed. `STAGING_SYNTHETIC_WALLET_VERIFIED` is false in code. Do not treat `NEXTPARI_WALLET_MODE=synthetic` as permission to move money.
+- `ensure_player_account` still runs on staging so synthetic registration can create a zero-balance account on the staging project.
+- Email recovery, personal-data writes, and other non-money RPCs can write to the staging project after isolation passes. They cannot open a different Supabase URL.
 - The checker can see the production database only when `NEXTPARI_PRODUCTION_SUPABASE_PROJECT_REF` is the real production ref. A wrong ref defeats that comparison.
 - Cookie names are shared by design so the Android and web clients stay compatible. A later change that sets a cookie `Domain` of `nextpari.net` would merge sessions. Staging rejects `NEXTPARI_COOKIE_DOMAIN`.
 - Vercel Preview is outside this guard. Keep production service-role keys out of Preview.
@@ -155,4 +174,4 @@ Later, after approval, expect a separate Supabase project, a separate Vercel pro
 
 ## Approval stop
 
-Owner approval is required before creating the Supabase project, the Vercel project, or the Railway environment, and before `supabase link` or `supabase db push`. Until then, use the templates and `npm run staging:isolation:test` only.
+Owner approval is required before creating the Supabase project, the Vercel project, or the Railway environment, and before `supabase link` or `supabase db push`. Staging is not ready to provision. Monetary side effects stay blocked. Until approval, use the templates and `npm run staging:isolation:test` only.

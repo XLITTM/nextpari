@@ -1,3 +1,4 @@
+import { guardStagingMonetaryRpc } from '../config/stagingEnforcement.js';
 import { createUserJwtClient } from '../supabase/admin.js';
 import { loadOwnerAuthEnv } from '../staff/env.js';
 import { extractErrorCode, rpcMessage, staffError, StaffOnboardingError } from '../staff/errors.js';
@@ -109,6 +110,7 @@ export function createSecurityJwtRpc(accessToken: string): SecurityRpcPort {
       if (!(SECURITY_ALLOWED_RPCS as readonly string[]).includes(name)) {
         throw staffError('SECURITY_ACTION_DENIED', 403);
       }
+      guardStagingMonetaryRpc(name);
       const { data, error } = await client.rpc(name, args);
       if (error) throw mapSecurityRpcError(error);
       return data;

@@ -9,6 +9,7 @@ import {
   type StaffHttpResult,
   type StaffJsonResponse,
 } from '../staff/httpHandler.js';
+import { stagingHttpDenial, stagingMoneyDenial } from '../config/stagingEnforcement.js';
 import { requestIsSecure } from './playerCookies.js';
 import { playerGameHttpError, type PlayerGameGatewayPorts } from './playerGamesService.js';
 import {
@@ -60,17 +61,20 @@ export async function handlePlayerWithdrawalsRequest(
     cookieSecure?: boolean;
     body?: unknown;
   },
-  ports: PlayerGameGatewayPorts = livePlayerWithdrawalPorts(),
+  ports?: PlayerGameGatewayPorts,
   log: StaffLog = staffHttpLog,
 ): Promise<{ status: number; body: Record<string, unknown>; cookies?: string[]; headers?: Record<string, string> }> {
   const path = normalizePath(input.pathname);
   const method = input.method.toUpperCase();
   const secure = input.cookieSecure === true;
+  const moneyDenied = stagingMoneyDenial(path, method);
+  if (moneyDenied) return moneyDenied;
+  const withdrawalPorts = ports ?? livePlayerWithdrawalPorts();
 
   try {
     if (path === PLAYER_PAYOUT_DESTINATIONS_PATH) {
       if (method === 'GET') {
-        return await listPlayerCashPayoutDestinations(ports, input.cookie, secure);
+        return await listPlayerCashPayoutDestinations(withdrawalPorts, input.cookie, secure);
       }
       throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
     }
@@ -78,10 +82,10 @@ export async function handlePlayerWithdrawalsRequest(
       throw new StaffOnboardingError('NOT_FOUND', 404);
     }
     if (method === 'GET') {
-      return await listPlayerWithdrawals(ports, input.cookie, secure);
+      return await listPlayerWithdrawals(withdrawalPorts, input.cookie, secure);
     }
     if (method === 'POST') {
-      return await createPlayerWithdrawal(ports, input.cookie, asRecord(parseJsonPayload(input.body)), secure);
+      return await createPlayerWithdrawal(withdrawalPorts, input.cookie, asRecord(parseJsonPayload(input.body)), secure);
     }
     throw new StaffOnboardingError('METHOD_NOT_ALLOWED', 405);
   } catch (error) {
@@ -122,6 +126,11 @@ export async function attachPlayerWithdrawalsHttp(
   const pathname = (req.url ?? '').split('?')[0] ?? '';
   if (!isPlayerWithdrawalsPath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'GET';
     const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
     const result = await handlePlayerWithdrawalsRequest(
@@ -132,7 +141,7 @@ export async function attachPlayerWithdrawalsHttp(
         cookieSecure: requestIsSecure(req.headers),
         body,
       },
-      livePlayerWithdrawalPorts(),
+      undefined,
       log,
     );
     writeStaffJson(res, toStaffResult(result));
@@ -164,6 +173,11 @@ export async function handleVercelPlayerWithdrawals(
   ports?: PlayerGameGatewayPorts,
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const cookie = req.headers.cookie;
   const result = await handlePlayerWithdrawalsRequest(
     {

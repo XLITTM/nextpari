@@ -1,4 +1,5 @@
 import type { IncomingMessage } from 'node:http';
+import { stagingHttpDenial } from '../config/stagingEnforcement.js';
 import {
   staffHttpLog,
   writeStaffJson,
@@ -88,6 +89,11 @@ export async function handleVercelSentryTest(
   env: NodeJS.ProcessEnv = process.env,
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const result = await handleSentryTestRequest(
     {
       method: req.method ?? 'GET',

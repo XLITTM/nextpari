@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { guardStagingMonetaryRpc, stagingHttpDenial, stagingMoneyDenial } from '../config/stagingEnforcement.js';
 import { createServiceRoleClient } from '../supabase/admin.js';
 import { loadStaffOnboardingEnv } from '../staff/env.js';
 import { StaffOnboardingError, redactForLog } from '../staff/errors.js';
@@ -63,6 +64,8 @@ export async function handleSportsSettleRequest(
       body: { ok: false, error: 'METHOD_NOT_ALLOWED' },
     };
   }
+  const moneyDenied = stagingMoneyDenial(input.pathname, input.method, env);
+  if (moneyDenied) return moneyDenied;
   const expected = readSettlementSecret(env);
   const provided = bearerToken(input.authorization);
   if (!settlementSecretsEqual(provided, expected)) {
@@ -94,6 +97,7 @@ export async function handleSportsSettleRequest(
   console.log(`[sports] settlement-received items=${items.length}`);
   try {
     const invoke = rpc ?? (async (payload: unknown[]) => {
+      guardStagingMonetaryRpc('sports_apply_settlement');
       const staff = loadStaffOnboardingEnv();
       const client = createServiceRoleClient(staff.supabaseUrl, staff.supabaseServiceRoleKey);
       const { data, error } = await client.rpc('sports_apply_settlement', { p_items: payload });
@@ -141,6 +145,11 @@ export async function attachSportsSettleHttp(
   const pathname = (req.url ?? '').split('?')[0] ?? '';
   if (!isInternalSportsSettlePath(pathname)) return false;
   try {
+    const denied = stagingHttpDenial(req.headers);
+    if (denied) {
+      writeStaffJson(res, denied);
+      return true;
+    }
     const method = req.method ?? 'POST';
     const body = method === 'GET' || method === 'HEAD' ? {} : await readJsonBody(req);
     const result = await handleSportsSettleRequest(
@@ -173,6 +182,11 @@ export async function handleVercelSportsSettle(
   res: StaffJsonResponse,
   pathname: string,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   const authorization = req.headers.authorization ?? req.headers.Authorization;
   const result = await handleSportsSettleRequest({
     method: req.method ?? 'POST',

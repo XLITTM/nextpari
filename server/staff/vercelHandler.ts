@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
+import { stagingHttpDenial } from '../config/stagingEnforcement.js';
 import { reportServerException } from '../observability/sentry.js';
 import { StaffOnboardingError } from './errors.js';
 import {
@@ -33,6 +34,11 @@ export async function handleVercelOwnerStaff(
   portsFactory: StaffHttpPortsFactory = livePortsFactory,
   log: StaffLog = staffHttpLog,
 ): Promise<void> {
+  const denied = stagingHttpDenial(req.headers);
+  if (denied) {
+    writeStaffJson(res, denied);
+    return;
+  }
   try {
     const body = parseJsonPayload(req.body);
     const result = await handleOwnerStaffRequest(
