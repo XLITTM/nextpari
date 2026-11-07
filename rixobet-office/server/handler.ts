@@ -11,11 +11,12 @@ import {
   hashSecret,
   passwordAccepted,
   randomToken,
-  secretsMatch,
   totpMatches,
   verifyPassword,
 } from './crypto';
 import { isVerifiedRole, type OfficeRepository, type SessionRecord } from './repository';
+import { requestOriginAllowed } from './origin';
+import { createLimiter } from './rateLimit';
 
 const CHALLENGE_MS = 5 * 60 * 1000;
 const SESSION_MS = 12 * 60 * 60 * 1000;
@@ -102,6 +103,25 @@ function denied(status = 401): OfficeResponse {
   return { status, body: { brandCode: BRAND.code, accepted: false }, setCookie: [] };
 }
 
+function limited(): OfficeResponse {
+  return { status: 429, body: { brandCode: BRAND.code, accepted: false }, setCookie: [] };
+}
+
+const buckets = new WeakMap<OfficeRepository, { login: ReturnType<typeof createLimiter>; activation: ReturnType<typeof createLimiter> }>();
+
+function limitsFor(repository: OfficeRepository) {
+  const existing = buckets.get(repository);
+  if (existing) return existing;
+  const created = { login: createLimiter(8, 15 * 60 * 1000), activation: createLimiter(5, 15 * 60 * 1000) };
+  buckets.set(repository, created);
+  return created;
+}
+
+function clientIp(headers: OfficeRequest['headers']): string {
+  const forwarded = headers['x-forwarded-for']?.split(',')[0]?.trim() ?? '';
+  return /^[0-9a-fA-F:.]{3,64}$/.test(forwarded) ? forwarded : 'absent';
+}
+
 function sessionBody(session: SessionRecord, role: OfficeRole) {
   return {
     sessionId: session.publicId,
@@ -140,11 +160,12 @@ function permissionsFor(role: OfficeRole): readonly Permission[] {
   return ROLE_CEILING[role];
 }
 
-async function login(office: ReadyOffice, body: Record<string, unknown>): Promise<OfficeResponse> {
+async function login(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== BRAND.code) return denied(403);
   const email = text(body.email).trim().toLowerCase();
   const password = text(body.password);
+  if (!limitsFor(office.repository).login.allow(`${clientIp(request.headers)}|${email}`, office.now())) return limited();
   if (!emailAccepted(email) || !passwordAccepted(password)) return denied(401);
   const staff = await office.repository.findStaffByEmail(email);
   const hash = staff?.passwordHash ?? dummyPasswordHash();
@@ -162,9 +183,12 @@ async function login(office: ReadyOffice, body: Record<string, unknown>): Promis
   };
 }
 
-async function confirmMfa(office: ReadyOffice, body: Record<string, unknown>): Promise<OfficeResponse> {
+async function confirmMfa(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== BRAND.code) return denied(403);
+  if (!limitsFor(office.repository).login.allow(`${clientIp(request.headers)}|mfa|${text(body.challengeId)}`, office.now())) {
+    return limited();
+  }
   const challenge = await office.repository.readChallenge(text(body.challengeId));
   if (!challenge || challenge.brandCode !== BRAND.code || challenge.consumedAt) return denied(401);
   if (Date.parse(challenge.expiresAt) <= office.now() || challenge.attemptCount >= MAX_ATTEMPTS) return denied(401);
@@ -200,19 +224,18 @@ async function confirmMfa(office: ReadyOffice, body: Record<string, unknown>): P
   };
 }
 
-async function activation(office: ReadyOffice, body: Record<string, unknown>): Promise<OfficeResponse> {
+async function activation(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== undefined && body.brandCode !== BRAND.code) return denied(403);
   const email = text(body.email).trim().toLowerCase();
   const token = text(body.invitationToken);
   const password = text(body.password);
-  if (!emailAccepted(email) || token.length < 20 || !passwordAccepted(password)) return denied(401);
-  const invited = (await office.repository.listInvitedOwners()).filter((row) => row.brandCode === BRAND.code);
-  const staff = invited.find((row) => row.email.toLowerCase() === email);
-  if (invited.length !== 1 || !staff || staff.role !== 'owner' || staff.authUserId !== null) return unavailable();
-  if (!staff.invitationDeliveredAt || !staff.invitationTokenHash) return unavailable();
-  if (!secretsMatch(staff.invitationTokenHash, hashSecret(office.pepper, token))) return denied(401);
-  if (staff.identityVerifiedAt) return unavailable();
+  if (!limitsFor(office.repository).activation.allow(`${clientIp(request.headers)}|${email}`, office.now())) return limited();
+  if (!emailAccepted(email) || token.length < 20 || token.length > 200 || !/^[A-Za-z0-9_-]+$/.test(token) || !passwordAccepted(password)) {
+    return denied(401);
+  }
+  const staff = await office.repository.claimInvitation(email, hashSecret(office.pepper, token), new Date(office.now()).toISOString());
+  if (!staff) return denied(401);
   const secret = createMfaSecret();
   const enrolled = await office.repository.enrollInvitedOwner(staff.id, hashPassword(password), secret);
   if (!enrolled) return unavailable();
@@ -227,13 +250,14 @@ async function activation(office: ReadyOffice, body: Record<string, unknown>): P
   };
 }
 
-async function confirmActivation(office: ReadyOffice, body: Record<string, unknown>): Promise<OfficeResponse> {
+async function confirmActivation(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== undefined && body.brandCode !== BRAND.code) return denied(403);
   const email = text(body.email).trim().toLowerCase();
-  const staff = (await office.repository.listInvitedOwners()).find((row) => row.email.toLowerCase() === email);
-  if (!staff || staff.brandCode !== BRAND.code || staff.status !== 'invited' || !staff.invitationDeliveredAt) return unavailable();
-  if (!staff.passwordHash || !staff.mfaSecret || staff.identityVerifiedAt || staff.authUserId !== null) return unavailable();
+  if (!limitsFor(office.repository).activation.allow(`${clientIp(request.headers)}|confirm|${email}`, office.now())) return limited();
+  const staff = await office.repository.findStaffByEmail(email);
+  if (!staff || staff.brandCode !== BRAND.code || staff.status !== 'invited' || staff.authUserId !== null) return denied(401);
+  if (!staff.invitationConsumedAt || !staff.passwordHash || !staff.mfaSecret || staff.identityVerifiedAt) return denied(401);
   const step = totpMatches(staff.mfaSecret, text(body.code), office.now(), staff.mfaLastStep);
   if (step === null) return denied(401);
   const verified = await office.repository.verifyInvitedOwner(staff.id, new Date(office.now()).toISOString(), step);
@@ -250,12 +274,13 @@ export async function handleOffice(request: OfficeRequest, office: ReadyOffice |
 }
 async function dispatchOffice(request: OfficeRequest, office: ReadyOffice | null): Promise<OfficeResponse> {
   if (!office) return unavailable();
+  if (!requestOriginAllowed(request.headers, request.method)) return denied(403);
   const path = pathnameOf(request.path);
   const body = record(request.body) ?? {};
-  if (request.method === 'POST' && path === '/auth/login') return login(office, body);
-  if (request.method === 'POST' && path === '/auth/mfa') return confirmMfa(office, body);
-  if (request.method === 'POST' && path === '/auth/activation') return activation(office, body);
-  if (request.method === 'POST' && path === '/auth/activation/confirm') return confirmActivation(office, body);
+  if (request.method === 'POST' && path === '/auth/login') return login(office, request, body);
+  if (request.method === 'POST' && path === '/auth/mfa') return confirmMfa(office, request, body);
+  if (request.method === 'POST' && path === '/auth/activation') return activation(office, request, body);
+  if (request.method === 'POST' && path === '/auth/activation/confirm') return confirmActivation(office, request, body);
 
   const auth = await authenticated(office, request);
   if (request.method === 'GET' && path === '/auth/session') {

@@ -3,6 +3,7 @@ import { accessDecision } from './access/guard';
 import type { OfficeRoute } from './access/model';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { homeFor, OFFICE_ROUTES } from './nav/catalog';
+import { ActivationPage } from './ui/ActivationPage';
 import { LoginPage } from './ui/LoginPage';
 import { PortalFrame } from './ui/PortalFrame';
 import { PortalPage } from './ui/PortalPage';
@@ -46,6 +47,7 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/activate" element={<ActivationPage />} />
       {OFFICE_ROUTES.map((route) => (
         <Route key={route.path} path={route.path} element={<RequireAccess route={route} />} />
       ))}

@@ -13,7 +13,8 @@ export interface StaffRecord {
   mfaLastStep: number | null;
   identityVerifiedAt: string | null;
   invitationTokenHash: string | null;
-  invitationDeliveredAt: string | null;
+  invitationExpiresAt: string | null;
+  invitationConsumedAt: string | null;
 }
 
 export interface ChallengeRecord {
@@ -48,6 +49,7 @@ export interface OfficeRepository {
   findStaffByEmail(email: string): Promise<StaffRecord | null>;
   findStaffById(id: string): Promise<StaffRecord | null>;
   listInvitedOwners(): Promise<StaffRecord[]>;
+  claimInvitation(email: string, digest: string, nowIso: string): Promise<StaffRecord | null>;
   enrollInvitedOwner(id: string, passwordHash: string, mfaSecret: string): Promise<boolean>;
   verifyInvitedOwner(id: string, identityVerifiedAt: string, mfaLastStep: number): Promise<boolean>;
   recordMfaStep(id: string, step: number): Promise<void>;

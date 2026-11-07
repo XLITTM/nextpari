@@ -32,7 +32,8 @@ const STAFF_COLUMNS = [
   'mfa_last_step',
   'identity_verified_at',
   'invitation_token_hash',
-  'invitation_delivered_at',
+  'invitation_expires_at',
+  'invitation_consumed_at',
 ] as const;
 
 const SESSION_COLUMNS = ['id', 'staff_id', 'brand_code', 'secret_hash', 'expires_at', 'revoked_at', 'mfa_satisfied'] as const;

@@ -2,7 +2,7 @@ import { BRAND } from '../brand';
 import type { FormSpec, OfficeRoute } from '../access/model';
 import { parseSession, type OfficeSession, type ParsedSession } from '../access/session';
 import { OfficeFailure, officeRequest, type FailureReason } from './http';
-import { parseAcceptance, parseMfaChallenge, parsePage, type Acceptance, type PageData } from './parsers';
+import { parseAcceptance, parseActivationComplete, parseActivationStart, parseMfaChallenge, parsePage, type Acceptance, type PageData } from './parsers';
 
 export type OfficeCall<T> = { ok: true; data: T } | { ok: false; reason: FailureReason };
 
@@ -62,6 +62,39 @@ export async function requestLogout(): Promise<FailureReason | null> {
     return null;
   } catch (error) {
     return failure(error);
+  }
+}
+
+export async function beginActivation(
+  email: string,
+  invitationToken: string,
+  password: string,
+): Promise<OfficeCall<{ otpauthUri: string }>> {
+  try {
+    const body = await officeRequest('/auth/activation', {
+      method: 'POST',
+      action: 'auth.activation',
+      body: { brandCode: BRAND.code, email, invitationToken, password },
+    });
+    const started = parseActivationStart(body);
+    if (!started) return { ok: false, reason: 'invalid' };
+    return { ok: true, data: started };
+  } catch (error) {
+    return { ok: false, reason: failure(error) };
+  }
+}
+
+export async function finishActivation(email: string, code: string): Promise<OfficeCall<{ verified: true }>> {
+  try {
+    const body = await officeRequest('/auth/activation/confirm', {
+      method: 'POST',
+      action: 'auth.activation.confirm',
+      body: { brandCode: BRAND.code, email, code },
+    });
+    if (!parseActivationComplete(body)) return { ok: false, reason: 'invalid' };
+    return { ok: true, data: { verified: true } };
+  } catch (error) {
+    return { ok: false, reason: failure(error) };
   }
 }
 

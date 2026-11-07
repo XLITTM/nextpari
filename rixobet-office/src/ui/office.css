@@ -190,6 +190,7 @@ textarea { resize: vertical; }
 .rx-login .rx-word { font-size: 32px; }
 .rx-login .rx-crown { width: 42px; height: 42px; }
 .rx-login form { display: grid; gap: 10px; margin-top: 8px; }
+.rx-quiet { display: inline-block; margin-top: 14px; color: var(--gold-2); font-size: 13px; }
 .rx-login small { color: var(--danger); }
 
 @media (max-width: 980px) {

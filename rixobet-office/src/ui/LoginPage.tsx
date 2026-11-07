@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { landingPath } from '../access/guard';
 import type { FailureReason } from '../api/http';
 import { BRAND } from '../brand';
@@ -132,6 +132,9 @@ export function LoginPage() {
             {pending && !challengeId ? 'Проверка…' : 'Войти'}
           </button>
         </form>
+        <Link className="rx-quiet" to="/activate">
+          Активация приглашения
+        </Link>
         {challengeId ? (
           <form onSubmit={onMfa} noValidate>
             <p className="rx-lead">Сервер запросил код MFA. Сессия ещё не выдана.</p>

@@ -44,7 +44,12 @@ export async function serveOfficeApi(req: OfficeNodeRequest, res: OfficeNodeResp
   const officeRequest: OfficeRequest = {
     method: req.method ?? 'GET',
     path,
-    headers: { cookie: headerValue(req.headers, 'cookie') },
+    headers: {
+      cookie: headerValue(req.headers, 'cookie'),
+      origin: headerValue(req.headers, 'origin'),
+      'sec-fetch-site': headerValue(req.headers, 'sec-fetch-site'),
+      'x-forwarded-for': headerValue(req.headers, 'x-forwarded-for'),
+    },
     body: requestBody(req.body),
   };
   productionHandler ??= createProductionHandler();

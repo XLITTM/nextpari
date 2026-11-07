@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { AUTH_TABLES, assessCatalog, type BoundCatalog, type CatalogSnapshot, type CatalogTable } from './catalog';
-import { OFFICE_DATABASE_ROLE, type OfficeConfig } from './env';
+import { OFFICE_DATABASE_ROLE, OFFICE_POOLER_USER, type OfficeConfig } from './env';
 import type { ChallengeRecord, FlagRecord, OfficeRepository, SessionRecord, StaffRecord } from './repository';
 
 interface PgPool {
@@ -53,11 +53,12 @@ function mapStaff(row: Record<string, unknown>): StaffRecord | null {
     mfaLastStep: integerOrNull(row.mfa_last_step),
     identityVerifiedAt: iso(row.identity_verified_at),
     invitationTokenHash: textOrNull(row.invitation_token_hash),
-    invitationDeliveredAt: iso(row.invitation_delivered_at),
+    invitationExpiresAt: iso(row.invitation_expires_at),
+    invitationConsumedAt: iso(row.invitation_consumed_at),
   };
 }
 
-const STAFF_FIELDS = `id, email, role, status, brand_code, display_name, auth_user_id, password_hash, mfa_secret, mfa_last_step, identity_verified_at, invitation_token_hash, invitation_delivered_at`;
+const STAFF_FIELDS = `id, email, role, status, brand_code, display_name, auth_user_id, password_hash, mfa_secret, mfa_last_step, identity_verified_at, invitation_token_hash, invitation_expires_at, invitation_consumed_at`;
 
 async function loadDriver(databaseUrl: string): Promise<PgPool> {
   const host = new URL(databaseUrl).hostname;
@@ -122,13 +123,29 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
       );
       return result.rows.map((row) => mapStaff(row)).filter((row): row is StaffRecord => row !== null);
     },
+    async claimInvitation(email, digest, nowIso) {
+      const result = await pool.query(
+        `update ${staffTable}
+         set invitation_consumed_at = $3
+         where lower(email) = lower($1)
+           and invitation_token_hash = $2
+           and invitation_consumed_at is null
+           and invitation_expires_at > $3::timestamptz
+           and brand_code = '002' and role = 'owner' and status = 'invited'
+           and auth_user_id is null and identity_verified_at is null
+         returning ${STAFF_FIELDS}`,
+        [email, digest, nowIso],
+      );
+      const row = result.rows[0];
+      return row ? mapStaff(row) : null;
+    },
     async enrollInvitedOwner(id, passwordHash, mfaSecret) {
       const result = await pool.query(
         `update ${staffTable}
          set password_hash = $2, mfa_secret = $3
          where id = $1 and brand_code = '002' and role = 'owner' and status = 'invited'
            and auth_user_id is null and identity_verified_at is null
-           and invitation_delivered_at is not null and invitation_token_hash is not null
+           and invitation_consumed_at is not null and invitation_token_hash is not null
          returning id`,
         [id, passwordHash, mfaSecret],
       );
@@ -140,7 +157,7 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
          set status = 'active', identity_verified_at = $2, mfa_last_step = $3
          where id = $1 and brand_code = '002' and role = 'owner' and status = 'invited'
            and auth_user_id is null and identity_verified_at is null
-           and invitation_delivered_at is not null and password_hash is not null and mfa_secret is not null
+           and invitation_consumed_at is not null and password_hash is not null and mfa_secret is not null
          returning id`,
         [id, identityVerifiedAt, mfaLastStep],
       );
@@ -295,7 +312,7 @@ export async function openPostgresOffice(config: OfficeConfig): Promise<OfficeRe
     );
     const role = textOrNull(identity.rows[0]?.role)?.toLowerCase();
     const superuser = textOrNull(identity.rows[0]?.superuser);
-    if (role !== OFFICE_DATABASE_ROLE || superuser === 'on' || identity.rows[0]?.rolbypassrls === true) {
+    if ((role !== OFFICE_DATABASE_ROLE && role !== OFFICE_POOLER_USER) || superuser === 'on' || identity.rows[0]?.rolbypassrls === true) {
       throw new Error('DATABASE_ROLE_FORBIDDEN');
     }
     await pool.query(`select set_config('search_path', 'ryxobet', false)`);

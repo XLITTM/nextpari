@@ -17,7 +17,8 @@ describe('office API routing', () => {
     const sql = readFileSync(join(root, 'server/postgres.ts'), 'utf8');
     const catalog = readFileSync(join(root, 'server/catalog.ts'), 'utf8');
     for (const name of Object.values(AUTH_TABLES)) expect(catalog.includes(`'${name}'`)).toBe(true);
-    expect(sql.includes('invitation_delivered_at')).toBe(true);
+    expect(sql.includes('invitation_expires_at')).toBe(true);
+    expect(sql.includes('invitation_consumed_at is null')).toBe(true);
     expect(sql.includes('mfa_satisfied')).toBe(true);
     expect(sql.includes('consumed_at is null')).toBe(true);
     expect(sql.includes("st.status = 'active'")).toBe(true);

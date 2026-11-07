@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ROLE_CEILING } from '../access/model';
 import { OFFICE_API_PREFIX, OfficeFailure } from '../api/http';
@@ -215,5 +215,34 @@ describe('missing backend', () => {
       expect(result.data.idempotencyKey).toBe(key);
     }
     expect(new OfficeFailure('disconnected').reason).toBe('disconnected');
+  });
+
+  it('keeps owner activation unavailable when the office API is disconnected', async () => {
+    const token = 'invitation-token-example-1';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => jsonResponse({ brandCode: '002', status: 'unavailable' }, 503)),
+    );
+    function SearchProbe() {
+      const location = useLocation();
+      return <output data-testid="search">{location.search}</output>;
+    }
+    render(
+      <MemoryRouter initialEntries={[`/activate?token=${token}`]}>
+        <AuthProvider>
+          <SearchProbe />
+          <AppRoutes />
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('heading', { level: 1, name: 'Активация владельца' })).toBeTruthy();
+    expect(await screen.findByText('Не подключено')).toBeTruthy();
+    expect(screen.getByLabelText('Приглашение')).toHaveProperty('value', token);
+    expect(screen.getByTestId('search').textContent).toBe('');
+    expect(screen.queryByText('Личность подтверждена. Войдите с паролем и кодом MFA.')).toBeNull();
+    expect(screen.queryByText(/otpauth:\/\//)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }));
+    expect(await screen.findAllByRole('alert')).toBeTruthy();
+    expect(screen.queryByText('Личность подтверждена. Войдите с паролем и кодом MFA.')).toBeNull();
   });
 });

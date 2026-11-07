@@ -55,7 +55,7 @@ export async function officeRequest(path: string, options: RequestOptions): Prom
     throw new OfficeFailure('disconnected');
   }
 
-  if (response.status === 401 || response.status === 403) {
+  if (response.status === 401 || response.status === 403 || response.status === 429) {
     throw new OfficeFailure('denied', response.status);
   }
   if (

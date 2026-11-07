@@ -6,7 +6,7 @@ import { parseSession } from '../src/access/session';
 import { parseMfaChallenge } from '../src/api/parsers';
 import { OPERATIONAL_FLAGS, REQUIRED_TABLE_COUNT, assessCatalog, type CatalogTable } from './catalog';
 import { createMfaSecret, hashPassword, hashSecret, totpCode } from './crypto';
-import { DENIED_DATABASE_ROLES, OFFICE_DATABASE_ROLE, readOfficeConfig } from './env';
+import { DENIED_DATABASE_ROLES, OFFICE_DATABASE_ROLE, OFFICE_POOLER_DATABASE, OFFICE_POOLER_HOST, OFFICE_POOLER_PORT, OFFICE_POOLER_USER, readOfficeConfig } from './env';
 import { handleOffice, officeFor, type OfficeRequest } from './handler';
 import { createMemoryOffice, testingPatchStaff } from './memory';
 import { createProductionHandler } from './production';
@@ -34,7 +34,8 @@ function staff(overrides: Partial<StaffRecord> = {}): StaffRecord {
     mfaLastStep: null,
     identityVerifiedAt: '2026-11-01T00:00:00.000Z',
     invitationTokenHash: null,
-    invitationDeliveredAt: null,
+    invitationExpiresAt: null,
+    invitationConsumedAt: null,
     ...overrides,
   };
 }
@@ -50,7 +51,8 @@ function pendingOwner(): StaffRecord {
     mfaSecret: null,
     identityVerifiedAt: null,
     invitationTokenHash: null,
-    invitationDeliveredAt: null,
+    invitationExpiresAt: null,
+    invitationConsumedAt: null,
   });
 }
 
@@ -60,12 +62,20 @@ function reasonOf(env: Record<string, string>): string {
   return result.reason;
 }
 
+function poolerUrl(user = OFFICE_POOLER_USER, password = 'pw', host = OFFICE_POOLER_HOST, port = OFFICE_POOLER_PORT, database = OFFICE_POOLER_DATABASE) {
+  return `postgresql://${user}:${password}@${host}:${port}/${database}`;
+}
+
 function office(repository: OfficeRepository, now = NOW) {
   return officeFor(repository, PEPPER, () => now, true);
 }
 
 function request(partial: Partial<OfficeRequest> & Pick<OfficeRequest, 'method' | 'path'>): OfficeRequest {
-  return { headers: {}, body: {}, ...partial };
+  return {
+    body: {},
+    ...partial,
+    headers: { origin: 'https://office.rixobet.com', ...partial.headers },
+  };
 }
 
 function cookieOf(response: { setCookie: string[] }): string {
@@ -96,7 +106,8 @@ function catalog(options?: { count?: number; rls?: boolean; forceRls?: boolean; 
             'mfa_last_step',
             'identity_verified_at',
             'invitation_token_hash',
-            'invitation_delivered_at',
+            'invitation_expires_at',
+            'invitation_consumed_at',
           ],
     },
     {
@@ -157,9 +168,33 @@ describe('office authentication', () => {
         RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
       }),
     ).toBe('forbidden_role');
+    expect(readOfficeConfig({
+      RYXOBET_OFFICE_DATABASE_URL: `${poolerUrl()}?sslmode=require`,
+      RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
+    }).ok).toBe(true);
+    expect(reasonOf({
+      RYXOBET_OFFICE_DATABASE_URL: `${poolerUrl()}?sslmode=disable`,
+      RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
+    })).toBe('forbidden_role');
+    expect(reasonOf({
+      RYXOBET_OFFICE_DATABASE_URL: poolerUrl('ryxobet_office_api.otherproject'),
+      RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
+    })).toBe('forbidden_role');
+    expect(reasonOf({
+      RYXOBET_OFFICE_DATABASE_URL: poolerUrl('ryxobet_office_api'),
+      RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
+    })).toBe('forbidden_role');
+    expect(reasonOf({
+      RYXOBET_OFFICE_DATABASE_URL: poolerUrl(OFFICE_POOLER_USER, 'pw', 'db.lsmfdhenmceiammyptzu.supabase.co', '5432'),
+      RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
+    })).toBe('forbidden_role');
+    expect(reasonOf({
+      RYXOBET_OFFICE_DATABASE_URL: poolerUrl(OFFICE_POOLER_USER, 'pw', OFFICE_POOLER_HOST, '5432', 'ryxobet'),
+      RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
+    })).toBe('forbidden_role');
     expect(
       reasonOf({
-        RYXOBET_OFFICE_DATABASE_URL: `postgresql://${OFFICE_DATABASE_ROLE}:shared-value@127.0.0.1/ryxobet`,
+        RYXOBET_OFFICE_DATABASE_URL: poolerUrl(OFFICE_POOLER_USER, 'shared-value'),
         RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
         SUPABASE_SERVICE_ROLE_KEY: 'shared-value',
       }),
@@ -380,14 +415,31 @@ describe('office authentication', () => {
       }),
       office(repository),
     );
-    expect(prepared.status).toBe(503);
+    expect(prepared.status).toBe(401);
     expect(prepared.setCookie).toEqual([]);
     expect((await repository.findStaffById(owner.id))?.status).toBe('invited');
     expect((await repository.findStaffById(owner.id))?.passwordHash).toBeNull();
+    expect((await repository.findStaffById(owner.id))?.invitationConsumedAt).toBeNull();
+
+    const expired = pendingOwner();
+    expired.id = 'owner-expired-002';
+    expired.invitationTokenHash = hashSecret(PEPPER, token);
+    expired.invitationExpiresAt = new Date(NOW - 1000).toISOString();
+    const expiredRepo = createMemoryOffice({ staff: [expired], flags: flags() });
+    const expiredResponse = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/activation',
+        body: { brandCode: '002', email: expired.email, invitationToken: token, password: 'a-new-office-password' },
+      }),
+      office(expiredRepo),
+    );
+    expect(expiredResponse.status).toBe(401);
+    expect((await expiredRepo.findStaffById(expired.id))?.invitationConsumedAt).toBeNull();
 
     const delivered = pendingOwner();
     delivered.invitationTokenHash = hashSecret(PEPPER, token);
-    delivered.invitationDeliveredAt = '2026-11-07T00:00:00.000Z';
+    delivered.invitationExpiresAt = new Date(NOW + 60 * 60 * 1000).toISOString();
     const ready = createMemoryOffice({ staff: [delivered], flags: flags() });
     const enrolled = await handleOffice(
       request({
@@ -400,7 +452,20 @@ describe('office authentication', () => {
     expect(enrolled.status).toBe(200);
     expect(enrolled.setCookie).toEqual([]);
     expect(enrolled.body).toMatchObject({ status: 'verification_required' });
+    expect(JSON.stringify(enrolled.body)).not.toContain(token);
     expect(JSON.stringify(enrolled.body)).not.toContain('sessionId');
+    const storedDigest = (await ready.findStaffById(delivered.id))?.invitationTokenHash ?? '';
+    expect(storedDigest).not.toContain(token);
+    expect((await ready.findStaffById(delivered.id))?.invitationConsumedAt).toBeTruthy();
+    const replay = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/activation',
+        body: { brandCode: '002', email: delivered.email, invitationToken: token, password: 'another-office-password' },
+      }),
+      office(ready),
+    );
+    expect(replay.status).toBe(401);
     const secret = new URL(String((enrolled.body as { otpauthUri: string }).otpauthUri)).searchParams.get('secret');
     const step = totpCode(secret ?? '', NOW);
     const verified = await handleOffice(
@@ -495,6 +560,9 @@ describe('office authentication', () => {
     expect(reused.status).toBe(401);
 
     const cookie = cookieOf(confirmed);
+    expect(JSON.stringify(confirmed.body)).not.toContain(cookie);
+    expect(confirmed.setCookie[0]).toContain('Path=/api/rixobet/office/v1');
+    expect(confirmed.setCookie[0]).toContain('SameSite=Strict');
     testingPatchStaff(repository, cashier.id, { status: 'suspended' });
     const suspendedSession = await handleOffice(
       request({ method: 'GET', path: '/auth/session', headers: { cookie: `rxo_office_session=${cookie}` } }),
@@ -518,5 +586,102 @@ describe('office authentication', () => {
       office(repository),
     );
     expect(afterLogout.status).toBe(401);
+  });
+
+  it('limits repeated sign-in attempts and rejects a foreign origin', async () => {
+    const cashier = staff({ id: 'staff-limit-001', email: 'limit@office.rixobet.com' });
+    const repository = createMemoryOffice({ staff: [cashier], flags: flags() });
+    for (let index = 0; index < 8; index += 1) {
+      const attempt = await handleOffice(
+        request({
+          method: 'POST',
+          path: '/auth/login',
+          body: { brandCode: '002', email: cashier.email, password: 'wrong-password-1' },
+        }),
+        office(repository),
+      );
+      expect(attempt.status).toBe(401);
+    }
+    const limited = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/login',
+        body: { brandCode: '002', email: cashier.email, password: PASSWORD },
+      }),
+      office(repository),
+    );
+    expect(limited.status).toBe(429);
+    expect(limited.setCookie).toEqual([]);
+
+    const foreign = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/login',
+        headers: { origin: 'https://evil.example' },
+        body: { brandCode: '002', email: cashier.email, password: PASSWORD },
+      }),
+      office(createMemoryOffice({ staff: [cashier], flags: flags() })),
+    );
+    expect(foreign.status).toBe(403);
+
+    const crossSite = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/mfa',
+        headers: { origin: 'https://office.ryxobet.com', 'sec-fetch-site': 'cross-site' },
+        body: { brandCode: '002', challengeId: 'challenge-not-real', code: '000000' },
+      }),
+      office(createMemoryOffice({ staff: [cashier], flags: flags() })),
+    );
+    expect(crossSite.status).toBe(403);
+
+    const owner = pendingOwner();
+    const activationRepo = createMemoryOffice({ staff: [owner], flags: flags() });
+    const missingOrigin = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/activation',
+        headers: { origin: '' },
+        body: {
+          brandCode: '002',
+          email: owner.email,
+          invitationToken: 'invitation-token-not-a-password',
+          password: 'a-new-office-password',
+        },
+      }),
+      office(activationRepo),
+    );
+    expect(missingOrigin.status).toBe(403);
+    for (let index = 0; index < 5; index += 1) {
+      const attempt = await handleOffice(
+        request({
+          method: 'POST',
+          path: '/auth/activation',
+          body: {
+            brandCode: '002',
+            email: owner.email,
+            invitationToken: 'invitation-token-not-a-password',
+            password: 'a-new-office-password',
+          },
+        }),
+        office(activationRepo),
+      );
+      expect(attempt.status).toBe(401);
+    }
+    const activationLimited = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/activation',
+        body: {
+          brandCode: '002',
+          email: owner.email,
+          invitationToken: 'invitation-token-not-a-password',
+          password: 'a-new-office-password',
+        },
+      }),
+      office(activationRepo),
+    );
+    expect(activationLimited.status).toBe(429);
+    expect(activationLimited.setCookie).toEqual([]);
   });
 });

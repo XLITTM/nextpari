@@ -1,4 +1,4 @@
-import { randomToken } from './crypto';
+import { randomToken, secretsMatch } from './crypto';
 import type { ChallengeRecord, FlagRecord, OfficeRepository, SessionRecord, StaffRecord } from './repository';
 
 export interface MemorySeed {
@@ -35,10 +35,21 @@ export function createMemoryOffice(seed: MemorySeed): OfficeRepository {
         .filter((row) => row.role === 'owner' && row.status === 'invited' && row.authUserId === null)
         .map((row) => ({ ...row }));
     },
+    async claimInvitation(email, digest, nowIso) {
+      const now = Date.parse(nowIso);
+      const row = staff.find((entry) => entry.email.toLowerCase() === email.toLowerCase());
+      if (!row || row.role !== 'owner' || row.status !== 'invited' || row.brandCode !== '002') return null;
+      if (row.authUserId !== null || row.identityVerifiedAt || row.invitationConsumedAt) return null;
+      if (!row.invitationTokenHash || !row.invitationExpiresAt) return null;
+      if (!secretsMatch(row.invitationTokenHash, digest)) return null;
+      if (Date.parse(row.invitationExpiresAt) <= now) return null;
+      row.invitationConsumedAt = nowIso;
+      return { ...row };
+    },
     async enrollInvitedOwner(id, passwordHash, mfaSecret) {
       const row = staff.find((entry) => entry.id === id);
       if (!row || row.role !== 'owner' || row.status !== 'invited' || row.authUserId !== null) return false;
-      if (!row.invitationDeliveredAt || !row.invitationTokenHash || row.identityVerifiedAt) return false;
+      if (!row.invitationConsumedAt || !row.invitationTokenHash || row.identityVerifiedAt) return false;
       row.passwordHash = passwordHash;
       row.mfaSecret = mfaSecret;
       return true;
@@ -46,7 +57,7 @@ export function createMemoryOffice(seed: MemorySeed): OfficeRepository {
     async verifyInvitedOwner(id, identityVerifiedAt, mfaLastStep) {
       const row = staff.find((entry) => entry.id === id);
       if (!row || row.role !== 'owner' || row.status !== 'invited' || row.authUserId !== null) return false;
-      if (!row.invitationDeliveredAt || !row.passwordHash || !row.mfaSecret || row.identityVerifiedAt) return false;
+      if (!row.invitationConsumedAt || !row.passwordHash || !row.mfaSecret || row.identityVerifiedAt) return false;
       row.status = 'active';
       row.identityVerifiedAt = identityVerifiedAt;
       row.mfaLastStep = mfaLastStep;

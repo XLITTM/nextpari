@@ -117,6 +117,19 @@ export interface MfaChallenge {
   challengeId: string;
 }
 
+export function parseActivationStart(input: unknown): { otpauthUri: string } | null {
+  if (!isRecord(input)) return null;
+  if (input.brandCode !== BRAND.code || input.status !== 'verification_required') return null;
+  if ('sessionId' in input || 'role' in input || 'permissions' in input) return null;
+  if (typeof input.otpauthUri !== 'string' || !input.otpauthUri.startsWith('otpauth://totp/')) return null;
+  if (input.otpauthUri.length > 500) return null;
+  return { otpauthUri: input.otpauthUri };
+}
+
+export function parseActivationComplete(input: unknown): boolean {
+  return isRecord(input) && input.brandCode === BRAND.code && input.status === 'identity_verified' && !('sessionId' in input);
+}
+
 export function parseMfaChallenge(input: unknown): MfaChallenge | null {
   if (!isRecord(input)) return null;
   if (input.brandCode !== BRAND.code || input.status !== 'mfa_required') return null;
