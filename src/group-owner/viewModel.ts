@@ -1,10 +1,11 @@
 import { OWNER_PERMISSIONS, type BrandStaffGrant, type StaffRole } from '../../server/group/access.ts';
-import { GROUP_BRANDS, type BrandCode, type BrandStatus } from '../../server/group/catalog.ts';
+import { GROUP_BRANDS, type BrandCode } from '../../server/group/catalog.ts';
 import { aggregateGroupReport, type BrandOperationalSnapshot, type BrandReport, type GroupReport } from '../../server/group/reporting.ts';
 import type { DemoAuditEvent, DemoPlayer } from './demoData.ts';
 
 export const WRITE_DISABLED = 'Запись отключена. Казначейские и денежные операции не открыты.';
 export const ACCOUNT_NOT_CREATED = 'Учётная запись не создана. Приглашение не отправлено.';
+export const NOT_CONNECTED = 'Не подключено';
 
 export const PAGES = ['overview', 'brands', 'employees', 'players', 'finance', 'access', 'audit'] as const;
 export type GroupOwnerPage = (typeof PAGES)[number];
@@ -124,6 +125,54 @@ export function financeLines(report: GroupReport, filter: BrandFilter): FinanceL
   );
 }
 
+export interface AssignedBrand {
+  code: BrandCode;
+  displayName: string;
+  status: string;
+}
+
+export interface AssignedBrandView {
+  code: BrandCode;
+  displayName: string;
+  status: string;
+  playerCount: number | null;
+  managerCount: number;
+  cashierCount: number;
+  securityCount: number;
+  financials: BrandReport['financials'] | null;
+}
+
+export function assignedBrandViews(
+  brands: readonly AssignedBrand[],
+  snapshots: readonly BrandOperationalSnapshot[],
+  grants: readonly BrandStaffGrant[],
+): AssignedBrandView[] {
+  return brands.map((brand) => {
+    const rows = snapshots.filter((row) => row.brandCode === brand.code);
+    const staff = grants.filter((grant) => grant.brandCode === brand.code);
+    const connected = rows.length > 0;
+    return {
+      code: brand.code,
+      displayName: brand.displayName,
+      status: brand.status,
+      playerCount: connected ? rows[0]!.playerCount : null,
+      managerCount: staff.filter((grant) => grant.role === 'manager').length,
+      cashierCount: staff.filter((grant) => grant.role === 'cashier').length,
+      securityCount: staff.filter((grant) => grant.role === 'security').length,
+      financials: connected ? rows.map((row) => row.financials) : null,
+    };
+  });
+}
+
+export function countLabel(value: number | null): string {
+  return value == null ? NOT_CONNECTED : String(value);
+}
+
+export function totalPlayers(brands: readonly AssignedBrandView[]): number | null {
+  if (brands.length === 0 || brands.some((brand) => brand.playerCount == null)) return null;
+  return brands.reduce((sum, brand) => sum + (brand.playerCount ?? 0), 0);
+}
+
 export function overviewCounts(brands: readonly BrandReport[]): {
   brandCount: number;
   playerCount: number;
@@ -141,11 +190,10 @@ export function overviewCounts(brands: readonly BrandReport[]): {
 }
 
 export function brandLabel(code: BrandCode): string {
-  if (code === '003') return 'Будущий бренд';
   return GROUP_BRANDS.find((brand) => brand.code === code)?.displayName ?? code;
 }
 
-export function statusLabel(status: BrandStatus): string {
+export function statusLabel(status: string): string {
   switch (status) {
     case 'active':
       return 'Активен';

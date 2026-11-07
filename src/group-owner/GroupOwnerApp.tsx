@@ -9,29 +9,30 @@ import {
   UserRound,
   Users,
 } from 'lucide-react';
-import { GROUP_BRANDS, type BrandCode } from '../../server/group/catalog.ts';
+import { type BrandCode, type BrandStatus } from '../../server/group/catalog.ts';
 import { readRecoveryCallback, recoveryFailureView, type RecoveryFailureView } from './recoveryCallback.ts';
 import type { BrandStaffGrant, StaffRole } from '../../server/group/access.ts';
 import type { BrandOperationalSnapshot } from '../../server/group/reporting.ts';
 import type { DemoAuditEvent } from './demoData.ts';
 import {
   ACCOUNT_NOT_CREATED,
-  OWNER_PERMISSION_LIST,
+  NOT_CONNECTED,
   STAFF_PERMISSIONS,
   WRITE_DISABLED,
+  assignedBrandViews,
   auditForBrand,
   brandLabel,
-  brandsForFilter,
-  buildGroupReport,
+  countLabel,
   employeeDraftReceipt,
   employeeFieldMessage,
-  financeLines,
   grantsForBrand,
-  overviewCounts,
   permissionLabel,
   playersForBrand,
   roleLabel,
   statusLabel,
+  totalPlayers,
+  type AssignedBrand,
+  type AssignedBrandView,
   type BrandFilter,
   type EmployeeDraft,
   type EmployeeField,
@@ -46,6 +47,7 @@ export interface GroupDashboardPlayer {
 }
 
 export interface GroupDashboardData {
+  brands: readonly AssignedBrand[];
   grants: readonly BrandStaffGrant[];
   players: readonly GroupDashboardPlayer[];
   operational: readonly BrandOperationalSnapshot[];
@@ -100,16 +102,12 @@ export function GroupOwnerApp({
   const [navOpen, setNavOpen] = useState(false);
   const [session, setSession] = useState<GroupOwnerSession | null>(initialSession);
   const [snapshot, setSnapshot] = useState<GroupDashboardData | null>(initialSnapshot);
-  const report = useMemo(
-    () => buildGroupReport(snapshot?.operational ?? [], snapshot?.grants ?? []),
-    [snapshot],
+  const assigned = useMemo(() => snapshot?.brands ?? [], [snapshot]);
+  const views = useMemo(
+    () => assignedBrandViews(assigned, snapshot?.operational ?? [], snapshot?.grants ?? []),
+    [assigned, snapshot],
   );
-  const present = useMemo(() => new Set([
-    ...(snapshot?.operational ?? []).map((row) => row.brandCode),
-    ...(snapshot?.grants ?? []).map((row) => row.brandCode),
-    ...(snapshot?.players ?? []).map((row) => row.brandCode),
-  ]), [snapshot]);
-  const visible = brandsForFilter(report, brand).filter((item) => present.has(item.code));
+  const visible = brand === 'all' ? views : views.filter((item) => item.code === brand);
   const title = NAV.find((item) => item.id === page)?.label ?? 'Обзор';
 
   useEffect(() => {
@@ -181,49 +179,51 @@ export function GroupOwnerApp({
               Бренд
               <select
                 aria-label="Фильтр бренда"
-                value={brand}
+                value={assigned.some((item) => item.code === brand) || brand === 'all' ? brand : 'all'}
                 onChange={(event) => setBrand(event.target.value as BrandFilter)}
               >
                 <option value="all">Все</option>
-                <option value="001">NextPari</option>
-                <option value="002">RYXO</option>
-                <option value="003">Будущий бренд</option>
+                {assigned.map((item) => (
+                  <option key={item.code} value={item.code}>{item.code} {item.displayName}</option>
+                ))}
               </select>
             </label>
           </div>
         </header>
         <main className="content">
-          <p className="note">Источник: group_control. Показатели появляются только из ответа API.</p>
+          <p className="note">Источник: group_control.brands и назначения brand_owners. Чужие бренды не показываются.</p>
           {snapshot?.schemaError ? <div className="warning" role="status">{snapshot.schemaError}</div> : null}
           {snapshot?.nextpariReason === 'NEXTPARI_REPORT_ADAPTER_REQUIRED'
-            ? <p className="note">Отчёт NextPari не подключён отдельным серверным доступом.</p>
+            ? <p className="note">Кабинет владельца NextPari не читается этим сеансом. Сводка сети берётся только из group_control.</p>
             : null}
-          {page === 'overview' ? <Overview reportBrands={visible} /> : null}
-          {page === 'brands' ? <Brands filter={brand} rows={visible} /> : null}
-          {page === 'employees' ? <Employees filter={brand} grants={snapshot?.grants ?? []} /> : null}
-          {page === 'players' ? <Players filter={brand} players={snapshot?.players ?? []} /> : null}
-          {page === 'finance' ? <Finance filter={brand} report={report} visible={visible.map((item) => item.code)} /> : null}
-          {page === 'access' ? <Access filter={brand} grants={snapshot?.grants ?? []} permissions={snapshot?.permissions ?? session.permissions} /> : null}
-          {page === 'audit' ? <Audit filter={brand} events={snapshot?.audit ?? []} /> : null}
+          {page === 'overview' ? <Overview failed={Boolean(snapshot?.schemaError)} rows={visible} /> : null}
+          {page === 'brands' ? <Brands rows={visible} /> : null}
+          {page === 'employees' ? <Employees filter={brand} brands={assigned} grants={snapshot?.grants ?? []} /> : null}
+          {page === 'players' ? <Players filter={brand} brands={assigned} players={snapshot?.players ?? []} /> : null}
+          {page === 'finance' ? <Finance rows={visible} /> : null}
+          {page === 'access' ? <Access filter={brand} brands={assigned} grants={snapshot?.grants ?? []} permissions={session.permissions} /> : null}
+          {page === 'audit' ? <Audit filter={brand} brands={assigned} events={snapshot?.audit ?? []} /> : null}
         </main>
       </div>
     </div>
   );
 }
 
-function Overview({ reportBrands }: { reportBrands: ReturnType<typeof brandsForFilter> }) {
-  const counts = overviewCounts(reportBrands);
+function Overview({ failed, rows }: { failed: boolean; rows: readonly AssignedBrandView[] }) {
+  const players = failed ? null : totalPlayers(rows);
+  const staff = (count: number) => failed ? NOT_CONNECTED : String(count);
   return (
     <>
       <section className="cards" aria-label="Сводные показатели">
-        <article className="card"><span>Бренды</span><strong>{counts.brandCount}</strong></article>
-        <article className="card"><span>Игроки</span><strong>{counts.playerCount}</strong></article>
-        <article className="card"><span>Менеджеры</span><strong>{counts.managerCount}</strong></article>
-        <article className="card"><span>Кассиры</span><strong>{counts.cashierCount}</strong></article>
-        <article className="card"><span>Безопасность</span><strong>{counts.securityCount}</strong></article>
+        <article className="card"><span>Бренды</span><strong>{failed ? NOT_CONNECTED : rows.length}</strong></article>
+        <article className="card"><span>Игроки</span><strong>{countLabel(players)}</strong></article>
+        <article className="card"><span>Менеджеры</span><strong>{staff(rows.reduce((sum, item) => sum + item.managerCount, 0))}</strong></article>
+        <article className="card"><span>Кассиры</span><strong>{staff(rows.reduce((sum, item) => sum + item.cashierCount, 0))}</strong></article>
+        <article className="card"><span>Безопасность</span><strong>{staff(rows.reduce((sum, item) => sum + item.securityCount, 0))}</strong></article>
       </section>
       <section className="panel">
         <h2>Операционные статусы</h2>
+        <p className="note">Название и статус читаются из group_control.brands. Число игроков берётся из снимка отчёта. Нет снимка — это не ноль.</p>
         <div className="table-wrap">
           <table>
             <thead>
@@ -237,16 +237,17 @@ function Overview({ reportBrands }: { reportBrands: ReturnType<typeof brandsForF
               </tr>
             </thead>
             <tbody>
-              {reportBrands.map((item) => (
+              {rows.map((item) => (
                 <tr key={item.code}>
-                  <td>{brandLabel(item.code)}</td>
+                  <td>{item.displayName}</td>
                   <td>{item.code}</td>
-                  <td><span className={statusClass(item.operationalStatus)}>{statusLabel(item.operationalStatus)}</span></td>
-                  <td className="num">{item.playerCount}</td>
+                  <td><span className={statusClass(item.status)}>{statusLabel(item.status)}</span></td>
+                  <td className="num">{countLabel(item.playerCount)}</td>
                   <td className="num">{item.managerCount}</td>
                   <td className="num">{item.cashierCount}</td>
                 </tr>
               ))}
+              {rows.length === 0 ? <tr><td colSpan={6}>{failed ? NOT_CONNECTED : 'Этому владельцу не назначен ни один бренд.'}</td></tr> : null}
             </tbody>
           </table>
         </div>
@@ -255,12 +256,14 @@ function Overview({ reportBrands }: { reportBrands: ReturnType<typeof brandsForF
   );
 }
 
-function Brands({ filter, rows }: { filter: BrandFilter; rows: ReturnType<typeof brandsForFilter> }) {
-  void filter;
+function Brands({ rows }: { rows: readonly AssignedBrandView[] }) {
   return (
     <section className="panel">
       <h2>Бренды сети</h2>
       <p className="note">{WRITE_DISABLED} Создание бренда и назначение домена подготовлены, но не выполняются.</p>
+      {rows.some((item) => item.status === 'registered' || item.status === 'planned')
+        ? <p className="note">Зарегистрированный или запланированный бренд показан из group_control.brands. Его кошельки и спортсбук не подключены.</p>
+        : null}
       <div className="table-wrap">
         <table>
           <thead>
@@ -275,11 +278,12 @@ function Brands({ filter, rows }: { filter: BrandFilter; rows: ReturnType<typeof
             {rows.map((item) => (
               <tr key={item.code}>
                 <td>{item.code}</td>
-                <td>{brandLabel(item.code)}</td>
-                <td><span className={statusClass(item.operationalStatus)}>{statusLabel(item.operationalStatus)}</span></td>
-                <td>не назначен</td>
+                <td>{item.displayName}</td>
+                <td><span className={statusClass(item.status)}>{statusLabel(item.status)}</span></td>
+                <td>{NOT_CONNECTED}</td>
               </tr>
             ))}
+            {rows.length === 0 ? <tr><td colSpan={4}>Этому владельцу не назначен ни один бренд.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -299,8 +303,8 @@ function Brands({ filter, rows }: { filter: BrandFilter; rows: ReturnType<typeof
   );
 }
 
-function Employees({ filter, grants: allGrants }: { filter: BrandFilter; grants: readonly BrandStaffGrant[] }) {
-  const [draft, setDraft] = useState<EmployeeDraft>({ ...EMPTY_DRAFT, brandCode: filter === 'all' ? '001' : filter });
+function Employees({ filter, brands, grants: allGrants }: { filter: BrandFilter; brands: readonly AssignedBrand[]; grants: readonly BrandStaffGrant[] }) {
+  const [draft, setDraft] = useState<EmployeeDraft>({ ...EMPTY_DRAFT, brandCode: filter === 'all' ? (brands[0]?.code ?? '001') : filter });
   const [errors, setErrors] = useState<EmployeeField[]>([]);
   const [notice, setNotice] = useState('');
   const grants = grantsForBrand(allGrants, filter);
@@ -338,7 +342,7 @@ function Employees({ filter, grants: allGrants }: { filter: BrandFilter; grants:
           <tbody>
             {grants.map((grant) => (
               <tr key={`${grant.brandCode}-${grant.staffSubject}`}>
-                <td>{brandLabel(grant.brandCode)}</td>
+                <td>{brands.find((item) => item.code === grant.brandCode)?.displayName ?? brandLabel(grant.brandCode)}</td>
                 <td>{roleLabel(grant.role)}</td>
                 <td>{grant.staffSubject}</td>
                 <td><span className="chip wait">только чтение</span></td>
@@ -356,8 +360,8 @@ function Employees({ filter, grants: allGrants }: { filter: BrandFilter; grants:
             value={draft.brandCode}
             onChange={(event) => update({ brandCode: event.target.value })}
           >
-            {GROUP_BRANDS.map((item) => (
-              <option key={item.code} value={item.code}>{brandLabel(item.code as BrandCode)}</option>
+            {brands.map((item) => (
+              <option key={item.code} value={item.code}>{item.code} {item.displayName}</option>
             ))}
           </select>
         </label>
@@ -418,12 +422,12 @@ function Employees({ filter, grants: allGrants }: { filter: BrandFilter; grants:
   );
 }
 
-function Players({ filter, players }: { filter: BrandFilter; players: readonly GroupDashboardPlayer[] }) {
+function Players({ filter, brands, players }: { filter: BrandFilter; brands: readonly AssignedBrand[]; players: readonly GroupDashboardPlayer[] }) {
   const rows = playersForBrand(players, filter);
   return (
     <section className="panel">
       <h2>Игроки</h2>
-      <p className="note">Публичный ID глобально уникален. Список показывает только выбранный бренд и не подмешивает чужие записи.</p>
+      <p className="note">Строки — это резервы player_id_reservations выбранного бренда. Пустой список не означает ноль игроков в кошельке.</p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -438,12 +442,12 @@ function Players({ filter, players }: { filter: BrandFilter; players: readonly G
             {rows.map((player) => (
               <tr key={player.publicId}>
                 <td>{player.publicId}</td>
-                <td>{brandLabel(player.brandCode)}</td>
+                <td>{brands.find((item) => item.code === player.brandCode)?.displayName ?? brandLabel(player.brandCode)}</td>
                 <td>{player.label}</td>
                 <td>{player.source}</td>
               </tr>
             ))}
-            {rows.length === 0 ? <tr><td colSpan={4}>У этого бренда нет записей игроков.</td></tr> : null}
+            {rows.length === 0 ? <tr><td colSpan={4}>Записей резерва нет. Число игроков не подключено.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -451,12 +455,11 @@ function Players({ filter, players }: { filter: BrandFilter; players: readonly G
   );
 }
 
-function Finance({ filter, report, visible }: { filter: BrandFilter; report: ReturnType<typeof buildGroupReport>; visible: string[] }) {
-  const lines = financeLines(report, filter).filter((line) => visible.includes(line.brandCode));
+function Finance({ rows }: { rows: readonly AssignedBrandView[] }) {
   return (
     <section className="panel">
       <h2>Финансы только для чтения</h2>
-      <p className="note">Суммы разделены по бренду и валюте. Разные валюты не складываются.</p>
+      <p className="note">Суммы разделены по бренду и валюте. Разные валюты не складываются. Нет снимка — это не ноль.</p>
       <div className="table-wrap">
         <table>
           <thead>
@@ -469,16 +472,25 @@ function Finance({ filter, report, visible }: { filter: BrandFilter; report: Ret
             </tr>
           </thead>
           <tbody>
-            {lines.map((line) => (
-              <tr key={`${line.brandCode}-${line.currency}`}>
-                <td>{brandLabel(line.brandCode)}</td>
-                <td>{line.currency}</td>
-                <td className="num">{line.deposits}</td>
-                <td className="num">{line.withdrawals}</td>
-                <td className="num">{line.ggr}</td>
-              </tr>
+            {rows.flatMap((item) => (
+              item.financials == null
+                ? [(
+                  <tr key={item.code}>
+                    <td>{item.displayName}</td>
+                    <td colSpan={4}>{NOT_CONNECTED}</td>
+                  </tr>
+                )]
+                : item.financials.map((line) => (
+                  <tr key={`${item.code}-${line.currency}`}>
+                    <td>{item.displayName}</td>
+                    <td>{line.currency}</td>
+                    <td className="num">{line.deposits}</td>
+                    <td className="num">{line.withdrawals}</td>
+                    <td className="num">{line.ggr}</td>
+                  </tr>
+                ))
             ))}
-            {lines.length === 0 ? <tr><td colSpan={5}>Для выбранного бренда нет финансовых строк.</td></tr> : null}
+            {rows.length === 0 ? <tr><td colSpan={5}>Этому владельцу не назначен ни один бренд.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -486,14 +498,16 @@ function Finance({ filter, report, visible }: { filter: BrandFilter; report: Ret
   );
 }
 
-function Access({ filter, grants: allGrants, permissions }: { filter: BrandFilter; grants: readonly BrandStaffGrant[]; permissions: readonly string[] }) {
+function Access({ filter, brands, grants: allGrants, permissions }: { filter: BrandFilter; brands: readonly AssignedBrand[]; grants: readonly BrandStaffGrant[]; permissions: readonly string[] }) {
   const grants = grantsForBrand(allGrants, filter);
   return (
     <section className="panel">
       <h2>Доступ владельца группы</h2>
       <p className="note">Вход владельца группы будет проверяться по UUID в базе control-plane. Этот экран не выполняет вход и не содержит обхода прав.</p>
       <ul>
-        {(permissions.length > 0 ? permissions : OWNER_PERMISSION_LIST).map((permission) => <li key={permission}>{permissionLabel(permission)}</li>)}
+        {permissions.length > 0
+          ? permissions.map((permission) => <li key={permission}>{permissionLabel(permission)}</li>)
+          : <li>Права владельца не назначены.</li>}
       </ul>
       <h2>Назначения внутри брендов</h2>
       <div className="table-wrap">
@@ -508,7 +522,7 @@ function Access({ filter, grants: allGrants, permissions }: { filter: BrandFilte
           <tbody>
             {grants.map((grant) => (
               <tr key={`${grant.brandCode}-${grant.role}-${grant.staffSubject}`}>
-                <td>{brandLabel(grant.brandCode)}</td>
+                <td>{brands.find((item) => item.code === grant.brandCode)?.displayName ?? brandLabel(grant.brandCode)}</td>
                 <td>{roleLabel(grant.role as StaffRole)}</td>
                 <td>{grant.staffSubject}</td>
               </tr>
@@ -521,7 +535,7 @@ function Access({ filter, grants: allGrants, permissions }: { filter: BrandFilte
   );
 }
 
-function Audit({ filter, events: allEvents }: { filter: BrandFilter; events: readonly DemoAuditEvent[] }) {
+function Audit({ filter, brands, events: allEvents }: { filter: BrandFilter; brands: readonly AssignedBrand[]; events: readonly DemoAuditEvent[] }) {
   const events = auditForBrand(allEvents, filter);
   return (
     <section className="panel">
@@ -540,7 +554,7 @@ function Audit({ filter, events: allEvents }: { filter: BrandFilter; events: rea
             {events.map((event) => (
               <tr key={event.id}>
                 <td>{event.at}</td>
-                <td>{brandLabel(event.brandCode)}</td>
+                <td>{brands.find((item) => item.code === event.brandCode)?.displayName ?? brandLabel(event.brandCode)}</td>
                 <td>{event.actor}</td>
                 <td>{event.action}</td>
               </tr>
@@ -555,6 +569,7 @@ function Audit({ filter, events: allEvents }: { filter: BrandFilter; events: rea
 
 function emptySnapshot(schemaError: string): GroupDashboardData {
   return {
+    brands: [],
     grants: [],
     players: [],
     operational: [],
@@ -570,10 +585,22 @@ function snapshotFromOverview(data: Record<string, unknown>, nextpariReason: str
     Array.isArray(value) ? value.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object') : []
   );
   const code = (value: unknown): BrandCode | null => (value === '001' || value === '002' || value === '003' ? value : null);
+  const status = (value: unknown): BrandStatus | null => (
+    value === 'active' || value === 'registered' || value === 'planned' || value === 'provisioning' || value === 'suspended'
+      ? value
+      : null
+  );
   return {
     schemaError: null,
     nextpariReason,
     permissions: [],
+    brands: list(data.brands).flatMap((row) => {
+      const brandCode = code(row.code);
+      const brandStatus = status(row.status);
+      const displayName = String(row.displayName ?? row.display_name ?? '').trim();
+      if (!brandCode || !brandStatus || !displayName) return [];
+      return [{ code: brandCode, displayName, status: brandStatus }];
+    }),
     grants: list(data.grants).flatMap((row) => {
       const brandCode = code(row.brandCode);
       const role = row.role;
@@ -588,21 +615,21 @@ function snapshotFromOverview(data: Record<string, unknown>, nextpariReason: str
     }),
     operational: list(data.finance).flatMap((row) => {
       const brandCode = code(row.brandCode);
-      if (!brandCode) return [];
-      const status = String(row.operationalStatus ?? 'planned');
-      const operationalStatus = status === 'active' || status === 'registered' || status === 'planned' || status === 'provisioning' || status === 'suspended'
-        ? status
-        : 'planned';
+      const rawCount = row.playerCount ?? row.player_count;
+      const playerCount = typeof rawCount === 'number' ? rawCount : Number(rawCount);
+      const operationalStatus = status(row.operationalStatus ?? row.operational_status);
+      const currency = String(row.currency ?? '');
+      const deposits = String(row.deposits ?? '');
+      const withdrawals = String(row.withdrawals ?? '');
+      const ggr = String(row.ggr ?? '');
+      const money = /^(0|[1-9][0-9]*)(\.[0-9]{1,2})?$/;
+      if (!brandCode || !operationalStatus || !Number.isInteger(playerCount) || playerCount < 0) return [];
+      if (!currency || !money.test(deposits) || !money.test(withdrawals) || !money.test(ggr)) return [];
       return [{
         brandCode,
-        playerCount: Number(row.playerCount ?? 0),
+        playerCount,
         operationalStatus,
-        financials: {
-          currency: String(row.currency ?? ''),
-          deposits: String(row.deposits ?? '0'),
-          withdrawals: String(row.withdrawals ?? '0'),
-          ggr: String(row.ggr ?? '0'),
-        },
+        financials: { currency, deposits, withdrawals, ggr },
       }];
     }),
     audit: list(data.audit).flatMap((row) => {

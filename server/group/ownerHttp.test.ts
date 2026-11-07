@@ -201,9 +201,36 @@ describe('group owner authentication', () => {
     }, ports());
     assert.equal(result.status, 200);
     assert.equal(result.body.synthetic, false);
-    const data = result.body.data as { players: Array<{ publicId: string }>; finance: Array<{ currency: string }> };
+    const data = result.body.data as {
+      brands: Array<{ code: string; displayName: string }>;
+      players: Array<{ publicId: string }>;
+      finance: Array<{ currency: string }>;
+    };
+    assert.deepEqual(data.brands.map((brand) => brand.code), ['001']);
+    assert.equal(data.brands[0]?.displayName, 'NextPari');
     assert.deepEqual(data.players.map((player) => player.publicId), ['100001']);
     assert.deepEqual(data.finance.map((line) => line.currency), ['TMT']);
+    const emptyFinance = model();
+    emptyFinance.finance = [];
+    emptyFinance.brandOwners = [
+      { ownerId: OWNER, brandCode: '001' },
+      { ownerId: OWNER, brandCode: '002' },
+    ];
+    const registered = await handleGroupOwnerRequest({
+      method: 'GET',
+      pathname: '/api/group-owner/overview',
+      cookie: cookie(token(OWNER, 'aal2')),
+    }, ports({
+      async loadModel() {
+        return emptyFinance;
+      },
+    }));
+    const registeredData = registered.body.data as { brands: Array<{ code: string; displayName: string; status: string }>; finance: unknown[] };
+    assert.deepEqual(registeredData.brands.map((brand) => `${brand.code}:${brand.displayName}:${brand.status}`), [
+      '001:NextPari:active',
+      '002:RYXO:registered',
+    ]);
+    assert.deepEqual(registeredData.finance, []);
     assert.equal(JSON.stringify(result.body).includes('turnover'), false);
     assert.equal(JSON.stringify(result.body).includes('email'), false);
     const nextpari = result.body.nextpari as { available: boolean; reason: string };

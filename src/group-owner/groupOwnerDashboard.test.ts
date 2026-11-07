@@ -14,15 +14,23 @@ import { readRecoveryCallback, recoveryFailureView } from './recoveryCallback.ts
 import {
   employeeDraftReceipt,
   financeLines,
-  overviewCounts,
+  assignedBrandViews,
+  countLabel,
   playerIdsLeakAcrossBrands,
+  totalPlayers,
   playersForBrand,
   publicIdsAreGloballyUnique,
   buildGroupReport,
 } from './viewModel.ts';
 
 const session = { ownerId: '00000000-0000-4000-8000-0000000000aa', permissions: ['brands.read', 'reports.read', 'staff.map'] };
+const brands = [
+  { code: '001' as const, displayName: 'NextPari', status: 'active' as const },
+  { code: '002' as const, displayName: 'RYXO', status: 'registered' as const },
+  { code: '003' as const, displayName: 'Future brand', status: 'planned' as const },
+];
 const snapshot: GroupDashboardData = {
+  brands,
   grants: DEMO_GRANTS,
   players: DEMO_PLAYERS.map((player) => ({
     brandCode: player.brandCode,
@@ -85,11 +93,71 @@ describe('group owner dashboard', () => {
     assert.match(markup, /Кабинет владельца NextPari не заменяется/);
     assert.match(markup, /NextPari/);
     assert.match(markup, /RYXO/);
-    assert.match(markup, /Будущий бренд/);
-    const counts = overviewCounts(buildGroupReport(DEMO_SNAPSHOTS, DEMO_GRANTS).brands.filter((brand) => brand.code !== '003'));
-    assert.equal(counts.brandCount, 2);
-    assert.equal(counts.playerCount, 6);
-    assert.match(markup, />6</);
+    assert.match(markup, /Future brand/);
+    assert.match(markup, /001 NextPari/);
+    assert.match(markup, /002 RYXO/);
+    assert.match(markup, /003 Future brand/);
+    const views = assignedBrandViews(brands, DEMO_SNAPSHOTS, DEMO_GRANTS);
+    assert.equal(views.length, 3);
+    assert.equal(views[2]?.playerCount, null);
+    assert.equal(totalPlayers(views), null);
+    assert.equal(countLabel(totalPlayers(views)), 'Не подключено');
+    assert.match(markup, /Бренды<\/span><strong>3<\/strong>/);
+    assert.match(markup, /Игроки<\/span><strong>Не подключено<\/strong>/);
+    assert.match(markup, />4</);
+    assert.match(markup, />2</);
+  });
+
+  it('lists assigned brands when report snapshots are empty and does not invent zeros', () => {
+    const markup = renderToStaticMarkup(createElement(GroupOwnerApp, {
+      initialPage: 'overview',
+      initialSession: session,
+      initialSnapshot: {
+        brands,
+        grants: [],
+        players: [],
+        operational: [],
+        audit: [],
+        permissions: session.permissions,
+        schemaError: null,
+        nextpariReason: 'NEXTPARI_REPORT_ADAPTER_REQUIRED',
+      },
+    }));
+    assert.match(markup, /001 NextPari/);
+    assert.match(markup, /002 RYXO/);
+    assert.match(markup, /003 Future brand/);
+    assert.match(markup, /Активен/);
+    assert.match(markup, /Зарегистрирован/);
+    assert.match(markup, /Запланирован/);
+    assert.match(markup, /Бренды<\/span><strong>3<\/strong>/);
+    assert.match(markup, /Игроки<\/span><strong>Не подключено<\/strong>/);
+    assert.match(markup, /Менеджеры<\/span><strong>0<\/strong>/);
+    assert.doesNotMatch(markup, /120\.00/);
+    assert.doesNotMatch(markup, /900001/);
+    const finance = renderToStaticMarkup(createElement(GroupOwnerApp, {
+      initialPage: 'finance',
+      initialSession: session,
+      initialSnapshot: {
+        brands,
+        grants: [],
+        players: [],
+        operational: [],
+        audit: [],
+        permissions: session.permissions,
+        schemaError: null,
+        nextpariReason: 'NEXTPARI_REPORT_ADAPTER_REQUIRED',
+      },
+    }));
+    assert.match(finance, /Не подключено/);
+    assert.doesNotMatch(finance, /0\.00/);
+    const zeros = assignedBrandViews(brands, brands.map((brand) => ({
+      brandCode: brand.code,
+      playerCount: 0,
+      operationalStatus: brand.status,
+      financials: { currency: 'TMT', deposits: '0.00', withdrawals: '0.00', ggr: '0.00' },
+    })), []);
+    assert.equal(totalPlayers(zeros), 0);
+    assert.equal(countLabel(0), '0');
   });
 
   it('filters players to the selected brand', () => {
@@ -100,7 +168,7 @@ describe('group owner dashboard', () => {
     assert.match(nextpari, /900001/);
     assert.doesNotMatch(nextpari, /910001/);
     const future = html('players', '003');
-    assert.match(future, /нет записей игроков/);
+    assert.match(future, /Число игроков не подключено/);
     assert.doesNotMatch(future, /900001/);
     assert.doesNotMatch(future, /910001/);
   });
