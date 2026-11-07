@@ -1,15 +1,28 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AUTH_TABLES } from './catalog';
-import { isOfficeApiPath, serveOfficeApi } from './vercel';
+import { AUTH_TABLES, OPERATIONAL_FLAGS } from './catalog';
+import { handleOffice, officeFor } from './handler';
+import { createMemoryOffice } from './memory';
+import { safeDatabaseDiagnostic } from './production';
+import { isOfficeApiPath, resolveOfficeApiPath, serveOfficeApi } from './vercel';
 
 describe('office API routing', () => {
   it('keeps the Vercel rewrite away from the office API', () => {
     const root = join(import.meta.dirname, '..');
     const config = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')) as {
+      functions?: Record<string, { maxDuration?: number }>;
       rewrites: { source: string; destination: string }[];
     };
+    const api = config.rewrites[0];
+    expect(api?.source).toBe('/api/rixobet/office/v1/:path*');
+    expect(api?.destination).toBe('/api/rixobet/office/v1?rixo_path=/:path*');
+    expect(config.functions?.['api/rixobet/office/v1.ts']?.maxDuration).toBe(15);
+    expect(existsSync(join(root, 'api/rixobet/office/v1.ts'))).toBe(true);
+    expect(existsSync(join(root, 'api/rixobet/office/v1/[[...path]].ts'))).toBe(false);
+    const entry = readFileSync(join(root, 'api/rixobet/office/v1.ts'), 'utf8');
+    expect(entry.includes('serveOfficeApi')).toBe(true);
+    expect(entry.includes('[[...path]]')).toBe(false);
     const spa = config.rewrites.find((rewrite) => rewrite.destination === '/index.html');
     expect(spa?.source).toBe('/((?!api/).*)');
     expect(isOfficeApiPath('/api/rixobet/office/v1/auth/login')).toBe(true);
@@ -47,6 +60,42 @@ describe('office API routing', () => {
     expect(status).toBe(503);
     expect(headers.get('content-type')).toBe('application/json; charset=utf-8');
     expect(body).toContain('"status":"unavailable"');
+    expect(body).toContain('"diagnostic":"missing_database"');
     expect(body.includes('<html')).toBe(false);
+    expect(body.includes('postgresql://')).toBe(false);
+    expect(body.includes('RYXOBET_OFFICE_DATABASE_URL')).toBe(false);
+  });
+
+  it('maps a rewritten session request to JSON and keeps diagnostics free of credentials', async () => {
+    expect(resolveOfficeApiPath('/api/rixobet/office/v1/auth/session')).toBe('/api/rixobet/office/v1/auth/session');
+    expect(resolveOfficeApiPath('/api/rixobet/office/v1?rixo_path=/auth/session')).toBe('/api/rixobet/office/v1/auth/session');
+    expect(resolveOfficeApiPath('/api/rixobet/office/v1?rixo_path=//evil.example')).toBe('/api/rixobet/office/v1');
+    expect(resolveOfficeApiPath('/api/rixobet/office/v1?rixo_path=/../owner')).toBe('/api/rixobet/office/v1');
+    expect(
+      resolveOfficeApiPath('/api/rixobet/office/v1', { 'x-forwarded-uri': '/api/rixobet/office/v1/auth/session' }),
+    ).toBe('/api/rixobet/office/v1/auth/session');
+
+    const repository = createMemoryOffice({
+      staff: [],
+      flags: OPERATIONAL_FLAGS.map((key) => ({ key, brandCode: '002', enabled: false })),
+    });
+    const session = await handleOffice(
+      {
+        method: 'GET',
+        path: resolveOfficeApiPath('/api/rixobet/office/v1?rixo_path=/auth/session'),
+        headers: {},
+        body: {},
+      },
+      officeFor(repository, 'rixo-office-session-pepper-32bytes', () => Date.parse('2026-11-07T12:00:00.000Z'), true),
+    );
+    expect(session.status).toBe(401);
+    expect(session.body).toMatchObject({ brandCode: '002', accepted: false });
+    expect(JSON.stringify(session.body).includes('<html')).toBe(false);
+
+    expect(safeDatabaseDiagnostic(new Error('DATABASE_ROLE_FORBIDDEN'))).toBe('database_role');
+    expect(safeDatabaseDiagnostic(new Error('CATALOG_staff'))).toBe('catalog_staff');
+    expect(safeDatabaseDiagnostic(new Error('connect ECONNREFUSED postgresql://secret@db/postgres'))).toBe(
+      'database_unavailable',
+    );
   });
 });

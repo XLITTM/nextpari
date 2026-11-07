@@ -102,8 +102,11 @@ function sessionCookie(token: string, maxAge: number, secure: boolean): string {
   return parts.join('; ');
 }
 
-function unavailable(): OfficeResponse {
-  return { status: 503, body: { brandCode: BRAND.code, status: 'unavailable' }, setCookie: [] };
+function unavailable(diagnostic?: string): OfficeResponse {
+  const body = diagnostic
+    ? { brandCode: BRAND.code, status: 'unavailable' as const, diagnostic }
+    : { brandCode: BRAND.code, status: 'unavailable' as const };
+  return { status: 503, body, setCookie: [] };
 }
 
 function denied(status = 401): OfficeResponse {
@@ -285,15 +288,23 @@ async function confirmActivation(office: ReadyOffice, request: OfficeRequest, bo
   return { status: 200, body: { brandCode: BRAND.code, status: 'identity_verified' }, setCookie: [] };
 }
 
-export async function handleOffice(request: OfficeRequest, office: ReadyOffice | null): Promise<OfficeResponse> {
+export async function handleOffice(
+  request: OfficeRequest,
+  office: ReadyOffice | null,
+  diagnostic?: string,
+): Promise<OfficeResponse> {
   try {
-    return await dispatchOffice(request, office);
+    return await dispatchOffice(request, office, diagnostic);
   } catch {
-    return unavailable();
+    return unavailable(diagnostic ?? 'handler_failed');
   }
 }
-async function dispatchOffice(request: OfficeRequest, office: ReadyOffice | null): Promise<OfficeResponse> {
-  if (!office) return unavailable();
+async function dispatchOffice(
+  request: OfficeRequest,
+  office: ReadyOffice | null,
+  diagnostic?: string,
+): Promise<OfficeResponse> {
+  if (!office) return unavailable(diagnostic);
   if (!requestOriginAllowed(request.headers, request.method)) return denied(403);
   const path = pathnameOf(request.path);
   const body = record(request.body) ?? {};

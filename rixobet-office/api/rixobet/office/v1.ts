@@ -1,4 +1,4 @@
-import { serveOfficeApi } from '../../../../server/vercel';
+import { serveOfficeApi } from '../../../server/vercel';
 
 type OfficeRequest = Parameters<typeof serveOfficeApi>[0];
 type OfficeResponse = Parameters<typeof serveOfficeApi>[1];

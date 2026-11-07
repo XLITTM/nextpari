@@ -37,10 +37,34 @@ export function isOfficeApiPath(path: string): boolean {
   return pathname === '/api/rixobet/office/v1' || pathname.startsWith('/api/rixobet/office/v1/');
 }
 
+const OFFICE_PREFIX = '/api/rixobet/office/v1';
+
+function officeSuffix(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
+  if (!/^\/[A-Za-z0-9/_-]+$/.test(value)) return null;
+  if (value.split('/').includes('..')) return null;
+  return value;
+}
+
+export function resolveOfficeApiPath(url: string, headers: OfficeNodeRequest['headers'] = {}): string {
+  const raw = url.startsWith('/') ? url : `/${url}`;
+  const queryAt = raw.indexOf('?');
+  const pathname = (queryAt === -1 ? raw : raw.slice(0, queryAt)) || '/';
+  const params = new URLSearchParams(queryAt === -1 ? '' : raw.slice(queryAt + 1));
+  if (pathname !== OFFICE_PREFIX && isOfficeApiPath(pathname)) return pathname;
+  const fromQuery = officeSuffix(params.get('rixo_path'));
+  if (fromQuery) return `${OFFICE_PREFIX}${fromQuery}`;
+  for (const name of ['x-forwarded-uri', 'x-vercel-original-url', 'x-invoke-path', 'x-matched-path']) {
+    const headerPath = headerValue(headers, name)?.split('?')[0];
+    if (headerPath && headerPath !== OFFICE_PREFIX && isOfficeApiPath(headerPath)) return headerPath;
+  }
+  return pathname.startsWith('/') ? pathname : `/${pathname}`;
+}
+
 let productionHandler: OfficeHandler | null = null;
 
 export async function serveOfficeApi(req: OfficeNodeRequest, res: OfficeNodeResponse): Promise<void> {
-  const path = req.url?.startsWith('/') ? req.url : `/${req.url ?? ''}`;
+  const path = resolveOfficeApiPath(req.url ?? '/', req.headers);
   const officeRequest: OfficeRequest = {
     method: req.method ?? 'GET',
     path,
