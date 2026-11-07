@@ -13,6 +13,7 @@ export interface StaffRecord {
   mfaLastStep: number | null;
   identityVerifiedAt: string | null;
   invitationTokenHash: string | null;
+  invitationDeliveredAt: string | null;
 }
 
 export interface ChallengeRecord {
@@ -34,6 +35,7 @@ export interface SessionRecord {
   mfaSatisfied: boolean;
   role: string;
   displayName: string;
+  status: string;
 }
 
 export interface FlagRecord {
@@ -46,14 +48,18 @@ export interface OfficeRepository {
   findStaffByEmail(email: string): Promise<StaffRecord | null>;
   findStaffById(id: string): Promise<StaffRecord | null>;
   listInvitedOwners(): Promise<StaffRecord[]>;
-  saveStaff(staff: StaffRecord): Promise<void>;
+  enrollInvitedOwner(id: string, passwordHash: string, mfaSecret: string): Promise<boolean>;
+  verifyInvitedOwner(id: string, identityVerifiedAt: string, mfaLastStep: number): Promise<boolean>;
+  recordMfaStep(id: string, step: number): Promise<void>;
   createChallenge(staffId: string, expiresAt: string): Promise<ChallengeRecord>;
   readChallenge(id: string): Promise<ChallengeRecord | null>;
-  saveChallenge(challenge: ChallengeRecord): Promise<void>;
+  failChallenge(id: string): Promise<number | null>;
+  claimChallenge(id: string, consumedAt: string): Promise<boolean>;
   createSession(input: {
     staffId: string;
     secretHash: string;
     expiresAt: string;
+    issuedAt: string;
     mfaSatisfied: true;
   }): Promise<SessionRecord>;
   readSession(secretHash: string): Promise<SessionRecord | null>;

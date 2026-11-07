@@ -1,5 +1,6 @@
 export const OFFICE_DATABASE_URL = 'RYXOBET_OFFICE_DATABASE_URL';
 export const OFFICE_SESSION_PEPPER = 'RYXOBET_OFFICE_SESSION_PEPPER';
+export const OFFICE_DATABASE_ROLE = 'ryxobet_office_api';
 
 const FRONTEND_DATABASE_URL = `VITE_${OFFICE_DATABASE_URL}`;
 const FRONTEND_SESSION_PEPPER = `VITE_${OFFICE_SESSION_PEPPER}`;
@@ -53,7 +54,7 @@ export function readOfficeConfig(env: Readonly<Record<string, string | undefined
   if (!databaseUrl) return { ok: false, reason: 'missing_database' };
   if (sessionPepper.length < 32) return { ok: false, reason: 'missing_pepper' };
   const role = databaseRole(databaseUrl);
-  if (!role || (DENIED_DATABASE_ROLES as readonly string[]).includes(role)) {
+  if (role !== OFFICE_DATABASE_ROLE || (DENIED_DATABASE_ROLES as readonly string[]).includes(role)) {
     return { ok: false, reason: 'forbidden_role' };
   }
   const shared = read(env, SHARED_SERVICE_KEY);

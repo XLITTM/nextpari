@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
-import { assessCatalog, type BoundCatalog, type CatalogSnapshot, type CatalogTable } from './catalog';
-import { DENIED_DATABASE_ROLES, type OfficeConfig } from './env';
+import { AUTH_TABLES, assessCatalog, type BoundCatalog, type CatalogSnapshot, type CatalogTable } from './catalog';
+import { OFFICE_DATABASE_ROLE, type OfficeConfig } from './env';
 import type { ChallengeRecord, FlagRecord, OfficeRepository, SessionRecord, StaffRecord } from './repository';
 
 interface PgPool {
@@ -53,10 +53,11 @@ function mapStaff(row: Record<string, unknown>): StaffRecord | null {
     mfaLastStep: integerOrNull(row.mfa_last_step),
     identityVerifiedAt: iso(row.identity_verified_at),
     invitationTokenHash: textOrNull(row.invitation_token_hash),
+    invitationDeliveredAt: iso(row.invitation_delivered_at),
   };
 }
 
-const STAFF_FIELDS = `id, email, role, status, brand_code, display_name, auth_user_id, password_hash, mfa_secret, mfa_last_step, identity_verified_at, invitation_token_hash`;
+const STAFF_FIELDS = `id, email, role, status, brand_code, display_name, auth_user_id, password_hash, mfa_secret, mfa_last_step, identity_verified_at, invitation_token_hash, invitation_delivered_at`;
 
 async function loadDriver(databaseUrl: string): Promise<PgPool> {
   const host = new URL(databaseUrl).hostname;
@@ -70,7 +71,8 @@ async function loadDriver(databaseUrl: string): Promise<PgPool> {
 async function snapshot(pool: PgPool): Promise<CatalogSnapshot> {
   const result = await pool.query(
     `select c.relname as table_name,
-            (c.relrowsecurity and pg_catalog.pg_get_userbyid(c.relowner)::text <> current_user) as rls,
+            c.relrowsecurity as rls,
+            c.relforcerowsecurity as force_rls,
             a.attname as column_name
      from pg_catalog.pg_class c
      join pg_catalog.pg_namespace n on n.oid = c.relnamespace
@@ -82,13 +84,21 @@ async function snapshot(pool: PgPool): Promise<CatalogSnapshot> {
     const name = textOrNull(row.table_name);
     const column = textOrNull(row.column_name);
     if (!name || !column) continue;
-    const existing = tables.get(name) ?? { name, rls: row.rls === true, columns: [] };
+    const existing = tables.get(name) ?? { name, rls: row.rls === true, forceRls: row.force_rls === true, columns: [] };
     tables.set(name, { ...existing, columns: [...existing.columns, column] });
   }
   return { schema: 'ryxobet', tables: [...tables.values()] };
 }
 
 function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
+  if (
+    bound.staff !== AUTH_TABLES.staff ||
+    bound.sessions !== AUTH_TABLES.sessions ||
+    bound.challenges !== AUTH_TABLES.challenges ||
+    bound.flags !== AUTH_TABLES.flags
+  ) {
+    throw new Error('CATALOG_TABLE');
+  }
   const staffTable = `ryxobet.${ident(bound.staff)}`;
   const sessionTable = `ryxobet.${ident(bound.sessions)}`;
   const challengeTable = `ryxobet.${ident(bound.challenges)}`;
@@ -112,13 +122,34 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
       );
       return result.rows.map((row) => mapStaff(row)).filter((row): row is StaffRecord => row !== null);
     },
-    async saveStaff(staff) {
-      await pool.query(
+    async enrollInvitedOwner(id, passwordHash, mfaSecret) {
+      const result = await pool.query(
         `update ${staffTable}
-         set password_hash = $2, mfa_secret = $3, mfa_last_step = $4, status = $5,
-             identity_verified_at = $6, auth_user_id = $7
-         where id = $1 and brand_code = '002'`,
-        [staff.id, staff.passwordHash, staff.mfaSecret, staff.mfaLastStep, staff.status, staff.identityVerifiedAt, staff.authUserId],
+         set password_hash = $2, mfa_secret = $3
+         where id = $1 and brand_code = '002' and role = 'owner' and status = 'invited'
+           and auth_user_id is null and identity_verified_at is null
+           and invitation_delivered_at is not null and invitation_token_hash is not null
+         returning id`,
+        [id, passwordHash, mfaSecret],
+      );
+      return result.rows.length === 1;
+    },
+    async verifyInvitedOwner(id, identityVerifiedAt, mfaLastStep) {
+      const result = await pool.query(
+        `update ${staffTable}
+         set status = 'active', identity_verified_at = $2, mfa_last_step = $3
+         where id = $1 and brand_code = '002' and role = 'owner' and status = 'invited'
+           and auth_user_id is null and identity_verified_at is null
+           and invitation_delivered_at is not null and password_hash is not null and mfa_secret is not null
+         returning id`,
+        [id, identityVerifiedAt, mfaLastStep],
+      );
+      return result.rows.length === 1;
+    },
+    async recordMfaStep(id, step) {
+      await pool.query(
+        `update ${staffTable} set mfa_last_step = $2 where id = $1 and brand_code = '002' and status = 'active'`,
+        [id, step],
       );
     },
     async createChallenge(staffId, expiresAt) {
@@ -152,19 +183,36 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
       };
       return challenge;
     },
-    async saveChallenge(challenge) {
-      await pool.query(`update ${challengeTable} set consumed_at = $2, attempt_count = $3 where id = $1 and brand_code = '002'`, [
-        challenge.id,
-        challenge.consumedAt,
-        challenge.attemptCount,
-      ]);
+    async failChallenge(id) {
+      const result = await pool.query(
+        `update ${challengeTable}
+         set attempt_count = attempt_count + 1
+         where id = $1 and brand_code = '002' and consumed_at is null and attempt_count < 5
+         returning attempt_count`,
+        [id],
+      );
+      return integerOrNull(result.rows[0]?.attempt_count);
+    },
+    async claimChallenge(id, consumedAt) {
+      const result = await pool.query(
+        `update ${challengeTable}
+         set consumed_at = $2
+         where id = $1 and brand_code = '002' and consumed_at is null
+         returning id`,
+        [id, consumedAt],
+      );
+      return result.rows.length === 1;
     },
     async createSession(input) {
       const staffResult = await pool.query(`select ${STAFF_FIELDS} from ${staffTable} where id = $1 and brand_code = '002'`, [
         input.staffId,
       ]);
       const staff = staffResult.rows[0] ? mapStaff(staffResult.rows[0]) : null;
-      if (!staff || staff.brandCode !== '002') throw new Error('STAFF_NOT_FOUND');
+      if (!staff || staff.brandCode !== '002' || staff.status !== 'active') throw new Error('STAFF_NOT_FOUND');
+      await pool.query(
+        `update ${sessionTable} set revoked_at = $2 where staff_id = $1 and brand_code = '002' and revoked_at is null`,
+        [staff.id, input.issuedAt],
+      );
       const publicId = randomUUID();
       await pool.query(
         `insert into ${sessionTable} (id, staff_id, brand_code, secret_hash, expires_at, revoked_at, mfa_satisfied)
@@ -181,16 +229,18 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
         mfaSatisfied: true,
         role: staff.role,
         displayName: staff.displayName,
+        status: staff.status,
       };
       return session;
     },
     async readSession(secretHash) {
       const result = await pool.query(
         `select s.id, s.staff_id, s.brand_code, s.secret_hash, s.expires_at, s.revoked_at, s.mfa_satisfied,
-                st.role, st.display_name
+                st.role, st.display_name, st.status
          from ${sessionTable} s
          join ${staffTable} st on st.id = s.staff_id
-         where s.secret_hash = $1 and s.revoked_at is null`,
+         where s.secret_hash = $1 and s.revoked_at is null and s.brand_code = '002'
+           and st.brand_code = '002' and st.status = 'active'`,
         [secretHash],
       );
       const row = result.rows[0];
@@ -201,7 +251,8 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
       const expiresAt = iso(row.expires_at);
       const role = textOrNull(row.role);
       const displayName = textOrNull(row.display_name);
-      if (!publicId || !staffId || !brandCode || !expiresAt || !role || !displayName) return null;
+      const status = textOrNull(row.status);
+      if (!publicId || !staffId || !brandCode || !expiresAt || !role || !displayName || status !== 'active') return null;
       return {
         publicId,
         staffId,
@@ -212,6 +263,7 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
         mfaSatisfied: row.mfa_satisfied === true,
         role,
         displayName,
+        status,
       };
     },
     async revokeSession(secretHash, revokedAt) {
@@ -243,7 +295,7 @@ export async function openPostgresOffice(config: OfficeConfig): Promise<OfficeRe
     );
     const role = textOrNull(identity.rows[0]?.role)?.toLowerCase();
     const superuser = textOrNull(identity.rows[0]?.superuser);
-    if (!role || superuser === 'on' || identity.rows[0]?.rolbypassrls === true || (DENIED_DATABASE_ROLES as readonly string[]).includes(role)) {
+    if (role !== OFFICE_DATABASE_ROLE || superuser === 'on' || identity.rows[0]?.rolbypassrls === true) {
       throw new Error('DATABASE_ROLE_FORBIDDEN');
     }
     await pool.query(`select set_config('search_path', 'ryxobet', false)`);

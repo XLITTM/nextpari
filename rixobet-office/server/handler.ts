@@ -128,7 +128,7 @@ async function authenticated(office: ReadyOffice, request: OfficeRequest): Promi
   const token = cookieValue(request.headers.cookie);
   if (!token) return { ok: false, response: denied(401) };
   const session = await office.repository.readSession(hashSecret(office.pepper, token));
-  if (!session || session.revokedAt) return { ok: false, response: denied(401) };
+  if (!session || session.revokedAt || session.status !== 'active') return { ok: false, response: denied(401) };
   if (session.brandCode !== BRAND.code) return { ok: false, response: denied(403) };
   if (session.mfaSatisfied !== true) return { ok: false, response: denied(401) };
   if (Date.parse(session.expiresAt) <= office.now()) return { ok: false, response: denied(401) };
@@ -169,22 +169,27 @@ async function confirmMfa(office: ReadyOffice, body: Record<string, unknown>): P
   if (!challenge || challenge.brandCode !== BRAND.code || challenge.consumedAt) return denied(401);
   if (Date.parse(challenge.expiresAt) <= office.now() || challenge.attemptCount >= MAX_ATTEMPTS) return denied(401);
   const owner = await office.repository.findStaffById(challenge.staffId);
-  if (!owner || owner.brandCode !== BRAND.code || !owner.mfaSecret || !isVerifiedRole(owner.role)) return denied(401);
+  if (!owner || owner.brandCode !== BRAND.code || owner.status !== 'active' || !owner.mfaSecret || !isVerifiedRole(owner.role)) {
+    return denied(401);
+  }
   if (!/^[A-Za-z0-9:_-]{4,80}$/.test(owner.id)) return denied(401);
   if (!/^[\p{L}\p{N}][\p{L}\p{N}\s'.-]{0,79}$/u.test(owner.displayName)) return denied(401);
   const step = totpMatches(owner.mfaSecret, text(body.code), office.now(), owner.mfaLastStep);
   if (step === null) {
-    await office.repository.saveChallenge({ ...challenge, attemptCount: challenge.attemptCount + 1 });
+    await office.repository.failChallenge(challenge.id);
     return denied(401);
   }
-  await office.repository.saveChallenge({ ...challenge, consumedAt: new Date(office.now()).toISOString() });
-  await office.repository.saveStaff({ ...owner, mfaLastStep: step });
+  const claimed = await office.repository.claimChallenge(challenge.id, new Date(office.now()).toISOString());
+  if (!claimed) return denied(401);
+  await office.repository.recordMfaStep(owner.id, step);
   const token = randomToken(32);
+  const issuedAt = new Date(office.now()).toISOString();
   const expiresAt = new Date(office.now() + SESSION_MS).toISOString();
   const session = await office.repository.createSession({
     staffId: owner.id,
     secretHash: hashSecret(office.pepper, token),
     expiresAt,
+    issuedAt,
     mfaSatisfied: true,
   });
   if (session.brandCode !== BRAND.code || session.mfaSatisfied !== true) return denied(403);
@@ -205,18 +210,12 @@ async function activation(office: ReadyOffice, body: Record<string, unknown>): P
   const invited = (await office.repository.listInvitedOwners()).filter((row) => row.brandCode === BRAND.code);
   const staff = invited.find((row) => row.email.toLowerCase() === email);
   if (invited.length !== 1 || !staff || staff.role !== 'owner' || staff.authUserId !== null) return unavailable();
-  if (!staff.invitationTokenHash) return unavailable();
+  if (!staff.invitationDeliveredAt || !staff.invitationTokenHash) return unavailable();
   if (!secretsMatch(staff.invitationTokenHash, hashSecret(office.pepper, token))) return denied(401);
-  if (staff.passwordHash || staff.identityVerifiedAt) return unavailable();
+  if (staff.identityVerifiedAt) return unavailable();
   const secret = createMfaSecret();
-  await office.repository.saveStaff({
-    ...staff,
-    passwordHash: hashPassword(password),
-    mfaSecret: secret,
-    status: 'invited',
-    authUserId: null,
-    identityVerifiedAt: null,
-  });
+  const enrolled = await office.repository.enrollInvitedOwner(staff.id, hashPassword(password), secret);
+  if (!enrolled) return unavailable();
   return {
     status: 200,
     body: {
@@ -233,16 +232,12 @@ async function confirmActivation(office: ReadyOffice, body: Record<string, unkno
   if (body.brandCode !== undefined && body.brandCode !== BRAND.code) return denied(403);
   const email = text(body.email).trim().toLowerCase();
   const staff = (await office.repository.listInvitedOwners()).find((row) => row.email.toLowerCase() === email);
-  if (!staff || staff.brandCode !== BRAND.code || !staff.passwordHash || !staff.mfaSecret) return unavailable();
+  if (!staff || staff.brandCode !== BRAND.code || staff.status !== 'invited' || !staff.invitationDeliveredAt) return unavailable();
+  if (!staff.passwordHash || !staff.mfaSecret || staff.identityVerifiedAt || staff.authUserId !== null) return unavailable();
   const step = totpMatches(staff.mfaSecret, text(body.code), office.now(), staff.mfaLastStep);
   if (step === null) return denied(401);
-  await office.repository.saveStaff({
-    ...staff,
-    status: 'active',
-    identityVerifiedAt: new Date(office.now()).toISOString(),
-    mfaLastStep: step,
-    authUserId: null,
-  });
+  const verified = await office.repository.verifyInvitedOwner(staff.id, new Date(office.now()).toISOString(), step);
+  if (!verified) return unavailable();
   return { status: 200, body: { brandCode: BRAND.code, status: 'identity_verified' }, setCookie: [] };
 }
 

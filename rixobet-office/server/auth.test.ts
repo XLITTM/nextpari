@@ -6,9 +6,9 @@ import { parseSession } from '../src/access/session';
 import { parseMfaChallenge } from '../src/api/parsers';
 import { OPERATIONAL_FLAGS, REQUIRED_TABLE_COUNT, assessCatalog, type CatalogTable } from './catalog';
 import { createMfaSecret, hashPassword, hashSecret, totpCode } from './crypto';
-import { DENIED_DATABASE_ROLES, readOfficeConfig } from './env';
+import { DENIED_DATABASE_ROLES, OFFICE_DATABASE_ROLE, readOfficeConfig } from './env';
 import { handleOffice, officeFor, type OfficeRequest } from './handler';
-import { createMemoryOffice } from './memory';
+import { createMemoryOffice, testingPatchStaff } from './memory';
 import { createProductionHandler } from './production';
 import type { FlagRecord, OfficeRepository, StaffRecord } from './repository';
 
@@ -34,6 +34,7 @@ function staff(overrides: Partial<StaffRecord> = {}): StaffRecord {
     mfaLastStep: null,
     identityVerifiedAt: '2026-11-01T00:00:00.000Z',
     invitationTokenHash: null,
+    invitationDeliveredAt: null,
     ...overrides,
   };
 }
@@ -49,6 +50,7 @@ function pendingOwner(): StaffRecord {
     mfaSecret: null,
     identityVerifiedAt: null,
     invitationTokenHash: null,
+    invitationDeliveredAt: null,
   });
 }
 
@@ -72,12 +74,13 @@ function cookieOf(response: { setCookie: string[] }): string {
   return header.split(';')[0]?.split('=').slice(1).join('=') ?? '';
 }
 
-function catalog(options?: { count?: number; rls?: boolean; staff?: boolean }): CatalogTable[] {
+function catalog(options?: { count?: number; rls?: boolean; forceRls?: boolean; staff?: boolean; challengeName?: string }): CatalogTable[] {
   const count = options?.count ?? REQUIRED_TABLE_COUNT;
   const tables: CatalogTable[] = [
     {
       name: 'staff_accounts',
       rls: options?.rls ?? true,
+      forceRls: options?.forceRls ?? true,
       columns: options?.staff === false
         ? ['id']
         : [
@@ -93,26 +96,30 @@ function catalog(options?: { count?: number; rls?: boolean; staff?: boolean }): 
             'mfa_last_step',
             'identity_verified_at',
             'invitation_token_hash',
+            'invitation_delivered_at',
           ],
     },
     {
       name: 'staff_sessions',
       rls: true,
+      forceRls: true,
       columns: ['id', 'staff_id', 'brand_code', 'secret_hash', 'expires_at', 'revoked_at', 'mfa_satisfied'],
     },
     {
-      name: 'mfa_challenges',
+      name: options?.challengeName ?? 'staff_mfa_challenges',
       rls: true,
+      forceRls: true,
       columns: ['id', 'staff_id', 'brand_code', 'expires_at', 'consumed_at', 'attempt_count'],
     },
     {
       name: 'feature_flags',
       rls: true,
+      forceRls: true,
       columns: ['flag_key', 'brand_code', 'enabled'],
     },
   ];
   for (let index = tables.length; index < count; index += 1) {
-    tables.push({ name: `foundation_${index}`, rls: true, columns: ['id'] });
+    tables.push({ name: `foundation_${index}`, rls: true, forceRls: true, columns: ['id'] });
   }
   return tables;
 }
@@ -120,10 +127,24 @@ function catalog(options?: { count?: number; rls?: boolean; staff?: boolean }): 
 describe('office authentication', () => {
   it('rejects a catalog that is not the private brand schema', () => {
     expect(assessCatalog({ schema: 'public', tables: catalog() })).toEqual({ ok: false, reason: 'schema' });
-    expect(assessCatalog({ schema: 'ryxobet', tables: catalog({ count: 15 }) })).toEqual({ ok: false, reason: 'table_count' });
+    expect(assessCatalog({ schema: 'ryxobet', tables: catalog({ count: 16 }) })).toEqual({ ok: false, reason: 'table_count' });
     expect(assessCatalog({ schema: 'ryxobet', tables: catalog({ rls: false }) })).toEqual({ ok: false, reason: 'rls' });
+    expect(assessCatalog({ schema: 'ryxobet', tables: catalog({ forceRls: false }) })).toEqual({ ok: false, reason: 'rls' });
     expect(assessCatalog({ schema: 'ryxobet', tables: catalog({ staff: false }) })).toEqual({ ok: false, reason: 'staff' });
-    expect(assessCatalog({ schema: 'ryxobet', tables: catalog() }).ok).toBe(true);
+    expect(assessCatalog({ schema: 'ryxobet', tables: catalog({ challengeName: 'mfa_challenges' }) })).toEqual({
+      ok: false,
+      reason: 'challenges',
+    });
+    const bound = assessCatalog({ schema: 'ryxobet', tables: catalog() });
+    expect(bound).toEqual({
+      ok: true,
+      bound: {
+        staff: 'staff_accounts',
+        sessions: 'staff_sessions',
+        challenges: 'staff_mfa_challenges',
+        flags: 'feature_flags',
+      },
+    });
   });
 
   it('rejects missing, shared, and frontend database credentials', async () => {
@@ -138,15 +159,15 @@ describe('office authentication', () => {
     ).toBe('forbidden_role');
     expect(
       reasonOf({
-        RYXOBET_OFFICE_DATABASE_URL: 'postgresql://rixobet_office:shared-value@127.0.0.1/ryxobet',
+        RYXOBET_OFFICE_DATABASE_URL: `postgresql://${OFFICE_DATABASE_ROLE}:shared-value@127.0.0.1/ryxobet`,
         RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
         SUPABASE_SERVICE_ROLE_KEY: 'shared-value',
       }),
     ).toBe('shared_credential');
     expect(
       reasonOf({
-        VITE_RYXOBET_OFFICE_DATABASE_URL: 'postgresql://rixobet_office:pw@127.0.0.1/ryxobet',
-        RYXOBET_OFFICE_DATABASE_URL: 'postgresql://rixobet_office:pw@127.0.0.1/ryxobet',
+        VITE_RYXOBET_OFFICE_DATABASE_URL: `postgresql://${OFFICE_DATABASE_ROLE}:pw@127.0.0.1/ryxobet`,
+        RYXOBET_OFFICE_DATABASE_URL: `postgresql://${OFFICE_DATABASE_ROLE}:pw@127.0.0.1/ryxobet`,
         RYXOBET_OFFICE_SESSION_PEPPER: PEPPER,
       }),
     ).toBe('frontend_secret');
@@ -359,26 +380,52 @@ describe('office authentication', () => {
       }),
       office(repository),
     );
-    expect(prepared.status).toBe(200);
+    expect(prepared.status).toBe(503);
     expect(prepared.setCookie).toEqual([]);
-    expect(prepared.body).toMatchObject({ status: 'verification_required' });
-    expect(JSON.stringify(prepared.body)).not.toContain('sessionId');
-    const secret = new URL(String((prepared.body as { otpauthUri: string }).otpauthUri)).searchParams.get('secret');
+    expect((await repository.findStaffById(owner.id))?.status).toBe('invited');
+    expect((await repository.findStaffById(owner.id))?.passwordHash).toBeNull();
+
+    const delivered = pendingOwner();
+    delivered.invitationTokenHash = hashSecret(PEPPER, token);
+    delivered.invitationDeliveredAt = '2026-11-07T00:00:00.000Z';
+    const ready = createMemoryOffice({ staff: [delivered], flags: flags() });
+    const enrolled = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/activation',
+        body: { brandCode: '002', email: delivered.email, invitationToken: token, password: 'a-new-office-password', role: 'owner' },
+      }),
+      office(ready),
+    );
+    expect(enrolled.status).toBe(200);
+    expect(enrolled.setCookie).toEqual([]);
+    expect(enrolled.body).toMatchObject({ status: 'verification_required' });
+    expect(JSON.stringify(enrolled.body)).not.toContain('sessionId');
+    const secret = new URL(String((enrolled.body as { otpauthUri: string }).otpauthUri)).searchParams.get('secret');
     const step = totpCode(secret ?? '', NOW);
     const verified = await handleOffice(
       request({
         method: 'POST',
         path: '/auth/activation/confirm',
-        body: { email: owner.email, code: step?.code },
+        body: { email: delivered.email, code: step?.code },
       }),
-      office(repository),
+      office(ready),
     );
     expect(verified.status).toBe(200);
     expect(verified.setCookie).toEqual([]);
-    const stored = await repository.findStaffById(owner.id);
+    const stored = await ready.findStaffById(delivered.id);
     expect(stored?.status).toBe('active');
     expect(stored?.authUserId).toBeNull();
     expect(stored?.identityVerifiedAt).toBeTruthy();
+    const premature = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/login',
+        body: { brandCode: '002', email: owner.email, password: 'a-new-office-password' },
+      }),
+      office(repository),
+    );
+    expect(premature.status).toBe(401);
   });
 
   it('keeps database credentials and the server implementation out of the browser bundle', () => {
@@ -398,5 +445,78 @@ describe('office authentication', () => {
     expect(source.includes('RYXOBET_OFFICE_DATABASE_URL')).toBe(false);
     expect(source.includes("from '../server")).toBe(false);
     expect(source.includes("from './server")).toBe(false);
+  });
+
+  it('rejects a suspended account, a replayed MFA challenge, and a revoked session', async () => {
+    const suspended = staff({ id: 'staff-suspended-001', email: 'suspended@office.rixobet.com', status: 'suspended' });
+    const suspendedRepo = createMemoryOffice({ staff: [suspended], flags: flags() });
+    const blocked = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/login',
+        body: { brandCode: '002', email: suspended.email, password: PASSWORD, role: 'owner' },
+      }),
+      office(suspendedRepo),
+    );
+    expect(blocked.status).toBe(401);
+    expect(blocked.setCookie).toEqual([]);
+
+    const cashier = staff();
+    const repository = createMemoryOffice({ staff: [cashier], flags: flags() });
+    const login = await handleOffice(
+      request({ method: 'POST', path: '/auth/login', body: { brandCode: '002', email: cashier.email, password: PASSWORD } }),
+      office(repository),
+    );
+    const challengeId = parseMfaChallenge(login.body)?.challengeId;
+    const code = totpCode(cashier.mfaSecret ?? '', NOW)?.code;
+    const confirmed = await handleOffice(
+      request({ method: 'POST', path: '/auth/mfa', body: { brandCode: '002', challengeId, code } }),
+      office(repository),
+    );
+    const replay = await handleOffice(
+      request({ method: 'POST', path: '/auth/mfa', body: { brandCode: '002', challengeId, code } }),
+      office(repository),
+    );
+    expect(replay.status).toBe(401);
+    expect(replay.setCookie).toEqual([]);
+
+    const again = await handleOffice(
+      request({ method: 'POST', path: '/auth/login', body: { brandCode: '002', email: cashier.email, password: PASSWORD } }),
+      office(repository),
+    );
+    const reused = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/mfa',
+        body: { brandCode: '002', challengeId: parseMfaChallenge(again.body)?.challengeId, code },
+      }),
+      office(repository),
+    );
+    expect(reused.status).toBe(401);
+
+    const cookie = cookieOf(confirmed);
+    testingPatchStaff(repository, cashier.id, { status: 'suspended' });
+    const suspendedSession = await handleOffice(
+      request({ method: 'GET', path: '/auth/session', headers: { cookie: `rxo_office_session=${cookie}` } }),
+      office(repository),
+    );
+    expect(suspendedSession.status).toBe(401);
+    testingPatchStaff(repository, cashier.id, { status: 'active', role: 'security' });
+    const refreshed = await handleOffice(
+      request({ method: 'GET', path: '/cashier/deposits', headers: { cookie: `rxo_office_session=${cookie}` } }),
+      office(repository),
+    );
+    expect(refreshed.status).toBe(403);
+
+    const signedOut = await handleOffice(
+      request({ method: 'POST', path: '/auth/logout', headers: { cookie: `rxo_office_session=${cookie}` } }),
+      office(repository),
+    );
+    expect(signedOut.setCookie[0]).toContain('Max-Age=0');
+    const afterLogout = await handleOffice(
+      request({ method: 'GET', path: '/auth/session', headers: { cookie: `rxo_office_session=${cookie}` } }),
+      office(repository),
+    );
+    expect(afterLogout.status).toBe(401);
   });
 });
