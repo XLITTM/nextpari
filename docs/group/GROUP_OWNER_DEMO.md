@@ -68,6 +68,8 @@ Use a Chrome profile that is not signed in to Vercel. A private window is enough
 
 The dashboard now starts at a group-owner login. It is not the NextPari owner login. Cookies are `np_group_access` and `np_group_refresh`, HttpOnly, and separate from `nextpari_owner_access`.
 
+Password recovery uses `resetPasswordForEmail` and redirects only to `https://group-owner-xlit.vercel.app`. The server checks that recovery session against the active owner record before `updateUser({ password })`. The link token is not shown or logged. An expired or non-owner link does not change the password, MFA, permissions, or brand assignments.
+
 Password sign-in uses the Supabase anon key on the server. The server loads `owner_identities` before it allows TOTP enrollment. A password-only session cannot open data. Reads require an `aal2` session. MFA enrollment and verification are `POST /api/group-owner/auth/enroll` and `POST /api/group-owner/auth/mfa`.
 
 After `aal2`, the server reads `group_control` with the `group_control_reader` database role over a pooled TLS connection. It does not use PostgREST and it does not use the service-role key. A brand staff UUID is not an owner. Rows are limited to `brand_owners` for that owner. The browser bundle does not contain the database URL.

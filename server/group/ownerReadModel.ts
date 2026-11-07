@@ -2,6 +2,8 @@ import { isBrandCode, type BrandCode } from './catalog.js';
 
 export const GROUP_OWNER_ACCESS_COOKIE = 'np_group_access';
 export const GROUP_OWNER_REFRESH_COOKIE = 'np_group_refresh';
+export const GROUP_OWNER_RECOVERY_COOKIE = 'np_group_recovery';
+export const GROUP_OWNER_RECOVERY_REFRESH_COOKIE = 'np_group_recovery_refresh';
 
 const FORBIDDEN_KEYS = [
   'email',

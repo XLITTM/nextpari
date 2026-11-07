@@ -2,6 +2,8 @@ import { GroupControlError } from './errors.js';
 import { sanitizeAuthAudit, type GroupAuthAudit } from './ownerAudit.js';
 import {
   GROUP_OWNER_ACCESS_COOKIE,
+  GROUP_OWNER_RECOVERY_COOKIE,
+  GROUP_OWNER_RECOVERY_REFRESH_COOKIE,
   GROUP_OWNER_REFRESH_COOKIE,
   asBrandCode,
   readJwtClaims,
@@ -31,6 +33,9 @@ export interface GroupOwnerPorts {
   loadOwner(userId: string): Promise<GroupOwnerRecord | null>;
   loadModel(ownerId: string): Promise<GroupReadModel>;
   auditAuthFailure(event: GroupAuthAudit): void;
+  requestPasswordRecovery(email: string): Promise<void>;
+  verifyRecoverySession(accessToken: string): Promise<VerifiedGroupAccess>;
+  updateRecoveredPassword(accessToken: string, refreshToken: string, password: string): Promise<void>;
 }
 
 export interface GroupOwnerHttpResult {
@@ -64,10 +69,25 @@ function writeCookies(accessToken: string, refreshToken: string, secure: boolean
   ];
 }
 
+function clearNamed(names: readonly string[], secure: boolean): string[] {
+  return names.map((name) => `${name}=; ${cookieFlags(0, secure)}`);
+}
+
 function clearCookies(secure: boolean): string[] {
-  return [GROUP_OWNER_ACCESS_COOKIE, GROUP_OWNER_REFRESH_COOKIE].map(
-    (name) => `${name}=; ${cookieFlags(0, secure)}`,
-  );
+  return clearNamed([
+    GROUP_OWNER_ACCESS_COOKIE,
+    GROUP_OWNER_REFRESH_COOKIE,
+    GROUP_OWNER_RECOVERY_COOKIE,
+    GROUP_OWNER_RECOVERY_REFRESH_COOKIE,
+  ], secure);
+}
+
+function writeRecoveryCookies(accessToken: string, refreshToken: string, secure: boolean): string[] {
+  return [
+    `${GROUP_OWNER_RECOVERY_COOKIE}=${encodeURIComponent(accessToken)}; ${cookieFlags(10 * 60, secure)}`,
+    `${GROUP_OWNER_RECOVERY_REFRESH_COOKIE}=${encodeURIComponent(refreshToken)}; ${cookieFlags(10 * 60, secure)}`,
+    ...clearNamed([GROUP_OWNER_ACCESS_COOKIE, GROUP_OWNER_REFRESH_COOKIE], secure),
+  ];
 }
 
 function readCookie(header: string | undefined, name: string): string {
@@ -139,6 +159,29 @@ async function requireOwner(
   if (owner.status !== 'active') throw new GroupControlError('OWNER_DISABLED');
   if (!owner.permissions.includes(permission)) throw new GroupControlError('OWNER_PERMISSION_DENIED');
   return { access, owner, token };
+}
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function recoveryInvalid(
+  ports: GroupOwnerPorts,
+  pathname: string,
+  secure: boolean,
+  userId: string | null,
+  code = 'RECOVERY_LINK_INVALID',
+): GroupOwnerHttpResult {
+  recordFailure(ports, pathname, code, userId);
+  return {
+    status: 400,
+    body: { ok: false, error: 'RECOVERY_LINK_INVALID' },
+    cookies: clearCookies(secure),
+    headers: { 'Cache-Control': 'no-store' },
+  };
+}
+
+function isExpiredRecovery(error: unknown): boolean {
+  return error instanceof GroupControlError
+    && (error.code === 'JWT_INVALID' || error.code === 'RECOVERY_LINK_INVALID' || error.code === 'AUTH_FAILED');
 }
 
 function financeStaysSplit(rows: readonly GroupFinanceRow[]): GroupFinanceRow[] {
@@ -244,6 +287,86 @@ export async function handleGroupOwnerRequest(
 
     if (path === '/api/group-owner/auth/logout' && method === 'POST') {
       return { status: 200, body: { ok: true }, cookies: clearCookies(secure), headers: { 'Cache-Control': 'no-store' } };
+    }
+
+    if (path === '/api/group-owner/auth/recover' && method === 'POST') {
+      const email = String(body.email ?? '').trim().toLowerCase();
+      if (!EMAIL.test(email) || email.length > 320) return fail(400, 'EMAIL_REQUIRED', secure);
+      try {
+        await ports.requestPasswordRecovery(email);
+      } catch (error) {
+        if (error instanceof GroupControlError && error.code === 'RECOVERY_UNAVAILABLE') {
+          return fail(503, 'RECOVERY_UNAVAILABLE');
+        }
+        return {
+          status: 200,
+          body: { ok: true },
+          headers: { 'Cache-Control': 'no-store' },
+        };
+      }
+      return {
+        status: 200,
+        body: { ok: true },
+        headers: { 'Cache-Control': 'no-store' },
+      };
+    }
+
+    if (path === '/api/group-owner/auth/recover/verify' && method === 'POST') {
+      const accessToken = String(body.accessToken ?? '');
+      const refreshToken = String(body.refreshToken ?? '');
+      if (!accessToken || !refreshToken) return recoveryInvalid(ports, path, secure, null);
+      let access: VerifiedGroupAccess;
+      try {
+        access = await ports.verifyRecoverySession(accessToken);
+      } catch (error) {
+        if (isExpiredRecovery(error)) return recoveryInvalid(ports, path, secure, null);
+        throw error;
+      }
+      const owner = await ports.loadOwner(access.userId);
+      if (!owner || owner.status !== 'active') {
+        return recoveryInvalid(ports, path, secure, access.userId, owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN');
+      }
+      return {
+        status: 200,
+        body: { ok: true },
+        cookies: writeRecoveryCookies(accessToken, refreshToken, secure),
+        headers: { 'Cache-Control': 'no-store' },
+      };
+    }
+
+    if (path === '/api/group-owner/auth/recover/complete' && method === 'POST') {
+      const password = String(body.password ?? '');
+      const confirm = String(body.confirm ?? '');
+      if (password.length < 8 || password !== confirm) return fail(400, 'PASSWORD_MISMATCH', secure);
+      const accessToken = readCookie(input.cookie, GROUP_OWNER_RECOVERY_COOKIE);
+      const refreshToken = readCookie(input.cookie, GROUP_OWNER_RECOVERY_REFRESH_COOKIE);
+      if (!accessToken || !refreshToken) return recoveryInvalid(ports, path, secure, null);
+      let access: VerifiedGroupAccess;
+      try {
+        access = await ports.verifyRecoverySession(accessToken);
+      } catch (error) {
+        if (isExpiredRecovery(error)) return recoveryInvalid(ports, path, secure, null);
+        throw error;
+      }
+      const owner = await ports.loadOwner(access.userId);
+      if (!owner || owner.status !== 'active') {
+        return recoveryInvalid(ports, path, secure, access.userId, owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN');
+      }
+      try {
+        await ports.updateRecoveredPassword(accessToken, refreshToken, password);
+      } catch (error) {
+        if (isExpiredRecovery(error)) return recoveryInvalid(ports, path, secure, access.userId);
+        if (error instanceof GroupControlError && error.code === 'PASSWORD_REJECTED') {
+          return fail(400, 'PASSWORD_REJECTED', secure);
+        }
+        throw error;
+      }
+      return {
+        status: 200,
+        body: { ok: true },
+        cookies: clearCookies(secure),
+        headers: { 'Cache-Control': 'no-store' },
+      };
     }
 
     if (path === '/api/group-owner/auth/session' && method === 'GET') {

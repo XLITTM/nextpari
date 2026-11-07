@@ -72,6 +72,13 @@ function ports(overrides: Partial<GroupOwnerPorts> = {}): GroupOwnerPorts {
       return model();
     },
     auditAuthFailure() {},
+    async requestPasswordRecovery() {},
+    async verifyRecoverySession(value) {
+      const claims = readJwtClaims(value);
+      if (!claims) throw new GroupControlError('RECOVERY_LINK_INVALID');
+      return { userId: claims.sub, aal: claims.aal === 'aal2' ? 'aal2' : 'aal1' };
+    },
+    async updateRecoveredPassword() {},
   };
   return { ...base, ...overrides };
 }
@@ -264,5 +271,115 @@ describe('group owner authentication', () => {
     assert.equal(live.includes(".schema('group_control')"), false);
     assert.equal(ui.includes('SUPABASE_SERVICE_ROLE_KEY'), false);
     assert.equal(ui.includes('createServiceRoleClient'), false);
+    assert.equal(live.includes('admin.updateUserById'), false);
+    assert.equal(live.includes('unenroll'), false);
+    assert.match(live, /resetPasswordForEmail/);
+    assert.match(live, /redirectTo: GROUP_OWNER_RECOVERY_REDIRECT/);
+    assert.match(live, /https:\/\/group-owner-xlit\.vercel\.app/);
+    assert.equal(live.includes('https://group-owner-xlit.vercel.app/'), false);
+  });
+
+  it('sends recovery mail without returning a token and updates the password only for an active owner', async () => {
+    const recovery = token(OWNER, 'aal1');
+    let mailed = '';
+    let updated = false;
+    let enrolled = 0;
+    const events: string[] = [];
+    const recoveryPorts = ports({
+      async requestPasswordRecovery(email) {
+        mailed = email;
+      },
+      async enrollTotp() {
+        enrolled += 1;
+        return { factorId: 'factor-1', uri: 'otpauth://totp/secret' };
+      },
+      async updateRecoveredPassword(accessToken, refreshToken, password) {
+        updated = accessToken === recovery && refreshToken === 'refresh-secret' && password === 'new-password-1';
+      },
+      auditAuthFailure(event) {
+        events.push(JSON.stringify(event));
+      },
+    });
+    const sent = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover',
+      body: { email: 'Owner@Example.invalid' },
+    }, recoveryPorts);
+    assert.equal(sent.status, 200);
+    assert.equal(sent.body.ok, true);
+    assert.equal(mailed, 'owner@example.invalid');
+    assert.equal(JSON.stringify(sent.body).includes('access_token'), false);
+
+    const verified = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/verify',
+      secure: true,
+      body: { accessToken: recovery, refreshToken: 'refresh-secret' },
+    }, recoveryPorts);
+    assert.equal(verified.status, 200);
+    assert.equal(JSON.stringify(verified.body).includes(recovery), false);
+    assert.equal(JSON.stringify(verified.body).includes('refresh-secret'), false);
+    assert.match((verified.cookies ?? []).join('\n'), /np_group_recovery=/);
+    assert.doesNotMatch((verified.cookies ?? []).join('\n'), /np_group_access=[^;]/);
+
+    const cookieHeader = (verified.cookies ?? [])
+      .filter((item) => item.startsWith('np_group_recovery'))
+      .map((item) => item.split(';')[0])
+      .join('; ');
+    const completed = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/complete',
+      cookie: cookieHeader,
+      secure: true,
+      body: { password: 'new-password-1', confirm: 'new-password-1' },
+    }, recoveryPorts);
+    assert.equal(completed.status, 200);
+    assert.equal(completed.body.ok, true);
+    assert.equal(updated, true);
+    assert.equal(enrolled, 0);
+    assert.equal(JSON.stringify(completed.body).includes('new-password-1'), false);
+    assert.equal(JSON.stringify(completed.body).includes(recovery), false);
+    assert.match((completed.cookies ?? []).join('\n'), /np_group_recovery=;/);
+
+    const mismatch = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/complete',
+      cookie: cookieHeader,
+      body: { password: 'new-password-1', confirm: 'other-password' },
+    }, recoveryPorts);
+    assert.equal(mismatch.status, 400);
+    assert.equal(mismatch.body.error, 'PASSWORD_MISMATCH');
+  });
+
+  it('rejects an expired recovery link and a non-owner before any password change', async () => {
+    let updated = 0;
+    const expired = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/verify',
+      body: { accessToken: 'not-a-token', refreshToken: 'refresh-secret' },
+    }, ports({
+      async updateRecoveredPassword() {
+        updated += 1;
+      },
+    }));
+    assert.equal(expired.status, 400);
+    assert.equal(expired.body.error, 'RECOVERY_LINK_INVALID');
+    assert.equal(JSON.stringify(expired.body).includes('not-a-token'), false);
+    assert.equal(JSON.stringify(expired).includes('error_description'), false);
+
+    const stranger = token(STAFF, 'aal1');
+    const denied = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/verify',
+      body: { accessToken: stranger, refreshToken: 'refresh-secret' },
+    }, ports({
+      async updateRecoveredPassword() {
+        updated += 1;
+      },
+    }));
+    assert.equal(denied.status, 400);
+    assert.equal(denied.body.error, 'RECOVERY_LINK_INVALID');
+    assert.equal(updated, 0);
+    assert.equal((denied.cookies ?? []).some((item) => item.startsWith('np_group_recovery=') && !item.startsWith('np_group_recovery=;')), false);
   });
 });

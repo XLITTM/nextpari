@@ -10,6 +10,7 @@ import { GroupControlError } from '../../server/group/errors.ts';
 import { sumMoney } from '../../server/group/reporting.ts';
 import { DEMO_AUDIT, DEMO_GRANTS, DEMO_PLAYERS, DEMO_SNAPSHOTS } from './demoData.ts';
 import { GroupOwnerApp, type GroupDashboardData } from './GroupOwnerApp.tsx';
+import { readRecoveryCallback } from './recoveryCallback.ts';
 import {
   employeeDraftReceipt,
   financeLines,
@@ -53,8 +54,16 @@ describe('group owner dashboard', () => {
   it('asks for group owner sign-in before showing any figures', () => {
     const markup = renderToStaticMarkup(createElement(GroupOwnerApp));
     assert.match(markup, /Вход владельца группы/);
+    assert.match(markup, /Забыли пароль\?/);
     assert.doesNotMatch(markup, /900001/);
     assert.doesNotMatch(markup, /120\.00/);
+    const expired = readRecoveryCallback('#error_code=otp_expired&error_description=access_token%3Dsecret-token&type=recovery');
+    assert.deepEqual(expired, { kind: 'invalid' });
+    assert.equal(JSON.stringify(expired).includes('secret-token'), false);
+    const ready = readRecoveryCallback('#access_token=header.payload.sig&refresh_token=refresh-secret&type=recovery');
+    assert.equal(ready.kind, 'ready');
+    assert.equal(readRecoveryCallback('').kind, 'none');
+    assert.equal(readRecoveryCallback('#type=signup&access_token=header.payload.sig&refresh_token=refresh-secret').kind, 'invalid');
   });
 
   it('renders the separate overview from the supplied rows', () => {

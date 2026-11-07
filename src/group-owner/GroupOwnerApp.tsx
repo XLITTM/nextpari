@@ -10,6 +10,7 @@ import {
   Users,
 } from 'lucide-react';
 import { GROUP_BRANDS, type BrandCode } from '../../server/group/catalog.ts';
+import { readRecoveryCallback } from './recoveryCallback.ts';
 import type { BrandStaffGrant, StaffRole } from '../../server/group/access.ts';
 import type { BrandOperationalSnapshot } from '../../server/group/reporting.ts';
 import type { DemoAuditEvent } from './demoData.ts';
@@ -615,11 +616,39 @@ function snapshotFromOverview(data: Record<string, unknown>, nextpariReason: str
 function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [nextPassword, setNextPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [code, setCode] = useState('');
   const [factorId, setFactorId] = useState('');
   const [mfa, setMfa] = useState(false);
   const [setupUri, setSetupUri] = useState('');
   const [message, setMessage] = useState('');
+  const [mode, setMode] = useState<'login' | 'forgot' | 'reset' | 'invalid'>('login');
+
+  useEffect(() => {
+    const callback = readRecoveryCallback(window.location.hash);
+    if (callback.kind === 'none') return;
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    if (callback.kind === 'invalid') {
+      setMode('invalid');
+      return;
+    }
+    const accessToken = callback.accessToken;
+    const refreshToken = callback.refreshToken;
+    void (async () => {
+      try {
+        const response = await fetch('/api/group-owner/auth/recover/verify', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken, refreshToken }),
+        });
+        setMode(response.ok ? 'reset' : 'invalid');
+      } catch {
+        setMode('invalid');
+      }
+    })();
+  }, []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -674,6 +703,107 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
     }
   }
 
+  async function requestRecovery(event: FormEvent) {
+    event.preventDefault();
+    setMessage('');
+    try {
+      const response = await fetch('/api/group-owner/auth/recover', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const body = await response.json() as { ok?: boolean };
+      setMessage(response.ok && body.ok
+        ? 'Если для этой учётной записи доступно восстановление, письмо отправлено.'
+        : 'Письмо сейчас не отправлено.');
+    } catch {
+      setMessage('Письмо сейчас не отправлено.');
+    }
+  }
+
+  async function completeRecovery(event: FormEvent) {
+    event.preventDefault();
+    setMessage('');
+    if (nextPassword.length < 8 || nextPassword !== confirmPassword) {
+      setMessage('Пароли не совпадают. Нужно не меньше 8 символов.');
+      return;
+    }
+    try {
+      const response = await fetch('/api/group-owner/auth/recover/complete', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: nextPassword, confirm: confirmPassword }),
+      });
+      const body = await response.json() as { ok?: boolean };
+      if (!response.ok || !body.ok) {
+        setMode('invalid');
+        setMessage('Ссылка недействительна или устарела.');
+        return;
+      }
+      setNextPassword('');
+      setConfirmPassword('');
+      setMode('login');
+      setMessage('Пароль обновлён. Войдите снова. Проверка MFA сохраняется.');
+    } catch {
+      setMode('invalid');
+      setMessage('Ссылка недействительна или устарела.');
+    }
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <main className="content" style={{ maxWidth: 460, margin: '10vh auto' }}>
+        <section className="panel">
+          <h2>Восстановление пароля</h2>
+          <p className="note">Письмо придёт только для существующей учётной записи владельца группы.</p>
+          <form onSubmit={requestRecovery} className="form-grid">
+            <label className="field">Почта
+              <input aria-label="Почта" type="text" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" />
+            </label>
+            <button className="primary" type="submit">Отправить ссылку</button>
+          </form>
+          <button className="ghost" type="button" onClick={() => { setMode('login'); setMessage(''); }}>Вернуться ко входу</button>
+          {message ? <p className="warning" role="status">{message}</p> : null}
+        </section>
+      </main>
+    );
+  }
+
+  if (mode === 'reset') {
+    return (
+      <main className="content" style={{ maxWidth: 460, margin: '10vh auto' }}>
+        <section className="panel">
+          <h2>Новый пароль</h2>
+          <p className="note">Сессия восстановления проверена. Права владельца и MFA не меняются.</p>
+          <form onSubmit={completeRecovery} className="form-grid">
+            <label className="field">Новый пароль
+              <input aria-label="Новый пароль" type="password" value={nextPassword} onChange={(event) => setNextPassword(event.target.value)} autoComplete="new-password" />
+            </label>
+            <label className="field">Повторите пароль
+              <input aria-label="Повторите пароль" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" />
+            </label>
+            <button className="primary" type="submit">Сохранить пароль</button>
+          </form>
+          {message ? <p className="warning" role="status">{message}</p> : null}
+        </section>
+      </main>
+    );
+  }
+
+  if (mode === 'invalid') {
+    return (
+      <main className="content" style={{ maxWidth: 460, margin: '10vh auto' }}>
+        <section className="panel">
+          <h2>Ссылка недействительна</h2>
+          <p className="warning" role="status">Ссылка недействительна или устарела. Запросите новое письмо.</p>
+          <button className="primary" type="button" onClick={() => { setMode('login'); setMessage(''); }}>Вернуться ко входу</button>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="content" style={{ maxWidth: 460, margin: '10vh auto' }}>
       <section className="panel">
@@ -700,6 +830,7 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
             </>
           ) : null}
           <button className="primary" type="submit">Войти</button>
+          <button className="ghost" type="button" onClick={() => { setMode('forgot'); setMessage(''); }}>Забыли пароль?</button>
         </form>
         {message ? <p className="warning" role="status">{message}</p> : null}
       </section>
