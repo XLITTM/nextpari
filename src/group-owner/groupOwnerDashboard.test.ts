@@ -10,7 +10,7 @@ import { GroupControlError } from '../../server/group/errors.ts';
 import { sumMoney } from '../../server/group/reporting.ts';
 import { DEMO_AUDIT, DEMO_GRANTS, DEMO_PLAYERS, DEMO_SNAPSHOTS } from './demoData.ts';
 import { GroupOwnerApp, type GroupDashboardData } from './GroupOwnerApp.tsx';
-import { readRecoveryCallback } from './recoveryCallback.ts';
+import { readRecoveryCallback, recoveryFailureView } from './recoveryCallback.ts';
 import {
   employeeDraftReceipt,
   financeLines,
@@ -64,6 +64,19 @@ describe('group owner dashboard', () => {
     assert.equal(ready.kind, 'ready');
     assert.equal(readRecoveryCallback('').kind, 'none');
     assert.equal(readRecoveryCallback('#type=signup&access_token=header.payload.sig&refresh_token=refresh-secret').kind, 'invalid');
+    const ssl = recoveryFailureView('GROUP_DATABASE_SSL');
+    assert.equal(ssl.mode, 'unavailable');
+    assert.equal(ssl.code, 'GROUP_DATABASE_SSL');
+    assert.match(ssl.message, /не отклонена/);
+    const missing = recoveryFailureView('OWNER_UNKNOWN');
+    assert.equal(missing.mode, 'unavailable');
+    assert.equal(missing.code, 'OWNER_UNKNOWN');
+    const expiredLink = recoveryFailureView('RECOVERY_LINK_INVALID');
+    assert.equal(expiredLink.mode, 'invalid');
+    assert.equal(expiredLink.code, null);
+    const leaked = recoveryFailureView('postgres://group_control_reader:pw@db.example/postgres');
+    assert.equal(leaked.mode, 'invalid');
+    assert.equal(JSON.stringify(leaked).includes('postgres://'), false);
   });
 
   it('renders the separate overview from the supplied rows', () => {

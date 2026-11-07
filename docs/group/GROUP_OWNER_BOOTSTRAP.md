@@ -22,7 +22,7 @@ Then set a password that is not written into the repository:
 ALTER ROLE group_control_reader PASSWORD '<typed once>';
 ```
 
-Store the connection string only as the server variable `GROUP_CONTROL_DATABASE_URL`. The user must be `group_control_reader`, the host must be this project's database or pooler, and `sslmode=require`. Do not create a `VITE_` variable for it.
+Store the connection string only as the server variable `GROUP_CONTROL_DATABASE_URL`. The user must be `group_control_reader`, the host must be this project's database or pooler, and `sslmode=require`. The server removes `sslmode` before node-postgres parses it, so `require` stays encrypted without the driver treating it as `verify-full`. `sslmode=verify-full` is left strict. Do not create a `VITE_` variable for it. The reader role does not bypass row security. If `owner_identities` has row security and no SELECT policy, the lookup returns `GROUP_RLS_HIDES_OWNER` instead of an invalid recovery link. The policy statements in the procedure file are not applied by the application.
 
 The role can `SELECT` the read columns only. It cannot insert, update, delete, or execute `allocate_player_id`. Treasury tables are not granted.
 

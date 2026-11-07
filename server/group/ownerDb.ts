@@ -39,6 +39,87 @@ export interface PreparedGroupRead {
   loadModel(ownerId: string): Promise<GroupReadModel>;
 }
 
+const DATABASE_PG_CODES: Record<string, string> = {
+  '28000': 'GROUP_DATABASE_AUTH',
+  '28P01': 'GROUP_DATABASE_AUTH',
+  '42501': 'GROUP_DATABASE_FORBIDDEN',
+  '42703': 'GROUP_COLUMN_MISMATCH',
+  '42P01': 'GROUP_SCHEMA_UNAVAILABLE',
+  '3F000': 'GROUP_SCHEMA_UNAVAILABLE',
+  '57014': 'GROUP_SCHEMA_UNAVAILABLE',
+};
+
+const SSL_ERROR_CODES = new Set([
+  'CERT_HAS_EXPIRED',
+  'DEPTH_ZERO_SELF_SIGNED_CERT',
+  'ERR_TLS_CERT_ALTNAME_INVALID',
+  'SELF_SIGNED_CERT_IN_CHAIN',
+  'UNABLE_TO_GET_ISSUER_CERT',
+  'UNABLE_TO_GET_ISSUER_CERT_LOCALLY',
+  'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+]);
+
+const UNAVAILABLE_ERROR_CODES = new Set([
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'ETIMEDOUT',
+]);
+
+const OWNER_RLS_SQL = `
+SELECT c.relrowsecurity AS enabled
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'group_control'
+  AND c.relname = 'owner_identities'
+LIMIT 1
+`.trim();
+
+export interface ReaderPoolSettings {
+  connectionString: string;
+  ssl: {
+    rejectUnauthorized: boolean;
+    servername: string;
+    checkServerIdentity?: () => undefined;
+  };
+}
+
+/**
+ * pg 8.23 parses sslmode=require as verify-full and emits a warning even when
+ * Pool is also given an ssl object, because the connection string overwrites it.
+ * Strip sslmode here and apply libpq's meaning: require encrypts, verify-full checks the name.
+ */
+export function readerPoolSettings(connectionString: string): ReaderPoolSettings {
+  assertReaderConnection(connectionString);
+  const url = new URL(connectionString);
+  const mode = (url.searchParams.get('sslmode') ?? 'require').toLowerCase();
+  url.searchParams.delete('sslmode');
+  url.searchParams.delete('uselibpqcompat');
+  const servername = url.hostname;
+  if (mode === 'verify-full') {
+    return { connectionString: url.toString(), ssl: { rejectUnauthorized: true, servername } };
+  }
+  if (mode === 'verify-ca') {
+    return {
+      connectionString: url.toString(),
+      ssl: { rejectUnauthorized: true, servername, checkServerIdentity: () => undefined },
+    };
+  }
+  return { connectionString: url.toString(), ssl: { rejectUnauthorized: false, servername } };
+}
+
+export function classifyReaderError(error: unknown): string {
+  if (error instanceof GroupControlError) return error.code;
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code ?? '')
+    : '';
+  if (DATABASE_PG_CODES[code]) return DATABASE_PG_CODES[code];
+  if (SSL_ERROR_CODES.has(code) || code.startsWith('ERR_SSL_')) return 'GROUP_DATABASE_SSL';
+  if (UNAVAILABLE_ERROR_CODES.has(code)) return 'GROUP_DATABASE_UNAVAILABLE';
+  return 'GROUP_SCHEMA_UNAVAILABLE';
+}
+
 export function assertReaderConnection(connectionString: string): void {
   if ((process.env.VITE_GROUP_CONTROL_DATABASE_URL ?? '').trim()) {
     throw new GroupControlError('GROUP_SCHEMA_UNAVAILABLE');
@@ -127,19 +208,32 @@ export async function prepareGroupRead(query: GroupQuery): Promise<PreparedGroup
   return {
     async loadOwner(userId: string): Promise<GroupOwnerRecord | null> {
       const subject = assertUserId(userId);
-      const identity = resolved.owner_identities;
-      const identityColumn = identity.subject;
-      if (!identityColumn) throw new GroupControlError('GROUP_COLUMN_MISMATCH');
+      const identityLive = byTable.get('owner_identities') ?? [];
+      const identitySubjects = (GROUP_SUBJECT_COLUMNS.owner_identities ?? [])
+        .filter((column) => identityLive.includes(column));
+      if (identitySubjects.length === 0) throw new GroupControlError('GROUP_COLUMN_MISMATCH');
+      const identityWhere = identitySubjects
+        .map((column) => `${quoteIdent(column, identitySubjects)} = $1`)
+        .join(' OR ');
       const identitySql = select(
         'owner_identities',
-        `WHERE ${quoteIdent(identityColumn, identity.columns)} = $1`,
+        `WHERE (${identityWhere})`,
         'ORDER BY status',
       );
       const found = await query(identitySql, [subject, GROUP_ROW_LIMIT]);
       const row = found.rows[0];
-      if (!row) return null;
-      const id = String(row[identityColumn] ?? '');
-      if (!UUID.test(id)) return null;
+      if (!row) {
+        let hidden = false;
+        try {
+          const flags = await query(OWNER_RLS_SQL, []);
+          hidden = flags.rows[0]?.enabled === true;
+        } catch {
+          hidden = false;
+        }
+        if (hidden) throw new GroupControlError('GROUP_RLS_HIDES_OWNER');
+        return null;
+      }
+      const id = subject;
       const permission = resolved.owner_permissions;
       const permissionColumn = permission.subject;
       if (!permissionColumn) throw new GroupControlError('GROUP_COLUMN_MISMATCH');
@@ -181,16 +275,15 @@ export async function prepareGroupRead(query: GroupQuery): Promise<PreparedGroup
 let pool: pg.Pool | null = null;
 
 export function readerQueryFromEnv(): GroupQuery {
-  const connectionString = (process.env.GROUP_CONTROL_DATABASE_URL ?? '').trim();
-  assertReaderConnection(connectionString);
+  const settings = readerPoolSettings((process.env.GROUP_CONTROL_DATABASE_URL ?? '').trim());
   if (!pool) {
     pool = new pg.Pool({
-      connectionString,
+      connectionString: settings.connectionString,
       max: 2,
       idleTimeoutMillis: 10_000,
       connectionTimeoutMillis: 5_000,
       allowExitOnIdle: true,
-      ssl: { rejectUnauthorized: true },
+      ssl: settings.ssl,
       application_name: 'group-owner-reader',
       statement_timeout: 5_000,
       query_timeout: 5_000,
@@ -201,8 +294,7 @@ export function readerQueryFromEnv(): GroupQuery {
       const result = await pool!.query(text, [...params]);
       return { rows: result.rows as Record<string, unknown>[] };
     } catch (error) {
-      if (error instanceof GroupControlError) throw error;
-      throw new GroupControlError('GROUP_SCHEMA_UNAVAILABLE');
+      throw new GroupControlError(classifyReaderError(error));
     }
   };
 }

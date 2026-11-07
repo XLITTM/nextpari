@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { GroupControlError } from './errors.js';
-import { assertReaderConnection, prepareGroupRead, type GroupQuery } from './ownerDb.js';
+import { assertReaderConnection, classifyReaderError, prepareGroupRead, readerPoolSettings, type GroupQuery } from './ownerDb.js';
 import { GROUP_PROJECT_REF, GROUP_READ_COLUMNS, GROUP_READ_TABLES, GROUP_ROW_LIMIT, GROUP_SUBJECT_COLUMNS } from './schemaContract.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -47,7 +47,7 @@ describe('group control reader contract', () => {
     const model = await read.loadModel(OWNER);
     assert.deepEqual(model.brands.map((brand) => brand.code), ['001']);
     const sql = calls.map((call) => call.text).join('\n');
-    assert.match(sql, /"auth_user_id"/);
+    assert.match(sql, /"auth_user_id" = \$1 OR "id" = \$1/);
     assert.equal(sql.includes('select *'), false);
     assert.equal(/SUM\s*\(/i.test(sql), false);
     assert.equal(/\b(INSERT|UPDATE|DELETE|ALTER)\b/i.test(sql), false);
@@ -88,6 +88,54 @@ describe('group control reader contract', () => {
       (error: unknown) => error instanceof GroupControlError && error.code === 'OWNER_UNKNOWN',
     );
     assert.equal(calls.length, before);
+  });
+
+  it('reports row-level security when the owner row is hidden', async () => {
+    const { query } = queryFrom(liveColumns(), (text) => (
+      text.includes('relrowsecurity') ? [{ enabled: true }] : []
+    ));
+    const read = await prepareGroupRead(query);
+    await assert.rejects(
+      () => read.loadOwner(OWNER),
+      (error: unknown) => error instanceof GroupControlError && error.code === 'GROUP_RLS_HIDES_OWNER',
+    );
+  });
+
+  it('returns no owner when the row is absent and row security is off', async () => {
+    const { query } = queryFrom(liveColumns(), (text) => (
+      text.includes('relrowsecurity') ? [{ enabled: false }] : []
+    ));
+    const read = await prepareGroupRead(query);
+    assert.equal(await read.loadOwner(OWNER), null);
+  });
+
+  it('keeps sslmode=require from being upgraded to verify-full', () => {
+    const valid = `postgres://group_control_reader.${GROUP_PROJECT_REF}:pw@db.${GROUP_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require`;
+    const required = readerPoolSettings(valid);
+    assert.equal(required.ssl.rejectUnauthorized, false);
+    assert.equal(required.ssl.servername, `db.${GROUP_PROJECT_REF}.supabase.co`);
+    assert.equal(required.connectionString.includes('sslmode'), false);
+    const pooler = `postgres://group_control_reader.${GROUP_PROJECT_REF}:pw@aws-0-eu-central-1.pooler.supabase.com:6543/postgres?sslmode=require`;
+    const pooled = readerPoolSettings(pooler);
+    assert.equal(pooled.ssl.rejectUnauthorized, false);
+    assert.equal(pooled.ssl.servername, 'aws-0-eu-central-1.pooler.supabase.com');
+    assert.equal(pooled.connectionString.includes('6543'), true);
+    assert.equal(pooled.connectionString.includes('sslmode'), false);
+    const strict = readerPoolSettings(valid.replace('sslmode=require', 'sslmode=verify-full'));
+    assert.equal(strict.ssl.rejectUnauthorized, true);
+    assert.equal(strict.connectionString.includes('sslmode'), false);
+  });
+
+  it('maps connection failures without copying the driver message', () => {
+    const secret = `postgres://group_control_reader.${GROUP_PROJECT_REF}:pw@db.${GROUP_PROJECT_REF}.supabase.co:5432/postgres`;
+    assert.equal(classifyReaderError({ code: 'ERR_TLS_CERT_ALTNAME_INVALID', message: secret }), 'GROUP_DATABASE_SSL');
+    assert.equal(classifyReaderError({ code: 'SELF_SIGNED_CERT_IN_CHAIN', message: secret }), 'GROUP_DATABASE_SSL');
+    assert.equal(classifyReaderError({ code: '28P01', message: secret }), 'GROUP_DATABASE_AUTH');
+    assert.equal(classifyReaderError({ code: '42501', message: secret }), 'GROUP_DATABASE_FORBIDDEN');
+    assert.equal(classifyReaderError({ code: 'ECONNREFUSED', message: secret }), 'GROUP_DATABASE_UNAVAILABLE');
+    assert.equal(classifyReaderError({ code: '42703', message: secret }), 'GROUP_COLUMN_MISMATCH');
+    assert.equal(classifyReaderError(new GroupControlError('GROUP_SCHEMA_UNAVAILABLE')), 'GROUP_SCHEMA_UNAVAILABLE');
+    assert.equal(JSON.stringify(classifyReaderError({ code: '28P01', message: secret })).includes('postgres://'), false);
   });
 
   it('accepts only the reader role on the existing project', () => {

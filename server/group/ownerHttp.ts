@@ -124,13 +124,20 @@ function recordFailure(
   if (event) ports.auditAuthFailure(event);
 }
 
+const DATABASE_FAILURES = new Set([
+  'GROUP_SCHEMA_NOT_EXPOSED',
+  'GROUP_COLUMN_MISMATCH',
+  'GROUP_SCHEMA_UNAVAILABLE',
+  'GROUP_DATABASE_SSL',
+  'GROUP_DATABASE_AUTH',
+  'GROUP_DATABASE_FORBIDDEN',
+  'GROUP_DATABASE_UNAVAILABLE',
+  'GROUP_RLS_HIDES_OWNER',
+]);
+
 function ownerError(error: unknown, secure: boolean): GroupOwnerHttpResult {
   if (error instanceof GroupControlError) {
-    if (
-      error.code === 'GROUP_SCHEMA_NOT_EXPOSED'
-      || error.code === 'GROUP_COLUMN_MISMATCH'
-      || error.code === 'GROUP_SCHEMA_UNAVAILABLE'
-    ) {
+    if (DATABASE_FAILURES.has(error.code)) {
       return fail(503, error.code);
     }
     if (error.code === 'AUTH_FAILED' || error.code === 'AUTH_REQUIRED' || error.code === 'JWT_INVALID') {
@@ -177,6 +184,30 @@ function recoveryInvalid(
     cookies: clearCookies(secure),
     headers: { 'Cache-Control': 'no-store' },
   };
+}
+
+function recoveryOwnerDenied(
+  ports: GroupOwnerPorts,
+  pathname: string,
+  secure: boolean,
+  userId: string,
+  owner: GroupOwnerRecord | null,
+): GroupOwnerHttpResult | null {
+  if (owner && owner.status === 'active') return null;
+  const code = owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN';
+  recordFailure(ports, pathname, code, userId);
+  return { ...fail(403, code), cookies: clearCookies(secure) };
+}
+
+function recoveryDatabaseFailure(
+  ports: GroupOwnerPorts,
+  pathname: string,
+  userId: string,
+  error: unknown,
+): GroupOwnerHttpResult | null {
+  if (!(error instanceof GroupControlError) || !DATABASE_FAILURES.has(error.code)) return null;
+  recordFailure(ports, pathname, error.code, userId);
+  return fail(503, error.code);
 }
 
 function isExpiredRecovery(error: unknown): boolean {
@@ -322,10 +353,16 @@ export async function handleGroupOwnerRequest(
         if (isExpiredRecovery(error)) return recoveryInvalid(ports, path, secure, null);
         throw error;
       }
-      const owner = await ports.loadOwner(access.userId);
-      if (!owner || owner.status !== 'active') {
-        return recoveryInvalid(ports, path, secure, access.userId, owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN');
+      let owner: GroupOwnerRecord | null;
+      try {
+        owner = await ports.loadOwner(access.userId);
+      } catch (error) {
+        const failure = recoveryDatabaseFailure(ports, path, access.userId, error);
+        if (failure) return failure;
+        throw error;
       }
+      const denied = recoveryOwnerDenied(ports, path, secure, access.userId, owner);
+      if (denied) return denied;
       return {
         status: 200,
         body: { ok: true },
@@ -348,10 +385,16 @@ export async function handleGroupOwnerRequest(
         if (isExpiredRecovery(error)) return recoveryInvalid(ports, path, secure, null);
         throw error;
       }
-      const owner = await ports.loadOwner(access.userId);
-      if (!owner || owner.status !== 'active') {
-        return recoveryInvalid(ports, path, secure, access.userId, owner ? 'OWNER_DISABLED' : 'OWNER_UNKNOWN');
+      let owner: GroupOwnerRecord | null;
+      try {
+        owner = await ports.loadOwner(access.userId);
+      } catch (error) {
+        const failure = recoveryDatabaseFailure(ports, path, access.userId, error);
+        if (failure) return failure;
+        throw error;
       }
+      const denied = recoveryOwnerDenied(ports, path, secure, access.userId, owner);
+      if (denied) return denied;
       try {
         await ports.updateRecoveredPassword(accessToken, refreshToken, password);
       } catch (error) {

@@ -377,9 +377,66 @@ describe('group owner authentication', () => {
         updated += 1;
       },
     }));
-    assert.equal(denied.status, 400);
-    assert.equal(denied.body.error, 'RECOVERY_LINK_INVALID');
+    assert.equal(denied.status, 403);
+    assert.equal(denied.body.error, 'OWNER_UNKNOWN');
+    assert.notEqual(denied.body.error, 'RECOVERY_LINK_INVALID');
     assert.equal(updated, 0);
     assert.equal((denied.cookies ?? []).some((item) => item.startsWith('np_group_recovery=') && !item.startsWith('np_group_recovery=;')), false);
+  });
+
+  it('returns the database code when recovery verification cannot read the owner', async () => {
+    let updated = 0;
+    const ownerToken = token(OWNER, 'aal1');
+    const ssl = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/verify',
+      body: { accessToken: ownerToken, refreshToken: 'refresh-secret' },
+    }, ports({
+      async loadOwner() {
+        throw new GroupControlError('GROUP_DATABASE_SSL');
+      },
+      async updateRecoveredPassword() {
+        updated += 1;
+      },
+    }));
+    assert.equal(ssl.status, 503);
+    assert.equal(ssl.body.error, 'GROUP_DATABASE_SSL');
+    assert.notEqual(ssl.body.error, 'RECOVERY_LINK_INVALID');
+    assert.equal(JSON.stringify(ssl.body).includes('postgres://'), false);
+    assert.equal(JSON.stringify(ssl.body).includes('refresh-secret'), false);
+    assert.equal(JSON.stringify(ssl.body).includes(ownerToken), false);
+
+    const forbidden = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/verify',
+      body: { accessToken: ownerToken, refreshToken: 'refresh-secret' },
+    }, ports({
+      async loadOwner() {
+        throw new GroupControlError('GROUP_DATABASE_FORBIDDEN');
+      },
+      async updateRecoveredPassword() {
+        updated += 1;
+      },
+    }));
+    assert.equal(forbidden.status, 503);
+    assert.equal(forbidden.body.error, 'GROUP_DATABASE_FORBIDDEN');
+    assert.equal(updated, 0);
+
+    const unavailable = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/auth/recover/complete',
+      cookie: `np_group_recovery=${encodeURIComponent(ownerToken)}; np_group_recovery_refresh=refresh-secret`,
+      body: { password: 'new-password-1', confirm: 'new-password-1' },
+    }, ports({
+      async loadOwner() {
+        throw new GroupControlError('GROUP_DATABASE_UNAVAILABLE');
+      },
+      async updateRecoveredPassword() {
+        updated += 1;
+      },
+    }));
+    assert.equal(unavailable.status, 503);
+    assert.equal(unavailable.body.error, 'GROUP_DATABASE_UNAVAILABLE');
+    assert.equal(updated, 0);
   });
 });

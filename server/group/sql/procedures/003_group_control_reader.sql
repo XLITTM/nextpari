@@ -61,6 +61,35 @@ GRANT SELECT (id, actor, action, brand_code, created_at) ON group_control.audit_
 ALTER ROLE group_control_reader SET statement_timeout = '5s';
 ALTER ROLE group_control_reader SET search_path = group_control;
 
+-- The role is NOBYPASSRLS. If RLS is enabled and no SELECT policy exists,
+-- a successful SELECT returns zero rows. Recovery must not treat that as an
+-- invalid token. These policies let the reader see rows its column grants
+-- already name. They do not grant INSERT, UPDATE, or DELETE.
+-- Creating a policy does not enable RLS.
+
+DO $$
+DECLARE
+  rel text;
+BEGIN
+  FOREACH rel IN ARRAY ARRAY[
+    'brands',
+    'owner_identities',
+    'owner_permissions',
+    'brand_owners',
+    'brand_staff_grants',
+    'player_id_reservations',
+    'brand_report_snapshots',
+    'audit_events'
+  ]
+  LOOP
+    EXECUTE format('DROP POLICY IF EXISTS group_control_reader_select ON group_control.%I', rel);
+    EXECUTE format(
+      'CREATE POLICY group_control_reader_select ON group_control.%I FOR SELECT TO group_control_reader USING (true)',
+      rel
+    );
+  END LOOP;
+END $$;
+
 -- The owner sets the password in the SQL editor and does not commit that statement.
 
 COMMIT;

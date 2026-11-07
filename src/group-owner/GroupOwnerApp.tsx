@@ -10,7 +10,7 @@ import {
   Users,
 } from 'lucide-react';
 import { GROUP_BRANDS, type BrandCode } from '../../server/group/catalog.ts';
-import { readRecoveryCallback } from './recoveryCallback.ts';
+import { readRecoveryCallback, recoveryFailureView, type RecoveryFailureView } from './recoveryCallback.ts';
 import type { BrandStaffGrant, StaffRole } from '../../server/group/access.ts';
 import type { BrandOperationalSnapshot } from '../../server/group/reporting.ts';
 import type { DemoAuditEvent } from './demoData.ts';
@@ -623,14 +623,25 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
   const [mfa, setMfa] = useState(false);
   const [setupUri, setSetupUri] = useState('');
   const [message, setMessage] = useState('');
-  const [mode, setMode] = useState<'login' | 'forgot' | 'reset' | 'invalid'>('login');
+  const [mode, setMode] = useState<'login' | 'forgot' | 'reset' | 'invalid' | 'unavailable'>('login');
+  const [failure, setFailure] = useState<RecoveryFailureView | null>(null);
+
+  function showRecoveryFailure(error: unknown, status = 400) {
+    const parsed = recoveryFailureView(error);
+    const view = status >= 500 && parsed.mode === 'invalid'
+      ? recoveryFailureView('GROUP_SCHEMA_UNAVAILABLE')
+      : parsed;
+    setFailure(view);
+    setMode(view.mode === 'form' ? 'reset' : view.mode);
+    if (view.mode === 'form') setMessage(view.message);
+  }
 
   useEffect(() => {
     const callback = readRecoveryCallback(window.location.hash);
     if (callback.kind === 'none') return;
     window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
     if (callback.kind === 'invalid') {
-      setMode('invalid');
+      showRecoveryFailure('RECOVERY_LINK_INVALID');
       return;
     }
     const accessToken = callback.accessToken;
@@ -643,9 +654,15 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ accessToken, refreshToken }),
         });
-        setMode(response.ok ? 'reset' : 'invalid');
+        const body = await response.json().catch(() => ({} as { ok?: boolean; error?: unknown }));
+        if (response.ok && body.ok) {
+          setFailure(null);
+          setMode('reset');
+          return;
+        }
+        showRecoveryFailure(body.error, response.status);
       } catch {
-        setMode('invalid');
+        showRecoveryFailure('GROUP_SCHEMA_UNAVAILABLE', 503);
       }
     })();
   }, []);
@@ -736,19 +753,18 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: nextPassword, confirm: confirmPassword }),
       });
-      const body = await response.json() as { ok?: boolean };
+      const body = await response.json().catch(() => ({} as { ok?: boolean; error?: unknown }));
       if (!response.ok || !body.ok) {
-        setMode('invalid');
-        setMessage('Ссылка недействительна или устарела.');
+        showRecoveryFailure(body.error, response.status);
         return;
       }
       setNextPassword('');
       setConfirmPassword('');
+      setFailure(null);
       setMode('login');
       setMessage('Пароль обновлён. Войдите снова. Проверка MFA сохраняется.');
     } catch {
-      setMode('invalid');
-      setMessage('Ссылка недействительна или устарела.');
+      showRecoveryFailure('GROUP_SCHEMA_UNAVAILABLE', 503);
     }
   }
 
@@ -792,13 +808,15 @@ function Login({ onSignedIn }: { onSignedIn: (session: GroupOwnerSession) => voi
     );
   }
 
-  if (mode === 'invalid') {
+  if (mode === 'invalid' || mode === 'unavailable') {
+    const view = failure ?? recoveryFailureView('RECOVERY_LINK_INVALID');
     return (
       <main className="content" style={{ maxWidth: 460, margin: '10vh auto' }}>
         <section className="panel">
-          <h2>Ссылка недействительна</h2>
-          <p className="warning" role="status">Ссылка недействительна или устарела. Запросите новое письмо.</p>
-          <button className="primary" type="button" onClick={() => { setMode('login'); setMessage(''); }}>Вернуться ко входу</button>
+          <h2>{view.title}</h2>
+          <p className="warning" role="status">{view.message}</p>
+          {view.code ? <p className="note">{view.code}</p> : null}
+          <button className="primary" type="button" onClick={() => { setMode('login'); setMessage(''); setFailure(null); }}>Вернуться ко входу</button>
         </section>
       </main>
     );
