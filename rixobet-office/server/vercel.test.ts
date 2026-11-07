@@ -11,17 +11,20 @@ describe('office API routing', () => {
   it('keeps the Vercel rewrite away from the office API', () => {
     const root = join(import.meta.dirname, '..');
     const config = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')) as {
-      functions?: Record<string, { maxDuration?: number }>;
+      functions?: Record<string, { maxDuration?: number; includeFiles?: string }>;
       rewrites: { source: string; destination: string }[];
     };
     const api = config.rewrites[0];
     expect(api?.source).toBe('/api/rixobet/office/v1/:path*');
     expect(api?.destination).toBe('/api/rixobet/office/v1?rixo_path=/:path*');
-    expect(config.functions?.['api/rixobet/office/v1.ts']?.maxDuration).toBe(15);
-    expect(existsSync(join(root, 'api/rixobet/office/v1.ts'))).toBe(true);
+    expect(config.functions?.['api/rixobet/office/v1.js']?.maxDuration).toBe(15);
+    expect(config.functions?.['api/rixobet/office/v1.js']?.includeFiles).toBe('api/rixobet/office/bundle.js');
+    expect(existsSync(join(root, 'api/rixobet/office/v1.js'))).toBe(true);
+    expect(existsSync(join(root, 'api/rixobet/office/v1.ts'))).toBe(false);
     expect(existsSync(join(root, 'api/rixobet/office/v1/[[...path]].ts'))).toBe(false);
-    const entry = readFileSync(join(root, 'api/rixobet/office/v1.ts'), 'utf8');
-    expect(entry.includes('serveOfficeApi')).toBe(true);
+    const entry = readFileSync(join(root, 'api/rixobet/office/v1.js'), 'utf8');
+    expect(entry.includes("from './bundle.js'")).toBe(true);
+    expect(entry.includes('server/vercel')).toBe(false);
     expect(entry.includes('[[...path]]')).toBe(false);
     const spa = config.rewrites.find((rewrite) => rewrite.destination === '/index.html');
     expect(spa?.source).toBe('/((?!api/).*)');

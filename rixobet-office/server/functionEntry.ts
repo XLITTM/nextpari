@@ -1,0 +1,1 @@
+export { serveOfficeApi } from './vercel';

@@ -2,8 +2,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/rixobet/office/v1.ts": {
-      "maxDuration": 15
+    "api/rixobet/office/v1.js": {
+      "maxDuration": 15,
+      "includeFiles": "api/rixobet/office/bundle.js"
     }
   },
   "rewrites": [
