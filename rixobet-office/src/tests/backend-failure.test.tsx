@@ -120,6 +120,26 @@ describe('missing backend', () => {
     expect(body.role).toBeUndefined();
   });
 
+  it('stays unavailable when office authentication has no database credentials', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ brandCode: '002', status: 'unavailable' }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      })),
+    );
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/login']}>
+          <AppRoutes />
+        </MemoryRouter>
+      </AuthProvider>,
+    );
+    expect(await screen.findByText('Не подключено')).toBeTruthy();
+    expect(screen.queryByLabelText('Код MFA')).toBeNull();
+    expect(screen.queryByText('Сессия сервера')).toBeNull();
+  });
+
   it('keeps a deposit request unconfirmed when the server is missing', async () => {
     const form = matchRoute('/cashier/deposits')?.form;
     if (!form) throw new Error('missing deposit form');
