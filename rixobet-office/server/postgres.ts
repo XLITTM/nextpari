@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { officePoolConfig } from './pgConfig';
 import { AUTH_TABLES, assessCatalog, type BoundCatalog, type CatalogSnapshot, type CatalogTable } from './catalog';
 import { OFFICE_DATABASE_ROLE, OFFICE_POOLER_USER, type OfficeConfig } from './env';
 import type { ChallengeRecord, FlagRecord, OfficeRepository, SessionRecord, StaffRecord } from './repository';
@@ -61,12 +62,7 @@ function mapStaff(row: Record<string, unknown>): StaffRecord | null {
 const STAFF_FIELDS = `id, email, role, status, brand_code, display_name, auth_user_id, password_hash, mfa_secret, mfa_last_step, identity_verified_at, invitation_token_hash, invitation_expires_at, invitation_consumed_at`;
 
 async function loadDriver(databaseUrl: string): Promise<PgPool> {
-  const host = new URL(databaseUrl).hostname;
-  return new Pool({
-    connectionString: databaseUrl,
-    max: 2,
-    ssl: host === 'localhost' || host === '127.0.0.1' ? undefined : { rejectUnauthorized: true },
-  });
+  return new Pool(officePoolConfig(databaseUrl));
 }
 
 async function snapshot(pool: PgPool): Promise<CatalogSnapshot> {
