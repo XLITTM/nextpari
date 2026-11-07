@@ -6,6 +6,7 @@ import { mapGroupRows } from './ownerHttp.js';
 import type { GroupOwnerRecord, GroupReadModel } from './ownerReadModel.js';
 import {
   GROUP_PROJECT_REF,
+  GROUP_OPTIONAL_COLUMNS,
   GROUP_READ_COLUMNS,
   GROUP_READ_TABLES,
   GROUP_READER_ROLE,
@@ -203,6 +204,9 @@ export function resolveSelectList(table: GroupReadTable, liveColumns: readonly s
   for (const column of GROUP_READ_COLUMNS[table]) {
     if (!live.has(column)) throw new GroupControlError('GROUP_COLUMN_MISMATCH');
     columns.push(column);
+  }
+  for (const column of GROUP_OPTIONAL_COLUMNS[table] ?? []) {
+    if (live.has(column)) columns.push(column);
   }
   return { subject, columns: subject ? [subject, ...columns] : columns };
 }

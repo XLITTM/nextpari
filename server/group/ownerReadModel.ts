@@ -39,6 +39,7 @@ export interface GroupStaffRow {
   brandCode: BrandCode;
   role: 'manager' | 'cashier' | 'security';
   staffSubject: string;
+  status: 'active' | 'suspended' | 'revoked' | null;
 }
 
 export interface GroupPlayerRow {

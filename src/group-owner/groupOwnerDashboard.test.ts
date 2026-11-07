@@ -31,6 +31,11 @@ const brands = [
 ];
 const snapshot: GroupDashboardData = {
   brands,
+  brandOwners: [
+    { ownerId: session.ownerId, brandCode: '001' },
+    { ownerId: session.ownerId, brandCode: '002' },
+    { ownerId: session.ownerId, brandCode: '003' },
+  ],
   grants: DEMO_GRANTS,
   players: DEMO_PLAYERS.map((player) => ({
     brandCode: player.brandCode,
@@ -114,6 +119,7 @@ describe('group owner dashboard', () => {
       initialSession: session,
       initialSnapshot: {
         brands,
+        brandOwners: brands.map((item) => ({ ownerId: session.ownerId, brandCode: item.code })),
         grants: [],
         players: [],
         operational: [],
@@ -139,6 +145,7 @@ describe('group owner dashboard', () => {
       initialSession: session,
       initialSnapshot: {
         brands,
+        brandOwners: brands.map((item) => ({ ownerId: session.ownerId, brandCode: item.code })),
         grants: [],
         players: [],
         operational: [],
@@ -217,9 +224,38 @@ describe('group owner dashboard', () => {
     });
     assert.deepEqual(valid.errors, []);
     assert.equal(valid.accountCreated, false);
+    const cashierStaff = employeeDraftReceipt({
+      brandCode: '001',
+      identity: 'Демо Кассир',
+      role: 'cashier',
+      permissions: ['staff'],
+      status: 'active',
+    });
+    assert.deepEqual(cashierStaff.errors, ['permissions']);
+    const securityBalances = employeeDraftReceipt({
+      brandCode: '002',
+      identity: 'Демо Охрана',
+      role: 'security',
+      permissions: ['balances'],
+      status: 'active',
+    });
+    assert.deepEqual(securityBalances.errors, ['permissions']);
     const markup = html('employees', '001');
     assert.match(markup, /Отправить приглашение/);
+    assert.match(markup, /Приостановить/);
+    assert.match(markup, /Отозвать/);
+    assert.match(markup, /Статус не указан/);
+    assert.match(markup, /на сайте выключены/);
     assert.match(markup, /disabled/);
+    assert.doesNotMatch(markup, /Бэкенд не подключён/);
+    const ryxo = html('employees', '002');
+    assert.match(ryxo, /Бэкенд не подключён/);
+    assert.match(ryxo, /Безопасность/);
+    const access = html('access', '002');
+    assert.match(access, /Безопасность: Игроки/);
+    assert.match(access, /Назначения владельца по брендам/);
+    assert.match(access, /Бэкенд не подключён/);
+    assert.match(access, new RegExp(session.ownerId));
   });
 
   it('denies cross-brand staff and display-name owner login', () => {
@@ -227,6 +263,18 @@ describe('group owner dashboard', () => {
     assert.equal(authorizeStaffSubject(DEMO_GRANTS, '001', subject, 'players'), '001');
     assert.throws(() => authorizeStaffSubject(DEMO_GRANTS, '002', subject, 'players'), (error: unknown) => {
       return error instanceof GroupControlError && error.code === 'CROSS_BRAND_ACCESS_DENIED';
+    });
+    const security = DEMO_GRANTS.find((grant) => grant.role === 'security');
+    assert.ok(security);
+    assert.equal(authorizeStaffSubject(DEMO_GRANTS, security.brandCode, security.staffSubject, 'players'), security.brandCode);
+    assert.throws(() => authorizeStaffSubject(DEMO_GRANTS, security.brandCode, security.staffSubject, 'balances'), (error: unknown) => {
+      return error instanceof GroupControlError && error.code === 'STAFF_PERMISSION_DENIED';
+    });
+    const cashier = DEMO_GRANTS.find((grant) => grant.role === 'cashier');
+    assert.ok(cashier);
+    assert.equal(authorizeStaffSubject(DEMO_GRANTS, cashier.brandCode, cashier.staffSubject, 'transactions'), cashier.brandCode);
+    assert.throws(() => authorizeStaffSubject(DEMO_GRANTS, cashier.brandCode, cashier.staffSubject, 'staff'), (error: unknown) => {
+      return error instanceof GroupControlError && error.code === 'STAFF_PERMISSION_DENIED';
     });
     assert.throws(() => authenticateGroupOwner([], 'group-owner'), (error: unknown) => {
       return error instanceof GroupControlError && error.code === 'OWNER_SUBJECT_INVALID';

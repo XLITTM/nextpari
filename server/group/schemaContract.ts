@@ -31,6 +31,14 @@ export const GROUP_READ_COLUMNS: Record<GroupReadTable, readonly string[]> = {
   audit_events: ['id', 'actor', 'action', 'brand_code', 'created_at'],
 };
 
+/**
+ * Selected when the live catalog already has them.
+ * A missing optional column is not GROUP_COLUMN_MISMATCH.
+ */
+export const GROUP_OPTIONAL_COLUMNS: Partial<Record<GroupReadTable, readonly string[]>> = {
+  brand_staff_grants: ['status'],
+};
+
 /** Closed candidate lists. The live catalog picks the one column that exists. */
 export const GROUP_SUBJECT_COLUMNS: Partial<Record<GroupReadTable, readonly string[]>> = {
   owner_identities: ['auth_user_id', 'id'],

@@ -1,3 +1,4 @@
+import { parseStaffChange, staffChangeRefusal, ROLE_PERMISSIONS } from './access.js';
 import { GroupControlError } from './errors.js';
 import { sanitizeAuthAudit, type GroupAuthAudit } from './ownerAudit.js';
 import {
@@ -441,6 +442,57 @@ export async function handleGroupOwnerRequest(
       recordFailure(ports, path, 'STAFF_WRITES_DISABLED', null);
       return fail(403, 'STAFF_WRITES_DISABLED');
     }
+    const staffAction = staffActionFor(path, method);
+    if (staffAction) {
+      const { access, owner } = await requireOwner(ports, input.cookie, 'staff.map');
+      let change;
+      try {
+        change = parseStaffChange(body, staffAction);
+      } catch (error) {
+        if (error instanceof GroupControlError) {
+          recordFailure(ports, path, error.code, access.userId);
+          return fail(400, error.code);
+        }
+        throw error;
+      }
+      const model = scopeReadModel(await ports.loadModel(owner.id), owner.id);
+      if (!model.brandOwners.some((row) => row.brandCode === change.brandCode)) {
+        recordFailure(ports, path, 'BRAND_NOT_ASSIGNED', access.userId);
+        return fail(403, 'BRAND_NOT_ASSIGNED');
+      }
+      const same = model.grants.find((grant) => (
+        grant.brandCode === change.brandCode && grant.staffSubject === change.staffSubject
+      ));
+      const otherBrand = model.grants.some((grant) => (
+        grant.staffSubject === change.staffSubject && grant.brandCode !== change.brandCode
+      ));
+      if (staffAction === 'invite' && !same && otherBrand) {
+        recordFailure(ports, path, 'CROSS_BRAND_ACCESS_DENIED', access.userId);
+        return fail(403, 'CROSS_BRAND_ACCESS_DENIED');
+      }
+      if (staffAction !== 'invite' && !same) {
+        const code = otherBrand ? 'CROSS_BRAND_ACCESS_DENIED' : 'STAFF_GRANT_NOT_FOUND';
+        recordFailure(ports, path, code, access.userId);
+        return fail(403, code);
+      }
+      if (same && same.role !== change.role) {
+        recordFailure(ports, path, 'STAFF_ROLE_INVALID', access.userId);
+        return fail(400, 'STAFF_ROLE_INVALID');
+      }
+      const brand = model.brands.find((item) => item.code === change.brandCode);
+      const refusal = staffChangeRefusal(staffAction);
+      recordFailure(ports, path, refusal, access.userId);
+      return {
+        status: 409,
+        body: {
+          ok: false,
+          error: refusal,
+          applied: false,
+          backend: brand?.status === 'active' ? 'catalog_only' : 'not_connected',
+        },
+        headers: { 'Cache-Control': 'no-store' },
+      };
+    }
 
     const permission = READS[path];
     if (!permission || method !== 'GET') return fail(404, 'NOT_FOUND');
@@ -472,18 +524,35 @@ function payloadFor(path: string, model: GroupReadModel): unknown {
   }
   if (path === '/api/group-owner/brands') return model.brands;
   if (path === '/api/group-owner/staff' || path === '/api/group-owner/access') {
-    return { permissionsRequired: 'staff.map', grants: model.grants, brandOwners: model.brandOwners };
+    return {
+      permissionsRequired: 'staff.map',
+      grants: model.grants,
+      brandOwners: model.brandOwners,
+      rolePermissions: ROLE_PERMISSIONS,
+      writesEnabled: false,
+    };
   }
   if (path === '/api/group-owner/players') return model.players;
   if (path === '/api/group-owner/finance') return financeStaysSplit(model.finance);
   if (path === '/api/group-owner/audit') return model.audit;
   return {
     brands: model.brands,
+    brandOwners: model.brandOwners,
     grants: model.grants,
+    rolePermissions: ROLE_PERMISSIONS,
+    writesEnabled: false,
     players: model.players,
     finance: financeStaysSplit(model.finance),
     audit: model.audit,
   };
+}
+
+function staffActionFor(path: string, method: string): 'invite' | 'revoke' | 'suspend' | null {
+  if (method !== 'POST') return null;
+  if (path === '/api/group-owner/staff/invite') return 'invite';
+  if (path === '/api/group-owner/staff/revoke') return 'revoke';
+  if (path === '/api/group-owner/staff/suspend') return 'suspend';
+  return null;
 }
 
 export function mapGroupRows(input: {
@@ -523,7 +592,9 @@ export function mapGroupRows(input: {
       const role = String(record.role ?? '');
       const staffSubject = String(record.staff_subject ?? record.staffSubject ?? '');
       if (!brandCode || (role !== 'manager' && role !== 'cashier' && role !== 'security') || !staffSubject) return null;
-      return { brandCode, role, staffSubject };
+      const rawStatus = record.status;
+      const status = rawStatus === 'active' || rawStatus === 'suspended' || rawStatus === 'revoked' ? rawStatus : null;
+      return { brandCode, role, staffSubject, status };
     }).filter((item): item is GroupStaffRow => item != null),
     players: (input.players ?? []).map((item): GroupPlayerRow | null => {
       const record = row(item);

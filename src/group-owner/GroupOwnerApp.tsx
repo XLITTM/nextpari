@@ -18,6 +18,7 @@ import {
   ACCOUNT_NOT_CREATED,
   NOT_CONNECTED,
   STAFF_PERMISSIONS,
+  STAFF_ROLES,
   WRITE_DISABLED,
   assignedBrandViews,
   auditForBrand,
@@ -25,8 +26,10 @@ import {
   countLabel,
   employeeDraftReceipt,
   employeeFieldMessage,
+  grantStatusLabel,
   grantsForBrand,
   permissionLabel,
+  rolePermissionText,
   playersForBrand,
   roleLabel,
   statusLabel,
@@ -46,8 +49,14 @@ export interface GroupDashboardPlayer {
   source: string;
 }
 
+export interface GroupOwnerAssignment {
+  ownerId: string;
+  brandCode: BrandCode;
+}
+
 export interface GroupDashboardData {
   brands: readonly AssignedBrand[];
+  brandOwners: readonly GroupOwnerAssignment[];
   grants: readonly BrandStaffGrant[];
   players: readonly GroupDashboardPlayer[];
   operational: readonly BrandOperationalSnapshot[];
@@ -201,7 +210,15 @@ export function GroupOwnerApp({
           {page === 'employees' ? <Employees filter={brand} brands={assigned} grants={snapshot?.grants ?? []} /> : null}
           {page === 'players' ? <Players filter={brand} brands={assigned} players={snapshot?.players ?? []} /> : null}
           {page === 'finance' ? <Finance rows={visible} /> : null}
-          {page === 'access' ? <Access filter={brand} brands={assigned} grants={snapshot?.grants ?? []} permissions={session.permissions} /> : null}
+          {page === 'access' ? (
+            <Access
+              filter={brand}
+              brands={assigned}
+              grants={snapshot?.grants ?? []}
+              brandOwners={snapshot?.brandOwners ?? []}
+              permissions={session.permissions}
+            />
+          ) : null}
           {page === 'audit' ? <Audit filter={brand} brands={assigned} events={snapshot?.audit ?? []} /> : null}
         </main>
       </div>
@@ -335,20 +352,29 @@ function Employees({ filter, brands, grants: allGrants }: { filter: BrandFilter;
             <tr>
               <th>Бренд</th>
               <th>Роль</th>
+              <th>Права</th>
               <th>Субъект</th>
               <th>Статус</th>
             </tr>
           </thead>
           <tbody>
-            {grants.map((grant) => (
-              <tr key={`${grant.brandCode}-${grant.staffSubject}`}>
-                <td>{brands.find((item) => item.code === grant.brandCode)?.displayName ?? brandLabel(grant.brandCode)}</td>
-                <td>{roleLabel(grant.role)}</td>
-                <td>{grant.staffSubject}</td>
-                <td><span className="chip wait">только чтение</span></td>
-              </tr>
-            ))}
-            {grants.length === 0 ? <tr><td colSpan={4}>Для выбранного бренда нет назначений.</td></tr> : null}
+            {grants.map((grant) => {
+              const brandStatus = brands.find((item) => item.code === grant.brandCode)?.status;
+              return (
+                <tr key={`${grant.brandCode}-${grant.staffSubject}`}>
+                  <td>{brands.find((item) => item.code === grant.brandCode)?.displayName ?? brandLabel(grant.brandCode)}</td>
+                  <td>{roleLabel(grant.role)}</td>
+                  <td>{rolePermissionText(grant.role)}</td>
+                  <td>{grant.staffSubject}</td>
+                  <td>
+                    <span className="chip wait">{grantStatusLabel(grant.status, brandStatus)}</span>
+                    <button className="ghost" type="button" disabled>Приостановить</button>
+                    <button className="ghost" type="button" disabled>Отозвать</button>
+                  </td>
+                </tr>
+              );
+            })}
+            {grants.length === 0 ? <tr><td colSpan={5}>Для выбранного бренда нет назначений.</td></tr> : null}
           </tbody>
         </table>
       </div>
@@ -411,6 +437,7 @@ function Employees({ filter, brands, grants: allGrants }: { filter: BrandFilter;
           <button className="ghost" type="button" disabled>Отправить приглашение</button>
         </div>
       </form>
+      <p className="note">Приглашение, приостановка и отзыв на сайте выключены. Имя на форме не создаёт доступ. Сервер принимает только UUID субъекта и не записывает приглашение.</p>
       {errors.length > 0 ? (
         <ul className="errors">
           {errors.map((field) => <li key={field}>{employeeFieldMessage(field)}</li>)}
@@ -498,16 +525,58 @@ function Finance({ rows }: { rows: readonly AssignedBrandView[] }) {
   );
 }
 
-function Access({ filter, brands, grants: allGrants, permissions }: { filter: BrandFilter; brands: readonly AssignedBrand[]; grants: readonly BrandStaffGrant[]; permissions: readonly string[] }) {
+function Access({
+  filter,
+  brands,
+  grants: allGrants,
+  brandOwners,
+  permissions,
+}: {
+  filter: BrandFilter;
+  brands: readonly AssignedBrand[];
+  grants: readonly BrandStaffGrant[];
+  brandOwners: readonly GroupOwnerAssignment[];
+  permissions: readonly string[];
+}) {
   const grants = grantsForBrand(allGrants, filter);
+  const owners = brandOwners.filter((row) => filter === 'all' || row.brandCode === filter);
   return (
     <section className="panel">
       <h2>Доступ владельца группы</h2>
-      <p className="note">Вход владельца группы будет проверяться по UUID в базе control-plane. Этот экран не выполняет вход и не содержит обхода прав.</p>
+      <p className="note">Вход владельца группы проверяется по UUID в базе control-plane. Этот экран не выполняет вход и не содержит обхода прав.</p>
       <ul>
         {permissions.length > 0
           ? permissions.map((permission) => <li key={permission}>{permissionLabel(permission)}</li>)
           : <li>Права владельца не назначены.</li>}
+      </ul>
+      <h2>Назначения владельца по брендам</h2>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Бренд</th>
+              <th>Владелец</th>
+              <th>Бэкенд</th>
+            </tr>
+          </thead>
+          <tbody>
+            {owners.map((row) => {
+              const brand = brands.find((item) => item.code === row.brandCode);
+              return (
+                <tr key={`${row.ownerId}-${row.brandCode}`}>
+                  <td>{brand?.displayName ?? brandLabel(row.brandCode)}</td>
+                  <td>{row.ownerId}</td>
+                  <td>{brand && brand.status !== 'active' ? 'Бэкенд не подключён' : (brand ? statusLabel(brand.status) : NOT_CONNECTED)}</td>
+                </tr>
+              );
+            })}
+            {owners.length === 0 ? <tr><td colSpan={3}>Этому владельцу не назначен ни один бренд.</td></tr> : null}
+          </tbody>
+        </table>
+      </div>
+      <h2>Права ролей</h2>
+      <ul>
+        {STAFF_ROLES.map((role) => <li key={role}>{roleLabel(role)}: {rolePermissionText(role)}</li>)}
       </ul>
       <h2>Назначения внутри брендов</h2>
       <div className="table-wrap">
@@ -570,6 +639,7 @@ function Audit({ filter, brands, events: allEvents }: { filter: BrandFilter; bra
 function emptySnapshot(schemaError: string): GroupDashboardData {
   return {
     brands: [],
+    brandOwners: [],
     grants: [],
     players: [],
     operational: [],
@@ -594,6 +664,12 @@ function snapshotFromOverview(data: Record<string, unknown>, nextpariReason: str
     schemaError: null,
     nextpariReason,
     permissions: [],
+    brandOwners: list(data.brandOwners).flatMap((row) => {
+      const brandCode = code(row.brandCode ?? row.brand_code);
+      const ownerId = String(row.ownerId ?? row.owner_id ?? '').toLowerCase();
+      if (!brandCode || !/^[0-9a-f-]{36}$/.test(ownerId)) return [];
+      return [{ ownerId, brandCode }];
+    }),
     brands: list(data.brands).flatMap((row) => {
       const brandCode = code(row.code);
       const brandStatus = status(row.status);
@@ -605,7 +681,9 @@ function snapshotFromOverview(data: Record<string, unknown>, nextpariReason: str
       const brandCode = code(row.brandCode);
       const role = row.role;
       if (!brandCode || (role !== 'manager' && role !== 'cashier' && role !== 'security')) return [];
-      return [{ brandCode, role, staffSubject: String(row.staffSubject ?? '') }];
+      const rawStatus = row.status;
+      const status = rawStatus === 'active' || rawStatus === 'suspended' || rawStatus === 'revoked' ? rawStatus : null;
+      return [{ brandCode, role, staffSubject: String(row.staffSubject ?? ''), status }];
     }),
     players: list(data.players).flatMap((row) => {
       const brandCode = code(row.brandCode);

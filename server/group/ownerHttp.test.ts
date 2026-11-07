@@ -26,8 +26,8 @@ function model(): GroupReadModel {
       { ownerId: OWNER, brandCode: '001' },
     ],
     grants: [
-      { brandCode: '001', role: 'manager', staffSubject: STAFF },
-      { brandCode: '002', role: 'cashier', staffSubject: STAFF },
+      { brandCode: '001', role: 'manager', staffSubject: STAFF, status: null },
+      { brandCode: '002', role: 'cashier', staffSubject: STAFF, status: null },
     ],
     players: [
       { brandCode: '001', publicId: '100001', source: 'legacy' },
@@ -265,6 +265,166 @@ describe('group owner authentication', () => {
     }, ports());
     assert.equal(staffWrite.status, 403);
     assert.equal(staffWrite.body.error, 'STAFF_WRITES_DISABLED');
+
+    const staffRead = await handleGroupOwnerRequest({
+      method: 'GET',
+      pathname: '/api/group-owner/staff',
+      cookie: cookie(token(OWNER, 'aal2')),
+    }, ports());
+    assert.equal(staffRead.status, 200);
+    const staffData = staffRead.body.data as { grants: Array<{ brandCode: string }>; writesEnabled: boolean };
+    assert.deepEqual(staffData.grants.map((grant) => grant.brandCode), ['001']);
+    assert.equal(staffData.writesEnabled, false);
+    assert.equal(JSON.stringify(staffRead.body).includes('002'), false);
+  });
+
+  it('validates staff changes and does not apply them', async () => {
+    const invited = '00000000-0000-4000-8000-0000000000c3';
+    const body = {
+      brandCode: '001',
+      staffSubject: invited,
+      role: 'manager',
+      permissions: ['players', 'staff'],
+    };
+    const events: string[] = [];
+    const invite = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body,
+    }, ports({
+      auditAuthFailure(event) {
+        events.push(JSON.stringify(event));
+      },
+    }));
+    assert.equal(invite.status, 409);
+    assert.equal(invite.body.error, 'STAFF_INVITE_NOT_APPLIED');
+    assert.equal(invite.body.applied, false);
+    assert.equal(invite.body.backend, 'catalog_only');
+    assert.equal(JSON.stringify(invite.body).includes(invited), false);
+    assert.match(events.join('\n'), /STAFF_INVITE_NOT_APPLIED/);
+    assert.equal(events.join('\n').includes(invited), false);
+
+    const withoutMfa = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal1')),
+      body,
+    }, ports());
+    assert.equal(withoutMfa.status, 403);
+    assert.equal(withoutMfa.body.error, 'MFA_REQUIRED');
+
+    const withoutPermission = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/revoke',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body,
+    }, ports({
+      async loadOwner() {
+        return { id: OWNER, status: 'active', permissions: ['brands.read'] };
+      },
+    }));
+    assert.equal(withoutPermission.status, 403);
+    assert.equal(withoutPermission.body.error, 'OWNER_PERMISSION_DENIED');
+
+    const otherBrand = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { ...body, brandCode: '002' },
+    }, ports());
+    assert.equal(otherBrand.status, 403);
+    assert.equal(otherBrand.body.error, 'BRAND_NOT_ASSIGNED');
+
+    const namedSubject = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { ...body, staffSubject: 'Демо Кассир' },
+    }, ports());
+    assert.equal(namedSubject.status, 400);
+    assert.equal(namedSubject.body.error, 'STAFF_SUBJECT_INVALID');
+
+    const cashierStaff = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { ...body, role: 'cashier', permissions: ['staff'] },
+    }, ports());
+    assert.equal(cashierStaff.status, 400);
+    assert.equal(cashierStaff.body.error, 'STAFF_PERMISSION_DENIED');
+
+    const securityBalances = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { ...body, role: 'security', permissions: ['balances'] },
+    }, ports());
+    assert.equal(securityBalances.status, 400);
+    assert.equal(securityBalances.body.error, 'STAFF_PERMISSION_DENIED');
+
+    const revoke = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/revoke',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { brandCode: '001', staffSubject: STAFF, role: 'manager', permissions: ['players'] },
+    }, ports());
+    assert.equal(revoke.status, 409);
+    assert.equal(revoke.body.error, 'STAFF_REVOKE_NOT_APPLIED');
+    assert.equal(revoke.body.applied, false);
+    assert.equal(JSON.stringify(revoke.body).includes(STAFF), false);
+
+    const suspendMissing = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/suspend',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { brandCode: '001', staffSubject: invited, role: 'manager', permissions: [] },
+    }, ports());
+    assert.equal(suspendMissing.status, 403);
+    assert.equal(suspendMissing.body.error, 'STAFF_GRANT_NOT_FOUND');
+
+    const registered = model();
+    registered.brandOwners = [
+      { ownerId: OWNER, brandCode: '001' },
+      { ownerId: OWNER, brandCode: '002' },
+    ];
+    registered.grants = [
+      { brandCode: '001', role: 'manager', staffSubject: STAFF, status: null },
+    ];
+    const ryxoInvite = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { brandCode: '002', staffSubject: STAFF, role: 'cashier', permissions: ['balances'] },
+    }, ports({
+      async loadModel() {
+        return registered;
+      },
+    }));
+    assert.equal(ryxoInvite.status, 403);
+    assert.equal(ryxoInvite.body.error, 'CROSS_BRAND_ACCESS_DENIED');
+
+    const freshRyxo = '00000000-0000-4000-8000-0000000000d4';
+    const ryxoNew = await handleGroupOwnerRequest({
+      method: 'POST',
+      pathname: '/api/group-owner/staff/invite',
+      cookie: cookie(token(OWNER, 'aal2')),
+      body: { brandCode: '002', staffSubject: freshRyxo, role: 'security', permissions: ['players'] },
+    }, ports({
+      async loadModel() {
+        return registered;
+      },
+    }));
+    assert.equal(ryxoNew.status, 409);
+    assert.equal(ryxoNew.body.error, 'STAFF_INVITE_NOT_APPLIED');
+    assert.equal(ryxoNew.body.applied, false);
+    assert.equal(ryxoNew.body.backend, 'not_connected');
+    assert.equal(JSON.stringify(ryxoNew.body).includes(freshRyxo), false);
+
+    const ui = readFileSync(join(root, 'src', 'group-owner', 'GroupOwnerApp.tsx'), 'utf8');
+    assert.equal(ui.includes('/api/group-owner/staff/invite'), false);
+    assert.equal(ui.includes('/api/group-owner/staff/revoke'), false);
+    assert.equal(ui.includes('/api/group-owner/staff/suspend'), false);
   });
 
   it('fails closed when the schema is not exposed and strips private fields', async () => {

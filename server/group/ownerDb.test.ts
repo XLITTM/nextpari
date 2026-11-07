@@ -105,6 +105,9 @@ describe('group control reader contract', () => {
     assert.deepEqual(owner?.permissions, ['brands.read']);
     const model = await read.loadModel(OWNER);
     assert.deepEqual(model.brands.map((brand) => brand.code), ['001']);
+    const grantSql = calls.map((call) => call.text).find((text) => text.includes('brand_staff_grants')) ?? '';
+    assert.match(grantSql, /"brand_code", "role", "staff_subject"/);
+    assert.equal(grantSql.includes('"status"'), false);
     const sql = calls.map((call) => call.text).join('\n');
     assert.match(sql, /"auth_user_id" = \$1 OR "id" = \$1/);
     assert.equal(sql.includes('select *'), false);
@@ -123,6 +126,22 @@ describe('group control reader contract', () => {
       () => prepareGroupRead(queryFrom([{ table_name: 'brands', column_name: 'code' }]).query),
       (error: unknown) => error instanceof GroupControlError && error.code === 'GROUP_COLUMN_MISMATCH',
     );
+  });
+
+  it('selects staff status only when the live catalog already has that column', async () => {
+    const catalog = liveColumns();
+    catalog.push({ table_name: 'brand_staff_grants', column_name: 'status' });
+    const { query, calls } = queryFrom(catalog, (text) => (
+      text.includes('brand_staff_grants')
+        ? [{ brand_code: '001', role: 'security', staff_subject: '00000000-0000-4000-8000-0000000000b2', status: 'suspended' }]
+        : []
+    ));
+    const read = await prepareGroupRead(query);
+    const loaded = await read.loadModel(OWNER);
+    const grantSql = calls.map((call) => call.text).find((text) => text.includes('brand_staff_grants')) ?? '';
+    assert.match(grantSql, /"status"/);
+    assert.equal(loaded.grants[0]?.role, 'security');
+    assert.equal(loaded.grants[0]?.status, 'suspended');
   });
 
   it('uses id when that is the live owner subject column', async () => {
@@ -247,6 +266,16 @@ describe('group control reader contract', () => {
     const grants = sql.split('\n').filter((line) => line.startsWith('GRANT SELECT'));
     assert.equal(grants.some((line) => /treasury|wallets|profiles/i.test(line)), false);
     assert.match(sql, /REVOKE ALL ON ALL FUNCTIONS IN SCHEMA group_control/);
+    const staffSql = readFileSync(join(root, 'server/group/sql/procedures/004_group_staff_access.sql'), 'utf8');
+    assert.match(staffSql, /DO NOT APPLY/);
+    assert.equal(migrations.some((name) => name.includes('group_staff_access')), false);
+    assert.equal(/PASSWORD\s+'[^']+'/i.test(staffSql), false);
+    assert.equal(staffSql.includes('GRANT INSERT'), false);
+    assert.equal(staffSql.includes('GRANT UPDATE'), false);
+    assert.equal(staffSql.includes('GRANT DELETE'), false);
+    assert.equal(/DISABLE ROW LEVEL SECURITY/i.test(staffSql), false);
+    assert.match(staffSql, /ENABLE ROW LEVEL SECURITY/);
+    assert.equal(staffSql.includes('@'), false);
     const draft = readFileSync(join(root, 'server/group/sql/drafts/001_group_control_plane.sql'), 'utf8');
     assert.equal(readFileSync(join(root, 'server/group/ownerDb.ts'), 'utf8').includes(draft.slice(0, 40)), false);
   });

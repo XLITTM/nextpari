@@ -1,4 +1,4 @@
-import { OWNER_PERMISSIONS, type BrandStaffGrant, type StaffRole } from '../../server/group/access.ts';
+import { OWNER_PERMISSIONS, ROLE_PERMISSIONS, type BrandResource, type BrandStaffGrant, type StaffRole } from '../../server/group/access.ts';
 import { GROUP_BRANDS, type BrandCode } from '../../server/group/catalog.ts';
 import { aggregateGroupReport, type BrandOperationalSnapshot, type BrandReport, type GroupReport } from '../../server/group/reporting.ts';
 import type { DemoAuditEvent, DemoPlayer } from './demoData.ts';
@@ -44,7 +44,10 @@ export function validateEmployeeDraft(draft: EmployeeDraft): EmployeeField[] {
   }
   if (!STAFF_ROLES.includes(draft.role as StaffRole)) errors.push('role');
   const permissions = new Set(draft.permissions);
-  if (permissions.size === 0 || [...permissions].some((item) => !STAFF_PERMISSIONS.includes(item as StaffPermission))) {
+  const allowed = STAFF_ROLES.includes(draft.role as StaffRole)
+    ? ROLE_PERMISSIONS[draft.role as StaffRole]
+    : STAFF_PERMISSIONS;
+  if (permissions.size === 0 || [...permissions].some((item) => !allowed.includes(item as BrandResource))) {
     errors.push('permissions');
   }
   if (draft.status !== 'active' && draft.status !== 'suspended') errors.push('status');
@@ -68,7 +71,7 @@ export function employeeFieldMessage(field: EmployeeField): string {
     case 'role':
       return 'Выберите роль: менеджер, кассир или безопасность.';
     case 'permissions':
-      return 'Отметьте хотя бы одно право.';
+      return 'Отметьте права, которые разрешены этой роли.';
     case 'status':
       return 'Выберите статус.';
     default:
@@ -208,6 +211,25 @@ export function statusLabel(status: string): string {
     default:
       return status;
   }
+}
+
+export function rolePermissionText(role: StaffRole): string {
+  return ROLE_PERMISSIONS[role].map((permission) => permissionLabel(permission)).join(', ');
+}
+
+export function grantStatusLabel(
+  status: 'active' | 'suspended' | 'revoked' | null | undefined,
+  brandStatus: string | undefined,
+): string {
+  const named = status === 'active'
+    ? 'Активен'
+    : status === 'suspended'
+      ? 'Приостановлен'
+      : status === 'revoked'
+        ? 'Отозван'
+        : 'Статус не указан';
+  if (brandStatus && brandStatus !== 'active') return `${named}. Бэкенд не подключён`;
+  return named;
 }
 
 export function roleLabel(role: StaffRole): string {
