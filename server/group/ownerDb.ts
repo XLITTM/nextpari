@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import tls from 'node:tls';
 import pg from 'pg';
 import { GroupControlError } from './errors.js';
 import { mapGroupRows } from './ownerHttp.js';
@@ -76,37 +78,83 @@ WHERE n.nspname = 'group_control'
 LIMIT 1
 `.trim();
 
+const PEM_CERTIFICATES = /-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g;
+
+export interface ReaderTlsOptions {
+  rejectUnauthorized: true;
+  servername: string;
+  ca?: string[];
+}
+
 export interface ReaderPoolSettings {
   connectionString: string;
-  ssl: {
-    rejectUnauthorized: boolean;
-    servername: string;
-    checkServerIdentity?: () => undefined;
-  };
+  ssl: ReaderTlsOptions;
+}
+
+function trustedRootCert(source: string): string {
+  const trimmed = source.trim();
+  if (trimmed.includes('PRIVATE KEY') || /postgres(ql)?:\/\//i.test(trimmed)) {
+    throw new GroupControlError('GROUP_DATABASE_SSL');
+  }
+  const inline = trimmed.match(PEM_CERTIFICATES);
+  if (inline) return inline.join('\n');
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed)) throw new GroupControlError('GROUP_DATABASE_SSL');
+  let fileText = '';
+  try {
+    fileText = readFileSync(trimmed, 'utf8');
+  } catch {
+    throw new GroupControlError('GROUP_DATABASE_SSL');
+  }
+  if (fileText.includes('PRIVATE KEY')) throw new GroupControlError('GROUP_DATABASE_SSL');
+  const blocks = fileText.match(PEM_CERTIFICATES);
+  if (!blocks) throw new GroupControlError('GROUP_DATABASE_SSL');
+  return blocks.join('\n');
 }
 
 /**
- * pg 8.23 parses sslmode=require as verify-full and emits a warning even when
- * Pool is also given an ssl object, because the connection string overwrites it.
- * Strip sslmode here and apply libpq's meaning: require encrypts, verify-full checks the name.
+ * pg parses sslmode from the connection string after Pool is constructed and
+ * replaces any ssl object supplied beside it. The modes require, prefer, and
+ * verify-ca are removed here. Every accepted mode is then verify-full:
+ * the certificate chain and the hostname are both checked.
+ * A Supabase root from sslrootcert or GROUP_CONTROL_DATABASE_SSL_ROOT_CERT is
+ * added to Node's public trust store. It does not replace that store and it
+ * does not disable verification.
  */
-export function readerPoolSettings(connectionString: string): ReaderPoolSettings {
+export function readerPoolSettings(connectionString: string, rootCertSource?: string): ReaderPoolSettings {
   assertReaderConnection(connectionString);
+  if ((process.env.VITE_GROUP_CONTROL_DATABASE_SSL_ROOT_CERT ?? '').trim()) {
+    throw new GroupControlError('GROUP_DATABASE_SSL');
+  }
   const url = new URL(connectionString);
-  const mode = (url.searchParams.get('sslmode') ?? 'require').toLowerCase();
-  url.searchParams.delete('sslmode');
-  url.searchParams.delete('uselibpqcompat');
-  const servername = url.hostname;
-  if (mode === 'verify-full') {
-    return { connectionString: url.toString(), ssl: { rejectUnauthorized: true, servername } };
+  const mode = (url.searchParams.get('sslmode') ?? 'verify-full').toLowerCase();
+  if (mode === 'disable' || mode === 'allow' || mode === 'prefer') {
+    throw new GroupControlError('GROUP_DATABASE_SSL');
   }
-  if (mode === 'verify-ca') {
-    return {
-      connectionString: url.toString(),
-      ssl: { rejectUnauthorized: true, servername, checkServerIdentity: () => undefined },
-    };
+  const rootFromUrl = url.searchParams.get('sslrootcert') ?? '';
+  for (const key of ['sslmode', 'uselibpqcompat', 'sslrootcert', 'sslcert', 'sslkey', 'ssl']) {
+    url.searchParams.delete(key);
   }
-  return { connectionString: url.toString(), ssl: { rejectUnauthorized: false, servername } };
+  const source = (rootCertSource ?? rootFromUrl).trim();
+  const ssl: ReaderTlsOptions = {
+    rejectUnauthorized: true,
+    servername: url.hostname,
+  };
+  if (source) ssl.ca = [...tls.rootCertificates, trustedRootCert(source)];
+  return { connectionString: url.toString(), ssl };
+}
+
+export function readerPoolConfig(connectionString: string, rootCertSource?: string): pg.PoolConfig {
+  const settings = readerPoolSettings(connectionString, rootCertSource);
+  return {
+    connectionString: settings.connectionString,
+    max: 2,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 5_000,
+    allowExitOnIdle: true,
+    ssl: settings.ssl,
+    application_name: 'group-owner-reader',
+    query_timeout: 5_000,
+  };
 }
 
 export function classifyReaderError(error: unknown): string {
@@ -138,8 +186,11 @@ export function assertReaderConnection(connectionString: string): void {
   if (bare !== GROUP_READER_ROLE || FORBIDDEN_USERS.has(bare) || !user.startsWith(GROUP_READER_ROLE)) {
     throw new GroupControlError('GROUP_SCHEMA_UNAVAILABLE');
   }
-  if (!connectionString.includes(GROUP_PROJECT_REF) || /sslmode=disable/i.test(url.search) || !url.password) {
+  if (!connectionString.includes(GROUP_PROJECT_REF) || !url.password) {
     throw new GroupControlError('GROUP_SCHEMA_UNAVAILABLE');
+  }
+  if (/sslmode=disable/i.test(url.search) || /sslmode=allow/i.test(url.search) || /uselibpqcompat=true/i.test(url.search)) {
+    throw new GroupControlError('GROUP_DATABASE_SSL');
   }
 }
 
@@ -275,19 +326,10 @@ export async function prepareGroupRead(query: GroupQuery): Promise<PreparedGroup
 let pool: pg.Pool | null = null;
 
 export function readerQueryFromEnv(): GroupQuery {
-  const settings = readerPoolSettings((process.env.GROUP_CONTROL_DATABASE_URL ?? '').trim());
+  const configured = (process.env.GROUP_CONTROL_DATABASE_SSL_ROOT_CERT ?? '').trim();
+  const config = readerPoolConfig((process.env.GROUP_CONTROL_DATABASE_URL ?? '').trim(), configured || undefined);
   if (!pool) {
-    pool = new pg.Pool({
-      connectionString: settings.connectionString,
-      max: 2,
-      idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 5_000,
-      allowExitOnIdle: true,
-      ssl: settings.ssl,
-      application_name: 'group-owner-reader',
-      statement_timeout: 5_000,
-      query_timeout: 5_000,
-    });
+    pool = new pg.Pool(config);
   }
   return async (text, params) => {
     try {

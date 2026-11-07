@@ -58,6 +58,8 @@ GRANT SELECT (brand_code, currency, player_count, operational_status, deposits, 
   ON group_control.brand_report_snapshots TO group_control_reader;
 GRANT SELECT (id, actor, action, brand_code, created_at) ON group_control.audit_events TO group_control_reader;
 
+-- The transaction pooler rejects statement_timeout in the startup packet.
+-- This role default applies on the database side instead.
 ALTER ROLE group_control_reader SET statement_timeout = '5s';
 ALTER ROLE group_control_reader SET search_path = group_control;
 
