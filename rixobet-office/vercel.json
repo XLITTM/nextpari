@@ -1,0 +1,20 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "functions": {
+    "api/rixobet/office/v1.js": {
+      "maxDuration": 15,
+      "includeFiles": "api/rixobet/office/bundle.js"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/rixobet/office/v1/:path*",
+      "destination": "/api/rixobet/office/v1?rixo_path=/:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
