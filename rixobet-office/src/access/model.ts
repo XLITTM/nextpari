@@ -104,6 +104,7 @@ export function isPermission(value: unknown): value is Permission {
 
 export type FieldKind =
   | 'email'
+  | 'login'
   | 'personName'
   | 'password'
   | 'amount'

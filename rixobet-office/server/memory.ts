@@ -46,6 +46,18 @@ export function createMemoryOffice(seed: MemorySeed): OfficeRepository {
       row.invitationConsumedAt = nowIso;
       return { ...row };
     },
+    async issueOwnerInvitation(login, digest, expiresAt) {
+      const row = staff.find((entry) => entry.email.toLowerCase() === login.toLowerCase());
+      if (!row || row.role !== 'owner' || row.status !== 'invited' || row.brandCode !== '002') return null;
+      if (row.authUserId !== null || row.identityVerifiedAt) return null;
+      row.invitationTokenHash = digest;
+      row.invitationExpiresAt = expiresAt;
+      row.invitationConsumedAt = null;
+      row.passwordHash = null;
+      row.mfaSecret = null;
+      row.mfaLastStep = null;
+      return { ...row };
+    },
     async enrollInvitedOwner(id, passwordHash, mfaSecret) {
       const row = staff.find((entry) => entry.id === id);
       if (!row || row.role !== 'owner' || row.status !== 'invited' || row.authUserId !== null) return false;
@@ -137,6 +149,7 @@ export function createMemoryOffice(seed: MemorySeed): OfficeRepository {
     async flags() {
       return flags.map((row) => ({ ...row }));
     },
+    async end() {},
   };
   staffRows.set(repository, staff);
   return repository;

@@ -9,7 +9,7 @@ import { Wordmark } from './mark';
 import { StatusBanner } from './Status';
 
 const fields = [
-  { name: 'email', label: 'Почта', kind: 'email', required: true, autoComplete: 'username' },
+  { name: 'login', label: 'Логин', kind: 'login', required: true, autoComplete: 'username' },
   { name: 'password', label: 'Пароль', kind: 'password', required: true, autoComplete: 'current-password' },
 ] as const;
 
@@ -17,7 +17,7 @@ export function LoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState('');
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [challengeId, setChallengeId] = useState<string | null>(null);
@@ -37,14 +37,14 @@ export function LoginPage() {
 
   async function onLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextErrors = validateFields(fields, { email, password });
+    const nextErrors = validateFields(fields, { login, password });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) {
       setFailure(null);
       return;
     }
     setPending(true);
-    const result = await auth.login(email.trim(), password);
+    const result = await auth.login(login.trim(), password);
     setPending(false);
     if (!result.ok) {
       setChallengeId(null);
@@ -80,7 +80,7 @@ export function LoginPage() {
           {BRAND.name} Office · бренд {BRAND.code} · {BRAND.staffDomain}
         </p>
         <h1>Вход для сотрудников</h1>
-        <p className="rx-lead">Сессия выдаётся сервером после пароля. Код MFA запрашивается только если он включён. Роль из адреса не принимается.</p>
+        <p className="rx-lead">Сессия выдаётся сервером после логина и пароля. Код MFA запрашивается только если он включён. Роль из адреса не принимается.</p>
         {!auth.ready ? <p className="rx-wait">Проверка сессии…</p> : null}
         {banner ? (
           <StatusBanner
@@ -94,19 +94,19 @@ export function LoginPage() {
         ) : null}
         <form onSubmit={onLogin} noValidate>
           <div className="rx-field">
-            <label htmlFor="login-email">Почта</label>
+            <label htmlFor="login-email">Логин</label>
             <input
               id="login-email"
-              name="email"
+              name="login"
               autoComplete="username"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              aria-invalid={Boolean(errors.email)}
-              aria-describedby={errors.email ? 'login-email-error' : undefined}
+              value={login}
+              onChange={(event) => setLogin(event.target.value)}
+              aria-invalid={Boolean(errors.login)}
+              aria-describedby={errors.login ? 'login-email-error' : undefined}
             />
-            {errors.email ? (
+            {errors.login ? (
               <small id="login-email-error" role="alert">
-                {errors.email}
+                {errors.login}
               </small>
             ) : null}
           </div>

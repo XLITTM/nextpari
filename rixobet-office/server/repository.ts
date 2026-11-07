@@ -50,6 +50,7 @@ export interface OfficeRepository {
   findStaffById(id: string): Promise<StaffRecord | null>;
   listInvitedOwners(): Promise<StaffRecord[]>;
   claimInvitation(email: string, digest: string, nowIso: string): Promise<StaffRecord | null>;
+  issueOwnerInvitation(login: string, digest: string, expiresAt: string): Promise<StaffRecord | null>;
   enrollInvitedOwner(id: string, passwordHash: string, mfaSecret: string | null): Promise<boolean>;
   verifyInvitedOwner(id: string, identityVerifiedAt: string, mfaLastStep: number | null): Promise<boolean>;
   recordMfaStep(id: string, step: number): Promise<void>;
@@ -67,6 +68,7 @@ export interface OfficeRepository {
   readSession(secretHash: string): Promise<SessionRecord | null>;
   revokeSession(secretHash: string, revokedAt: string): Promise<void>;
   flags(): Promise<FlagRecord[]>;
+  end(): Promise<void>;
 }
 
 export function isVerifiedRole(role: string): role is OfficeRole {

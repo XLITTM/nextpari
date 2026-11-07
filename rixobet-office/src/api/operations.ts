@@ -30,7 +30,7 @@ export async function requestLogin(
     const body = await officeRequest('/auth/login', {
       method: 'POST',
       action: 'auth.login',
-      body: { brandCode: BRAND.code, email, password },
+      body: { brandCode: BRAND.code, login: email, password },
     });
     const result = parseLoginResult(body);
     if (!result) return { ok: false, reason: 'invalid' };
@@ -78,7 +78,7 @@ export async function beginActivation(
     const body = await officeRequest('/auth/activation', {
       method: 'POST',
       action: 'auth.activation',
-      body: { brandCode: BRAND.code, email, invitationToken, password, enrollMfa },
+      body: { brandCode: BRAND.code, login: email, invitationToken, password, enrollMfa },
     });
     const started = parseActivationStart(body);
     if (started) return { ok: true, data: started };
@@ -94,7 +94,7 @@ export async function finishActivation(email: string, code: string): Promise<Off
     const body = await officeRequest('/auth/activation/confirm', {
       method: 'POST',
       action: 'auth.activation.confirm',
-      body: { brandCode: BRAND.code, email, code },
+      body: { brandCode: BRAND.code, login: email, code },
     });
     if (parseActivationComplete(body) !== 'identity_verified') return { ok: false, reason: 'invalid' };
     return { ok: true, data: { verified: true } };

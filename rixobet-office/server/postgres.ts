@@ -139,6 +139,24 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
       const row = result.rows[0];
       return row ? mapStaff(row) : null;
     },
+    async issueOwnerInvitation(login, digest, expiresAt) {
+      const result = await pool.query(
+        `update ${staffTable}
+         set invitation_token_hash = $2,
+             invitation_expires_at = $3::timestamptz,
+             invitation_consumed_at = null,
+             password_hash = null,
+             mfa_secret = null,
+             mfa_last_step = null
+         where lower(email) = lower($1)
+           and brand_code = '002' and role = 'owner' and status = 'invited'
+           and auth_user_id is null and identity_verified_at is null
+         returning ${STAFF_FIELDS}`,
+        [login, digest, expiresAt],
+      );
+      const issued = result.rows[0];
+      return issued ? mapStaff(issued) : null;
+    },
     async enrollInvitedOwner(id, passwordHash, mfaSecret) {
       const result = await pool.query(
         `update ${staffTable}
@@ -300,6 +318,9 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
         flags.push({ key, brandCode, enabled: row.enabled });
       }
       return flags;
+    },
+    async end() {
+      await pool.end();
     },
   };
 }

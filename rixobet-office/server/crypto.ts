@@ -110,6 +110,10 @@ export function passwordAccepted(password: string): boolean {
   return password.length >= 12 && password.length <= 128 && !/[\u0000-\u001F]/.test(password);
 }
 
+export function loginAccepted(login: string): boolean {
+  return login.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(login);
+}
+
 export function emailAccepted(email: string): boolean {
-  return email.length <= 120 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  return loginAccepted(email);
 }

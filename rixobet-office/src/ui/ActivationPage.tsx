@@ -46,10 +46,10 @@ export function ActivationPage() {
     event.preventDefault();
     const nextErrors = validateFields(
       [
-        { name: 'email', label: 'Почта', kind: 'email', required: true },
+        { name: 'login', label: 'Логин', kind: 'login', required: true },
         { name: 'password', label: 'Пароль', kind: 'password', required: true },
       ],
-      { email, password },
+      { login: email, password },
     );
     if (!TOKEN.test(token)) nextErrors.token = 'Укажите приглашение';
     setErrors(nextErrors);
@@ -100,7 +100,7 @@ export function ActivationPage() {
         </p>
         <h1>Активация владельца</h1>
         <p className="rx-lead">
-          Приглашение одноразовое и действует ограниченное время. Сессия появится после отдельного входа. MFA можно включить сейчас или пропустить.
+          Приглашение одноразовое и передаётся администратором. Почта не используется и письмо не отправляется. MFA можно включить или пропустить.
         </p>
         {banner ? <StatusBanner reason={banner} /> : null}
         {verified ? (
@@ -108,19 +108,19 @@ export function ActivationPage() {
         ) : (
           <form onSubmit={onActivate} noValidate>
             <div className="rx-field">
-              <label htmlFor="activation-email">Почта</label>
+              <label htmlFor="activation-email">Логин</label>
               <input
                 id="activation-email"
-                name="email"
+                name="login"
                 autoComplete="username"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
-                aria-invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? 'activation-email-error' : undefined}
+                aria-invalid={Boolean(errors.login)}
+                aria-describedby={errors.login ? 'activation-email-error' : undefined}
               />
-              {errors.email ? (
+              {errors.login ? (
                 <small id="activation-email-error" role="alert">
-                  {errors.email}
+                  {errors.login}
                 </small>
               ) : null}
             </div>

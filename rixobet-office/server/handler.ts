@@ -6,9 +6,9 @@ import { operationalFlagsClosed } from './catalog';
 import {
   createMfaSecret,
   dummyPasswordHash,
-  emailAccepted,
   hashPassword,
   hashSecret,
+  loginAccepted,
   passwordAccepted,
   randomToken,
   totpMatches,
@@ -60,6 +60,13 @@ interface ReadyOffice {
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function loginOf(body: Record<string, unknown>): string {
+  const login = text(body.login).trim().toLowerCase();
+  const email = text(body.email).trim().toLowerCase();
+  if (login && email && login !== email) return '';
+  return login || email;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -185,11 +192,11 @@ async function issueSession(office: ReadyOffice, staff: StaffRecord): Promise<Of
 async function login(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== BRAND.code) return denied(403);
-  const email = text(body.email).trim().toLowerCase();
+  const login = loginOf(body);
   const password = text(body.password);
-  if (!limitsFor(office.repository).login.allow(`${clientIp(request.headers)}|${email}`, office.now())) return limited();
-  if (!emailAccepted(email) || !passwordAccepted(password)) return denied(401);
-  const staff = await office.repository.findStaffByEmail(email);
+  if (!limitsFor(office.repository).login.allow(`${clientIp(request.headers)}|${login}`, office.now())) return limited();
+  if (!loginAccepted(login) || !passwordAccepted(password)) return denied(401);
+  const staff = await office.repository.findStaffByEmail(login);
   const hash = staff?.passwordHash ?? dummyPasswordHash();
   const passwordOk = verifyPassword(password, hash);
   if (!staff || staff.brandCode !== BRAND.code || !passwordOk) return denied(401);
@@ -235,14 +242,14 @@ async function confirmMfa(office: ReadyOffice, request: OfficeRequest, body: Rec
 async function activation(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== undefined && body.brandCode !== BRAND.code) return denied(403);
-  const email = text(body.email).trim().toLowerCase();
+  const login = loginOf(body);
   const token = text(body.invitationToken);
   const password = text(body.password);
-  if (!limitsFor(office.repository).activation.allow(`${clientIp(request.headers)}|${email}`, office.now())) return limited();
-  if (!emailAccepted(email) || token.length < 20 || token.length > 200 || !/^[A-Za-z0-9_-]+$/.test(token) || !passwordAccepted(password)) {
+  if (!limitsFor(office.repository).activation.allow(`${clientIp(request.headers)}|${login}`, office.now())) return limited();
+  if (!loginAccepted(login) || token.length < 20 || token.length > 200 || !/^[A-Za-z0-9_-]+$/.test(token) || !passwordAccepted(password)) {
     return denied(401);
   }
-  const staff = await office.repository.claimInvitation(email, hashSecret(office.pepper, token), new Date(office.now()).toISOString());
+  const staff = await office.repository.claimInvitation(login, hashSecret(office.pepper, token), new Date(office.now()).toISOString());
   if (!staff) return denied(401);
   const secret = body.enrollMfa === true ? createMfaSecret() : null;
   const enrolled = await office.repository.enrollInvitedOwner(staff.id, hashPassword(password), secret);
@@ -257,7 +264,7 @@ async function activation(office: ReadyOffice, request: OfficeRequest, body: Rec
     body: {
       brandCode: BRAND.code,
       status: 'verification_required',
-      otpauthUri: `otpauth://totp/RIXO%20BET:${encodeURIComponent(email)}?secret=${secret}&issuer=RIXO%20BET&digits=6&period=30`,
+      otpauthUri: `otpauth://totp/RIXO%20BET:${encodeURIComponent(login)}?secret=${secret}&issuer=RIXO%20BET&digits=6&period=30`,
     },
     setCookie: [],
   };
@@ -266,9 +273,9 @@ async function activation(office: ReadyOffice, request: OfficeRequest, body: Rec
 async function confirmActivation(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== undefined && body.brandCode !== BRAND.code) return denied(403);
-  const email = text(body.email).trim().toLowerCase();
-  if (!limitsFor(office.repository).activation.allow(`${clientIp(request.headers)}|confirm|${email}`, office.now())) return limited();
-  const staff = await office.repository.findStaffByEmail(email);
+  const login = loginOf(body);
+  if (!limitsFor(office.repository).activation.allow(`${clientIp(request.headers)}|confirm|${login}`, office.now())) return limited();
+  const staff = await office.repository.findStaffByEmail(login);
   if (!staff || staff.brandCode !== BRAND.code || staff.status !== 'invited' || staff.authUserId !== null) return denied(401);
   if (!staff.invitationConsumedAt || !staff.passwordHash || !staff.mfaSecret || staff.identityVerifiedAt) return denied(401);
   const step = totpMatches(staff.mfaSecret, text(body.code), office.now(), staff.mfaLastStep);

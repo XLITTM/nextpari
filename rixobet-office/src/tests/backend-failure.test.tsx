@@ -120,7 +120,7 @@ describe('missing backend', () => {
     expect((await screen.findAllByText('Заполните поле')).length).toBeGreaterThan(0);
     expect(fetchMock.mock.calls.length).toBe(callsAfterProbe);
 
-    fireEvent.change(screen.getByLabelText('Почта'), { target: { value: 'person@rixobet.com' } });
+    fireEvent.change(screen.getByLabelText('Логин'), { target: { value: 'person@rixobet.com' } });
     fireEvent.change(screen.getByLabelText('Пароль'), { target: { value: 'long-password-1' } });
     fireEvent.submit(form);
     expect(await screen.findByText('Не подключено')).toBeTruthy();
@@ -128,7 +128,8 @@ describe('missing backend', () => {
     expect(screen.queryByRole('heading', { name: 'Обзор' })).toBeNull();
     const loginCall = fetchMock.mock.calls.find((call) => String(call[0]).endsWith('/auth/login'));
     if (!loginCall) throw new Error('login was not requested');
-    const body = JSON.parse(String(loginCall[1]?.body)) as { role?: string; brandCode?: string };
+    const body = JSON.parse(String(loginCall[1]?.body)) as { role?: string; brandCode?: string; login?: string };
+    expect(body.login).toBe('person@rixobet.com');
     expect(body.brandCode).toBe('002');
     expect(body.role).toBeUndefined();
   });

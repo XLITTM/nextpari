@@ -26,6 +26,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc --noEmit && vite build && node scripts/assert-no-secrets.mjs --require-dist",
-    "test:bundle": "node scripts/assert-no-secrets.mjs --require-dist"
+    "test:bundle": "node scripts/assert-no-secrets.mjs --require-dist",
+    "issue-owner-invitation": "node node_modules/vite-node/vite-node.mjs server/issueOwnerInvitationCli.ts"
   }
 }

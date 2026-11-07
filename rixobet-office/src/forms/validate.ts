@@ -25,6 +25,8 @@ function fieldError(field: FieldSpec, value: string): string | null {
   switch (field.kind) {
     case 'email':
       return value.length <= 120 && EMAIL.test(value) ? null : 'Укажите почту';
+    case 'login':
+      return value.length <= 120 && EMAIL.test(value) ? null : 'Укажите логин';
     case 'personName':
       return NAME.test(value) ? null : 'Укажите имя';
     case 'password':
