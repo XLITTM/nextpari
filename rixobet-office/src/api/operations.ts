@@ -2,7 +2,7 @@ import { BRAND } from '../brand';
 import type { FormSpec, OfficeRoute } from '../access/model';
 import { parseSession, type OfficeSession, type ParsedSession } from '../access/session';
 import { OfficeFailure, officeRequest, type FailureReason } from './http';
-import { parseAcceptance, parseActivationComplete, parseActivationStart, parseMfaChallenge, parsePage, type Acceptance, type PageData } from './parsers';
+import { parseAcceptance, parseActivationComplete, parseActivationStart, parseLoginResult, parsePage, type Acceptance, type PageData } from './parsers';
 
 export type OfficeCall<T> = { ok: true; data: T } | { ok: false; reason: FailureReason };
 
@@ -22,16 +22,19 @@ export async function restoreSession(): Promise<OfficeCall<OfficeSession> & { em
   }
 }
 
-export async function requestLogin(email: string, password: string): Promise<OfficeCall<{ challengeId: string }>> {
+export async function requestLogin(
+  email: string,
+  password: string,
+): Promise<OfficeCall<{ kind: 'mfa'; challengeId: string } | { kind: 'session'; session: OfficeSession }>> {
   try {
     const body = await officeRequest('/auth/login', {
       method: 'POST',
       action: 'auth.login',
       body: { brandCode: BRAND.code, email, password },
     });
-    const challenge = parseMfaChallenge(body);
-    if (!challenge) return { ok: false, reason: 'invalid' };
-    return { ok: true, data: challenge };
+    const result = parseLoginResult(body);
+    if (!result) return { ok: false, reason: 'invalid' };
+    return { ok: true, data: result };
   } catch (error) {
     return { ok: false, reason: failure(error) };
   }
@@ -69,16 +72,18 @@ export async function beginActivation(
   email: string,
   invitationToken: string,
   password: string,
-): Promise<OfficeCall<{ otpauthUri: string }>> {
+  enrollMfa = false,
+): Promise<OfficeCall<{ otpauthUri: string } | { activated: true }>> {
   try {
     const body = await officeRequest('/auth/activation', {
       method: 'POST',
       action: 'auth.activation',
-      body: { brandCode: BRAND.code, email, invitationToken, password },
+      body: { brandCode: BRAND.code, email, invitationToken, password, enrollMfa },
     });
     const started = parseActivationStart(body);
-    if (!started) return { ok: false, reason: 'invalid' };
-    return { ok: true, data: started };
+    if (started) return { ok: true, data: started };
+    if (parseActivationComplete(body) === 'activated') return { ok: true, data: { activated: true } };
+    return { ok: false, reason: 'invalid' };
   } catch (error) {
     return { ok: false, reason: failure(error) };
   }
@@ -91,7 +96,7 @@ export async function finishActivation(email: string, code: string): Promise<Off
       action: 'auth.activation.confirm',
       body: { brandCode: BRAND.code, email, code },
     });
-    if (!parseActivationComplete(body)) return { ok: false, reason: 'invalid' };
+    if (parseActivationComplete(body) !== 'identity_verified') return { ok: false, reason: 'invalid' };
     return { ok: true, data: { verified: true } };
   } catch (error) {
     return { ok: false, reason: failure(error) };

@@ -61,7 +61,7 @@ describe('missing backend', () => {
     expect(parseAcceptance({ brandCode: '002', accepted: true, auditId: 'audit-123456', operationId: 'op-123456' }, 'other')).toBeNull();
   });
 
-  it('does not turn a password response into a session', async () => {
+  it('accepts a password session and rejects a mixed MFA payload', async () => {
     const sessionBody = {
       sessionId: 'fixture-owner-session',
       brandCode: '002',
@@ -80,7 +80,20 @@ describe('missing backend', () => {
       }),
     );
     const login = await requestLogin('person@rixobet.com', 'long-password-1');
-    expect(login.ok).toBe(false);
+    expect(login.ok).toBe(true);
+    if (login.ok) expect(login.data.kind).toBe('session');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).endsWith('/auth/login')) {
+          return jsonResponse({ ...sessionBody, status: 'mfa_required', challengeId: 'challenge-mixed-0001' });
+        }
+        return htmlResponse();
+      }),
+    );
+    const mixed = await requestLogin('person@rixobet.com', 'long-password-1');
+    expect(mixed.ok).toBe(false);
     const mfa = await confirmMfa('challenge-not-issued', '000000');
     expect(mfa.ok).toBe(false);
   });
@@ -239,10 +252,10 @@ describe('missing backend', () => {
     expect(await screen.findByText('Не подключено')).toBeTruthy();
     expect(screen.getByLabelText('Приглашение')).toHaveProperty('value', token);
     expect(screen.getByTestId('search').textContent).toBe('');
-    expect(screen.queryByText('Личность подтверждена. Войдите с паролем и кодом MFA.')).toBeNull();
+    expect(screen.queryByText('Учётная запись активирована. Войдите с паролем.')).toBeNull();
     expect(screen.queryByText(/otpauth:\/\//)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Продолжить' }));
     expect(await screen.findAllByRole('alert')).toBeTruthy();
-    expect(screen.queryByText('Личность подтверждена. Войдите с паролем и кодом MFA.')).toBeNull();
+    expect(screen.queryByText('Учётная запись активирована. Войдите с паролем.')).toBeNull();
   });
 });

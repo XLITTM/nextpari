@@ -52,7 +52,7 @@ export function LoginPage() {
       return;
     }
     setFailure(null);
-    setChallengeId(result.challengeId);
+    if ('challengeId' in result) setChallengeId(result.challengeId);
   }
 
   async function onMfa(event: FormEvent<HTMLFormElement>) {
@@ -80,7 +80,7 @@ export function LoginPage() {
           {BRAND.name} Office · бренд {BRAND.code} · {BRAND.staffDomain}
         </p>
         <h1>Вход для сотрудников</h1>
-        <p className="rx-lead">Сессия выдаётся сервером после пароля и кода MFA. Роль из адреса не принимается.</p>
+        <p className="rx-lead">Сессия выдаётся сервером после пароля. Код MFA запрашивается только если он включён. Роль из адреса не принимается.</p>
         {!auth.ready ? <p className="rx-wait">Проверка сессии…</p> : null}
         {banner ? (
           <StatusBanner

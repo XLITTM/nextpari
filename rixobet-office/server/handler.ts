@@ -14,7 +14,7 @@ import {
   totpMatches,
   verifyPassword,
 } from './crypto';
-import { isVerifiedRole, type OfficeRepository, type SessionRecord } from './repository';
+import { isVerifiedRole, type OfficeRepository, type SessionRecord, type StaffRecord } from './repository';
 import { requestOriginAllowed } from './origin';
 import { createLimiter } from './rateLimit';
 
@@ -160,6 +160,28 @@ function permissionsFor(role: OfficeRole): readonly Permission[] {
   return ROLE_CEILING[role];
 }
 
+async function issueSession(office: ReadyOffice, staff: StaffRecord): Promise<OfficeResponse> {
+  if (!isVerifiedRole(staff.role)) return denied(403);
+  if (!/^[A-Za-z0-9:_-]{4,80}$/.test(staff.id)) return denied(401);
+  if (!/^[\p{L}\p{N}][\p{L}\p{N}\s'.-]{0,79}$/u.test(staff.displayName)) return denied(401);
+  const token = randomToken(32);
+  const issuedAt = new Date(office.now()).toISOString();
+  const expiresAt = new Date(office.now() + SESSION_MS).toISOString();
+  const session = await office.repository.createSession({
+    staffId: staff.id,
+    secretHash: hashSecret(office.pepper, token),
+    expiresAt,
+    issuedAt,
+    mfaSatisfied: true,
+  });
+  if (session.brandCode !== BRAND.code || session.mfaSatisfied !== true || session.role !== staff.role) return denied(403);
+  return {
+    status: 200,
+    body: sessionBody(session, staff.role),
+    setCookie: [sessionCookie(token, Math.floor(SESSION_MS / 1000), office.secureCookie)],
+  };
+}
+
 async function login(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
   if (!(await officeReady(office))) return unavailable();
   if (body.brandCode !== BRAND.code) return denied(403);
@@ -172,15 +194,16 @@ async function login(office: ReadyOffice, request: OfficeRequest, body: Record<s
   const passwordOk = verifyPassword(password, hash);
   if (!staff || staff.brandCode !== BRAND.code || !passwordOk) return denied(401);
   if (!isVerifiedRole(staff.role)) return denied(403);
-  if (staff.status !== 'active' || !staff.identityVerifiedAt || !staff.mfaSecret || staff.authUserId !== null) {
-    return denied(401);
+  if (staff.status !== 'active' || !staff.identityVerifiedAt || staff.authUserId !== null) return denied(401);
+  if (staff.mfaSecret) {
+    const challenge = await office.repository.createChallenge(staff.id, new Date(office.now() + CHALLENGE_MS).toISOString());
+    return {
+      status: 200,
+      body: { brandCode: BRAND.code, status: 'mfa_required', challengeId: challenge.id },
+      setCookie: [],
+    };
   }
-  const challenge = await office.repository.createChallenge(staff.id, new Date(office.now() + CHALLENGE_MS).toISOString());
-  return {
-    status: 200,
-    body: { brandCode: BRAND.code, status: 'mfa_required', challengeId: challenge.id },
-    setCookie: [],
-  };
+  return issueSession(office, staff);
 }
 
 async function confirmMfa(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
@@ -206,22 +229,7 @@ async function confirmMfa(office: ReadyOffice, request: OfficeRequest, body: Rec
   const claimed = await office.repository.claimChallenge(challenge.id, new Date(office.now()).toISOString());
   if (!claimed) return denied(401);
   await office.repository.recordMfaStep(owner.id, step);
-  const token = randomToken(32);
-  const issuedAt = new Date(office.now()).toISOString();
-  const expiresAt = new Date(office.now() + SESSION_MS).toISOString();
-  const session = await office.repository.createSession({
-    staffId: owner.id,
-    secretHash: hashSecret(office.pepper, token),
-    expiresAt,
-    issuedAt,
-    mfaSatisfied: true,
-  });
-  if (session.brandCode !== BRAND.code || session.mfaSatisfied !== true) return denied(403);
-  return {
-    status: 200,
-    body: sessionBody(session, owner.role),
-    setCookie: [sessionCookie(token, Math.floor(SESSION_MS / 1000), office.secureCookie)],
-  };
+  return issueSession(office, owner);
 }
 
 async function activation(office: ReadyOffice, request: OfficeRequest, body: Record<string, unknown>): Promise<OfficeResponse> {
@@ -236,9 +244,14 @@ async function activation(office: ReadyOffice, request: OfficeRequest, body: Rec
   }
   const staff = await office.repository.claimInvitation(email, hashSecret(office.pepper, token), new Date(office.now()).toISOString());
   if (!staff) return denied(401);
-  const secret = createMfaSecret();
+  const secret = body.enrollMfa === true ? createMfaSecret() : null;
   const enrolled = await office.repository.enrollInvitedOwner(staff.id, hashPassword(password), secret);
   if (!enrolled) return unavailable();
+  if (!secret) {
+    const activated = await office.repository.verifyInvitedOwner(staff.id, new Date(office.now()).toISOString(), null);
+    if (!activated) return unavailable();
+    return { status: 200, body: { brandCode: BRAND.code, status: 'activated' }, setCookie: [] };
+  }
   return {
     status: 200,
     body: {

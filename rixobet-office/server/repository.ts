@@ -50,8 +50,8 @@ export interface OfficeRepository {
   findStaffById(id: string): Promise<StaffRecord | null>;
   listInvitedOwners(): Promise<StaffRecord[]>;
   claimInvitation(email: string, digest: string, nowIso: string): Promise<StaffRecord | null>;
-  enrollInvitedOwner(id: string, passwordHash: string, mfaSecret: string): Promise<boolean>;
-  verifyInvitedOwner(id: string, identityVerifiedAt: string, mfaLastStep: number): Promise<boolean>;
+  enrollInvitedOwner(id: string, passwordHash: string, mfaSecret: string | null): Promise<boolean>;
+  verifyInvitedOwner(id: string, identityVerifiedAt: string, mfaLastStep: number | null): Promise<boolean>;
   recordMfaStep(id: string, step: number): Promise<void>;
   createChallenge(staffId: string, expiresAt: string): Promise<ChallengeRecord>;
   readChallenge(id: string): Promise<ChallengeRecord | null>;

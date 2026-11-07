@@ -6,6 +6,7 @@ import type { OfficeSession } from '../access/session';
 export type Connection = 'checking' | 'disconnected' | 'ready';
 
 export type LoginOutcome =
+  | { ok: true; session: true }
   | { ok: true; challengeId: string }
   | { ok: false; reason: FailureReason };
 
@@ -48,6 +49,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string): Promise<LoginOutcome> => {
     const result = await requestLogin(email, password);
     if (!result.ok) return result;
+    if (result.data.kind === 'session') {
+      setSession(result.data.session);
+      setConnection('ready');
+      return { ok: true, session: true };
+    }
     return { ok: true, challengeId: result.data.challengeId };
   }, []);
 

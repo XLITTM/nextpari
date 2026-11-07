@@ -1,5 +1,6 @@
 import { BRAND } from '../brand';
 import type { PageKind } from '../access/model';
+import { parseSession, type OfficeSession } from '../access/session';
 
 export interface MetricItem {
   key: string;
@@ -126,8 +127,12 @@ export function parseActivationStart(input: unknown): { otpauthUri: string } | n
   return { otpauthUri: input.otpauthUri };
 }
 
-export function parseActivationComplete(input: unknown): boolean {
-  return isRecord(input) && input.brandCode === BRAND.code && input.status === 'identity_verified' && !('sessionId' in input);
+export function parseActivationComplete(input: unknown): 'activated' | 'identity_verified' | null {
+  if (!isRecord(input)) return null;
+  if (input.brandCode !== BRAND.code) return null;
+  if ('sessionId' in input || 'role' in input || 'permissions' in input) return null;
+  if (input.status === 'activated' || input.status === 'identity_verified') return input.status;
+  return null;
 }
 
 export function parseMfaChallenge(input: unknown): MfaChallenge | null {
@@ -137,4 +142,17 @@ export function parseMfaChallenge(input: unknown): MfaChallenge | null {
   const challengeId = token(input.challengeId, 12, 80);
   if (!challengeId) return null;
   return { challengeId };
+}
+
+export function parseLoginResult(
+  input: unknown,
+): { kind: 'mfa'; challengeId: string } | { kind: 'session'; session: OfficeSession } | null {
+  if (!isRecord(input)) return null;
+  if (input.status === 'mfa_required') {
+    if ('sessionId' in input || 'role' in input || 'permissions' in input) return null;
+    const challenge = parseMfaChallenge(input);
+    return challenge ? { kind: 'mfa', challengeId: challenge.challengeId } : null;
+  }
+  const session = parseSession(input);
+  return session.ok ? { kind: 'session', session: session.session } : null;
 }

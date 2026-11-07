@@ -282,6 +282,55 @@ describe('office authentication', () => {
     expect(restored.status).toBe(403);
   });
 
+  it('issues a password session for every office role when MFA is not enrolled', async () => {
+    for (const role of ['owner', 'manager', 'cashier', 'security'] as const) {
+      const member = staff({
+        id: `staff-${role}-plain`,
+        email: `${role}@office.rixobet.com`,
+        role,
+        displayName: 'Office User',
+        mfaSecret: null,
+        mfaLastStep: null,
+      });
+      const repository = createMemoryOffice({ staff: [member], flags: flags() });
+      const login = await handleOffice(
+        request({
+          method: 'POST',
+          path: '/auth/login',
+          body: { brandCode: '002', email: member.email, password: PASSWORD, role: 'owner' },
+        }),
+        office(repository),
+      );
+      expect(login.status).toBe(200);
+      expect(login.setCookie[0]).toContain('HttpOnly');
+      expect(login.setCookie[0]).toContain('Secure');
+      expect(login.setCookie[0]).toContain('SameSite=Strict');
+      expect(parseMfaChallenge(login.body)).toBeNull();
+      expect(JSON.stringify(login.body)).not.toContain(cookieOf(login));
+      const parsed = parseSession(login.body, NOW);
+      expect(parsed.ok && parsed.session.role).toBe(role);
+      const enrolled = staff({
+        id: `staff-${role}-mfa`,
+        email: `mfa-${role}@office.rixobet.com`,
+        role,
+        displayName: 'Office User',
+      });
+      const protectedRepo = createMemoryOffice({ staff: [enrolled], flags: flags() });
+      const challenged = await handleOffice(
+        request({
+          method: 'POST',
+          path: '/auth/login',
+          body: { brandCode: '002', email: enrolled.email, password: PASSWORD },
+        }),
+        office(protectedRepo),
+      );
+      expect(challenged.status).toBe(200);
+      expect(challenged.setCookie).toEqual([]);
+      expect(parseMfaChallenge(challenged.body)?.challengeId).toBeTruthy();
+      expect(parseSession(challenged.body, NOW).ok).toBe(false);
+    }
+  });
+
   it('rejects the wrong brand, wrong role, missing MFA, and an expired session', async () => {
     const cashier = staff();
     const repository = createMemoryOffice({ staff: [cashier], flags: flags() });
@@ -451,12 +500,16 @@ describe('office authentication', () => {
     );
     expect(enrolled.status).toBe(200);
     expect(enrolled.setCookie).toEqual([]);
-    expect(enrolled.body).toMatchObject({ status: 'verification_required' });
+    expect(enrolled.body).toMatchObject({ status: 'activated' });
     expect(JSON.stringify(enrolled.body)).not.toContain(token);
     expect(JSON.stringify(enrolled.body)).not.toContain('sessionId');
+    expect(JSON.stringify(enrolled.body)).not.toContain('otpauth');
     const storedDigest = (await ready.findStaffById(delivered.id))?.invitationTokenHash ?? '';
     expect(storedDigest).not.toContain(token);
     expect((await ready.findStaffById(delivered.id))?.invitationConsumedAt).toBeTruthy();
+    expect((await ready.findStaffById(delivered.id))?.status).toBe('active');
+    expect((await ready.findStaffById(delivered.id))?.mfaSecret).toBeNull();
+    expect((await ready.findStaffById(delivered.id))?.authUserId).toBeNull();
     const replay = await handleOffice(
       request({
         method: 'POST',
@@ -466,20 +519,53 @@ describe('office authentication', () => {
       office(ready),
     );
     expect(replay.status).toBe(401);
-    const secret = new URL(String((enrolled.body as { otpauthUri: string }).otpauthUri)).searchParams.get('secret');
+    const signedIn = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/login',
+        body: { brandCode: '002', email: delivered.email, password: 'a-new-office-password', role: 'cashier' },
+      }),
+      office(ready),
+    );
+    expect(signedIn.status).toBe(200);
+    expect(signedIn.setCookie[0]).toContain('HttpOnly');
+    expect(parseMfaChallenge(signedIn.body)).toBeNull();
+    const ownerSession = parseSession(signedIn.body, NOW);
+    expect(ownerSession.ok && ownerSession.session.role).toBe('owner');
+
+    const optional = pendingOwner();
+    optional.id = 'owner-mfa-002';
+    optional.email = 'mfa-owner@office.rixobet.com';
+    optional.invitationTokenHash = hashSecret(PEPPER, token);
+    optional.invitationExpiresAt = new Date(NOW + 60 * 60 * 1000).toISOString();
+    const optionalRepo = createMemoryOffice({ staff: [optional], flags: flags() });
+    const withMfa = await handleOffice(
+      request({
+        method: 'POST',
+        path: '/auth/activation',
+        body: { brandCode: '002', email: optional.email, invitationToken: token, password: 'a-new-office-password', enrollMfa: true },
+      }),
+      office(optionalRepo),
+    );
+    expect(withMfa.status).toBe(200);
+    expect(withMfa.setCookie).toEqual([]);
+    expect(withMfa.body).toMatchObject({ status: 'verification_required' });
+    expect((await optionalRepo.findStaffById(optional.id))?.status).toBe('invited');
+    const secret = new URL(String((withMfa.body as { otpauthUri: string }).otpauthUri)).searchParams.get('secret');
     const step = totpCode(secret ?? '', NOW);
     const verified = await handleOffice(
       request({
         method: 'POST',
         path: '/auth/activation/confirm',
-        body: { email: delivered.email, code: step?.code },
+        body: { email: optional.email, code: step?.code },
       }),
-      office(ready),
+      office(optionalRepo),
     );
     expect(verified.status).toBe(200);
     expect(verified.setCookie).toEqual([]);
-    const stored = await ready.findStaffById(delivered.id);
+    const stored = await optionalRepo.findStaffById(optional.id);
     expect(stored?.status).toBe('active');
+    expect(stored?.mfaSecret).toBeTruthy();
     expect(stored?.authUserId).toBeNull();
     expect(stored?.identityVerifiedAt).toBeTruthy();
     const premature = await handleOffice(

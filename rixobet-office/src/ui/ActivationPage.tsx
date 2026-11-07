@@ -20,6 +20,7 @@ export function ActivationPage() {
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [otpauthUri, setOtpauthUri] = useState<string | null>(null);
+  const [enrollMfa, setEnrollMfa] = useState(false);
   const [verified, setVerified] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState<FailureReason | null>(null);
@@ -57,7 +58,7 @@ export function ActivationPage() {
       return;
     }
     setPending(true);
-    const result = await beginActivation(email.trim(), token, password);
+    const result = await beginActivation(email.trim(), token, password, enrollMfa);
     setPending(false);
     if (!result.ok) {
       setOtpauthUri(null);
@@ -65,6 +66,10 @@ export function ActivationPage() {
       return;
     }
     setFailure(null);
+    if ('activated' in result.data) {
+      setVerified(true);
+      return;
+    }
     setOtpauthUri(result.data.otpauthUri);
   }
 
@@ -95,11 +100,11 @@ export function ActivationPage() {
         </p>
         <h1>Активация владельца</h1>
         <p className="rx-lead">
-          Приглашение одноразовое и действует ограниченное время. Сессия появится только после отдельного входа и кода MFA.
+          Приглашение одноразовое и действует ограниченное время. Сессия появится после отдельного входа. MFA можно включить сейчас или пропустить.
         </p>
         {banner ? <StatusBanner reason={banner} /> : null}
         {verified ? (
-          <p className="rx-lead">Личность подтверждена. Войдите с паролем и кодом MFA.</p>
+          <p className="rx-lead">Учётная запись активирована. Войдите с паролем.</p>
         ) : (
           <form onSubmit={onActivate} noValidate>
             <div className="rx-field">
@@ -154,6 +159,15 @@ export function ActivationPage() {
                 </small>
               ) : null}
             </div>
+            <label className="rx-check" htmlFor="activation-mfa-opt">
+              <input
+                id="activation-mfa-opt"
+                type="checkbox"
+                checked={enrollMfa}
+                onChange={(event) => setEnrollMfa(event.target.checked)}
+              />
+              Включить MFA
+            </label>
             <button className="rx-btn" type="submit" disabled={pending || Boolean(otpauthUri)}>
               {pending && !otpauthUri ? 'Проверка…' : 'Продолжить'}
             </button>

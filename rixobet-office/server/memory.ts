@@ -57,7 +57,8 @@ export function createMemoryOffice(seed: MemorySeed): OfficeRepository {
     async verifyInvitedOwner(id, identityVerifiedAt, mfaLastStep) {
       const row = staff.find((entry) => entry.id === id);
       if (!row || row.role !== 'owner' || row.status !== 'invited' || row.authUserId !== null) return false;
-      if (!row.invitationConsumedAt || !row.passwordHash || !row.mfaSecret || row.identityVerifiedAt) return false;
+      if (!row.invitationConsumedAt || !row.passwordHash || row.identityVerifiedAt) return false;
+      if (mfaLastStep === null ? row.mfaSecret !== null : !row.mfaSecret) return false;
       row.status = 'active';
       row.identityVerifiedAt = identityVerifiedAt;
       row.mfaLastStep = mfaLastStep;

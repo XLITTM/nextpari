@@ -157,7 +157,8 @@ function repository(pool: PgPool, bound: BoundCatalog): OfficeRepository {
          set status = 'active', identity_verified_at = $2, mfa_last_step = $3
          where id = $1 and brand_code = '002' and role = 'owner' and status = 'invited'
            and auth_user_id is null and identity_verified_at is null
-           and invitation_consumed_at is not null and password_hash is not null and mfa_secret is not null
+           and invitation_consumed_at is not null and password_hash is not null
+           and ((mfa_secret is null and $3::text is null) or (mfa_secret is not null and $3::text is not null))
          returning id`,
         [id, identityVerifiedAt, mfaLastStep],
       );
