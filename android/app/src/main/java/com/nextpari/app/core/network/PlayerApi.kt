@@ -7,6 +7,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface PlayerApi {
     @POST("api/player/auth/login")
@@ -92,6 +93,12 @@ interface PlayerApi {
 
     @POST("api/player/crypto/usdt-quote")
     suspend fun usdtQuote(@Body body: JsonObject): Response<JsonObject>
+
+    @GET("api/player/sports/football-feed")
+    suspend fun footballFeed(@Query("eventId") eventId: String? = null): Response<JsonObject>
+
+    @POST("api/player/sports/place")
+    suspend fun placeSportsBet(@Body body: JsonObject): Response<JsonObject>
 
     @GET("api/player/sports/bets")
     suspend fun sportsBets(): Response<JsonObject>
