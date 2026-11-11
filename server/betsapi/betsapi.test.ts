@@ -239,6 +239,27 @@ describe('betsapi read-only client', () => {
     assert.equal(urls.at(-1)?.includes('day=20261110'), true);
   });
 
+  it('loads a settlement result from the event view without an odds request', async () => {
+    const urls: string[] = [];
+    const feed = client({
+      now: () => 1_700_000_000_000,
+      fetchImpl: async (input) => {
+        const url = new URL(String(input));
+        urls.push(`${url.pathname}${url.search}`);
+        assert.equal(url.searchParams.get('token'), TOKEN);
+        return jsonResponse({ success: 1, results: [event({ time_status: '3', ss: '2-1' })] });
+      },
+    });
+    const result = await feed.getEventResult('1001');
+    assert.equal(result.ok, true);
+    assert.equal(result.feed?.events[0]?.status, 'finished');
+    assert.equal(result.feed?.events[0]?.score?.home, 2);
+    assert.equal(urls.length, 1);
+    assert.equal(urls[0].includes('/v1/event/view'), true);
+    assert.equal(urls[0].includes('event_id=1001'), true);
+    assert.equal(JSON.stringify(result).includes(TOKEN), false);
+  });
+
   it('serves a stale cached list on 429 and drops it after the stale window', async () => {
     let now = 1_000_000;
     let calls = 0;
@@ -469,6 +490,8 @@ describe('betsapi preview and retirement guards', () => {
       'server/betsapi/previewCli.ts',
       'api/internal/betsapi-preview.ts',
       'scripts/betsapi-readonly-preview.ts',
+      'server/sports/betsapiSettlementRun.ts',
+      'api/internal/sports/betsapi-settle.ts',
     ];
     for (const file of files) {
       const source = read(file);

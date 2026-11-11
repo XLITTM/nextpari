@@ -136,6 +136,16 @@ export class BetsApiReadOnlyClient {
     ));
   }
 
+  getEventResult(eventId: string): Promise<FeedResult> {
+    if (!/^\d{1,20}$/.test(eventId)) {
+      return Promise.resolve({ ok: false, error: 'UPSTREAM', upstreamStatus: null, feed: null });
+    }
+    return this.cached('event', PATHS.view, { event_id: eventId }, (json) => {
+      const row = normalizeFootballDetails(json, null);
+      return row ? [row] : [];
+    });
+  }
+
   getEvent(eventId: string): Promise<FeedResult> {
     const key = `event:${eventId}`;
     const pending = this.inflight.get(key);
@@ -148,7 +158,7 @@ export class BetsApiReadOnlyClient {
   }
 
   private cached(
-    endpoint: Exclude<FeedEndpoint, 'event'>,
+    endpoint: FeedEndpoint,
     path: string,
     query: Record<string, string>,
     parse: (json: unknown) => NormalizedEvent[],
@@ -164,7 +174,7 @@ export class BetsApiReadOnlyClient {
   }
 
   private loadCached(
-    endpoint: Exclude<FeedEndpoint, 'event'>,
+    endpoint: FeedEndpoint,
     key: string,
     path: string,
     query: Record<string, string>,

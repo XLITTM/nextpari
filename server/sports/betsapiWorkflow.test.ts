@@ -10,8 +10,9 @@ import {
 } from './betsapiActivation.js';
 import { quoteFromFootballEvent } from './betsapiQuote.js';
 import { gradeFootballOutcome, settlementNoticeForLeg } from './betsapiSettlement.js';
+import { handleBetsapiSettlementJob } from './betsapiSettlementRun.js';
 import { SPORTS_SETTLEMENT } from './settlement.js';
-import type { NormalizedEvent } from '../betsapi/types.js';
+import type { FeedResult, NormalizedEvent } from '../betsapi/types.js';
 
 const PLAYER = '11111111-1111-4111-8111-111111111111';
 
@@ -162,5 +163,147 @@ describe('betsapi real sportsbook gates', () => {
     assert.equal(match.markets['1'], 1.7);
     assert.equal(match.betsapiQuotes?.['П1']?.outcomeId, 'home');
     assert.equal(match.betsapiQuotes?.['П1']?.provider, 'betsapi');
+  });
+});
+
+function finishedResult(row: NormalizedEvent): FeedResult {
+  return {
+    ok: true,
+    error: null,
+    upstreamStatus: 200,
+    feed: {
+      source: 'betsapi',
+      mode: 'read-only',
+      betting: 'disabled',
+      settlement: 'disabled',
+      endpoint: 'event',
+      sportId: '1',
+      fetchedAt: '2026-11-12T20:00:00.000Z',
+      updatedAt: '2026-11-12T20:00:00.000Z',
+      stale: false,
+      rateLimited: false,
+      rateLimit: null,
+      events: [row],
+    },
+  };
+}
+
+describe('betsapi automatic settlement delivery', () => {
+  const env = {
+    CRON_SECRET: 'cron-test-secret',
+    BETSAPI_KEY: 'server-side-test-key',
+  };
+
+  it('refuses the job unless the cron bearer matches', async () => {
+    const denied = await handleBetsapiSettlementJob({ method: 'GET' }, env, {});
+    assert.equal(denied.status, 401);
+    assert.equal(denied.body.error, 'SETTLEMENT_JOB_UNAUTHORIZED');
+    const missing = await handleBetsapiSettlementJob(
+      { method: 'GET', authorization: 'Bearer cron-test-secret' },
+      { CRON_SECRET: 'cron-test-secret' },
+      { loadLegs: async () => { throw new Error('should not load'); } },
+    );
+    assert.equal(missing.body.skipped, 'TOKEN_MISSING');
+    assert.equal(missing.body.delivered, 0);
+  });
+
+  it('ingests a finished result and delivers the graded notice to the ledger once per fingerprint', async () => {
+    const applied: unknown[][] = [];
+    const run = () => handleBetsapiSettlementJob(
+      { method: 'GET', authorization: 'Bearer cron-test-secret' },
+      env,
+      {
+        loadLegs: async () => [
+          { fixtureId: '1001', marketId: '1_1', marketKey: '1x2', line: '', outcomeId: 'home' },
+          { fixtureId: '1001', marketId: '1_1', marketKey: '1x2', line: '', outcomeId: 'home' },
+          { fixtureId: '1002', marketId: '1_1', marketKey: '1x2', line: '', outcomeId: 'away' },
+        ],
+        results: {
+          async getEventResult(eventId) {
+            if (eventId === '1002') return finishedResult(event({ eventId: '1002', status: 'live', timeStatus: '1', score: { home: 0, away: 0 } }));
+            return finishedResult(event());
+          },
+        },
+        apply: async (notices) => {
+          applied.push(notices);
+          return { status: 200, body: { ok: true, result: 'applied' } };
+        },
+      },
+    );
+    const first = await run();
+    assert.equal(first.status, 200);
+    assert.equal(first.body.mode, 'ledger');
+    assert.equal(first.body.notices, 1);
+    assert.equal(first.body.delivered, 1);
+    const notice = (applied[0] ?? [])[0] as { settlement: number; fixtureId: string; provider: string };
+    assert.equal(notice.provider, 'betsapi');
+    assert.equal(notice.fixtureId, '1001');
+    assert.equal(notice.settlement, SPORTS_SETTLEMENT.Won);
+    assert.equal(JSON.stringify(first.body).includes('server-side-test-key'), false);
+    const second = await run();
+    assert.equal(second.body.delivered, 1);
+    assert.equal(applied.length, 2);
+  });
+
+  it('dispatches through the existing settlement webhook when that channel is configured', async () => {
+    let applyCalls = 0;
+    let posted = '';
+    const result = await handleBetsapiSettlementJob(
+      { method: 'POST', authorization: 'Bearer cron-test-secret' },
+      {
+        ...env,
+        NEXTPARI_SPORTS_SETTLE_URL: 'https://settle.test/api/internal/sports/settle',
+        NEXTPARI_SPORTS_SETTLEMENT_SECRET: 'settle-secret',
+      },
+      {
+        loadLegs: async () => [
+          { fixtureId: '1001', marketId: '1_3', marketKey: 'over_under', line: '2.5', outcomeId: 'over' },
+        ],
+        results: {
+          async getEventResult() {
+            return finishedResult(event({ score: { home: 2, away: 1 } }));
+          },
+        },
+        fetch: async (_input, init) => {
+          posted = String(init?.body ?? '');
+          assert.equal(init?.headers && (init.headers as Record<string, string>).Authorization, 'Bearer settle-secret');
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        },
+        apply: async () => {
+          applyCalls += 1;
+          return { status: 500, body: { ok: false } };
+        },
+      },
+    );
+    assert.equal(result.status, 200);
+    assert.equal(result.body.mode, 'dispatch');
+    assert.equal(applyCalls, 0);
+    assert.equal(posted.includes('"settlement":2'), true);
+    assert.equal(posted.includes('settle-secret'), false);
+  });
+
+  it('does not invent a payout when the finished event has no score', async () => {
+    let delivered = 0;
+    const result = await handleBetsapiSettlementJob(
+      { method: 'GET', authorization: 'Bearer cron-test-secret' },
+      env,
+      {
+        loadLegs: async () => [
+          { fixtureId: '1001', marketId: '1_1', marketKey: '1x2', line: '', outcomeId: 'home' },
+        ],
+        results: {
+          async getEventResult() {
+            return finishedResult(event({ score: null }));
+          },
+        },
+        apply: async (notices) => {
+          delivered = notices.length;
+          return { status: 200, body: { ok: true } };
+        },
+      },
+    );
+    assert.equal(result.body.notices, 0);
+    assert.equal(result.body.mode, 'idle');
+    assert.equal(delivered, 0);
   });
 });
