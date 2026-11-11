@@ -6,6 +6,7 @@ import com.nextpari.app.core.network.session.SafeHttpLogger
 import com.nextpari.app.core.network.session.SecureCookieJar
 import com.nextpari.app.core.network.session.SessionUnauthorizedHandler
 import com.nextpari.app.core.network.session.SessionUnauthorizedInterceptor
+import com.nextpari.app.core.network.session.WalletResponseScope
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -32,6 +33,12 @@ object NetworkModule {
             .followSslRedirects(true)
         if (cookieJar != null) {
             builder.cookieJar(cookieJar)
+            builder.addNetworkInterceptor { chain ->
+                val request = chain.request()
+                val response = chain.proceed(request)
+                val scope = request.tag(WalletResponseScope::class.java)
+                if (scope?.isCurrent() == false) response.newBuilder().removeHeader("Set-Cookie").build() else response
+            }
         }
         if (unauthorizedHandler != null) {
             builder.addInterceptor(SessionUnauthorizedInterceptor(unauthorizedHandler))
