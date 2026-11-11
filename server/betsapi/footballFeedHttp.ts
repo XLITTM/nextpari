@@ -1,7 +1,27 @@
-import { BetsApiReadOnlyClient, getSharedBetsApiClient } from './client.js';
+import {
+  BetsApiReadOnlyClient,
+  getFootballOddsClient,
+  getSharedBetsApiClient,
+  type EventOddsRead,
+  type EventOddsState,
+} from './client.js';
 import type { FeedResult, NormalizedEvent, NormalizedMarket } from './types.js';
 
 export const FOOTBALL_FEED_PATH = '/api/player/sports/football-feed';
+const MAX_ODDS_IDS = 8;
+const ODDS_BATCH_BUDGET_MS = 20_000;
+
+export interface FootballFeedMarket {
+  key: NormalizedMarket['key'];
+  name: string;
+  line: string;
+  status: 'open' | 'suspended';
+  outcomes: Array<{ key: string; name: string; price: number; sourceSelectionId?: string | null }>;
+  updatedAt: string | null;
+  bookmakerId: string | null;
+  externalPeriodId: string | null;
+  externalMarketId: string;
+}
 
 export interface FootballFeedCard {
   id: string;
@@ -12,19 +32,47 @@ export interface FootballFeedCard {
   kickoff: string | null;
   live: boolean;
   score: { home: number; away: number } | null;
-  markets: Array<{
-    key: NormalizedMarket['key'];
-    name: string;
-    line: string;
-    status: 'open' | 'closed';
-    outcomes: Array<{ key: string; name: string; price: number }>;
-    updatedAt: string | null;
-  }>;
+  priceState: EventOddsState | 'unpriced';
+  markets: FootballFeedMarket[];
+}
+
+export interface FootballOddsQuote {
+  id: string;
+  priceState: EventOddsState | 'deferred';
+  stale: boolean;
+  markets: FootballFeedMarket[];
 }
 
 function cardsFrom(result: FeedResult | null): FootballFeedCard[] {
   const events = result?.feed?.events ?? [];
   return events.map(toCard);
+}
+
+function priceStateOf(event: NormalizedEvent): FootballFeedCard['priceState'] {
+  if (!event.marketsKnown) return 'unpriced';
+  if (event.markets.some((market) => market.status === 'open')) return 'open';
+  if (event.markets.some((market) => market.availability === 'suspended')) return 'suspended';
+  return 'unavailable';
+}
+
+function marketToCard(market: NormalizedMarket): FootballFeedMarket | null {
+  if (market.status !== 'open' && market.availability !== 'suspended') return null;
+  return {
+    key: market.key,
+    name: market.name,
+    line: market.line ?? '',
+    status: market.availability === 'suspended' ? 'suspended' : 'open',
+    outcomes: market.outcomes.map((outcome) => ({
+      key: outcome.key,
+      name: outcome.name,
+      price: outcome.price,
+      sourceSelectionId: outcome.sourceSelectionId ?? null,
+    })),
+    updatedAt: market.updatedAt,
+    bookmakerId: market.bookmakerId ?? null,
+    externalPeriodId: market.externalPeriodId ?? null,
+    externalMarketId: market.externalMarketId ?? '',
+  };
 }
 
 function toCard(event: NormalizedEvent): FootballFeedCard {
@@ -37,29 +85,49 @@ function toCard(event: NormalizedEvent): FootballFeedCard {
     kickoff: event.kickoff,
     live: event.status === 'live',
     score: event.score,
-    markets: event.markets.filter((market) => market.status === 'open').map((market) => ({
-      key: market.key,
-      name: market.name,
-      line: market.line ?? '',
-      status: 'open' as const,
-      outcomes: market.outcomes.map((outcome) => ({
-        key: outcome.key,
-        name: outcome.name,
-        price: outcome.price,
-      })),
-      updatedAt: market.updatedAt,
-    })),
+    priceState: priceStateOf(event),
+    markets: event.markets.flatMap((market) => {
+      const card = marketToCard(market);
+      return card ? [card] : [];
+    }),
   };
+}
+
+function quoteFrom(read: EventOddsRead): FootballOddsQuote {
+  return {
+    id: read.eventId,
+    priceState: read.priceState,
+    stale: read.stale,
+    markets: read.markets.flatMap((market) => {
+      const card = marketToCard(market);
+      return card ? [card] : [];
+    }),
+  };
+}
+
+function oddsIds(raw: string): string[] {
+  const ids: string[] = [];
+  for (const part of raw.split(',')) {
+    const id = part.trim();
+    if (!/^\d{1,20}$/.test(id) || ids.includes(id)) continue;
+    ids.push(id);
+    if (ids.length >= MAX_ODDS_IDS) break;
+  }
+  return ids;
 }
 
 export async function handleFootballFeedRequest(
   input: { method?: string; url?: string },
   client: BetsApiReadOnlyClient = getSharedBetsApiClient(),
+  oddsClient?: BetsApiReadOnlyClient,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   if (String(input.method ?? 'GET').toUpperCase() !== 'GET') {
     return { status: 404, body: { ok: false, error: 'NOT_FOUND' } };
   }
   const params = input.url ? new URL(input.url, 'http://127.0.0.1').searchParams : new URLSearchParams();
+  if (params.has('oddsFor')) {
+    return readOddsBatch(params.get('oddsFor') ?? '', oddsClient ?? (client === getSharedBetsApiClient() ? getFootballOddsClient() : client));
+  }
   const eventId = params.get('eventId') ?? '';
   if (eventId) {
     if (!/^\d{1,20}$/.test(eventId)) return { status: 404, body: { ok: false, error: 'NOT_FOUND' } };
@@ -83,6 +151,33 @@ export async function handleFootballFeedRequest(
       error: tokenMissing ? 'TOKEN_MISSING' : live.error ?? upcoming.error,
       stale: Boolean(live.feed?.stale || upcoming.feed?.stale),
       events: [...cardsFrom(live), ...cardsFrom(upcoming)],
+    },
+  };
+}
+
+async function readOddsBatch(
+  raw: string,
+  client: BetsApiReadOnlyClient,
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const ids = oddsIds(raw);
+  const quotes: FootballOddsQuote[] = [];
+  const started = Date.now();
+  let stop = false;
+  for (const id of ids) {
+    if (stop || (quotes.length > 0 && Date.now() - started > ODDS_BATCH_BUDGET_MS)) {
+      quotes.push({ id, priceState: 'deferred', stale: false, markets: [] });
+      continue;
+    }
+    const read = await client.readEventOdds(id);
+    quotes.push(quoteFrom(read));
+    if (read.priceState === 'rate_limited') stop = true;
+  }
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      error: null,
+      quotes,
     },
   };
 }

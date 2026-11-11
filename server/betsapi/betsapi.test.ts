@@ -3,9 +3,12 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { advertisedExtraMarketCount, applyFootballQuotes, footballCardToMatch, footballQuoteIds, mergeListedMatches } from '../../src/lib/footballFeed.js';
 import { isRetiredSportsProvider } from '../sports/retiredProviders.js';
-import { BetsApiReadOnlyClient } from './client.js';
-import { normalizeFootballDetails, normalizeFootballList } from './parse.js';
+import { SharedRequestBudget } from './budget.js';
+import { BetsApiReadOnlyClient, ODDS_REQUEST_GAP_MS } from './client.js';
+import { handleFootballFeedRequest } from './footballFeedHttp.js';
+import { diagnoseOddsPayload, normalizeFootballDetails, normalizeFootballList } from './parse.js';
 import { handleBetsApiPreviewRequest } from './previewHttp.js';
 import type { NormalizedMarket } from './types.js';
 
@@ -187,6 +190,57 @@ describe('betsapi football normalization', () => {
     assert.equal(market(flat[0].markets, '1x2')?.status, 'open');
     assert.equal(flat[0].markets.some((item) => item.key === 'asian_handicap'), false);
     assert.equal(JSON.stringify(flat).includes('2.50'), false);
+  });
+
+  it('keeps bookmaker, period, line and outcome identity and classifies missing odds', () => {
+    const details = normalizeFootballDetails({
+      success: 1,
+      results: [event({ time_status: '1', ss: '1-0' })],
+    }, {
+      success: 1,
+      results: {
+        odds: {
+          '1_1': {
+            start: { '16': { home_od: '1.50', draw_od: '4.00', away_od: '6.00', add_time: '100', home_id: 'h-open' } },
+            end: { '16': { home_od: '1.80', draw_od: '3.50', away_od: '4.20', add_time: '200', home_id: 'h-live' } },
+          },
+          '1_3': {
+            '16': [
+              { over_od: '1.91', under_od: '1.91', handicap: '2.5', add_time: '200', over_id: 'over-25' },
+              { over_od: '1.85', under_od: '1.95', handicap: '3.5', add_time: '200' },
+            ],
+          },
+          '1_2': {
+            '16': [{ home_od: '1.95', away_od: '1.85', handicap: '-0.5', add_time: '200', home_id: 'ah-home' }],
+          },
+        },
+      },
+    });
+    const oneXtwo = market(details?.markets ?? [], '1x2');
+    assert.equal(oneXtwo?.status, 'open');
+    assert.equal(oneXtwo?.bookmakerId, '16');
+    assert.equal(oneXtwo?.externalPeriodId, 'end');
+    assert.equal(oneXtwo?.externalMarketId, '1_1');
+    assert.equal(oneXtwo?.outcomes.find((item) => item.key === 'home')?.sourceSelectionId, 'h-live');
+    assert.deepEqual(prices(oneXtwo), [1.8, 3.5, 4.2]);
+    const total = market(details?.markets ?? [], 'over_under', '2.5');
+    assert.equal(total?.bookmakerId, '16');
+    assert.equal(total?.externalMarketId, '1_3');
+    assert.equal(total?.line, '2.5');
+    assert.equal(total?.outcomes.find((item) => item.key === 'over')?.sourceSelectionId, 'over-25');
+    const handicap = market(details?.markets ?? [], 'asian_handicap', '-0.5');
+    assert.equal(handicap?.status, 'open');
+    assert.equal(handicap?.bookmakerId, '16');
+    assert.equal(handicap?.externalMarketId, '1_2');
+    assert.equal(diagnoseOddsPayload({ success: 1, results: { odds: {} } }), 'unavailable');
+    assert.equal(diagnoseOddsPayload({
+      success: 1,
+      results: { odds: { '1_1': { mystery: { value: 'x' } } } },
+    }), 'unrecognized');
+    assert.equal(diagnoseOddsPayload({
+      success: 1,
+      results: { odds: { '1_1': [{ home_od: '1.80', draw_od: '3.40', away_od: '4.20', suspended: '1', add_time: '10' }] } },
+    }), 'suspended');
   });
 });
 
@@ -516,5 +570,136 @@ describe('betsapi preview and retirement guards', () => {
     assert.match(place, /isRetiredSportsProvider/);
     const sourceRoot = read('src/services/sports.ts');
     assert.equal(sourceRoot.includes('server/betsapi'), false);
+  });
+});
+
+describe('football odds pacing', () => {
+  it('keeps two concurrent instances inside the 3600 requests per hour account limit', async () => {
+    assert.equal(ODDS_REQUEST_GAP_MS, 2_000);
+    let now = 0;
+    const slept: number[] = [];
+    const budget = new SharedRequestBudget({
+      minGapMs: 2_000,
+      now: () => now,
+      sleep: async (ms) => {
+        slept.push(ms);
+        now += ms;
+      },
+    });
+    await budget.schedule(async () => undefined);
+    await budget.schedule(async () => undefined);
+    assert.equal(slept[0], 2_000);
+    budget.noteQuota({
+      remaining: 30,
+      limit: 3_600,
+      resetAtMs: now + 120_000,
+      retryAfterMs: null,
+    });
+    await budget.schedule(async () => undefined);
+    assert.ok((slept.at(-1) ?? 0) >= 4_000);
+    assert.ok((slept.at(-1) ?? 0) <= 12_000);
+  });
+});
+
+describe('football odds display', () => {
+  it('loads a bounded odds batch, dedupes cache, and stops after a rate limit', async () => {
+    const calls: string[] = [];
+    const oddsClient = new BetsApiReadOnlyClient({
+      env: { BETSAPI_TOKEN: TOKEN },
+      minGapMs: 0,
+      freshMs: { odds: 15_000 },
+      now: () => 1_700_000_000_000,
+      fetchImpl: async (input) => {
+        const url = new URL(String(input));
+        const id = url.searchParams.get('event_id') ?? '';
+        calls.push(id);
+        assert.equal(url.pathname, '/v2/event/odds');
+        if (id === '3') return jsonResponse({ success: 0 }, 429, { 'retry-after': '60' });
+        return jsonResponse({
+          success: 1,
+          results: {
+            odds: {
+              '1_1': { '16': [{ home_od: '1.90', draw_od: '3.40', away_od: '4.20', add_time: '10', home_id: `h-${id}` }] },
+              '1_3': { '16': [{ over_od: '1.87', under_od: '1.95', handicap: '2.5', add_time: '10' }] },
+              '1_2': { '16': [{ home_od: '1.92', away_od: '1.90', handicap: '-0.5', add_time: '10' }] },
+            },
+          },
+        });
+      },
+    });
+    const listClient = new BetsApiReadOnlyClient({
+      env: { BETSAPI_TOKEN: TOKEN },
+      minGapMs: 0,
+      fetchImpl: async () => {
+        throw new Error('list client must not run for oddsFor');
+      },
+    });
+    const response = await handleFootballFeedRequest({
+      method: 'GET',
+      url: 'http://127.0.0.1/api/player/sports/football-feed?oddsFor=1,2,3,4,nope,1',
+    }, listClient, oddsClient);
+    assert.equal(response.status, 200);
+    assert.equal(JSON.stringify(response.body).includes(TOKEN), false);
+    const quotes = response.body.quotes as Array<{ id: string; priceState: string; markets: Array<{ key: string; bookmakerId: string | null; line: string; externalMarketId: string }> }>;
+    assert.deepEqual(quotes.map((quote) => quote.priceState), ['open', 'open', 'rate_limited', 'deferred']);
+    assert.deepEqual(calls, ['1', '2', '3']);
+    assert.equal(quotes[0].markets.find((item) => item.key === '1x2')?.bookmakerId, '16');
+    assert.equal(quotes[0].markets.find((item) => item.key === 'over_under')?.line, '2.5');
+    assert.equal(quotes[0].markets.find((item) => item.key === 'asian_handicap')?.externalMarketId, '1_2');
+    calls.length = 0;
+    await handleFootballFeedRequest({
+      method: 'GET',
+      url: 'http://127.0.0.1/api/player/sports/football-feed?oddsFor=1',
+    }, listClient, oddsClient);
+    assert.deepEqual(calls, []);
+  });
+
+  it('shows real extra markets and keeps prices across an unpriced list refresh', () => {
+    const listed = footballCardToMatch({
+      id: '1', league: 'L', country: 'GB', home: 'A', away: 'B', kickoff: null, live: true, score: { home: 0, away: 0 },
+      priceState: 'unpriced', markets: [],
+    });
+    assert.equal(advertisedExtraMarketCount(listed, 0), null);
+    assert.equal(listed.priceState, 'unpriced');
+    const priced = applyFootballQuotes([listed], [{
+      id: '1',
+      priceState: 'open',
+      markets: [
+        { key: '1x2', name: '1X2', line: '', status: 'open', updatedAt: null, bookmakerId: '16', externalPeriodId: 'end', externalMarketId: '1_1', outcomes: [
+          { key: 'home', name: 'Home', price: 1.8, sourceSelectionId: 'h1' },
+          { key: 'draw', name: 'Draw', price: 3.4 },
+          { key: 'away', name: 'Away', price: 4.2 },
+        ] },
+        { key: 'over_under', name: 'Over/Under', line: '2.5', status: 'open', updatedAt: null, bookmakerId: '16', externalPeriodId: null, externalMarketId: '1_3', outcomes: [
+          { key: 'over', name: 'Over', price: 1.9 },
+          { key: 'under', name: 'Under', price: 1.9 },
+        ] },
+      ],
+    }]);
+    assert.equal(priced[0].markets['1'], 1.8);
+    assert.equal(priced[0].extraMarkets, 1);
+    assert.equal(priced[0].betsapiQuotes?.['П1']?.bookmakerId, '16');
+    assert.equal(priced[0].betsapiQuotes?.['П1']?.sourceSelectionId, 'h1');
+    assert.equal(advertisedExtraMarketCount(priced[0], 1), 1);
+    const kept = mergeListedMatches(priced, [listed]);
+    assert.equal(kept[0].markets['1'], 1.8);
+    assert.equal(kept[0].priceState, 'open');
+    const suspended = footballCardToMatch({
+      id: '2', league: 'L', country: 'GB', home: 'A', away: 'B', kickoff: null, live: true, score: null,
+      priceState: 'suspended',
+      markets: [{
+        key: '1x2', name: '1X2', line: '', status: 'suspended', updatedAt: null,
+        bookmakerId: null, externalPeriodId: null, externalMarketId: '1_1', outcomes: [],
+      }],
+    });
+    assert.equal(suspended.marketsLocked, true);
+    assert.equal(suspended.markets['1'], 0);
+    assert.equal(suspended.betsapiQuotes?.['П1'], undefined);
+    assert.equal(advertisedExtraMarketCount(suspended, 0), null);
+    const plan = footballQuoteIds([
+      { ...listed, id: 'live-open', priceState: 'open' },
+      { ...listed, id: 'pre', isLive: false, priceState: 'unpriced' },
+    ]);
+    assert.deepEqual(plan.primary, ['pre']);
   });
 });

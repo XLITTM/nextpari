@@ -8,6 +8,7 @@ import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
 import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
+import { advertisedExtraMarketCount, footballPriceNote } from '../lib/footballFeed';
 import {
   clickableCardSelection,
   extraLsportsMarketRows,
@@ -75,9 +76,8 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
   const lsports = isLsportsMatch(match);
   const lsportsExtras = extraLsportsMarketRows(match);
   const extraRows = lsports ? lsportsExtras : extraMarketRows(match);
-  const extraCount = match.feedTag === 'lsports'
-    ? Math.max(Number(match.extraMarkets) || 0, extraRows.length)
-    : Math.max(Number(match.extraMarkets) || 0, extraRows.length, 3);
+  const extraCount = advertisedExtraMarketCount(match, extraRows.length);
+  const priceNote = footballPriceNote(match.priceState, !match.marketsLocked || extraRows.length > 0);
 
   return (
     <div
@@ -206,6 +206,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             </div>
           </div>
         ))}
+        {(extraCount != null || priceNote) && (
         <button
           className="w-full flex items-center justify-between mt-2 text-xs text-gray-700 dark:text-gray-200 px-1 hover:text-brand-600 transition-colors font-bold"
           onClick={(e) => {
@@ -217,9 +218,10 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             onOpenMatch(match.id);
           }}
         >
-          <span className="font-bold">+{extraCount} рынков</span>
+          <span className="font-bold">{extraCount != null ? `+${extraCount} рынков` : priceNote}</span>
           <ChevronRight className={`w-3.5 h-3.5 transition-transform ${extrasOpen ? 'rotate-90' : ''}`} strokeWidth={2.2} />
         </button>
+        )}
       </div>
     </div>
   );

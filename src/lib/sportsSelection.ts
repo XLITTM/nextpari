@@ -85,6 +85,10 @@ function betsapiSelection(
       line: quote.line,
       outcomeId: quote.outcomeId,
       providerLastUpdate: quote.updatedAt,
+      bookmakerId: quote.bookmakerId,
+      externalPeriodId: quote.externalPeriodId,
+      externalMarketId: quote.externalMarketId,
+      sourceSelectionId: quote.sourceSelectionId,
     },
   };
 }

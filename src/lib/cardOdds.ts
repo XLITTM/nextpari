@@ -76,6 +76,10 @@ function withBetsapiSelection(outcome: MarketOutcome & { selection?: BetSelectio
       line: outcome.line ?? '',
       outcomeId: outcome.outcomeId,
       providerLastUpdate: outcome.updatedAt,
+      bookmakerId: outcome.bookmakerId,
+      externalPeriodId: outcome.externalPeriodId,
+      externalMarketId: outcome.externalMarketId,
+      sourceSelectionId: outcome.sourceSelectionId,
     },
   };
 }

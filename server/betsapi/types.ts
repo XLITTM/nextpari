@@ -7,6 +7,7 @@ export type EventStatus = 'live' | 'prematch' | 'finished' | 'closed';
 export type MarketKey = '1x2' | 'over_under' | 'asian_handicap';
 
 export type MarketStatus = 'open' | 'closed';
+export type MarketAvailability = 'open' | 'suspended' | 'unavailable';
 
 export type OutcomeKey = 'home' | 'draw' | 'away' | 'over' | 'under';
 
@@ -14,6 +15,7 @@ export interface NormalizedOutcome {
   key: OutcomeKey;
   name: string;
   price: number;
+  sourceSelectionId?: string | null;
 }
 
 export interface NormalizedMarket {
@@ -23,6 +25,10 @@ export interface NormalizedMarket {
   status: MarketStatus;
   outcomes: NormalizedOutcome[];
   updatedAt: string | null;
+  bookmakerId?: string | null;
+  externalPeriodId?: string | null;
+  externalMarketId?: string;
+  availability?: MarketAvailability;
 }
 
 export interface NormalizedEvent {

@@ -36,7 +36,7 @@ function venueBgClass(kind: VenueSport): string {
 }
 
 export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetailsScreenProps) {
-  const { findMatch } = useLiveMatches();
+  const { findMatch, ensurePrices } = useLiveMatches();
   const catalogMatch = findMatch(matchId);
   const storeState = useSportsStore((s) => s.events[matchId]);
   const upsertEvent = useSportsStore((s) => s.upsertEvent);
@@ -71,7 +71,15 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
 
   useLiveOdds(matchId, isLive);
 
+  useEffect(() => {
+    if (catalogMatch?.feedTag !== 'betsapi') return;
+    const state = catalogMatch.priceState;
+    if (state === 'open' || state === 'unavailable' || state === 'suspended' || state === 'unrecognized') return;
+    void ensurePrices([matchId]);
+  }, [catalogMatch?.feedTag, catalogMatch?.priceState, ensurePrices, matchId]);
+
   const match = useMemo(() => {
+    if (catalogMatch?.feedTag === 'betsapi') return catalogMatch;
     const fromStore = storeState ? matchEventFromStore(storeState) : undefined;
     return fromStore ?? catalogMatch;
   }, [catalogMatch, storeState]);

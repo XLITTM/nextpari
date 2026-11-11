@@ -42,6 +42,10 @@ export interface MarketOutcome {
   outcomeId?: string;
   updatedAt?: string;
   matchLabel?: string;
+  bookmakerId?: string | null;
+  externalPeriodId?: string | null;
+  externalMarketId?: string;
+  sourceSelectionId?: string | null;
 }
 
 export type MarketCategory =
@@ -69,6 +73,9 @@ export interface MarketGroup {
   outcomes: MarketOutcome[];
   category?: MarketCategory;
   layout?: MarketLayout;
+  bookmakerId?: string | null;
+  externalPeriodId?: string | null;
+  externalMarketId?: string;
 }
 
 export interface MatchStat {
@@ -106,6 +113,7 @@ export interface MatchEvent {
   marketsLocked?: boolean;
   marketsEstimated?: boolean;
   feedTag?: 'lsports' | 'betsapi';
+  priceState?: 'unpriced' | 'open' | 'suspended' | 'unavailable' | 'unrecognized' | 'rate_limited' | 'stale' | 'upstream' | 'deferred';
   betsapiQuotes?: Record<string, {
     provider: 'betsapi';
     feedType: 'inplay' | 'prematch';
@@ -115,6 +123,10 @@ export interface MatchEvent {
     line: string;
     outcomeId: string;
     updatedAt?: string;
+    bookmakerId?: string | null;
+    externalPeriodId?: string | null;
+    externalMarketId?: string;
+    sourceSelectionId?: string | null;
   }>;
   stats?: MatchStat[];
   h2h?: H2HGame[];
@@ -179,6 +191,10 @@ export interface BetSelection {
   line?: string;
   outcomeId?: string;
   providerLastUpdate?: string;
+  bookmakerId?: string | null;
+  externalPeriodId?: string | null;
+  externalMarketId?: string;
+  sourceSelectionId?: string | null;
   marketStatus?: string;
   betStatus?: string;
   betStatusId?: string;

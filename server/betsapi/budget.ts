@@ -66,6 +66,7 @@ export class SharedRequestBudget {
   private nextAt = 0;
   private backoffUntil = 0;
   private backoffMs = BACKOFF_START_MS;
+  private paceMs: number;
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly minGapMs: number;
@@ -76,6 +77,7 @@ export class SharedRequestBudget {
       setTimeout(resolve, ms);
     }));
     this.minGapMs = options.minGapMs ?? MIN_REQUEST_GAP_MS;
+    this.paceMs = this.minGapMs;
   }
 
   async schedule<T>(task: () => Promise<T>): Promise<T> {
@@ -85,7 +87,7 @@ export class SharedRequestBudget {
       try {
         return await task();
       } finally {
-        this.nextAt = this.now() + this.minGapMs;
+        this.nextAt = this.now() + this.paceMs;
       }
     });
     this.chain = run.then(
@@ -114,6 +116,22 @@ export class SharedRequestBudget {
       this.backoffMs = BACKOFF_START_MS;
     }
     return pause;
+  }
+
+  coolingDown(): boolean {
+    return this.now() < this.backoffUntil;
+  }
+
+  noteQuota(observation: RateLimitObservation): void {
+    this.noteSuccess();
+    this.noteRemainingExhausted(observation);
+    const remaining = observation.remaining;
+    if (remaining == null || remaining <= 0 || observation.resetAtMs == null) return;
+    const windowMs = observation.resetAtMs - this.now();
+    if (windowMs <= 0) return;
+    const fairGap = Math.ceil(windowMs / remaining);
+    this.paceMs = Math.min(MIN_REQUEST_GAP_MS, Math.max(this.minGapMs, fairGap));
+    this.nextAt = Math.max(this.nextAt, this.now() + this.paceMs);
   }
 
   noteRemainingExhausted(observation: RateLimitObservation): void {

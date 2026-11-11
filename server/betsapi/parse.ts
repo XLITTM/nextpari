@@ -2,6 +2,7 @@ import { toDecimalOdds } from '../../src/lib/decimalOdds.js';
 import {
   FOOTBALL_SPORT_ID,
   type EventStatus,
+  type MarketAvailability,
   type NormalizedEvent,
   type NormalizedMarket,
   type NormalizedOutcome,
@@ -153,20 +154,57 @@ function leagueOf(row: Record<string, unknown>): NormalizedEvent['league'] {
   };
 }
 
+const SNAPSHOT_KEYS = ['live', 'current', 'end', 'kickoff', 'start'] as const;
+
+export type OddsDiagnosis = 'open' | 'suspended' | 'unavailable' | 'unrecognized';
+
+interface PricedRow {
+  row: Record<string, unknown>;
+  bookmakerId: string | null;
+  externalPeriodId: string | null;
+}
+
 function hasPriceField(row: Record<string, unknown>): boolean {
   return ['home_od', 'draw_od', 'away_od', 'over_od', 'under_od', 'od', 'OD', 'odd', 'odds', 'price']
     .some((key) => key in row);
 }
 
-function collectRows(node: unknown): Record<string, unknown>[] {
-  if (Array.isArray(node)) return node.flatMap((item) => collectRows(item));
+function bookmakerOf(row: Record<string, unknown>, inherited: string | null): string | null {
+  const direct = text(row.bookmaker_id ?? row.bookmakerId ?? row.bm);
+  if (direct) return direct;
+  const named = row.bookmaker;
+  if (typeof named === 'string' || typeof named === 'number') {
+    const value = text(named);
+    if (value) return value;
+  }
+  return inherited;
+}
+
+function collectPriced(
+  node: unknown,
+  bookmakerId: string | null,
+  externalPeriodId: string | null,
+): PricedRow[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((item) => collectPriced(item, bookmakerId, externalPeriodId));
+  }
   if (!isRecord(node)) return [];
-  if (hasPriceField(node)) return [node];
-  const snapshots = ['live', 'current', 'end', 'kickoff', 'start']
-    .filter((key) => key in node)
-    .flatMap((key) => collectRows(node[key]));
-  if (snapshots.length) return snapshots;
-  return Object.values(node).flatMap((value) => collectRows(value));
+  if (hasPriceField(node)) {
+    return [{
+      row: node,
+      bookmakerId: bookmakerOf(node, bookmakerId),
+      externalPeriodId: text(node.period ?? node.time_period) || externalPeriodId,
+    }];
+  }
+  const snapshots = SNAPSHOT_KEYS.filter((key) => key in node);
+  if (snapshots.length) {
+    return snapshots.flatMap((key) => collectPriced(node[key], bookmakerId, key));
+  }
+  const entries = Object.entries(node);
+  if (entries.length > 0 && entries.every(([key]) => /^\d+$/.test(key))) {
+    return entries.flatMap(([key, value]) => collectPriced(value, key, externalPeriodId));
+  }
+  return entries.flatMap(([, value]) => collectPriced(value, bookmakerId, externalPeriodId));
 }
 
 function findMarketNodes(root: Record<string, unknown>): Record<string, unknown> {
@@ -218,12 +256,27 @@ function readPrice(row: Record<string, unknown>, keys: string[]): number {
   return 0;
 }
 
-function outcome(key: OutcomeKey, name: string, price: number): NormalizedOutcome | null {
+function outcome(
+  key: OutcomeKey,
+  name: string,
+  price: number,
+  sourceSelectionId: string | null,
+): NormalizedOutcome | null {
   if (!(price > 1)) return null;
-  return { key, name, price };
+  return sourceSelectionId ? { key, name, price, sourceSelectionId } : { key, name, price };
 }
 
-function closedMarket(def: MarketDef, line: string | null, updatedAt: string | null): NormalizedMarket {
+function selectionId(row: Record<string, unknown>, key: OutcomeKey): string | null {
+  const specific = text(row[`${key}_id`] ?? row[`${key}_od_id`]);
+  return specific || null;
+}
+
+function closedMarket(
+  def: MarketDef,
+  line: string | null,
+  updatedAt: string | null,
+  identity: { bookmakerId?: string | null; externalPeriodId?: string | null; availability?: MarketAvailability } = {},
+): NormalizedMarket {
   return {
     key: def.key,
     name: def.name,
@@ -231,6 +284,10 @@ function closedMarket(def: MarketDef, line: string | null, updatedAt: string | n
     status: 'closed',
     outcomes: [],
     updatedAt,
+    bookmakerId: identity.bookmakerId ?? null,
+    externalPeriodId: identity.externalPeriodId ?? null,
+    externalMarketId: def.id,
+    availability: identity.availability ?? 'unavailable',
   };
 }
 
@@ -247,31 +304,38 @@ function rowMatchesMarket(def: MarketDef, row: Record<string, unknown>): boolean
   return row.draw_od == null && row.over_od == null && row.under_od == null;
 }
 
-function marketFromRow(def: MarketDef, row: Record<string, unknown>): NormalizedMarket {
+function marketFromPriced(def: MarketDef, priced: PricedRow): NormalizedMarket {
+  const row = priced.row;
   const updatedAt = unixToIso(row.add_time ?? row.odds_update ?? row.updated_at);
   const line = lineOf(def, row);
-  if (rowSuspended(row) || !rowMatchesMarket(def, row)) return closedMarket(def, line, updatedAt);
-  if (def.key !== '1x2' && !line) return closedMarket(def, null, updatedAt);
+  const identity = {
+    bookmakerId: priced.bookmakerId,
+    externalPeriodId: priced.externalPeriodId,
+    availability: 'unavailable' as MarketAvailability,
+  };
+  if (rowSuspended(row)) return closedMarket(def, line, updatedAt, { ...identity, availability: 'suspended' });
+  if (!rowMatchesMarket(def, row)) return closedMarket(def, line, updatedAt, identity);
+  if (def.key !== '1x2' && !line) return closedMarket(def, null, updatedAt, identity);
 
   let outcomes: Array<NormalizedOutcome | null>;
   if (def.key === '1x2') {
     outcomes = [
-      outcome('home', 'Home', readPrice(row, ['home_od', 'home'])),
-      outcome('draw', 'Draw', readPrice(row, ['draw_od', 'draw'])),
-      outcome('away', 'Away', readPrice(row, ['away_od', 'away'])),
+      outcome('home', 'Home', readPrice(row, ['home_od', 'home']), selectionId(row, 'home')),
+      outcome('draw', 'Draw', readPrice(row, ['draw_od', 'draw']), selectionId(row, 'draw')),
+      outcome('away', 'Away', readPrice(row, ['away_od', 'away']), selectionId(row, 'away')),
     ];
   } else if (def.key === 'over_under') {
     outcomes = [
-      outcome('over', 'Over', readPrice(row, ['over_od', 'over'])),
-      outcome('under', 'Under', readPrice(row, ['under_od', 'under'])),
+      outcome('over', 'Over', readPrice(row, ['over_od', 'over']), selectionId(row, 'over')),
+      outcome('under', 'Under', readPrice(row, ['under_od', 'under']), selectionId(row, 'under')),
     ];
   } else {
     outcomes = [
-      outcome('home', 'Home', readPrice(row, ['home_od', 'home'])),
-      outcome('away', 'Away', readPrice(row, ['away_od', 'away'])),
+      outcome('home', 'Home', readPrice(row, ['home_od', 'home']), selectionId(row, 'home')),
+      outcome('away', 'Away', readPrice(row, ['away_od', 'away']), selectionId(row, 'away')),
     ];
   }
-  if (outcomes.some((item) => item == null)) return closedMarket(def, line, updatedAt);
+  if (outcomes.some((item) => item == null)) return closedMarket(def, line, updatedAt, identity);
   return {
     key: def.key,
     name: def.name,
@@ -279,29 +343,31 @@ function marketFromRow(def: MarketDef, row: Record<string, unknown>): Normalized
     status: 'open',
     outcomes: outcomes as NormalizedOutcome[],
     updatedAt,
+    bookmakerId: priced.bookmakerId,
+    externalPeriodId: priced.externalPeriodId,
+    externalMarketId: def.id,
+    availability: 'open',
   };
 }
 
-function latestRows(def: MarketDef, rows: Record<string, unknown>[]): NormalizedMarket[] {
-  const grouped = new Map<string, { row: Record<string, unknown>; order: number }>();
-  rows.forEach((row, order) => {
-    const line = lineOf(def, row);
+function latestRows(def: MarketDef, rows: PricedRow[]): NormalizedMarket[] {
+  const grouped = new Map<string, { priced: PricedRow; order: number }>();
+  rows.forEach((priced, order) => {
+    const line = lineOf(def, priced.row);
     const key = def.key === '1x2' ? '1x2' : (line ?? '');
     const prev = grouped.get(key);
-    if (!prev || rowTime(row) > rowTime(prev.row) || (rowTime(row) === rowTime(prev.row) && order >= prev.order)) {
-      grouped.set(key, { row, order });
+    if (!prev || rowTime(priced.row) > rowTime(prev.priced.row) || (rowTime(priced.row) === rowTime(prev.priced.row) && order >= prev.order)) {
+      grouped.set(key, { priced, order });
     }
   });
   const markets = [...grouped.values()]
     .sort((left, right) => left.order - right.order)
-    .map((entry) => marketFromRow(def, entry.row));
+    .map((entry) => marketFromPriced(def, entry.priced));
   return markets.length ? markets : [closedMarket(def, null, null)];
 }
 
 export function eventWithOdds(event: NormalizedEvent, oddsPayload: unknown): NormalizedEvent {
-  const markets = marketsFromOddsPayload(oddsPayload);
-  if (!markets.some((market) => market.status === 'open')) return event;
-  return { ...event, marketsKnown: true, markets };
+  return { ...event, marketsKnown: true, markets: marketsFromOddsPayload(oddsPayload) };
 }
 
 export function marketsFromOddsPayload(payload: unknown): NormalizedMarket[] {
@@ -310,9 +376,22 @@ export function marketsFromOddsPayload(payload: unknown): NormalizedMarket[] {
   const nodes = findMarketNodes(container);
   return MARKET_DEFS.flatMap((def) => {
     if (!(def.id in nodes)) return [closedMarket(def, null, null)];
-    const rows = collectRows(nodes[def.id]);
-    return latestRows(def, rows);
+    return latestRows(def, collectPriced(nodes[def.id], null, null));
   });
+}
+
+export function diagnoseOddsPayload(payload: unknown): OddsDiagnosis {
+  const container = oddsContainer(payload);
+  if (!container) return 'unavailable';
+  const nodes = findMarketNodes(container);
+  const present = MARKET_DEFS.filter((def) => def.id in nodes);
+  if (!present.length) return 'unavailable';
+  const priced = present.flatMap((def) => collectPriced(nodes[def.id], null, null));
+  if (!priced.length) return 'unrecognized';
+  const markets = marketsFromOddsPayload(payload);
+  if (markets.some((market) => market.status === 'open')) return 'open';
+  if (markets.some((market) => market.availability === 'suspended')) return 'suspended';
+  return 'unavailable';
 }
 
 function embeddedOdds(row: Record<string, unknown>): Record<string, unknown> | null {

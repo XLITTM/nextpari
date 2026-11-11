@@ -1,5 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { fetchFootballEvent, fetchFootballFeed } from './lib/footballFeed';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  applyFootballQuotes,
+  fetchFootballFeed,
+  fetchFootballQuotes,
+  footballQuoteIds,
+  mergeListedMatches,
+} from './lib/footballFeed';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
@@ -8,6 +14,7 @@ interface LiveMatchesContextValue {
   upcomingMatches: MatchEvent[];
   loading: boolean;
   refresh: () => Promise<void>;
+  ensurePrices: (ids: string[]) => Promise<void>;
   findMatch: (id: string) => MatchEvent | undefined;
 }
 
@@ -19,28 +26,44 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const clearEvents = useSportsStore((s) => s.clearEvents);
   const [matches, setMatches] = useState<MatchEvent[]>(EMPTY_MATCHES);
   const [loading, setLoading] = useState(false);
+  const generation = useRef(0);
+
+  const applyQuotes = useCallback(async (ids: string[], ticket: number) => {
+    if (!ids.length || ticket !== generation.current) return;
+    const quotes = await fetchFootballQuotes(ids);
+    if (ticket !== generation.current) return;
+    setMatches((current) => applyFootballQuotes(current, quotes));
+    return quotes;
+  }, []);
+
+  const ensurePrices = useCallback(async (ids: string[]) => {
+    const ticket = generation.current;
+    await applyQuotes(ids.filter((id) => /^\d{1,20}$/.test(id)).slice(0, 8), ticket);
+  }, [applyQuotes]);
 
   const refresh = useCallback(async () => {
+    const ticket = ++generation.current;
     setLoading(true);
     try {
       const listed = await fetchFootballFeed();
-      setMatches(listed);
-      const needsPrice = listed.filter((match) => match.marketsLocked).slice(0, 3);
-      for (const match of needsPrice) {
-        try {
-          const priced = await fetchFootballEvent(match.id);
-          if (!priced || priced.marketsLocked) continue;
-          setMatches((current) => current.map((item) => (item.id === priced.id ? priced : item)));
-        } catch {
-          /* the list stays visible when one price request fails */
-        }
-      }
+      if (ticket !== generation.current) return;
+      let merged: MatchEvent[] = [];
+      setMatches((current) => {
+        merged = mergeListedMatches(current, listed);
+        return merged;
+      });
+      const plan = footballQuoteIds(merged);
+      const first = await applyQuotes(plan.primary, ticket);
+      const limited = first?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
+      if (!limited) await applyQuotes(plan.secondary, ticket);
     } catch {
-      setMatches(EMPTY_MATCHES);
+      if (ticket === generation.current) {
+        setMatches((current) => current);
+      }
     } finally {
-      setLoading(false);
+      if (ticket === generation.current) setLoading(false);
     }
-  }, []);
+  }, [applyQuotes]);
 
   useEffect(() => {
     clearEvents();
@@ -61,9 +84,10 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
       upcomingMatches,
       loading,
       refresh,
+      ensurePrices,
       findMatch,
     }),
-    [findMatch, liveMatches, loading, refresh, upcomingMatches],
+    [ensurePrices, findMatch, liveMatches, loading, refresh, upcomingMatches],
   );
 
   return <LiveMatchesContext.Provider value={value}>{children}</LiveMatchesContext.Provider>;

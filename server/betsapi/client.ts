@@ -5,13 +5,14 @@ import {
   type HeaderBag,
   type SharedBudgetOptions,
 } from './budget.js';
-import { normalizeFootballDetails, normalizeFootballList } from './parse.js';
+import { diagnoseOddsPayload, marketsFromOddsPayload, normalizeFootballDetails, normalizeFootballList, type OddsDiagnosis } from './parse.js';
 import {
   FOOTBALL_SPORT_ID,
   type FeedEndpoint,
   type FeedResult,
   type NormalizedEvent,
   type NormalizedFeed,
+  type NormalizedMarket,
   type RateLimitSnapshot,
 } from './types.js';
 
@@ -51,6 +52,21 @@ interface CacheEntry {
   events: NormalizedEvent[];
   endpoint: FeedEndpoint;
   rateLimit: RateLimitSnapshot | null;
+}
+
+export type EventOddsState = OddsDiagnosis | 'rate_limited' | 'stale' | 'upstream';
+
+export interface EventOddsRead {
+  eventId: string;
+  priceState: EventOddsState;
+  markets: NormalizedMarket[];
+  stale: boolean;
+}
+
+interface OddsCacheEntry {
+  storedAt: number;
+  priceState: OddsDiagnosis;
+  markets: NormalizedMarket[];
 }
 
 export interface BetsApiReadOnlyClientOptions extends SharedBudgetOptions {
@@ -101,6 +117,8 @@ export class BetsApiReadOnlyClient {
   private readonly staleMs: Record<CacheKind, number>;
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inflight = new Map<string, Promise<FeedResult>>();
+  private readonly oddsCache = new Map<string, OddsCacheEntry>();
+  private readonly oddsInflight = new Map<string, Promise<EventOddsRead>>();
 
   constructor(options: BetsApiReadOnlyClientOptions = {}) {
     this.env = options.env ?? process.env;
@@ -143,9 +161,53 @@ export class BetsApiReadOnlyClient {
       return null;
     }
     const observation = readRateLimitHeaders(odds.headers, this.now());
-    this.budget.noteSuccess();
-    this.budget.noteRemainingExhausted(observation);
+    this.budget.noteQuota(observation);
     return odds.json;
+  }
+
+  readEventOdds(eventId: string): Promise<EventOddsRead> {
+    if (!/^\d{1,20}$/.test(eventId)) {
+      return Promise.resolve({ eventId, priceState: 'unavailable', markets: [], stale: false });
+    }
+    const pending = this.oddsInflight.get(eventId);
+    if (pending) return pending;
+    const run = this.loadEventOdds(eventId).finally(() => {
+      this.oddsInflight.delete(eventId);
+    });
+    this.oddsInflight.set(eventId, run);
+    return run;
+  }
+
+  private async loadEventOdds(eventId: string): Promise<EventOddsRead> {
+    const cached = this.oddsCache.get(eventId) ?? null;
+    const age = cached ? this.now() - cached.storedAt : Number.POSITIVE_INFINITY;
+    if (cached && age <= this.freshMs.odds) {
+      return { eventId, priceState: cached.priceState, markets: cached.markets, stale: false };
+    }
+    const staleRead = (): EventOddsRead | null => (
+      cached && age <= this.staleMs.odds
+        ? { eventId, priceState: 'stale', markets: cached.markets, stale: true }
+        : null
+    );
+    if (this.budget.coolingDown()) {
+      return staleRead() ?? { eventId, priceState: 'rate_limited', markets: [], stale: false };
+    }
+    const token = tokenFrom(this.env);
+    if (!token) return { eventId, priceState: 'upstream', markets: [], stale: false };
+    const odds = await this.fetchAllowlisted(PATHS.odds, { event_id: eventId }, token);
+    if (odds.status === 429) {
+      this.budget.noteRateLimit(readRateLimitHeaders(odds.headers, this.now()));
+      return staleRead() ?? { eventId, priceState: 'rate_limited', markets: [], stale: false };
+    }
+    if (odds.timedOut || odds.networkError || odds.status < 200 || odds.status >= 300 || !accepted(odds.json)) {
+      return staleRead() ?? { eventId, priceState: 'upstream', markets: [], stale: false };
+    }
+    const observation = readRateLimitHeaders(odds.headers, this.now());
+    this.budget.noteQuota(observation);
+    const markets = marketsFromOddsPayload(odds.json);
+    const priceState = diagnoseOddsPayload(odds.json);
+    this.oddsCache.set(eventId, { storedAt: this.now(), priceState, markets });
+    return { eventId, priceState, markets, stale: false };
   }
 
   getEnded(day: string): Promise<FeedResult> {
@@ -226,8 +288,7 @@ export class BetsApiReadOnlyClient {
       return this.failed('UPSTREAM', cached, endpoint, upstream.status || null);
     }
     const observation = readRateLimitHeaders(upstream.headers, this.now());
-    this.budget.noteSuccess();
-    this.budget.noteRemainingExhausted(observation);
+    this.budget.noteQuota(observation);
     const entry: CacheEntry = {
       storedAt: this.now(),
       events: parse(upstream.json),
@@ -256,8 +317,7 @@ export class BetsApiReadOnlyClient {
       return this.failed('UPSTREAM', cached, 'event', view.status || null);
     }
     const viewObservation = readRateLimitHeaders(view.headers, this.now());
-    this.budget.noteSuccess();
-    this.budget.noteRemainingExhausted(viewObservation);
+    this.budget.noteQuota(viewObservation);
 
     let oddsPayload: unknown | null = null;
     let oddsRate: RateLimitSnapshot | null = null;
@@ -270,8 +330,7 @@ export class BetsApiReadOnlyClient {
       oddsLimited = true;
     } else if (!odds.timedOut && !odds.networkError && odds.status >= 200 && odds.status < 300 && accepted(odds.json)) {
       const observation = readRateLimitHeaders(odds.headers, this.now());
-      this.budget.noteSuccess();
-      this.budget.noteRemainingExhausted(observation);
+      this.budget.noteQuota(observation);
       oddsPayload = odds.json;
       oddsRate = snapshotOf(observation);
     }
@@ -415,6 +474,19 @@ export function getSharedBetsApiClient(options?: BetsApiReadOnlyClientOptions): 
 
 export function resetSharedBetsApiClient(): void {
   shared = null;
+}
+
+const ACCOUNT_HOURLY_LIMIT = 3_600;
+export const ODDS_REQUEST_GAP_MS = Math.ceil(3_600_000 / ACCOUNT_HOURLY_LIMIT) * 2;
+let oddsClient: BetsApiReadOnlyClient | null = null;
+
+export function getFootballOddsClient(): BetsApiReadOnlyClient {
+  if (!oddsClient) oddsClient = new BetsApiReadOnlyClient({ minGapMs: ODDS_REQUEST_GAP_MS });
+  return oddsClient;
+}
+
+export function resetFootballOddsClient(): void {
+  oddsClient = null;
 }
 
 export { BACKOFF_START_MS };
