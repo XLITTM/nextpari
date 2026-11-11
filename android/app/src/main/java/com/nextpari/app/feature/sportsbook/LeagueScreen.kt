@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -35,12 +36,14 @@ fun LeagueScreen(
     val dark = colors.bg == NextpariColors.Dark.bg
     val (_, name) = LeagueIds.fromLeagueId(leagueId)
     val resolvedMode = viewModel.rememberMode(mode)
+    val football = viewModel.state.collectAsStateWithLifecycle().value
     val matches = viewModel.leagueMatches(leagueId, resolvedMode)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF0F2F5))) {
         SportsbookScreenHeader(title = name, onBack = onBack, actions = emptyList())
+        FootballFeedControl(football.loading, football.feed.notice, viewModel::refreshFeed)
         when {
-            viewModel.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
+            football.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
             matches.isEmpty() -> Text(
                 "Сейчас матчей нет",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
@@ -57,6 +60,8 @@ fun LeagueScreen(
                         model = match,
                         carousel = false,
                         onOpen = { onNavigate(Destinations.match(match.id)) },
+                        selectedOdds = football.selectedKeys,
+                        onOddSelected = viewModel::toggle,
                     )
                 }
             }
