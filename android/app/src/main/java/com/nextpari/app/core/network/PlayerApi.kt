@@ -1,5 +1,6 @@
 package com.nextpari.app.core.network
 
+import com.nextpari.app.core.network.session.WalletResponseScope
 import kotlinx.serialization.json.JsonObject
 import retrofit2.Response
 import retrofit2.http.Body
@@ -8,6 +9,7 @@ import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
+import retrofit2.http.Tag
 
 interface PlayerApi {
     @POST("api/player/auth/login")
@@ -20,16 +22,16 @@ interface PlayerApi {
     suspend fun logout(): Response<JsonObject>
 
     @GET("api/player/me")
-    suspend fun me(): Response<JsonObject>
+    suspend fun me(@Tag scope: WalletResponseScope? = null): Response<JsonObject>
 
     @GET("api/player/profile")
-    suspend fun profile(): Response<JsonObject>
+    suspend fun profile(@Tag scope: WalletResponseScope? = null): Response<JsonObject>
 
     @GET("api/player/wallet")
     suspend fun wallet(): Response<JsonObject>
 
     @GET("api/player/wallets")
-    suspend fun wallets(): Response<JsonObject>
+    suspend fun wallets(@Tag scope: WalletResponseScope? = null): Response<JsonObject>
 
     @POST("api/player/wallets/add")
     suspend fun addWallet(@Body body: JsonObject): Response<JsonObject>
