@@ -7,6 +7,8 @@ fun interface SessionUnauthorizedHandler {
     fun onUnauthorized()
 }
 
+class WalletResponseScope(val isCurrent: () -> Boolean)
+
 class SessionUnauthorizedInterceptor(
     private val handler: SessionUnauthorizedHandler,
 ) : Interceptor {
@@ -14,7 +16,8 @@ class SessionUnauthorizedInterceptor(
         val response = chain.proceed(chain.request())
         val path = response.request.url.encodedPath
         val sportsbookDenial = response.code == 403 && path == "/api/player/sports/place"
-        if ((response.code == 401 || response.code == 403) && !sportsbookDenial && !isAuthAttempt(path)) {
+        val scoped = response.request.tag(WalletResponseScope::class.java) != null
+        if ((response.code == 401 || response.code == 403) && !scoped && !sportsbookDenial && !isAuthAttempt(path)) {
             handler.onUnauthorized()
         }
         return response
