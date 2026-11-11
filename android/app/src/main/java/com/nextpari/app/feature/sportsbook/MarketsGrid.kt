@@ -32,12 +32,13 @@ fun MarketsGrid(
     markets: List<MarketGroup>,
     initialPinned: Set<String> = emptySet(),
     loading: Boolean = false,
+    selected: Set<String> = emptySet(),
+    onSelect: (MarketOutcome) -> Unit = {},
 ) {
     val tabs = MarketTabs.forSport(sport)
     var tab by rememberSaveable { mutableStateOf(tabs.first().id) }
     var openKeys by rememberSaveable { mutableStateOf(setOf<String>()) }
     var pinned by rememberSaveable { mutableStateOf(initialPinned) }
-    var selected by rememberSaveable { mutableStateOf(setOf<String>()) }
     var bootstrappedTab by rememberSaveable { mutableStateOf("") }
     val filtered = MarketAccordionLogic.sortPinnedFirst(MarketTabs.filter(markets, tab), pinned)
 
@@ -102,10 +103,7 @@ fun MarketsGrid(
                     selectedKeys = selected,
                     onToggle = { openKeys = MarketAccordionLogic.toggle(openKeys, market.key) },
                     onPin = { pinned = MarketAccordionLogic.togglePin(pinned, market.key) },
-                    onSelect = { outcome ->
-                        val id = outcomeIdentity(outcome)
-                        selected = if (id in selected) selected - id else selected + id
-                    },
+                    onSelect = onSelect,
                 )
             }
         }
