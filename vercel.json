@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "work/sports-canonical-catalog-w001": false
+    }
+  },
   "rewrites": [
     {
       "source": "/api/betsapi/:path*",
