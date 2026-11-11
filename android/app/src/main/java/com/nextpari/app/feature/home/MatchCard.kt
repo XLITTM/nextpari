@@ -40,6 +40,7 @@ import com.nextpari.app.core.ui.components.LiveBadge
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.sportsbook.SportsBetSelection
 
 @Composable
 fun NextpariMatchCard(
@@ -47,6 +48,8 @@ fun NextpariMatchCard(
     carousel: Boolean,
     onOpen: () -> Unit,
     onToggleFavorite: (() -> Unit)? = null,
+    selectedOdds: Set<String> = emptySet(),
+    onOddSelected: ((SportsBetSelection) -> Unit)? = null,
 ) {
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
@@ -102,7 +105,14 @@ fun NextpariMatchCard(
         if (model.outcomes.isNotEmpty()) {
             Row(Modifier.padding(start = 12.dp, end = 12.dp, bottom = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 model.outcomes.take(3).forEach { outcome ->
-                    OutcomeButton(outcome, dark, Modifier.weight(1f))
+                    val selection = outcome.selection
+                    OutcomeButton(
+                        outcome, dark, Modifier.weight(1f),
+                        selected = selection != null && selection.identity in selectedOdds,
+                        onClick = if (selection != null && onOddSelected != null) {
+                            { onOddSelected(selection) }
+                        } else null,
+                    )
                 }
             }
         }
@@ -190,7 +200,9 @@ private fun MatchCenter(model: MatchCardModel) {
 }
 
 @Composable
-private fun OutcomeButton(outcome: MatchOutcome, dark: Boolean, modifier: Modifier) {
+private fun OutcomeButton(
+    outcome: MatchOutcome, dark: Boolean, modifier: Modifier, selected: Boolean, onClick: (() -> Unit)?,
+) {
     val colors = NextpariTheme.colors
     val oddsColor = when (outcome.movement) {
         OddsMovement.Up -> Color(0xFF16A34A)
@@ -202,7 +214,8 @@ private fun OutcomeButton(outcome: MatchOutcome, dark: Boolean, modifier: Modifi
             .height(36.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, if (dark) Color(0xFF4B5563) else Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
-            .background(if (dark) Color(0xFF0F172A) else Color.White)
+            .background(if (selected) colors.surfaceMuted else if (dark) Color(0xFF0F172A) else Color.White)
+            .then(if (onClick != null && !outcome.locked) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -219,6 +232,8 @@ private fun OutcomeButton(outcome: MatchOutcome, dark: Boolean, modifier: Modifi
 @Composable
 fun MatchCarousel(
     matches: List<MatchCardModel>,
+    selectedOdds: Set<String> = emptySet(),
+    onOddSelected: ((SportsBetSelection) -> Unit)? = null,
     onOpen: (MatchCardModel) -> Unit,
 ) {
     androidx.compose.foundation.lazy.LazyRow(
@@ -227,7 +242,10 @@ fun MatchCarousel(
     ) {
         items(matches.size, key = { matches[it].id }) { index ->
             val match = matches[index]
-            NextpariMatchCard(model = match, carousel = true, onOpen = { onOpen(match) })
+            NextpariMatchCard(
+                model = match, carousel = true, onOpen = { onOpen(match) },
+                selectedOdds = selectedOdds, onOddSelected = onOddSelected,
+            )
         }
     }
 }
