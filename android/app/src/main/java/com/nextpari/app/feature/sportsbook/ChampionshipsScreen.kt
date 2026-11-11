@@ -66,6 +66,7 @@ fun ChampionshipsScreen(
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(if (initialMode == "line") "line" else "live") }
+    val football = viewModel.state.collectAsStateWithLifecycle().value
     val groups = viewModel.championships(sport, tab)
     var expanded by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(groups.map { it.country }) {
@@ -107,8 +108,9 @@ fun ChampionshipsScreen(
             Spacer(Modifier.width(8.dp))
             Text(sportName.uppercase(), color = if (dark) Color(0xFFD1D5DB) else Color(0xFF4B5563), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
+        FootballFeedControl(football.loading, football.feed.notice, viewModel::refreshFeed)
         when {
-            viewModel.loading && groups.isEmpty() -> MatchSkeletonCarousel(count = 4)
+            football.loading && groups.isEmpty() -> MatchSkeletonCarousel(count = 4)
             groups.isEmpty() -> Text(
                 "Сейчас матчей нет",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
