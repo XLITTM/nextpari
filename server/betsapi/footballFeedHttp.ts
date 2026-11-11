@@ -1,5 +1,8 @@
 import { BetsApiReadOnlyClient, getSharedBetsApiClient } from './client.js';
+import { eventWithOdds } from './parse.js';
 import type { FeedResult, NormalizedEvent, NormalizedMarket } from './types.js';
+
+const ODDS_ENRICH_LIMIT = 3;
 
 export const FOOTBALL_FEED_PATH = '/api/player/sports/football-feed';
 
@@ -25,6 +28,24 @@ export interface FootballFeedCard {
 function cardsFrom(result: FeedResult | null): FootballFeedCard[] {
   const events = result?.feed?.events ?? [];
   return events.map(toCard);
+}
+
+async function enrichListedOdds(
+  client: BetsApiReadOnlyClient,
+  events: NormalizedEvent[],
+): Promise<NormalizedEvent[]> {
+  let remaining = ODDS_ENRICH_LIMIT;
+  const priced: NormalizedEvent[] = [];
+  for (const event of events) {
+    if (remaining <= 0 || event.markets.some((market) => market.status === 'open')) {
+      priced.push(event);
+      continue;
+    }
+    remaining -= 1;
+    const payload = await client.getOddsPayload(event.eventId);
+    priced.push(payload ? eventWithOdds(event, payload) : event);
+  }
+  return priced;
 }
 
 function toCard(event: NormalizedEvent): FootballFeedCard {
@@ -76,13 +97,15 @@ export async function handleFootballFeedRequest(
   }
   const [live, upcoming] = await Promise.all([client.getInplay(), client.getUpcoming(1)]);
   const tokenMissing = live.error === 'TOKEN_MISSING' || upcoming.error === 'TOKEN_MISSING';
+  const listed = [...(live.feed?.events ?? []), ...(upcoming.feed?.events ?? [])];
+  const priced = tokenMissing ? listed : await enrichListedOdds(client, listed);
   return {
     status: tokenMissing || live.ok || upcoming.ok ? 200 : 503,
     body: {
       ok: tokenMissing || live.ok || upcoming.ok,
       error: tokenMissing ? 'TOKEN_MISSING' : live.error ?? upcoming.error,
       stale: Boolean(live.feed?.stale || upcoming.feed?.stale),
-      events: [...cardsFrom(live), ...cardsFrom(upcoming)],
+      events: priced.map(toCard),
     },
   };
 }

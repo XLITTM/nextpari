@@ -1,4 +1,4 @@
-import { toDecimalOdds } from '../../src/lib/matchOdds.js';
+import { toDecimalOdds } from '../../src/lib/decimalOdds.js';
 import {
   FOOTBALL_SPORT_ID,
   type EventStatus,
@@ -296,6 +296,12 @@ function latestRows(def: MarketDef, rows: Record<string, unknown>[]): Normalized
     .sort((left, right) => left.order - right.order)
     .map((entry) => marketFromRow(def, entry.row));
   return markets.length ? markets : [closedMarket(def, null, null)];
+}
+
+export function eventWithOdds(event: NormalizedEvent, oddsPayload: unknown): NormalizedEvent {
+  const markets = marketsFromOddsPayload(oddsPayload);
+  if (!markets.some((market) => market.status === 'open')) return event;
+  return { ...event, marketsKnown: true, markets };
 }
 
 export function marketsFromOddsPayload(payload: unknown): NormalizedMarket[] {

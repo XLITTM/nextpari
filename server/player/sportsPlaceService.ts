@@ -305,7 +305,7 @@ export async function placeSportsBet(
     const decision = decideSportsQuote(request, quote, {
       bettingEnabled: isCanonicalSportsBetEnabled(env),
     });
-    if (!decision.ok) {
+    if ('reason' in decision) {
       const currentPrice = decision.currentPrice ?? decision.quote?.price ?? quote.price ?? null;
       await recordPlaceDecision(ports, {
         idempotencyKey,
@@ -348,7 +348,7 @@ export async function placeSportsBet(
 
   if (requests.some((row) => normalizeSportsProviderId(row.provider) === 'betsapi')) {
     const cap = betsapiStakeAllowed(stake, env);
-    if (!cap.ok) {
+    if ('code' in cap) {
       await recordPlaceDecision(ports, {
         idempotencyKey,
         playerUserId: session.userId,
@@ -363,7 +363,7 @@ export async function placeSportsBet(
   }
 
   const risk = evaluateSportsRisk({ stake, mode, quotes });
-  if (!risk.ok) {
+  if ('code' in risk) {
     await recordPlaceDecision(ports, {
       idempotencyKey,
       playerUserId: session.userId,

@@ -730,7 +730,7 @@ async function registerWithPhone(
   }
   if (ports.resolveLoginEmail) {
     const existing = await ports.resolveLoginEmail('phone', phone);
-    if (existing.ok || (!existing.ok && existing.reason === 'ambiguous')) {
+    if (!('reason' in existing) || existing.reason === 'ambiguous') {
       return {
         status: 409,
         body: { ok: false, authenticated: false, error: 'REGISTRATION_FAILED' },

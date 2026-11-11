@@ -130,6 +130,24 @@ export class BetsApiReadOnlyClient {
     ));
   }
 
+  async getOddsPayload(eventId: string): Promise<unknown | null> {
+    if (!/^\d{1,20}$/.test(eventId)) return null;
+    const token = tokenFrom(this.env);
+    if (!token) return null;
+    const odds = await this.fetchAllowlisted(PATHS.odds, { event_id: eventId }, token);
+    if (odds.status === 429) {
+      this.budget.noteRateLimit(readRateLimitHeaders(odds.headers, this.now()));
+      return null;
+    }
+    if (odds.timedOut || odds.networkError || odds.status < 200 || odds.status >= 300 || !accepted(odds.json)) {
+      return null;
+    }
+    const observation = readRateLimitHeaders(odds.headers, this.now());
+    this.budget.noteSuccess();
+    this.budget.noteRemainingExhausted(observation);
+    return odds.json;
+  }
+
   getEnded(day: string): Promise<FeedResult> {
     return this.cached('ended', PATHS.ended, { sport_id: FOOTBALL_SPORT_ID, day }, (json) => (
       normalizeFootballList(json, 'ended')
