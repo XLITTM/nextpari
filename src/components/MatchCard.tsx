@@ -187,7 +187,9 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             <div className="mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">{row.name}</div>
             <div className="grid grid-cols-2 gap-1.5">
               {row.outcomes.map((item) => {
-                const clickable = item.selection && hasCompleteLsportsIdentity(item.selection)
+                const clickable = item.selection?.provider === 'betsapi' && item.selection.outcomeId
+                  ? { selection: item.selection, locked: false }
+                  : item.selection && hasCompleteLsportsIdentity(item.selection)
                   ? { selection: item.selection, locked: false }
                   : clickableCardSelection(match, item.label, row.name, item.odds);
                 return (

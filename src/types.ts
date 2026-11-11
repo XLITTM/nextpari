@@ -33,6 +33,15 @@ export interface Sport {
 export interface MarketOutcome {
   label: string;
   odds: number;
+  provider?: 'betsapi';
+  feedType?: 'inplay' | 'prematch';
+  fixtureId?: string;
+  marketId?: string;
+  marketKey?: string;
+  line?: string;
+  outcomeId?: string;
+  updatedAt?: string;
+  matchLabel?: string;
 }
 
 export type MarketCategory =
@@ -96,7 +105,17 @@ export interface MatchEvent {
   marketGroups?: MarketGroup[];
   marketsLocked?: boolean;
   marketsEstimated?: boolean;
-  feedTag?: 'lsports';
+  feedTag?: 'lsports' | 'betsapi';
+  betsapiQuotes?: Record<string, {
+    provider: 'betsapi';
+    feedType: 'inplay' | 'prematch';
+    fixtureId: string;
+    marketId: string;
+    marketKey: string;
+    line: string;
+    outcomeId: string;
+    updatedAt?: string;
+  }>;
   stats?: MatchStat[];
   h2h?: H2HGame[];
   stadium?: { name: string; city: string; capacity: string };

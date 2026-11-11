@@ -1,4 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { fetchFootballFeed } from './lib/footballFeed';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
@@ -16,23 +17,42 @@ const LiveMatchesContext = createContext<LiveMatchesContextValue | null>(null);
 
 export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const clearEvents = useSportsStore((s) => s.clearEvents);
+  const [matches, setMatches] = useState<MatchEvent[]>(EMPTY_MATCHES);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      setMatches(await fetchFootballFeed());
+    } catch {
+      setMatches(EMPTY_MATCHES);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     clearEvents();
-  }, [clearEvents]);
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [clearEvents, refresh]);
 
-  const refresh = useCallback(async () => {}, []);
-  const findMatch = useCallback((_id: string) => undefined, []);
+  const findMatch = useCallback((id: string) => matches.find((match) => match.id === id), [matches]);
+  const liveMatches = matches.filter((match) => match.isLive);
+  const upcomingMatches = matches.filter((match) => !match.isLive);
 
   const value = useMemo<LiveMatchesContextValue>(
     () => ({
-      liveMatches: EMPTY_MATCHES,
-      upcomingMatches: EMPTY_MATCHES,
-      loading: false,
+      liveMatches,
+      upcomingMatches,
+      loading,
       refresh,
       findMatch,
     }),
-    [refresh, findMatch],
+    [findMatch, liveMatches, loading, refresh, upcomingMatches],
   );
 
   return <LiveMatchesContext.Provider value={value}>{children}</LiveMatchesContext.Provider>;

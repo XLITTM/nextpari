@@ -3,7 +3,7 @@ import { outcomeLabel, type ParsedMarket } from './odds-parser';
 import { useSportsStore } from '../stores/sportsStore';
 import type { BetSelection, MatchEvent } from '../types';
 import { selectionFromLsportsOutcome } from './sportsPlaceIdentity';
-import type { ExtraCardOutcome } from './cardOdds';
+import { buildCardSelection, type ExtraCardOutcome } from './cardOdds';
 import {
   clickableCardSelectionFromMarkets,
   lsportsCardSelectionFromMarkets,
@@ -55,12 +55,48 @@ export function lsportsCardSelection(
   );
 }
 
+function betsapiSelection(
+  match: MatchEvent,
+  outcomeLabelText: string,
+  odds: number,
+  marketName: string,
+): { selection: BetSelection; locked: boolean } | null {
+  if (match.feedTag !== 'betsapi') return null;
+  const quote = match.betsapiQuotes?.[outcomeLabelText];
+  if (!quote || !(odds > 1)) {
+    return {
+      selection: {
+        ...buildCardSelection(match, outcomeLabelText, odds, marketName),
+        provider: 'betsapi',
+        fixtureId: match.id,
+      },
+      locked: true,
+    };
+  }
+  return {
+    locked: false,
+    selection: {
+      ...buildCardSelection(match, outcomeLabelText, odds, marketName),
+      provider: 'betsapi',
+      feedType: quote.feedType,
+      fixtureId: quote.fixtureId,
+      marketId: quote.marketId,
+      marketKey: quote.marketKey,
+      line: quote.line,
+      outcomeId: quote.outcomeId,
+      providerLastUpdate: quote.updatedAt,
+    },
+  };
+}
+
 export function clickableCardSelection(
   match: MatchEvent,
   outcomeLabelText: string,
   marketName: string,
   odds: number,
 ): { selection: BetSelection; locked: boolean } {
+  const betsapi = betsapiSelection(match, outcomeLabelText, odds, marketName);
+  if (betsapi) return betsapi;
   return clickableCardSelectionFromMarkets(
     match,
     lsportsStoreMarkets(match.id),
