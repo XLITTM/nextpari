@@ -307,13 +307,22 @@ internal fun AuthenticatedShell(
         Destinations.BLACKJACK, Destinations.AVIATOR, Destinations.APPLES,
         Destinations.CRYSTAL, Destinations.DICE, Destinations.PHARAOH,
     )
+    LaunchedEffect(lifecycle, session.playerPublicId) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { walletsViewModel.refresh() }
+    }
+    var previousWasGame by remember { mutableStateOf(false) }
+    LaunchedEffect(current) {
+        if (current == null) return@LaunchedEffect
+        if (current == Destinations.WALLET || (previousWasGame && !arcade)) walletsViewModel.refresh()
+        previousWasGame = arcade
+    }
     val showBottomBar = current != Destinations.GAMES && !arcade
     val showHeader = Destinations.showsHeader(current)
     val showMainTabs = Destinations.showsMainTabs(current)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
-    val walletSnapshot = AppGraph.walletRepository.snapshot()
-    val fallbackBalance = WalletsCatalog.headerFallbackLabel(walletSnapshot.displayBalance, walletSnapshot.currency)
-    val balanceLabel = WalletsCatalog.headerBalanceLabel(fallbackBalance, walletsState)
+    val walletRevision by AppGraph.playerStateStore.walletRevision.collectAsStateWithLifecycle()
+    val walletSnapshot = remember(walletRevision, session.playerPublicId) { AppGraph.walletRepository.snapshot() }
+    val balanceLabel = WalletsCatalog.headerFallbackLabel(walletSnapshot.displayBalance, walletSnapshot.currency)
     val colors = NextpariTheme.colors
 
     Box(Modifier.fillMaxSize()) {
