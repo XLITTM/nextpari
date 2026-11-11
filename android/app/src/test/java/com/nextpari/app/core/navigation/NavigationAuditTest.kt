@@ -24,7 +24,7 @@ class NavigationAuditTest {
     }
 
     @Test
-    fun intentionalPlaceholdersRemainRegistered() {
+    fun couponAndIntentionalPlaceholdersRemainRegistered() {
         val root = moduleFile("src/main/java/com/nextpari/app/core/navigation/NextpariRoot.kt").readText()
         listOf(
             Destinations.FAVORITES,
@@ -44,7 +44,8 @@ class NavigationAuditTest {
             assertThat(root).contains(routeConstant(route))
         }
         assertThat(root).contains("FavoritesScreen()")
-        assertThat(root).contains("Купон пуст. Приём ставок выключен")
+        assertThat(root).contains("SportsCouponScreen(")
+        assertThat(root).doesNotContain("Купон пуст. Приём ставок выключен")
         assertThat(root).contains("placeholder(navController, Destinations.SLOTS")
         assertThat(root).contains("placeholder(navController, Destinations.LIVE_CASINO")
         assertThat(root).contains("placeholder(navController, Destinations.PROVIDER_SPORTSBOOK")
