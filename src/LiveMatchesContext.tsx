@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { fetchFootballFeed } from './lib/footballFeed';
+import { fetchFootballEvent, fetchFootballFeed } from './lib/footballFeed';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
@@ -23,7 +23,18 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setMatches(await fetchFootballFeed());
+      const listed = await fetchFootballFeed();
+      setMatches(listed);
+      const needsPrice = listed.filter((match) => match.marketsLocked).slice(0, 3);
+      for (const match of needsPrice) {
+        try {
+          const priced = await fetchFootballEvent(match.id);
+          if (!priced || priced.marketsLocked) continue;
+          setMatches((current) => current.map((item) => (item.id === priced.id ? priced : item)));
+        } catch {
+          /* the list stays visible when one price request fails */
+        }
+      }
     } catch {
       setMatches(EMPTY_MATCHES);
     } finally {

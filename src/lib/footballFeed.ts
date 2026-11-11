@@ -135,3 +135,16 @@ export async function fetchFootballFeed(signal?: AbortSignal): Promise<MatchEven
   const body = await response.json() as { events?: FootballFeedCard[] };
   return (body.events ?? []).map(footballCardToMatch);
 }
+
+export async function fetchFootballEvent(eventId: string, signal?: AbortSignal): Promise<MatchEvent | null> {
+  if (!/^\d{1,20}$/.test(eventId)) return null;
+  const response = await fetch(`/api/player/sports/football-feed?eventId=${encodeURIComponent(eventId)}`, {
+    signal,
+    credentials: 'same-origin',
+  });
+  if (!response.ok) return null;
+  const body = await response.json() as { events?: FootballFeedCard[] };
+  const card = body.events?.[0];
+  if (!card) return null;
+  return footballCardToMatch(card);
+}
