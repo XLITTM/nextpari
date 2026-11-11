@@ -39,6 +39,7 @@ data class MarketOutcome(
     val odds: String? = null,
     val locked: Boolean = false,
     val movement: OddsMovement = OddsMovement.None,
+    val selection: SportsBetSelection? = null,
 )
 
 data class MarketGroup(
