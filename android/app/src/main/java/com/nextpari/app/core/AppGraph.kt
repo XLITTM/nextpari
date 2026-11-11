@@ -113,9 +113,6 @@ object AppGraph {
         appScope.launch { coordinator.refreshPlayerState() }
     }
 
-    fun applyServerBalance(balanceAfter: Double, walletId: String = ""): Boolean =
-        sessionCoordinator?.applyBalanceAfter(balanceAfter, walletId) ?: false
-
     fun bindFromApplication(app: Application) {
         bindPreferences(DataStorePreferencesStorage(app))
         val cookieJar = SecureCookieJar(EncryptedCookiePersistence(app))
@@ -148,6 +145,7 @@ object AppGraph {
             api = api,
             json = NetworkModule.json,
             hasSession = { cookieJar.hasPlayerSessionCookies() },
+            onUnauthorized = coordinator::onUnauthorized,
         )
         personalDataRepository = RemotePersonalDataRepository(playerStateStore, api, NetworkModule.json, sessionReady)
         gameRepository = RemoteGameRepository(api, NetworkModule.json)
