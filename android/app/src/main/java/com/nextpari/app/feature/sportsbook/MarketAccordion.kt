@@ -108,7 +108,7 @@ fun MarketAccordion(
 }
 
 fun outcomeIdentity(outcome: MarketOutcome): String =
-    listOf(outcome.eventId, outcome.marketId, outcome.outcomeId.orEmpty(), outcome.line.orEmpty(), outcome.label).joinToString("|")
+    outcome.selection?.identity ?: listOf(outcome.eventId, outcome.marketId, outcome.outcomeId.orEmpty(), outcome.line.orEmpty(), outcome.label).joinToString("|")
 
 @Composable
 fun MarketOutcomeButton(
