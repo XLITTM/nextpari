@@ -13,7 +13,8 @@ class SessionUnauthorizedInterceptor(
     override fun intercept(chain: Interceptor.Chain): Response {
         val response = chain.proceed(chain.request())
         val path = response.request.url.encodedPath
-        if ((response.code == 401 || response.code == 403) && !isAuthAttempt(path)) {
+        val sportsbookDenial = response.code == 403 && path == "/api/player/sports/place"
+        if ((response.code == 401 || response.code == 403) && !sportsbookDenial && !isAuthAttempt(path)) {
             handler.onUnauthorized()
         }
         return response
