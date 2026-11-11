@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
@@ -47,6 +48,7 @@ fun GameListScreen(
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(if (initialMode == "line") "line" else "live") }
     var actionNotice by rememberSaveable { mutableStateOf("") }
+    val football = viewModel.state.collectAsStateWithLifecycle().value
     val matches = viewModel.pool(tab)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFE5E7EB))) {
@@ -68,8 +70,9 @@ fun GameListScreen(
                 GameListTab("Линия", tab == "line", Modifier.weight(1f)) { tab = "line" }
             }
         }
+        FootballFeedControl(football.loading, football.feed.notice, viewModel::refreshFeed)
         when {
-            viewModel.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
+            football.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
             matches.isEmpty() -> Text(
                 "Сейчас матчей нет",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
@@ -87,6 +90,8 @@ fun GameListScreen(
                         model = match,
                         carousel = false,
                         onOpen = { onNavigate(Destinations.match(match.id)) },
+                        selectedOdds = football.selectedKeys,
+                        onOddSelected = viewModel::toggle,
                     )
                 }
             }
