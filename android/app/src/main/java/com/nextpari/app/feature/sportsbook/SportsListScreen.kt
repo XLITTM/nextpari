@@ -54,6 +54,7 @@ fun SportsListScreen(
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(initialMode) }
+    val football = viewModel.state.collectAsStateWithLifecycle().value
     val rows = viewModel.sportRows(tab)
     val storedFavorites by com.nextpari.app.core.AppGraph.sportsFavorites.favorites.collectAsStateWithLifecycle()
     val favoriteScope = androidx.compose.runtime.rememberCoroutineScope()
@@ -78,6 +79,7 @@ fun SportsListScreen(
                 onChange = { tab = it },
             )
         }
+        FootballFeedControl(football.loading, football.feed.notice, viewModel::refreshFeed)
         LazyColumn(Modifier.fillMaxSize().padding(top = 8.dp).background(if (dark) Color(0xFF1E293B) else Color.White)) {
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 Row(
