@@ -1,5 +1,9 @@
 package com.nextpari.app.core.navigation
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.nextpari.app.feature.sportsbook.SportsCouponScreen
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -268,8 +272,27 @@ internal fun AuthenticatedShell(
     val walletsViewModel: WalletsViewModel = viewModel(factory = WalletsViewModel.Factory)
     val homeState by homeViewModel.uiState.collectAsStateWithLifecycle()
     val walletsState by walletsViewModel.uiState.collectAsStateWithLifecycle()
+    val football by sportsbookViewModel.state.collectAsStateWithLifecycle()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(football.acceptedBetId) {
+        if (football.acceptedBetId != null) walletsViewModel.refresh()
+    }
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
+    val showsFootball = when (current) {
+        Destinations.HOME -> homeState.mainTabId in setOf("top", "sport")
+        Destinations.GAMELIST_LIVE, Destinations.GAMELIST_LINE, Destinations.SPORTS_LIVE,
+        Destinations.SPORTS_LINE, Destinations.CHAMPIONSHIPS, Destinations.LEAGUE -> true
+        else -> false
+    }
+    LaunchedEffect(showsFootball, session.playerPublicId, lifecycle) {
+        if (showsFootball) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                sportsbookViewModel.refreshFeed()
+                delay(45_000)
+            }
+        }
+    }
     val ancestorRoutes = remember { mutableStateListOf<String>() }
     DisposableEffect(navController) {
         val listener = NavController.OnDestinationChangedListener { controller, destination, _ ->
@@ -334,7 +357,7 @@ internal fun AuthenticatedShell(
             if (showBottomBar) {
                 NextpariBottomNav(
                     activeRoute = Destinations.bottomNavActiveRoute(current, ancestorRoutes),
-                    betCount = 0,
+                    betCount = football.selections.size,
                     onSelect = { item -> navController.navigateTab(item.route) },
                 )
             }
@@ -372,7 +395,7 @@ internal fun AuthenticatedShell(
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None },
             ) {
-                HomeScreen(viewModel = homeViewModel, onNavigate = { navController.navigateTo(it) })
+                HomeScreen(viewModel = homeViewModel, sportsbook = sportsbookViewModel, onNavigate = { navController.navigateTo(it) })
             }
             composable(
                 Destinations.FAVORITES,
@@ -390,9 +413,20 @@ internal fun AuthenticatedShell(
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None },
             ) {
-                PlaceholderScreen(
-                    "Купон",
-                    message = "Купон пуст. Приём ставок выключен: лента событий не подключена, а канонический спортбук не включён.",
+                val wallet = walletsState.owned.firstOrNull { it.isActive }
+                SportsCouponScreen(
+                    state = football,
+                    walletId = wallet?.walletId.takeUnless { walletsState.busy },
+                    walletCurrency = wallet?.currency,
+                    onStake = sportsbookViewModel::setStake,
+                    onRemove = sportsbookViewModel::remove,
+                    onSubmit = {
+                        val activeWallet = AppGraph.playerStateStore.wallets().firstOrNull { it.isActive }
+                        if (!walletsState.busy && activeWallet?.walletId == wallet?.walletId) {
+                            sportsbookViewModel.submit(activeWallet?.walletId)
+                        }
+                    },
+                    onHistory = { navController.navigateTab(Destinations.HISTORY) },
                 )
             }
             composable(
