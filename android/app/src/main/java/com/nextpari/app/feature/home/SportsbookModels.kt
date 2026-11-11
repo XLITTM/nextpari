@@ -1,5 +1,7 @@
 package com.nextpari.app.feature.home
 
+import com.nextpari.app.feature.sportsbook.SportsBetSelection
+
 enum class OddsMovement { None, Up, Down }
 
 data class MatchOutcome(
@@ -7,6 +9,7 @@ data class MatchOutcome(
     val odds: String? = null,
     val locked: Boolean = false,
     val movement: OddsMovement = OddsMovement.None,
+    val selection: SportsBetSelection? = null,
 )
 
 data class MatchCardModel(
