@@ -7,6 +7,14 @@ import {
 } from './budget.js';
 import { diagnoseOddsPayload, marketsFromOddsPayload, normalizeFootballDetails, normalizeFootballList, type OddsDiagnosis } from './parse.js';
 import {
+  bet365Directory,
+  findBet365Link,
+  normalizeBet365Live,
+  normalizeBet365Prematch,
+  type Bet365EventMarkets,
+  type Bet365EventLink,
+} from './bet365Markets.js';
+import {
   FOOTBALL_SPORT_ID,
   type FeedEndpoint,
   type FeedResult,
@@ -76,6 +84,7 @@ export interface BetsApiReadOnlyClientOptions extends SharedBudgetOptions {
   freshMs?: Partial<Record<CacheKind, number>>;
   staleMs?: Partial<Record<CacheKind, number>>;
   hosts?: readonly string[];
+  budget?: SharedRequestBudget;
 }
 
 interface UpstreamResult {
@@ -119,6 +128,7 @@ export class BetsApiReadOnlyClient {
   private readonly inflight = new Map<string, Promise<FeedResult>>();
   private readonly oddsCache = new Map<string, OddsCacheEntry>();
   private readonly oddsInflight = new Map<string, Promise<EventOddsRead>>();
+  private readonly bet365DirectoryCache = new Map<'live' | 'prematch', { at: number; links: Bet365EventLink[] }>();
 
   constructor(options: BetsApiReadOnlyClientOptions = {}) {
     this.env = options.env ?? process.env;
@@ -126,7 +136,7 @@ export class BetsApiReadOnlyClient {
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.hosts = options.hosts ?? [BETSAPI_PRIMARY_HOST, BETSAPI_FALLBACK_HOST];
     this.now = options.now ?? (() => Date.now());
-    this.budget = new SharedRequestBudget({
+    this.budget = options.budget ?? new SharedRequestBudget({
       now: this.now,
       sleep: options.sleep,
       minGapMs: options.minGapMs,
@@ -163,6 +173,57 @@ export class BetsApiReadOnlyClient {
     const observation = readRateLimitHeaders(odds.headers, this.now());
     this.budget.noteQuota(observation);
     return odds.json;
+  }
+
+  async readBet365Expanded(eventsId: string, live: boolean): Promise<{
+    mapped: boolean;
+    stale: boolean;
+    rateLimited: boolean;
+    link: Bet365EventLink | null;
+    markets: Bet365EventMarkets | null;
+  }> {
+    const empty = { mapped: false, stale: false, rateLimited: false, link: null, markets: null };
+    if (!/^\d{1,20}$/.test(eventsId) || eventsId === '0') return empty;
+    if (this.budget.coolingDown()) return { ...empty, rateLimited: true };
+    const phase = live ? 'live' : 'prematch';
+    const directory = await this.bet365Links(phase);
+    if (directory.rateLimited) return { ...empty, rateLimited: true };
+    const link = findBet365Link(directory.links, eventsId, phase);
+    if (!link) return empty;
+    const detail = await this.fetchBet365(phase === 'live' ? '/v1/bet365/event' : '/v4/bet365/prematch', { FI: link.fi });
+    if (detail.rateLimited) return { mapped: true, stale: false, rateLimited: true, link, markets: null };
+    const markets = phase === 'live' ? normalizeBet365Live(detail.json, this.now()) : normalizeBet365Prematch(detail.json, this.now());
+    if (!markets || markets.fi !== link.fi) return { mapped: true, stale: false, rateLimited: false, link, markets: null };
+    if (markets.eventsId && markets.eventsId !== link.eventsId) return { mapped: true, stale: false, rateLimited: false, link, markets: null };
+    return { mapped: true, stale: markets.stale, rateLimited: false, link, markets: { ...markets, eventsId: link.eventsId } };
+  }
+
+  private async bet365Links(phase: 'live' | 'prematch'): Promise<{ links: Bet365EventLink[]; rateLimited: boolean }> {
+    const cached = this.bet365DirectoryCache.get(phase);
+    if (cached && this.now() - cached.at <= 60_000) return { links: cached.links, rateLimited: false };
+    const path = phase === 'live' ? '/v1/bet365/inplay_filter' : '/v1/bet365/upcoming';
+    const query: Record<string, string> = { sport_id: '1' };
+    if (phase === 'prematch') query.page = '1';
+    const read = await this.fetchBet365(path, query);
+    if (read.rateLimited) return { links: cached?.links ?? [], rateLimited: true };
+    const links = bet365Directory(read.json, phase);
+    this.bet365DirectoryCache.set(phase, { at: this.now(), links });
+    return { links, rateLimited: false };
+  }
+
+  private async fetchBet365(path: string, query: Record<string, string>): Promise<{ json: unknown; rateLimited: boolean }> {
+    const token = tokenFrom(this.env);
+    if (!token) return { json: null, rateLimited: false };
+    const upstream = await this.fetchAllowlisted(path, query, token);
+    if (upstream.status === 429) {
+      this.budget.noteRateLimit(readRateLimitHeaders(upstream.headers, this.now()));
+      return { json: null, rateLimited: true };
+    }
+    if (upstream.timedOut || upstream.networkError || upstream.status < 200 || upstream.status >= 300 || !accepted(upstream.json)) {
+      return { json: null, rateLimited: false };
+    }
+    this.budget.noteQuota(readRateLimitHeaders(upstream.headers, this.now()));
+    return { json: upstream.json, rateLimited: false };
   }
 
   readEventOdds(eventId: string): Promise<EventOddsRead> {
@@ -464,9 +525,11 @@ let shared: BetsApiReadOnlyClient | null = null;
 
 export function getSharedBetsApiClient(options?: BetsApiReadOnlyClientOptions): BetsApiReadOnlyClient {
   if (!shared) {
+    const isolated = Boolean(options?.now || options?.sleep || options?.budget);
     shared = new BetsApiReadOnlyClient({
       ...options,
       minGapMs: options?.minGapMs ?? 12_000,
+      budget: options?.budget ?? (isolated ? undefined : getAccountRequestBudget()),
     });
   }
   return shared;
@@ -476,17 +539,29 @@ export function resetSharedBetsApiClient(): void {
   shared = null;
 }
 
-const ACCOUNT_HOURLY_LIMIT = 3_600;
+const ACCOUNT_HOURLY_LIMIT = 1_800;
 export const ODDS_REQUEST_GAP_MS = Math.ceil(3_600_000 / ACCOUNT_HOURLY_LIMIT) * 2;
+let accountBudget: SharedRequestBudget | null = null;
 let oddsClient: BetsApiReadOnlyClient | null = null;
 
+export function getAccountRequestBudget(): SharedRequestBudget {
+  if (!accountBudget) accountBudget = new SharedRequestBudget({ minGapMs: ODDS_REQUEST_GAP_MS });
+  return accountBudget;
+}
+
 export function getFootballOddsClient(): BetsApiReadOnlyClient {
-  if (!oddsClient) oddsClient = new BetsApiReadOnlyClient({ minGapMs: ODDS_REQUEST_GAP_MS });
+  if (!oddsClient) {
+    oddsClient = new BetsApiReadOnlyClient({
+      minGapMs: ODDS_REQUEST_GAP_MS,
+      budget: getAccountRequestBudget(),
+    });
+  }
   return oddsClient;
 }
 
 export function resetFootballOddsClient(): void {
   oddsClient = null;
+  accountBudget = null;
 }
 
 export { BACKOFF_START_MS };

@@ -46,6 +46,7 @@ export interface MarketOutcome {
   externalPeriodId?: string | null;
   externalMarketId?: string;
   sourceSelectionId?: string | null;
+  locked?: boolean;
 }
 
 export type MarketCategory =

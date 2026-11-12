@@ -7,6 +7,7 @@ import { useBetSlip } from '../BetSlipContext';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useLiveOdds } from '../hooks/useLiveOdds';
 import { isBetsapiMatch, resolveDetailsMatch } from '../lib/footballFeed';
+import { bet365Groups, fetchBet365Expanded } from '../lib/bet365View';
 import { matchEventFromStore } from '../lib/liveMatches';
 import { useSportsStore } from '../stores/sportsStore';
 import type { Screen } from '../types';
@@ -45,6 +46,9 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
   const isLive = storeState?.event.time_status === '1' || Boolean(catalogMatch?.isLive);
   const [headerTab, setHeaderTab] = useState<HeaderTab>('info');
   const requestedOdds = useRef('');
+  const requestedBet365 = useRef('');
+  const [expanded, setExpanded] = useState<ReturnType<typeof bet365Groups>>([]);
+  const [bet365Stale, setBet365Stale] = useState(false);
 
   useEffect(() => {
     if (!matchId || storeState || !catalogMatch || isBetsapiMatch(catalogMatch)) return;
@@ -80,10 +84,30 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
     void ensurePrices([matchId]);
   }, [catalogMatch, ensurePrices, matchId]);
 
-  const match = useMemo(() => resolveDetailsMatch(
-    catalogMatch,
-    storeState ? matchEventFromStore(storeState) : undefined,
-  ), [catalogMatch, storeState]);
+  useEffect(() => {
+    if (!isBetsapiMatch(catalogMatch) || requestedBet365.current === matchId) return;
+    requestedBet365.current = matchId;
+    const live = Boolean(catalogMatch?.isLive);
+    void fetchBet365Expanded(matchId, live).then((result) => {
+      if (!result?.mapped || !catalogMatch) return;
+      setBet365Stale(result.stale);
+      setExpanded(bet365Groups(result.markets, catalogMatch));
+    }).catch(() => undefined);
+  }, [catalogMatch, matchId]);
+
+  const match = useMemo(() => {
+    const resolved = resolveDetailsMatch(
+      catalogMatch,
+      storeState ? matchEventFromStore(storeState) : undefined,
+    );
+    if (!resolved || !expanded.length) return resolved;
+    return {
+      ...resolved,
+      marketGroups: [...(resolved.marketGroups ?? []), ...expanded],
+      extraMarkets: (Number(resolved.extraMarkets) || 0) + expanded.length,
+      priceState: bet365Stale ? 'stale' as const : resolved.priceState,
+    };
+  }, [catalogMatch, storeState, expanded, bet365Stale]);
   const { count: betCount } = useBetSlip();
 
   if (!match) {

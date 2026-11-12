@@ -174,8 +174,19 @@ export function resolveDetailsMatch(catalog?: MatchEvent, stored?: MatchEvent): 
 export interface BetsapiDetailLine {
   id: string;
   title: string;
-  tab: 'main' | 'totals' | 'handicaps';
-  outcomes: Array<{ label: string; odds: number; selection?: BetSelection }>;
+  tab: 'main' | 'totals' | 'handicaps' | 'halves' | 'other';
+  outcomes: Array<{ label: string; odds: number; locked?: boolean; selection?: BetSelection }>;
+}
+
+function detailTab(group: { category?: string; name: string }): BetsapiDetailLine['tab'] | null {
+  if (group.category === '1st-half' || group.category === '2nd-half') return 'halves';
+  if (group.category === 'handicaps') return 'handicaps';
+  if (group.category === 'totals') return 'totals';
+  if (group.category === 'main' && group.name.replace(/^.*·\s*/, '') === 'Исход') return 'main';
+  if (group.category === 'handicaps' || /фора/i.test(group.name)) return 'handicaps';
+  if (group.category === 'totals' || /тотал/i.test(group.name)) return 'totals';
+  if (group.category) return 'other';
+  return null;
 }
 
 export function betsapiDetailLines(match: MatchEvent): BetsapiDetailLine[] {
@@ -189,13 +200,9 @@ export function betsapiDetailLines(match: MatchEvent): BetsapiDetailLine[] {
     lines.push({ id: `${match.id}-1x2`, title: 'Исход', tab: 'main', outcomes: main });
   }
   for (const group of match.marketGroups ?? []) {
-    const tab = group.category === 'handicaps' || /фора/i.test(group.name)
-      ? 'handicaps'
-      : group.category === 'totals' || /тотал/i.test(group.name)
-        ? 'totals'
-        : null;
+    const tab = detailTab(group);
     if (!tab) continue;
-    const outcomes = group.outcomes.filter((outcome) => outcome.odds > 1);
+    const outcomes = group.outcomes.filter((outcome) => outcome.odds > 1 || outcome.locked);
     if (!outcomes.length) continue;
     lines.push({
       id: group.id,
@@ -204,6 +211,7 @@ export function betsapiDetailLines(match: MatchEvent): BetsapiDetailLine[] {
       outcomes: outcomes.map((outcome) => ({
         label: outcome.label,
         odds: outcome.odds,
+        locked: Boolean(outcome.locked) || !(outcome.odds > 1),
         selection: outcome.provider === 'betsapi' ? {
           id: `${outcome.fixtureId}-${outcome.marketKey}-${outcome.line ?? ''}-${outcome.outcomeId}`,
           matchId: outcome.fixtureId || match.id,
@@ -240,6 +248,8 @@ export function betsapiDetailTabs(lines: BetsapiDetailLine[]): Array<{ id: 'all'
   if (lines.some((line) => line.tab === 'main')) tabs.push({ id: 'main', label: '1X2' });
   if (lines.some((line) => line.tab === 'totals')) tabs.push({ id: 'totals', label: 'Тоталы' });
   if (lines.some((line) => line.tab === 'handicaps')) tabs.push({ id: 'handicaps', label: 'Форы' });
+  if (lines.some((line) => line.tab === 'halves')) tabs.push({ id: 'halves', label: 'Таймы' });
+  if (lines.some((line) => line.tab === 'other')) tabs.push({ id: 'other', label: 'Другие' });
   return tabs;
 }
 

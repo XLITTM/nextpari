@@ -1,4 +1,5 @@
 export const MIN_REQUEST_GAP_MS = 12_000;
+export const ACCOUNT_INSTANCE_ALLOWANCE = 2;
 export const BACKOFF_START_MS = 60_000;
 export const BACKOFF_MAX_MS = 300_000;
 
@@ -129,7 +130,7 @@ export class SharedRequestBudget {
     if (remaining == null || remaining <= 0 || observation.resetAtMs == null) return;
     const windowMs = observation.resetAtMs - this.now();
     if (windowMs <= 0) return;
-    const fairGap = Math.ceil(windowMs / remaining);
+    const fairGap = Math.ceil(windowMs / remaining) * ACCOUNT_INSTANCE_ALLOWANCE;
     this.paceMs = Math.min(MIN_REQUEST_GAP_MS, Math.max(this.minGapMs, fairGap));
     this.nextAt = Math.max(this.nextAt, this.now() + this.paceMs);
   }

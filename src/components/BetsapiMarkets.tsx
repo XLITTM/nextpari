@@ -51,13 +51,13 @@ function LineCard({ line, match }: { line: BetsapiDetailLine; match: MatchEvent 
   return (
     <section className="rounded-xl bg-white p-2">
       <h3 className="px-1 pb-2 text-sm font-semibold text-[#1A1A1A]">{line.title}</h3>
-      <div className={`grid gap-1.5 ${line.tab === 'main' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+      <div className={`grid gap-1.5 ${line.outcomes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
         {line.outcomes.map((item) => {
-          const fromQuote = line.tab === 'main'
-            ? clickableCardSelection(match, item.label, '1X2', item.odds)
-            : null;
-          const selection = fromQuote?.selection ?? item.selection;
-          const locked = fromQuote ? fromQuote.locked || item.odds <= 1 : !selection || item.odds <= 1;
+          const fromQuote = item.selection || line.tab !== 'main'
+            ? null
+            : clickableCardSelection(match, item.label, '1X2', item.odds);
+          const selection = item.selection ?? fromQuote?.selection;
+          const locked = Boolean(item.locked) || (fromQuote ? fromQuote.locked || item.odds <= 1 : !selection || item.odds <= 1);
           if (!selection) return null;
           return (
             <PriceButton

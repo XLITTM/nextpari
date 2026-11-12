@@ -574,8 +574,8 @@ describe('betsapi preview and retirement guards', () => {
 });
 
 describe('football odds pacing', () => {
-  it('keeps two concurrent instances inside the 3600 requests per hour account limit', async () => {
-    assert.equal(ODDS_REQUEST_GAP_MS, 2_000);
+  it('keeps two concurrent instances inside the verified 1800 requests per hour account limit', async () => {
+    assert.equal(ODDS_REQUEST_GAP_MS, 4_000);
     let now = 0;
     const slept: number[] = [];
     const budget = new SharedRequestBudget({
@@ -596,7 +596,7 @@ describe('football odds pacing', () => {
       retryAfterMs: null,
     });
     await budget.schedule(async () => undefined);
-    assert.ok((slept.at(-1) ?? 0) >= 4_000);
+    assert.ok((slept.at(-1) ?? 0) >= 8_000);
     assert.ok((slept.at(-1) ?? 0) <= 12_000);
   });
 });

@@ -125,6 +125,23 @@ export async function handleFootballFeedRequest(
     return { status: 404, body: { ok: false, error: 'NOT_FOUND' } };
   }
   const params = input.url ? new URL(input.url, 'http://127.0.0.1').searchParams : new URLSearchParams();
+  if (params.has('bet365For')) {
+    const eventsId = params.get('bet365For') ?? '';
+    const read = await client.readBet365Expanded(eventsId, params.get('live') === '1');
+    return {
+      status: 200,
+      body: {
+        ok: true,
+        error: null,
+        mapped: read.mapped,
+        rateLimited: read.rateLimited,
+        stale: read.stale,
+        fi: read.link?.fi ?? null,
+        eventsId: read.mapped ? eventsId : null,
+        markets: read.markets?.markets ?? [],
+      },
+    };
+  }
   if (params.has('oddsFor')) {
     return readOddsBatch(params.get('oddsFor') ?? '', oddsClient ?? (client === getSharedBetsApiClient() ? getFootballOddsClient() : client));
   }
