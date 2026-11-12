@@ -1,5 +1,7 @@
 package com.nextpari.app.feature.sportsbook
 
+import android.os.SystemClock
+
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,6 +12,7 @@ import com.nextpari.app.feature.home.MatchCardModel
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,6 +33,16 @@ data class SportsbookUiState(
     val acceptedBetId: String? = null,
 ) {
     val selectedKeys: Set<String> get() = selections.mapTo(mutableSetOf()) { it.identity }
+    val picksCurrent: Boolean get() = selections.isNotEmpty() && selections.all { pick ->
+        fixtureFor(pick.fixtureId)?.markets?.any { group ->
+            group.outcomes.any { outcome -> outcome.selection?.let { it.identity == pick.identity && it.price == pick.price } == true }
+        } == true
+    }
+
+    internal fun fixtureFor(id: String): FootballFixture? = listOfNotNull(
+        detail.fixtures.firstOrNull { it.match.eventId == id },
+        feed.fixtures.firstOrNull { it.match.eventId == id },
+    ).maxByOrNull { it.quoteOrder }
 }
 
 class SportsbookViewModel(
@@ -37,12 +50,22 @@ class SportsbookViewModel(
     private val football: FootballRepository? = null,
     private val onBetAccepted: () -> Unit = {},
     private val sessions: StateFlow<AuthSession>? = null,
+    private val now: () -> Long = SystemClock::elapsedRealtime,
 ) : ViewModel() {
     private val ui = MutableStateFlow(SportsbookUiState())
     val state = ui.asStateFlow()
     private var playerId: String? = null
     private var feedJob: Job? = null
     private var detailJob: Job? = null
+    private var oddsJob: Job? = null
+    private var quoteWake: Job? = null
+    private var expiryJob: Job? = null
+    private var generation = 0L
+    private var requestOrder = 0L
+    private var nextBatchAt = Long.MIN_VALUE
+    private val attemptedAt = mutableMapOf<String, Long>()
+    private val viewports = linkedMapOf<Any, List<String>>()
+    private var visibleDetail: String? = null
     private var placeJob: Job? = null
     private var pending: PendingBet? = null
 
@@ -58,9 +81,21 @@ class SportsbookViewModel(
     internal fun setPlayer(id: String?) {
         if (playerId == id) return
         playerId = id
+        generation++
         feedJob?.cancel()
         detailJob?.cancel()
+        oddsJob?.cancel()
+        quoteWake?.cancel()
+        expiryJob?.cancel()
         placeJob?.cancel()
+        feedJob = null
+        detailJob = null
+        oddsJob = null
+        quoteWake = null
+        expiryJob = null
+        visibleDetail = null
+        viewports.clear()
+        attemptedAt.clear()
         pending = null
         selectedMode = "live"
         ui.value = SportsbookUiState()
@@ -72,33 +107,199 @@ class SportsbookViewModel(
         return session.isAuthenticated && session.playerPublicId == id
     }
 
+    private fun current(run: Long): Boolean = run == generation && hasCurrentPlayer()
+
     fun refreshFeed() {
         val repository = football ?: return
-        if (!hasCurrentPlayer() || feedJob?.isActive == true) return
+        if (!hasCurrentPlayer()) return
+        expirePrices()
+        if (feedJob?.isActive == true) return
+        val run = generation
+        val order = ++requestOrder
+        val started = now()
         ui.update { it.copy(loading = true) }
         feedJob = viewModelScope.launch {
-            val feed = read(repository, null, ui.value.feed)
-            ui.update { it.copy(feed = feed, loading = false) }
+            val listed = read(repository, null, ui.value.feed)
+            if (!current(run)) return@launch
+            ui.update { state ->
+                val feed = listed.copy(fixtures = listed.fixtures.map { fresh ->
+                    val prior = state.fixtureFor(fresh.match.eventId)?.takeIf(fresh::sameEvent)
+                    when {
+                        prior != null && (prior.quoteOrder > order ||
+                            (listed.notice == null && fresh.priceState == FootballPriceState.Unpriced)) ->
+                            fresh.withPrices(prior)
+                        else -> fresh.stamped(order, started)
+                    }
+                })
+                val listedDetail = state.detailId?.let { id -> feed.fixtures.firstOrNull { it.match.eventId == id } }
+                val detail = if (listedDetail != null) FootballSnapshot(listOf(listedDetail), listedDetail.priceState.notice, feed.canPrice)
+                    else state.detail
+                state.copy(feed = feed, detail = detail, loading = false)
+            }
+            val presentIds = ui.value.feed.fixtures.mapTo(mutableSetOf()) { attemptKey(it) }
+            ui.value.detail.fixtures.forEach { presentIds += attemptKey(it) }
+            attemptedAt.keys.retainAll(presentIds)
+            scheduleExpiry()
+            if (listed.canPrice) scheduleOdds(allowFallback = true)
         }
     }
 
     fun loadEvent(id: String) {
         val repository = football ?: return
         if (!hasCurrentPlayer() || !footballEventId.matches(id)) return
-        if (ui.value.detailId == id && detailJob?.isActive == true) return
-        detailJob?.cancel()
-        val previous = ui.value.detail.takeIf { ui.value.detailId == id } ?: FootballSnapshot()
-        ui.update { it.copy(detailId = id, detail = previous, detailLoading = true) }
-        detailJob = viewModelScope.launch {
-            val detail = read(repository, id, previous)
-            ui.update { state ->
-                val current = detail.fixtures.firstOrNull { it.match.id == id }
-                val feed = state.feed.copy(fixtures = state.feed.fixtures.mapNotNull { fixture ->
-                    if (fixture.match.id != id) fixture else current ?: detail.notice?.let { fixture.locked() }
-                })
-                state.copy(feed = feed, detail = detail, detailLoading = false)
-            }
+        expirePrices()
+        visibleDetail = id
+        if (ui.value.detailId != id) detailJob?.cancel()
+        val state = ui.value
+        val cached = state.fixtureFor(id)?.takeIf {
+            (state.feed.canPrice && state.feed.fixtures.any { fixture -> fixture.match.eventId == id }) ||
+                (state.detailId == id && state.detail.canPrice)
         }
+        if (cached != null) {
+            ui.update { it.copy(detailId = id, detail = FootballSnapshot(listOf(cached), cached.priceState.notice), detailLoading = false) }
+            scheduleOdds()
+            return
+        }
+        if (ui.value.detailId == id && detailJob?.isActive == true) return
+        val run = generation
+        val order = ++requestOrder
+        val started = now()
+        ui.update { it.copy(detailId = id, detail = FootballSnapshot(), detailLoading = true) }
+        detailJob = viewModelScope.launch {
+            val detail = read(repository, id, FootballSnapshot())
+            if (!current(run) || ui.value.detailId != id) return@launch
+            ui.update { state ->
+                val fixtures = detail.fixtures.map { fresh ->
+                    val newer = state.fixtureFor(id)?.takeIf { it.sameEvent(fresh) && it.quoteOrder > order }
+                    if (newer != null) fresh.withPrices(newer) else fresh.stamped(order, started)
+                }
+                state.copy(detail = detail.copy(fixtures = fixtures,
+                    notice = detail.notice ?: fixtures.singleOrNull()?.priceState?.notice), detailLoading = false)
+            }
+            if (detail.fixtures.isNotEmpty()) scheduleOdds()
+            scheduleExpiry()
+        }
+    }
+
+    fun leaveEvent(id: String) {
+        if (visibleDetail == id) {
+            visibleDetail = null
+            scheduleOdds()
+        }
+    }
+
+    fun visibleMatches(source: Any, ids: List<String>) {
+        if (ids.isNotEmpty()) expirePrices()
+        if (ids.isEmpty()) viewports.remove(source) else viewports[source] = ids
+        scheduleOdds()
+    }
+
+    private fun scheduleOdds(allowFallback: Boolean = false) {
+        if (football == null || !hasCurrentPlayer() || oddsJob?.isActive == true) return
+        quoteWake?.cancel()
+        val run = generation
+        quoteWake = viewModelScope.launch {
+            // Let lazy layouts report their visible keys before using the initial feed order.
+            delay(250)
+            if (!current(run)) return@launch
+            val state = ui.value
+            val candidates = oddsCandidates(state, allowFallback)
+            if (candidates.isEmpty()) return@launch
+            val next = candidates.minOf { eligibleAt(it) }
+            val due = maxOf(next, nextBatchAt)
+            val remaining = now().let { if (due > it) due - it else 0 }
+            delay(remaining)
+            if (!current(run)) return@launch
+            // Scrolling or a list refresh may have changed the candidates during the wait.
+            val selected = oddsCandidates(ui.value, allowFallback).filter { eligibleAt(it) <= now() }.take(FOOTBALL_BATCH_SIZE)
+            if (selected.isNotEmpty()) fetchOdds(selected, run)
+        }
+    }
+
+    private fun oddsCandidates(state: SportsbookUiState, allowFallback: Boolean): List<FootballFixture> {
+        val feed = state.feed.fixtures.takeIf { state.feed.canPrice }.orEmpty()
+        val detail = visibleDetail?.takeIf { state.detail.canPrice }?.let(state::fixtureFor)
+        return footballOddsCandidates(feed, viewports.values.flatten(), detail, allowFallback)
+    }
+
+    private fun eligibleAt(fixture: FootballFixture): Long {
+        val attempted = attemptedAt[attemptKey(fixture)]?.plus(FOOTBALL_QUOTE_MAX_AGE_MS) ?: Long.MIN_VALUE
+        val canReuse = fixture.match.eventId != visibleDetail || fixture.fullMarkets
+        return maxOf(attempted, if (canReuse && fixture.priceState == FootballPriceState.Open) fixture.validUntil else Long.MIN_VALUE)
+    }
+
+    private fun fetchOdds(fixtures: List<FootballFixture>, run: Long) {
+        val repository = football ?: return
+        val started = now()
+        val order = ++requestOrder
+        nextBatchAt = started + FOOTBALL_ODDS_GAP_MS
+        fixtures.forEach { attemptedAt[attemptKey(it)] = started }
+        oddsJob = viewModelScope.launch {
+            val batch = try {
+                repository.readOdds(fixtures.map { it.match.eventId })
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                FootballOddsBatch(fallback = FootballPriceState.Upstream)
+            }
+            if (!current(run)) return@launch
+            val backoff = batch.fallback.isThrottled || batch.quotes.values.any { it.availability.isThrottled }
+            if (backoff) nextBatchAt = maxOf(nextBatchAt, now() + FOOTBALL_ODDS_BACKOFF_MS)
+            fixtures.filter { batch.quotes[it.match.eventId]?.availability == FootballPriceState.Deferred }.forEach {
+                attemptedAt[attemptKey(it)] = started - FOOTBALL_QUOTE_MAX_AGE_MS + FOOTBALL_ODDS_GAP_MS
+            }
+            val anchors = fixtures.associateBy { it.match.eventId }
+            ui.update { state ->
+                fun merge(fixture: FootballFixture): FootballFixture {
+                    val id = fixture.match.eventId
+                    val anchor = anchors[id] ?: return fixture
+                    if (fixture.quoteOrder > order || !fixture.sameEvent(anchor)) return fixture
+                    return fixture.withQuote(batch.quotes[id], batch.fallback, order, started + FOOTBALL_QUOTE_MAX_AGE_MS)
+                        .let { if (it.priceState == FootballPriceState.Open && !it.hasPrice(now())) it.locked() else it }
+                }
+                val feed = state.feed.copy(fixtures = state.feed.fixtures.map(::merge))
+                val detail = state.detail.copy(fixtures = state.detail.fixtures.map(::merge))
+                val detailNotice = detail.fixtures.singleOrNull()?.priceState?.notice
+                state.copy(feed = feed, detail = detail.copy(notice = if (detail.fixtures.isEmpty()) detail.notice else detailNotice))
+            }
+            oddsJob = null
+            scheduleExpiry()
+            if (viewports.isNotEmpty() || visibleDetail != null) scheduleOdds()
+        }
+    }
+
+    private fun scheduleExpiry() {
+        expiryJob?.cancel()
+        val state = ui.value
+        val until = (state.feed.fixtures + state.detail.fixtures).filter { it.priceState == FootballPriceState.Open }
+            .minOfOrNull { it.validUntil } ?: return
+        val run = generation
+        expiryJob = viewModelScope.launch {
+            delay((until - now()).coerceAtLeast(0))
+            if (!current(run)) return@launch
+            expirePrices()
+            expiryJob = null
+            scheduleExpiry()
+        }
+    }
+
+    private fun expirePrices() {
+        val at = now()
+        fun expire(fixture: FootballFixture) =
+            if (fixture.priceState == FootballPriceState.Open && !fixture.hasPrice(at)) fixture.locked() else fixture
+        ui.update { prior ->
+            val detail = prior.detail.copy(fixtures = prior.detail.fixtures.map(::expire))
+            prior.copy(
+                feed = prior.feed.copy(fixtures = prior.feed.fixtures.map(::expire)),
+                detail = detail.copy(notice = detail.fixtures.singleOrNull()?.priceState?.notice ?: detail.notice),
+            )
+        }
+    }
+
+    private fun FootballFixture.stamped(order: Long, started: Long): FootballFixture {
+        val fixture = copy(quoteOrder = order,
+            validUntil = if (priceState == FootballPriceState.Open) started + FOOTBALL_QUOTE_MAX_AGE_MS else 0)
+        return if (fixture.priceState == FootballPriceState.Open && !fixture.hasPrice(now())) fixture.locked() else fixture
     }
 
     fun rememberMode(mode: String): String {
@@ -125,10 +326,10 @@ class SportsbookViewModel(
 
     fun toggle(selection: SportsBetSelection) {
         if (!hasCurrentPlayer() || ui.value.placing || pending != null) return
-        // Accept a tap only while the exact displayed quote remains in a current snapshot.
-        val current = listOfNotNull(detailFixture(selection.fixtureId),
-            ui.value.feed.fixtures.firstOrNull { it.match.id == selection.fixtureId })
-        if (current.none { fixture -> fixture.markets.any { group -> group.outcomes.any { it.selection == selection } } }) return
+        val fixture = ui.value.fixtureFor(selection.fixtureId)
+        if (fixture?.hasPrice(now()) != true || !fixture.markets.any { group ->
+                group.outcomes.any { it.selection == selection }
+            }) return
         ui.update { it.copy(selections = toggleSportsSelection(it.selections, selection), couponNotice = null, acceptedBetId = null) }
     }
 
@@ -151,6 +352,10 @@ class SportsbookViewModel(
             ui.update { it.copy(couponNotice = "Для повтора выберите кошелёк первой попытки") }
             return
         }
+        if (previous == null && (!state.picksCurrent || state.selections.any { state.fixtureFor(it.fixtureId)?.hasPrice(now()) != true })) {
+            ui.update { it.copy(couponNotice = "Обновите коэффициенты и выберите исходы заново") }
+            return
+        }
         val request = previous?.request ?: sportsBetRequest(state.stakeText, state.selections, UUID.randomUUID().toString())
         if (request == null) {
             ui.update { it.copy(couponNotice = "Введите сумму ставки") }
@@ -158,8 +363,11 @@ class SportsbookViewModel(
         }
         pending = PendingBet(walletId, request)
         ui.update { it.copy(placing = true, couponNotice = null) }
+        val run = generation
         placeJob = viewModelScope.launch {
-            when (val response = repository.place(request)) {
+            val response = repository.place(request)
+            if (!current(run)) return@launch
+            when (response) {
                 is SportsBetResult.Accepted -> {
                     pending = null
                     ui.update {
@@ -219,6 +427,27 @@ class SportsbookViewModel(
             }
         }
     }
+}
+
+internal const val FOOTBALL_ODDS_GAP_MS = 15_000L
+internal const val FOOTBALL_ODDS_BACKOFF_MS = 60_000L
+internal const val FOOTBALL_QUOTE_MAX_AGE_MS = 30_000L
+
+private val FootballPriceState.isThrottled: Boolean
+    get() = this == FootballPriceState.RateLimited || this == FootballPriceState.Stale
+
+private fun attemptKey(fixture: FootballFixture) = "${fixture.match.eventId}:${fixture.match.isLive}"
+
+internal fun footballOddsCandidates(
+    fixtures: List<FootballFixture>, visibleIds: List<String>, detail: FootballFixture?, allowFallback: Boolean,
+): List<FootballFixture> {
+    val byId = fixtures.associateBy { it.match.eventId }
+    val visible = visibleIds.distinct().mapNotNull(byId::get)
+    val candidates = if (visible.isNotEmpty()) visible else if (allowFallback && detail == null) {
+        fixtures.filter { it.match.isLive }.take(6) + fixtures.filterNot { it.match.isLive }.take(FOOTBALL_BATCH_SIZE)
+    } else emptyList()
+    return (listOfNotNull(detail) + candidates.filter { it.match.isLive } + candidates.filterNot { it.match.isLive })
+        .distinctBy { it.match.eventId }
 }
 
 internal fun toggleSportsSelection(
