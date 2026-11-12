@@ -144,29 +144,36 @@ class SportsbookViewModel(
         }
     }
 
-    fun loadEvent(id: String) {
+    fun loadEvent(id: String) = loadEvent(id, refreshClock = false)
+
+    fun loadEvent(id: String, refreshClock: Boolean) {
         val repository = football ?: return
         if (!hasCurrentPlayer() || !footballEventId.matches(id)) return
         expirePrices()
         visibleDetail = id
         if (ui.value.detailId != id) detailJob?.cancel()
         val state = ui.value
+        val listed = state.feed.canPrice && state.feed.fixtures.any { it.match.eventId == id }
         val cached = state.fixtureFor(id)?.takeIf {
-            (state.feed.canPrice && state.feed.fixtures.any { fixture -> fixture.match.eventId == id }) ||
+            listed ||
                 (state.detailId == id && state.detail.canPrice)
         }
         if (cached != null) {
             ui.update { it.copy(detailId = id, detail = FootballSnapshot(listOf(cached), cached.priceState.notice), detailLoading = false) }
             scheduleOdds()
-            return
+            if (!refreshClock || !cached.match.isLive) return
+            if (listed) {
+                refreshFeed()
+                return
+            }
         }
         if (ui.value.detailId == id && detailJob?.isActive == true) return
         val run = generation
         val order = ++requestOrder
         val started = now()
-        ui.update { it.copy(detailId = id, detail = FootballSnapshot(), detailLoading = true) }
+        if (cached == null) ui.update { it.copy(detailId = id, detail = FootballSnapshot(), detailLoading = true) }
         detailJob = viewModelScope.launch {
-            val detail = read(repository, id, FootballSnapshot())
+            val detail = read(repository, id, ui.value.detail)
             if (!current(run) || ui.value.detailId != id) return@launch
             ui.update { state ->
                 val fixtures = detail.fixtures.map { fresh ->
