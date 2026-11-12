@@ -5,5 +5,7 @@ export { latestMarketSnapshot, marketAvailability, selectableOdds, STANDARD_MARK
 export type { MarketAvailability, MarketFreshness } from './markets.js';
 export { LOGO_SOURCES, SportsLogoCatalog } from './logos.js';
 export type { LogoEntityKind, LogoLookup, VerifiedLogo } from './logos.js';
-export { STARTER_LOGO_CATALOG } from './starterLogos.js';
+export { STARTER_LOGO_CATALOG, BETSAPI_EVENTS_LOGO_SOURCE } from './starterLogos.js';
+export { FootballLogoService } from './footballLogos.js';
+export type { FootballLogoRefs, FootballLogos, LogoPublicationApproval } from './footballLogos.js';
 export type * from './types.js';
