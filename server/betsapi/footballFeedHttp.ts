@@ -162,7 +162,7 @@ export async function handleFootballFeedRequest(
       },
     };
   }
-  const [live, upcoming] = await Promise.all([client.getInplay(), client.getUpcoming(1)]);
+  const [live, upcoming] = await Promise.all([client.getInplay(), client.getPrematchCoverage()]);
   const tokenMissing = live.error === 'TOKEN_MISSING' || upcoming.error === 'TOKEN_MISSING';
   return {
     status: tokenMissing || live.ok || upcoming.ok ? 200 : 503,

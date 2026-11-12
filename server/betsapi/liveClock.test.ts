@@ -101,7 +101,9 @@ describe('football live clock', () => {
     const events = list.body.events as Array<{ liveClock: { minute: number; running: boolean } | null }>;
     assert.equal(events[0]?.liveClock?.minute, 8);
     assert.equal(events[0]?.liveClock?.running, true);
-    assert.deepEqual(paths.slice().sort(), ['/v3/events/inplay', '/v3/events/upcoming']);
+    assert.equal(paths.includes('/v3/events/inplay'), true);
+    assert.equal(paths.every((path) => path === '/v3/events/inplay' || path === '/v3/events/upcoming'), true);
+    assert.equal(paths.includes('/v2/event/odds'), false);
   });
 });
 

@@ -5,6 +5,14 @@ import {
   type HeaderBag,
   type SharedBudgetOptions,
 } from './budget.js';
+import {
+  coverageDays,
+  preparePrematch,
+  PREMATCH_REQUEST_BUDGET,
+  readUpcomingPager,
+  upcomingHasAnotherPage,
+  type UpcomingPager,
+} from './footballCoverage.js';
 import { diagnoseOddsPayload, marketsFromOddsPayload, normalizeFootballDetails, normalizeFootballList, type OddsDiagnosis } from './parse.js';
 import {
   bet365Directory,
@@ -60,6 +68,7 @@ interface CacheEntry {
   events: NormalizedEvent[];
   endpoint: FeedEndpoint;
   rateLimit: RateLimitSnapshot | null;
+  pager?: UpcomingPager | null;
 }
 
 export type EventOddsState = OddsDiagnosis | 'rate_limited' | 'stale' | 'upstream';
@@ -151,11 +160,83 @@ export class BetsApiReadOnlyClient {
     ));
   }
 
-  getUpcoming(page = 1): Promise<FeedResult> {
+  getUpcoming(page = 1, filters?: { day?: string; skipEsports?: boolean }): Promise<FeedResult> {
     const safePage = Number.isInteger(page) && page >= 1 && page <= 5 ? page : 1;
-    return this.cached('upcoming', PATHS.upcoming, { sport_id: FOOTBALL_SPORT_ID, page: String(safePage) }, (json) => (
+    const query: Record<string, string> = { sport_id: FOOTBALL_SPORT_ID, page: String(safePage) };
+    if (filters?.skipEsports) query.skip_esports = '1';
+    if (filters?.day && /^\d{8}$/.test(filters.day)) query.day = filters.day;
+    return this.cached('upcoming', PATHS.upcoming, query, (json) => (
       normalizeFootballList(json, 'upcoming', this.now())
     ));
+  }
+
+  async getPrematchCoverage(): Promise<FeedResult> {
+    const collected: NormalizedEvent[] = [];
+    const jobs: Array<{ page: number; day?: string }> = [
+      ...coverageDays(this.now()).map((day) => ({ page: 1, day })),
+      { page: 1 },
+    ];
+    const overflow: Array<{ page: number; day?: string }> = [];
+    let requests = 0;
+    let rateLimited = false;
+    let stale = false;
+    let sawFeed = false;
+    let tokenMissing = false;
+    while ((jobs.length > 0 || overflow.length > 0) && requests < PREMATCH_REQUEST_BUDGET) {
+      if (requests > 0 && this.budget.coolingDown()) {
+        rateLimited = true;
+        break;
+      }
+      const job = (jobs.shift() ?? overflow.shift())!;
+      requests += 1;
+      const result = await this.getUpcoming(job.page, { day: job.day, skipEsports: true });
+      if (result.error === 'TOKEN_MISSING') {
+        tokenMissing = true;
+        break;
+      }
+      if (result.error === 'RATE_LIMITED' || result.feed?.rateLimited) {
+        rateLimited = true;
+        if (result.feed?.events.length) collected.push(...result.feed.events);
+        break;
+      }
+      if (!result.ok || !result.feed) continue;
+      sawFeed = true;
+      stale = stale || result.feed.stale;
+      collected.push(...result.feed.events);
+      const query: Record<string, string> = { sport_id: FOOTBALL_SPORT_ID, page: String(job.page), skip_esports: '1' };
+      if (job.day) query.day = job.day;
+      const pager = this.cache.get(`upcoming:${new URLSearchParams(query).toString()}`)?.pager ?? null;
+      if (job.page === 1 && upcomingHasAnotherPage(pager, result.feed.events.length)) {
+        overflow.push({ page: 2, day: job.day });
+      }
+    }
+    const events = preparePrematch(collected);
+    if (tokenMissing) {
+      return { ok: false, error: 'TOKEN_MISSING', upstreamStatus: null, feed: null };
+    }
+    if (!sawFeed && events.length === 0) {
+      return { ok: false, error: rateLimited ? 'RATE_LIMITED' : 'UPSTREAM', upstreamStatus: null, feed: null };
+    }
+    const at = new Date(this.now()).toISOString();
+    return {
+      ok: true,
+      error: null,
+      upstreamStatus: 200,
+      feed: {
+        source: 'betsapi',
+        mode: 'read-only',
+        betting: 'disabled',
+        settlement: 'disabled',
+        endpoint: 'upcoming',
+        sportId: FOOTBALL_SPORT_ID,
+        fetchedAt: at,
+        updatedAt: at,
+        stale,
+        rateLimited,
+        rateLimit: null,
+        events,
+      },
+    };
   }
 
   async getOddsPayload(eventId: string): Promise<unknown | null> {
@@ -355,6 +436,7 @@ export class BetsApiReadOnlyClient {
       events: parse(upstream.json),
       endpoint,
       rateLimit: snapshotOf(observation),
+      pager: readUpcomingPager(upstream.json),
     };
     this.cache.set(key, entry);
     return this.ok(entry, false, false);
