@@ -5,6 +5,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +42,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
@@ -51,6 +53,7 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.sportsbook.CountPill
 import com.nextpari.app.feature.sportsbook.CountryGroup
 import com.nextpari.app.feature.sportsbook.HomeAccordionExpansion
+import com.nextpari.app.feature.sportsbook.FootballBadge
 import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.feature.sportsbook.LeagueIds
 import com.nextpari.app.feature.sportsbook.LeagueRow
@@ -163,9 +166,15 @@ private fun HomeCountryCard(
                         Modifier
                             .fillMaxWidth()
                             .clickable { onLeague(league) }
-                            .padding(start = 44.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+                            .padding(start = (if (league.badge == null) 44 else 20).dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        league.badge?.let {
+                            FootballBadge(it.url, Modifier.size(18.dp)) {
+                                Image(painterResource(SportIconRes.drawable("football")), null, Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.width(6.dp))
+                        }
                         Text(
                             league.name,
                             color = colors.text,
