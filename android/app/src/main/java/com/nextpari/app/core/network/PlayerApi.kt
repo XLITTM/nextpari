@@ -99,6 +99,9 @@ interface PlayerApi {
     @GET("api/player/sports/football-feed")
     suspend fun footballFeed(@Query("eventId") eventId: String? = null): Response<JsonObject>
 
+    @GET("api/player/sports/football-feed")
+    suspend fun footballOdds(@Query("oddsFor") eventIds: String): Response<JsonObject>
+
     @POST("api/player/sports/place")
     suspend fun placeSportsBet(@Body body: JsonObject): Response<JsonObject>
 
