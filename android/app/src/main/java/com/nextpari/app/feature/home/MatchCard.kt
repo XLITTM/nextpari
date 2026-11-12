@@ -50,7 +50,9 @@ import com.nextpari.app.core.ui.components.LiveBadge
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.sportsbook.FootballBadge
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
+import com.nextpari.app.feature.sportsbook.footballLiveMinute
 
 @Composable
 fun NextpariMatchCard(
@@ -75,7 +77,9 @@ fun NextpariMatchCard(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(painterResource(SportIconRes.drawable(model.sport)), contentDescription = null, modifier = Modifier.size(24.dp))
+            FootballBadge(model.competitionBadge?.url, Modifier.size(24.dp)) {
+                Image(painterResource(SportIconRes.drawable(model.sport)), contentDescription = null, modifier = Modifier.size(24.dp))
+            }
             Spacer(Modifier.width(6.dp))
             Text(model.league, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
             if (model.country.isNotBlank()) {
@@ -94,13 +98,13 @@ fun NextpariMatchCard(
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(if (dark) Color(0xFF374151) else Color(0xFFE5E7EB)))
         Row(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TeamSide(name = model.team1, logoRes = model.team1LogoRes, alignEnd = true, modifier = Modifier.weight(1f))
+            TeamSide(name = model.team1, logoRes = model.team1LogoRes, badgeUrl = model.homeBadgeUrl, alignEnd = true, modifier = Modifier.weight(1f))
             MatchCenter(model)
-            TeamSide(name = model.team2, logoRes = model.team2LogoRes, alignEnd = false, modifier = Modifier.weight(1f))
+            TeamSide(name = model.team2, logoRes = model.team2LogoRes, badgeUrl = model.awayBadgeUrl, alignEnd = false, modifier = Modifier.weight(1f))
         }
         if (model.isLive) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                LiveBadge(period = model.period)
+                LiveBadge(period = footballLiveMinute(model))
             }
         }
         if (!model.marketTitle.isNullOrBlank()) {
@@ -142,10 +146,10 @@ fun NextpariMatchCard(
 }
 
 @Composable
-private fun TeamSide(name: String, logoRes: Int?, alignEnd: Boolean, modifier: Modifier) {
+private fun TeamSide(name: String, logoRes: Int?, badgeUrl: String?, alignEnd: Boolean, modifier: Modifier) {
     val colors = NextpariTheme.colors
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start) {
-        if (!alignEnd) TeamAvatar(name, logoRes)
+        if (!alignEnd) TeamAvatar(name, logoRes, badgeUrl)
         Text(
             name,
             color = colors.text,
@@ -156,21 +160,21 @@ private fun TeamSide(name: String, logoRes: Int?, alignEnd: Boolean, modifier: M
             textAlign = if (alignEnd) TextAlign.End else TextAlign.Start,
             modifier = Modifier.weight(1f, fill = false).padding(horizontal = 6.dp),
         )
-        if (alignEnd) TeamAvatar(name, logoRes)
+        if (alignEnd) TeamAvatar(name, logoRes, badgeUrl)
     }
 }
 
 @Composable
-private fun TeamAvatar(name: String, logoRes: Int?) {
+private fun TeamAvatar(name: String, logoRes: Int?, badgeUrl: String?) {
     val colors = NextpariTheme.colors
-    Box(
-        Modifier.size(28.dp).clip(CircleShape).background(colors.surfaceMuted),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (logoRes != null) {
-            Image(painterResource(logoRes), contentDescription = null, modifier = Modifier.size(28.dp), contentScale = ContentScale.Crop)
-        } else {
-            Text(name.take(1).uppercase(), color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    FootballBadge(badgeUrl, Modifier.size(28.dp)) {
+        Box(Modifier.size(28.dp).clip(CircleShape).background(colors.surfaceMuted), contentAlignment = Alignment.Center) {
+            if (logoRes != null) {
+                Image(painterResource(logoRes), contentDescription = null,
+                    modifier = Modifier.size(28.dp), contentScale = ContentScale.Crop)
+            } else {
+                Text(name.take(1).uppercase(), color = colors.textSecondary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
