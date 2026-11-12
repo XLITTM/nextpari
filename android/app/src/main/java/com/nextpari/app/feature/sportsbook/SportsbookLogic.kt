@@ -9,6 +9,7 @@ data class LeagueRow(
     val country: String,
     val count: Int,
     val favorite: Boolean = false,
+    val badge: FootballCompetitionBadge? = null,
 )
 
 data class CountryGroup(
@@ -76,7 +77,8 @@ object CountryGrouping {
             val countryRow = countries.getOrPut(country) { MutableCountry() }
             countryRow.count += 1
             val league = countryRow.leagues.getOrPut(name) { LeagueRow(name = name, country = country, count = 0) }
-            countryRow.leagues[name] = league.copy(count = league.count + 1)
+            val badge = match.competitionBadge.takeIf { league.count == 0 || league.badge == it }
+            countryRow.leagues[name] = league.copy(count = league.count + 1, badge = badge)
         }
         return countries.map { (country, row) ->
             CountryGroup(
