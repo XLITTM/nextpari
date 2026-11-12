@@ -23,14 +23,15 @@ import androidx.compose.ui.unit.dp
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
 @Composable
-fun FootballFeedControl(loading: Boolean, notice: String?, onRefresh: () -> Unit) {
+fun FootballFeedControl(loading: Boolean, notice: String?, retryable: Boolean, onRefresh: () -> Unit) {
+    if (loading || !retryable || notice.isNullOrBlank()) return
     val colors = NextpariTheme.colors
     Row(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(notice ?: if (loading) "Загрузка футбола…" else "", color = colors.textSecondary, modifier = Modifier.weight(1f))
-        TextButton(enabled = !loading, onClick = onRefresh) { Text("Обновить") }
+        Text(notice, color = colors.textSecondary, modifier = Modifier.weight(1f))
+        TextButton(onClick = onRefresh) { Text("Повторить") }
     }
 }
 

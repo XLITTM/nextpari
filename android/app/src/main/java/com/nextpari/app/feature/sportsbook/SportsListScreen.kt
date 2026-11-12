@@ -79,7 +79,7 @@ fun SportsListScreen(
                 onChange = { tab = it },
             )
         }
-        FootballFeedControl(football.loading, football.feed.notice, viewModel::refreshFeed)
+        FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
         LazyColumn(Modifier.fillMaxSize().padding(top = 8.dp).background(if (dark) Color(0xFF1E293B) else Color.White)) {
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 Row(

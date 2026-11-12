@@ -66,7 +66,11 @@ fun HomeScreen(
 ) {
     val home by viewModel.uiState.collectAsStateWithLifecycle()
     val football = sportsbook.state.collectAsStateWithLifecycle().value
-    val state = home.copy(liveMatches = sportsbook.live(), lineMatches = sportsbook.line())
+    val live = sportsbook.live()
+    val line = sportsbook.line()
+    val state = home.copy(liveMatches = live, lineMatches = line,
+        esportsLive = live.filter { it.sport == "esports" },
+        esportsLine = line.filter { it.sport == "esports" })
     val colors = NextpariTheme.colors
     val topListState = rememberLazyListState()
     val sportListState = rememberLazyListState()
@@ -129,7 +133,7 @@ fun HomeScreen(
             }
             "sport" -> {
                 item(key = "sports") { SportsSelector(state, viewModel::selectSport, excludeEsports = true) }
-                item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, sportsbook::refreshFeed) }
+                item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, sportsbook::refreshFeed) }
                 item(key = "live") {
                     MatchSection(
                         title = "Популярное LIVE",
@@ -137,6 +141,7 @@ fun HomeScreen(
                         onViewport = if ("live" in visibleSections) sportsbook::visibleMatches else null,
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
+                        onToggleFavorite = sportsbook::toggleMatchFavorite,
                         body = HomeFeedVisibility.alwaysVisibleSection(football.loading, state.filteredLive.size),
                         seeAllRoute = Destinations.GAMELIST_LIVE,
                         onNavigate = onNavigate,
@@ -150,16 +155,17 @@ fun HomeScreen(
                         onViewport = if ("line" in visibleSections) sportsbook::visibleMatches else null,
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
+                        onToggleFavorite = sportsbook::toggleMatchFavorite,
                         body = HomeFeedVisibility.alwaysVisibleSection(football.loading, state.filteredLine.size),
                         seeAllRoute = Destinations.GAMELIST_LINE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeChampionships.groups(state.liveMatches, excludeEsports = true).isNotEmpty()) {
+                if (HomeChampionships.groups(state.filteredLive, excludeEsports = true).isNotEmpty()) {
                     item(key = "champs") {
                         HomeChampionshipsAccordion(
-                            live = state.liveMatches,
+                            live = state.filteredLive,
                             sportId = state.selectedSportId,
                             onNavigate = onNavigate,
                             excludeEsports = true,
@@ -168,9 +174,8 @@ fun HomeScreen(
                 }
             }
             else -> {
-                item(key = "sports") { SportsSelector(state, viewModel::selectSport) }
-                item(key = "promos") { PromoRow(state.promos, onNavigate) }
-                item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, sportsbook::refreshFeed) }
+                item(key = "sports") { SportsSelector(state, viewModel::selectSport, excludeEsports = true) }
+                item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, sportsbook::refreshFeed) }
                 val liveBody = HomeFeedVisibility.topLive(football.loading, state.filteredLive.size)
                 if (liveBody != HomeSectionBody.Hidden) {
                     item(key = "live") {
@@ -180,6 +185,7 @@ fun HomeScreen(
                             onViewport = if ("live" in visibleSections) sportsbook::visibleMatches else null,
                             selectedOdds = football.selectedKeys,
                             onOddSelected = sportsbook::toggle,
+                            onToggleFavorite = sportsbook::toggleMatchFavorite,
                             body = liveBody,
                             seeAllRoute = Destinations.GAMELIST_LIVE,
                             onNavigate = onNavigate,
@@ -194,22 +200,24 @@ fun HomeScreen(
                         onViewport = if ("line" in visibleSections) sportsbook::visibleMatches else null,
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
+                        onToggleFavorite = sportsbook::toggleMatchFavorite,
                         body = HomeFeedVisibility.alwaysVisibleSection(football.loading, state.filteredLine.size),
                         seeAllRoute = Destinations.GAMELIST_LINE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeChampionships.groups(state.liveMatches, excludeEsports = false).isNotEmpty()) {
+                if (HomeChampionships.groups(state.filteredLive, excludeEsports = true).isNotEmpty()) {
                     item(key = "champs") {
                         HomeChampionshipsAccordion(
-                            live = state.liveMatches,
+                            live = state.filteredLive,
                             sportId = state.selectedSportId,
                             onNavigate = onNavigate,
-                            excludeEsports = false,
+                            excludeEsports = true,
                         )
                     }
                 }
+                if (state.promos.isNotEmpty()) item(key = "promos") { PromoRow(state.promos, onNavigate) }
                 item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
                 if (HomeFeedVisibility.optionalDataOnly(state.esportsLive.size) == HomeSectionBody.Data) {
                     item(key = "esports-live") {
@@ -343,6 +351,7 @@ private fun MatchSection(
     selectedOdds: Set<String> = emptySet(),
     onOddSelected: ((SportsBetSelection) -> Unit)? = null,
     onViewport: ((Any, List<String>) -> Unit)? = null,
+    onToggleFavorite: ((String) -> Unit)? = null,
 ) {
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 16.dp)) {
@@ -357,12 +366,12 @@ private fun MatchSection(
             HomeSectionBody.Hidden -> Unit
             HomeSectionBody.Skeleton -> MatchSkeletonCarousel()
             HomeSectionBody.EmptyText -> Text(
-                "Матчи появятся скоро",
+                "Сейчас матчей нет",
                 color = colors.textMuted,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             )
-            HomeSectionBody.Data -> MatchCarousel(matches, selectedOdds, onOddSelected, onViewport) { match ->
+            HomeSectionBody.Data -> MatchCarousel(matches, selectedOdds, onOddSelected, onViewport, onToggleFavorite) { match ->
                 onNavigate(Destinations.match(match.eventId))
             }
         }

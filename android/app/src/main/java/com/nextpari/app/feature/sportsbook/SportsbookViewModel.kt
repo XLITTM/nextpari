@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.session.AuthSession
+import com.nextpari.app.feature.favorites.SportsFavoritesStore
 import com.nextpari.app.feature.home.HomeCatalogRepository
 import com.nextpari.app.feature.home.MatchCardModel
 import java.util.UUID
@@ -31,6 +32,7 @@ data class SportsbookUiState(
     val retryRequired: Boolean = false,
     val couponNotice: String? = null,
     val acceptedBetId: String? = null,
+    val favoriteMatchIds: Set<String> = emptySet(),
 ) {
     val selectedKeys: Set<String> get() = selections.mapTo(mutableSetOf()) { it.identity }
     val picksCurrent: Boolean get() = selections.isNotEmpty() && selections.all { pick ->
@@ -51,6 +53,7 @@ class SportsbookViewModel(
     private val onBetAccepted: () -> Unit = {},
     private val sessions: StateFlow<AuthSession>? = null,
     private val now: () -> Long = SystemClock::elapsedRealtime,
+    private val favoritesStore: SportsFavoritesStore? = null,
 ) : ViewModel() {
     private val ui = MutableStateFlow(SportsbookUiState())
     val state = ui.asStateFlow()
@@ -99,6 +102,13 @@ class SportsbookViewModel(
         pending = null
         selectedMode = "live"
         ui.value = SportsbookUiState()
+        if (id != null && favoritesStore != null) {
+            val run = generation
+            viewModelScope.launch {
+                val favorites = favoritesStore.matchIds(id)
+                if (current(run)) ui.update { it.copy(favoriteMatchIds = favorites) }
+            }
+        }
     }
 
     private fun hasCurrentPlayer(): Boolean {
@@ -132,7 +142,7 @@ class SportsbookViewModel(
                     }
                 })
                 val listedDetail = state.detailId?.let { id -> feed.fixtures.firstOrNull { it.match.eventId == id } }
-                val detail = if (listedDetail != null) FootballSnapshot(listOf(listedDetail), listedDetail.priceState.notice, feed.canPrice)
+                val detail = if (listedDetail != null) FootballSnapshot(listOf(listedDetail), feed.notice ?: listedDetail.priceState.notice, feed.canPrice, feed.retryable)
                     else state.detail
                 state.copy(feed = feed, detail = detail, loading = false)
             }
@@ -326,10 +336,22 @@ class SportsbookViewModel(
     fun matchById(id: String): MatchCardModel? {
         val current = ui.value
         val detailMatch = detailFixture(id)?.match
-        if (current.detailId == id && !current.detailLoading && current.detail.notice == null) return detailMatch
-        return detailMatch ?: current.feed.fixtures.firstOrNull { it.match.id == id }?.match
+        val match = if (current.detailId == id && !current.detailLoading && current.detail.notice == null) detailMatch
+            else detailMatch ?: current.feed.fixtures.firstOrNull { it.match.id == id }?.match
+        return match?.copy(isFavorite = id in current.favoriteMatchIds)
     }
     fun marketsFor(id: String): List<MarketGroup> = detailFixture(id)?.markets.orEmpty()
+
+    fun toggleMatchFavorite(id: String) {
+        val owner = playerId ?: return
+        if (!hasCurrentPlayer() || !footballEventId.matches(id)) return
+        val store = favoritesStore ?: return
+        val run = generation
+        viewModelScope.launch {
+            val favorites = store.toggleMatch(id, owner)
+            if (current(run)) ui.update { it.copy(favoriteMatchIds = favorites) }
+        }
+    }
 
     fun toggle(selection: SportsBetSelection) {
         if (!hasCurrentPlayer() || ui.value.placing || pending != null) return
@@ -406,7 +428,10 @@ class SportsbookViewModel(
 
     private fun matches(live: Boolean): List<MatchCardModel> {
         val current = ui.value.feed.fixtures.map(FootballFixture::match).filter { it.isLive == live }
-        return current + if (live) catalog.esportsLiveMatches() else catalog.esportsLineMatches()
+        val supplemental = if (live) catalog.esportsLiveMatches() else catalog.esportsLineMatches()
+        val favorites = ui.value.favoriteMatchIds
+        return FeaturedSports.ordered((current + supplemental).distinctBy { it.id })
+            .map { it.copy(isFavorite = it.id in favorites || it.isFavorite) }
     }
 
     private fun detailFixture(id: String): FootballFixture? =
@@ -418,7 +443,7 @@ class SportsbookViewModel(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
-            previous.locked(footballReadMessage(error))
+            previous.locked(footballReadMessage(error), (error as? FootballFeedHttpException)?.retryable ?: true)
         }
 
     private data class PendingBet(val walletId: String, val request: SportsBetRequest)
@@ -430,6 +455,7 @@ class SportsbookViewModel(
                 return SportsbookViewModel(
                     AppGraph.homeCatalogRepository, AppGraph.footballRepository, AppGraph::refreshPlayerState,
                     AppGraph.sessionRepository.session,
+                    favoritesStore = AppGraph.sportsFavorites,
                 ) as T
             }
         }

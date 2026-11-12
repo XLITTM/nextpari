@@ -10,11 +10,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -24,7 +20,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import com.nextpari.app.BuildConfig
-import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchCardModel
 
@@ -61,9 +56,10 @@ fun MatchDetailsScreen(
         markets = markets,
         initialPinned = initialPinned,
         onBack = onBack,
-        onNavigate = onNavigate,
         loading = loading,
         notice = state.detail.takeIf { !usePreview && state.detailId == matchId }?.notice,
+        retryable = !usePreview && state.detailId == matchId && state.detail.retryable,
+        onToggleFavorite = if (usePreview) null else ({ viewModel.toggleMatchFavorite(matchId) }),
         onRefresh = if (usePreview) null else ({ viewModel.loadEvent(matchId, refreshClock = true) }),
         selected = state.selectedKeys,
         onSelect = { it.selection?.let(viewModel::toggle) },
@@ -76,35 +72,28 @@ fun MatchDetailsBody(
     markets: List<MarketGroup>,
     initialPinned: Set<String>,
     onBack: () -> Unit,
-    onNavigate: (String) -> Unit,
     loading: Boolean = false,
     notice: String? = null,
+    retryable: Boolean = false,
     onRefresh: (() -> Unit)? = null,
     selected: Set<String> = emptySet(),
     onSelect: (MarketOutcome) -> Unit = {},
+    onToggleFavorite: (() -> Unit)? = null,
 ) {
     if (match == null) {
         Column(Modifier.fillMaxSize().background(NextpariTheme.colors.bg)) {
             SportsbookScreenHeader(title = "Матч", onBack = onBack, actions = emptyList())
-            if (onRefresh != null) FootballFeedControl(loading, notice, onRefresh)
-            if (!loading && notice == null) {
-                Text("Матч недоступен", color = NextpariTheme.colors.text, modifier = Modifier.padding(16.dp))
+            if (onRefresh != null) FootballFeedControl(loading, notice, retryable, onRefresh)
+            if (!loading && (!retryable || notice == null)) {
+                Text(notice ?: "Матч недоступен", color = NextpariTheme.colors.text, modifier = Modifier.padding(16.dp))
             }
         }
         return
     }
-    var headerTab by rememberSaveable { mutableStateOf("info") }
-    Column(Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).verticalScroll(rememberScrollState())) {
-        MatchTracker(
-            match = match,
-            sportLabel = SportsListCatalog.sportName(match.sport),
-            headerTab = headerTab,
-            onHeaderTabChange = { headerTab = it },
-            onBack = onBack,
-            onLiveClick = { onNavigate(Destinations.BETSLIP) },
-        )
-        if (headerTab == "info") {
-            if (onRefresh != null) FootballFeedControl(loading, notice, onRefresh)
+    Column(Modifier.fillMaxSize().background(NextpariTheme.colors.bg).verticalScroll(rememberScrollState())) {
+        MatchTracker(match, SportsListCatalog.sportName(match.sport), onBack, onToggleFavorite)
+        if (onRefresh != null) FootballFeedControl(loading, notice, retryable, onRefresh)
+        androidx.compose.runtime.key(match.id) {
             MarketsGrid(
                 sport = match.sport,
                 markets = markets,
@@ -113,8 +102,6 @@ fun MatchDetailsBody(
                 selected = selected,
                 onSelect = onSelect,
             )
-        } else {
-            StreamPanel()
         }
     }
 }
@@ -128,7 +115,6 @@ private fun MatchDetailsPreview() {
             markets = SportsbookPreviewData.markets,
             initialPinned = setOf(SportsbookPreviewData.pinnedKey),
             onBack = {},
-            onNavigate = {},
         )
     }
 }

@@ -108,7 +108,7 @@ fun ChampionshipsScreen(
             Spacer(Modifier.width(8.dp))
             Text(sportName.uppercase(), color = if (dark) Color(0xFFD1D5DB) else Color(0xFF4B5563), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
-        FootballFeedControl(football.loading, football.feed.notice, viewModel::refreshFeed)
+        FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
         when {
             football.loading && groups.isEmpty() -> MatchSkeletonCarousel(count = 4)
             groups.isEmpty() -> Text(
@@ -159,10 +159,12 @@ private fun CountryAccordion(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(NextpariWebIcons.Globe, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            SportsFlag(SportsRegions.code(group.country), Modifier.size(20.dp)) {
+                Icon(NextpariWebIcons.Trophy, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.width(12.dp))
             Text(
-                group.country,
+                SportsRegions.name(group.country),
                 color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
@@ -187,15 +189,13 @@ private fun CountryAccordion(
                         Modifier
                             .fillMaxWidth()
                             .clickable { onLeague(league) }
-                            .padding(start = (if (league.badge == null) 48 else 24).dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+                            .padding(start = 24.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        league.badge?.let {
-                            FootballBadge(it.url, Modifier.size(18.dp)) {
-                                Image(painterResource(SportIconRes.drawable("football")), null, Modifier.size(18.dp))
-                            }
-                            Spacer(Modifier.width(6.dp))
+                        CompetitionArtwork(league.badge?.url, league.badgeRes, league.country, Modifier.size(18.dp)) {
+                            Icon(NextpariWebIcons.Trophy, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(18.dp))
                         }
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             league.name,
                             color = if (dark) Color(0xFFD1D5DB) else Color(0xFF374151),

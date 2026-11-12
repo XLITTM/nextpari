@@ -55,10 +55,11 @@ class FootballIntegrationTest {
         assertEquals(2, totals.lineCount)
         assertEquals(listOf("2.25", "2.25", "2.5", "2.5"), totals.outcomes.map { it.line })
         assertTrue(totals.outcomes.takeLast(2).all { it.locked && it.odds == null })
-        val handicap = fixture.markets.single { it.marketId == "1_2" }.outcomes.first().selection!!
-        assertEquals("-0.5,0", handicap.line)
-        assertEquals("home", handicap.outcomeId)
-        assertEquals("inplay", handicap.feedType)
+        val handicap = fixture.markets.single { it.marketId == "1_2" }
+        assertEquals(listOf("-0.5,0", "-0.5,0"), handicap.outcomes.map { it.line })
+        assertEquals(listOf("home", "away"), handicap.outcomes.map { it.outcomeId })
+        assertTrue(handicap.outcomes.all { it.locked && it.odds == null && it.selection == null })
+        assertEquals("inplay", fixture.match.outcomes.first().selection?.feedType)
         assertEquals("prematch", live.copy(live = false).toFixture()!!.match.outcomes.first().selection?.feedType)
     }
 
@@ -113,7 +114,8 @@ class FootballIntegrationTest {
             var cleared = 0
             val api = NetworkModule.playerApi(NetworkModule.okHttpClient(unauthorizedHandler = { cleared++ }), server.url("/").toString())
             val repository = RemoteFootballRepository(api, json)
-            val pick = live.toFixture()!!.markets.last().outcomes.first().selection!!
+            val handicap = live.markets.last().copy(line = "0", bookmakerId = "16", externalMarketId = "1_2")
+            val pick = live.copy(markets = listOf(handicap)).toFixture()!!.markets.single().outcomes.first().selection!!
             val request = sportsBetRequest("2,50", listOf(pick), "test-idempotency")!!
             server.enqueue(jsonResponse("""{"ok":false,"error":"SPORTSBOOK_ACCOUNT_NOT_AUTHORIZED"}""", 403))
             assertEquals(SportsBetResult.Rejected("SPORTSBOOK_ACCOUNT_NOT_AUTHORIZED"), repository.place(request))
@@ -127,7 +129,8 @@ class FootballIntegrationTest {
             val leg = body["selections"]!!.jsonArray.single().jsonObject
             assertEquals(JsonPrimitive("betsapi"), leg["provider"])
             assertEquals(JsonPrimitive("1_2"), leg["marketId"])
-            assertEquals(JsonPrimitive("-0.5,0"), leg["line"])
+            assertEquals(JsonPrimitive("0"), leg["line"])
+            assertEquals(JsonPrimitive("16"), leg["bookmakerId"])
             assertEquals(JsonPrimitive("home"), leg["outcomeId"])
             server.enqueue(jsonResponse("""{"ok":true}"""))
             assertEquals(SportsBetResult.Unconfirmed, repository.place(request))

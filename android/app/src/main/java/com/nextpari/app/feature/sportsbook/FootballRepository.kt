@@ -37,11 +37,13 @@ data class FootballSnapshot(
     val fixtures: List<FootballFixture> = emptyList(),
     val notice: String? = null,
     val canPrice: Boolean = true,
+    val retryable: Boolean = false,
 ) {
-    fun locked(message: String) = copy(
+    fun locked(message: String, canRetry: Boolean = true) = copy(
         fixtures = fixtures.map(FootballFixture::locked),
         notice = message,
         canPrice = false,
+        retryable = canRetry,
     )
 }
 
@@ -176,9 +178,7 @@ class RemoteFootballRepository(
         val response = api.footballFeed(eventId)
         val body = response.body()
         if (response.code() == 404 && eventId != null) return FootballSnapshot()
-        check(response.isSuccessful && body != null) {
-            if (response.code() == 401) "Сессия недействительна" else "Футбольная лента недоступна"
-        }
+        if (!response.isSuccessful || body == null) throw FootballFeedHttpException(response.code())
         val feed = json.decodeFromJsonElement<FootballFeedDto>(body)
         val serverTimeMs = response.raw().headers["Date"]?.let {
             runCatching { Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(it)).toEpochMilli() }.getOrNull()
@@ -236,6 +236,12 @@ class RemoteFootballRepository(
     }
 }
 
+internal class FootballFeedHttpException(status: Int) : IllegalStateException(
+    if (status == 401) "Сессия недействительна" else "Футбольная лента недоступна",
+) {
+    val retryable = status == 408 || status in 500..599
+}
+
 internal fun footballReadMessage(error: Exception): String =
     if (error is IllegalStateException) error.message ?: "Футбольная лента недоступна"
     else when (error) {
@@ -271,13 +277,14 @@ internal data class FootballFeedDto(
                     issue != null -> fixture.locked(FootballPriceState.Upstream)
                     current.any { it != fixture } -> fixture.locked(FootballPriceState.Unavailable).let {
                         it.copy(match = it.match.copy(liveClock = null, homeBadgeUrl = null,
-                            awayBadgeUrl = null, competitionBadge = null))
+                            awayBadgeUrl = null, competitionBadge = null, competitionId = null))
                     }
                     else -> fixture
                 }
             }
         return FootballSnapshot(fixtures, issue,
-            canPrice = ok && !stale && error !in setOf("TOKEN_MISSING", "RATE_LIMITED"))
+            canPrice = ok && !stale && error !in setOf("TOKEN_MISSING", "RATE_LIMITED"),
+            retryable = !stale && error !in setOf("TOKEN_MISSING", "RATE_LIMITED") && (!ok || error != null))
     }
 }
 
@@ -335,17 +342,12 @@ internal data class FootballEventDto(
 ) {
     fun toFixture(receiptEpochMs: Long = 0, receiptElapsedMs: Long = 0, allowClock: Boolean = true): FootballFixture? {
         if (!footballEventId.matches(id) || home.isBlank() || away.isBlank()) return null
-        val kickoffLabel = kickoff?.let {
-            try {
-                Instant.parse(it).atZone(ZoneId.systemDefault()).format(kickoffFormat)
-            } catch (_: java.time.DateTimeException) {
-                null
-            }
-        }
+        val kickoffTime = kickoff?.let { runCatching { Instant.parse(it) }.getOrNull() }
+        val kickoffLabel = kickoffTime?.atZone(ZoneId.systemDefault())?.format(kickoffFormat)
         val badges = FootballBadges.fromCatalog(logos)
         val match = MatchCardModel(
             id = id,
-            sport = "football",
+            sport = if (FeaturedSports.isVirtualFootball(league)) "esports" else "football",
             league = league.ifBlank { "Футбол" },
             country = country,
             team1 = home,
@@ -353,11 +355,13 @@ internal data class FootballEventDto(
             isLive = live,
             score = score?.takeIf { it.home >= 0 && it.away >= 0 }?.let { "${it.home} : ${it.away}" },
             kickoffLabel = kickoffLabel,
+            kickoffEpochMs = kickoffTime?.toEpochMilli(),
             marketTitle = "1X2",
             liveClock = if (live && allowClock) FootballLiveClock.fromWire(liveClock, receiptEpochMs, receiptElapsedMs) else null,
             homeBadgeUrl = badges?.home,
             awayBadgeUrl = badges?.away,
             competitionBadge = badges?.competition,
+            competitionId = badges?.competitionId,
         )
         val availability = FootballPriceState.fromWire(priceState ?: if (markets.any { it.status == "open" }) "open" else "unpriced")
         return FootballFixture(match, emptyList()).withMarkets(markets, availability)
@@ -376,9 +380,16 @@ private fun FootballFixture.withMarkets(rows: List<FootballMarketDto>, state: Fo
                     val quote = quotes.singleOrNull()?.takeIf { it.status == "open" && state == FootballPriceState.Open }
                     val prices = quote?.outcomes.orEmpty().groupBy { it.key }
                     market.labels.map { (key, shortLabel) ->
-                        val label = if (line.isEmpty()) shortLabel else "$shortLabel $line"
+                        // The normalized legacy wire carries only a market line, with no signed per-outcome handicap.
+                        val ambiguous = market == FootballMarket.Handicap &&
+                            line.split(',').any { it.toBigDecimalOrNull()?.signum() != 0 }
+                        val label = when {
+                            line.isEmpty() -> shortLabel
+                            ambiguous -> "$shortLabel · линия $line"
+                            else -> "$shortLabel $line"
+                        }
                         val outcome = prices[key]?.singleOrNull()
-                        val price = outcome?.price?.takeIf { it.isFinite() && it > 1 }
+                        val price = outcome?.price?.takeIf { !ambiguous && it.isFinite() && it > 1 }
                         val selection = if (price != null && quote != null) SportsBetSelection(
                             fixtureId = match.eventId, feedType = if (match.isLive) "inplay" else "prematch",
                             marketId = market.id, marketKey = market.key, line = line, outcomeId = key, price = price,

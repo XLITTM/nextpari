@@ -41,7 +41,8 @@ class SportsbookHierarchyTest {
     @Test
     fun marketTabsPerSportMatchWeb() {
         assertThat(MarketTabs.forSport("football").map { it.label }).containsExactly(
-            "Все", "Основная игра", "Тоталы", "Форы", "1-й тайм", "2-й тайм", "Угловые", "Голы",
+            "Все", "Основная игра", "Тоталы", "Форы", "1-й тайм", "2-й тайм", "Угловые",
+            "Двойной шанс", "Обе забьют", "Карточки", "Голы",
         ).inOrder()
         assertThat(MarketTabs.forSport("tennis").map { it.label }).containsExactly(
             "Все рынки", "Победитель", "Сеты", "Геймы",
@@ -139,7 +140,7 @@ class SportsbookHierarchyTest {
     fun sportsListFeaturedAlwaysVisibleWithRepositoryCounts() {
         val live = listOf(spainA, MatchCardModel(id = "t", sport = "tennis", league = "ATP", country = "Мир", team1 = "X", team2 = "Y"))
         val rows = SportsListCatalog.rows("live", live, emptyList())
-        assertThat(rows.map { it.id }.take(5)).containsExactly("football", "tennis", "basketball", "hockey", "esports").inOrder()
+        assertThat(rows.map { it.id }.take(4)).containsExactly("football", "tennis", "basketball", "hockey").inOrder()
         assertThat(rows.first { it.id == "football" }.count).isEqualTo(1)
         assertThat(rows.first { it.id == "tennis" }.count).isEqualTo(1)
         assertThat(rows.first { it.id == "basketball" }.count).isEqualTo(0)

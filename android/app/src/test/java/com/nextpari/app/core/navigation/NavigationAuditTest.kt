@@ -43,7 +43,7 @@ class NavigationAuditTest {
         ).forEach { route ->
             assertThat(root).contains(routeConstant(route))
         }
-        assertThat(root).contains("FavoritesScreen()")
+        assertThat(root).contains("FavoritesScreen(")
         assertThat(root).contains("SportsCouponScreen(")
         assertThat(root).doesNotContain("Купон пуст. Приём ставок выключен")
         assertThat(root).contains("placeholder(navController, Destinations.SLOTS")

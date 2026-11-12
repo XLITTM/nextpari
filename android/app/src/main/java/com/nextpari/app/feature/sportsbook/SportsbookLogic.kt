@@ -10,6 +10,7 @@ data class LeagueRow(
     val count: Int,
     val favorite: Boolean = false,
     val badge: FootballCompetitionBadge? = null,
+    val badgeRes: Int? = null,
 )
 
 data class CountryGroup(
@@ -70,7 +71,7 @@ object LeagueIds {
 object CountryGrouping {
     fun groupByCountry(matches: List<MatchCardModel>): List<CountryGroup> {
         val countries = linkedMapOf<String, MutableCountry>()
-        for (match in matches) {
+        for (match in FeaturedSports.ordered(matches)) {
             val country = match.country.trim()
             val name = match.league.trim()
             if (name.isEmpty()) continue
@@ -78,15 +79,16 @@ object CountryGrouping {
             countryRow.count += 1
             val league = countryRow.leagues.getOrPut(name) { LeagueRow(name = name, country = country, count = 0) }
             val badge = match.competitionBadge.takeIf { league.count == 0 || league.badge == it }
-            countryRow.leagues[name] = league.copy(count = league.count + 1, badge = badge)
+            val bundledBadge = BundledFootballBadges.competition(match).takeIf { league.count == 0 || league.badgeRes == it }
+            countryRow.leagues[name] = league.copy(count = league.count + 1, badge = badge, badgeRes = bundledBadge)
         }
         return countries.map { (country, row) ->
             CountryGroup(
                 country = country,
                 count = row.count,
-                leagues = row.leagues.values.sortedWith(compareByDescending<LeagueRow> { it.count }.thenBy { it.name }),
+                leagues = row.leagues.values.toList(),
             )
-        }.sortedWith(compareByDescending<CountryGroup> { it.count }.thenBy { it.country })
+        }
     }
 
     fun initialExpanded(groups: List<CountryGroup>): String = groups.firstOrNull()?.country.orEmpty()
@@ -123,7 +125,7 @@ object SportsListCatalog {
     fun rows(tab: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<SportListRow> {
         val pool = if (tab == "line") line else live
         return supported
-            .filter { sport -> if (tab == "cybers") sport.id == "esports" else true }
+            .filter { sport -> if (tab == "cybers") sport.id == "esports" else sport.id != "esports" }
             .map { sport -> SportListRow(sport.id, sport.name, pool.count { it.sport == sport.id }) }
             .sortedWith { a, b ->
                 val ai = featuredIds.indexOf(a.id)
@@ -152,6 +154,9 @@ object MarketTabs {
         MarketTabSpec("1st-half", "1-й тайм"),
         MarketTabSpec("2nd-half", "2-й тайм"),
         MarketTabSpec("corners", "Угловые"),
+        MarketTabSpec("double-chance", "Двойной шанс"),
+        MarketTabSpec("btts", "Обе забьют"),
+        MarketTabSpec("cards", "Карточки"),
         MarketTabSpec("goals", "Голы"),
     )
     val tennis = listOf(
@@ -187,10 +192,16 @@ object MarketTabs {
         else -> football
     }
 
+    fun available(sport: String, markets: List<MarketGroup>): List<MarketTabSpec> =
+        forSport(sport).filter { tab -> tab.id == "all" || markets.any { matchesTab(it, tab.id) } }
+
     fun matchesTab(market: MarketGroup, tab: String): Boolean {
         val name = market.name.lowercase()
         return when (tab) {
             "all" -> true
+            "double-chance" -> market.category == "double-chance" || name in setOf("двойной шанс", "double chance")
+            "btts" -> market.category == "btts" || market.marketId == "btts" || name in setOf("обе забьют", "both teams to score")
+            "cards" -> market.category == "cards"
             "totals" -> Regex("тотал|under/over|total|exactly").containsMatchIn(name) &&
                 !Regex("corner|гол|забьют|точный|goal|btts").containsMatchIn(name)
             "handicaps" -> Regex("фора|handicap").containsMatchIn(name) && !name.contains("corner")
@@ -226,7 +237,7 @@ object MarketAccordionLogic {
         key in open || key in pinned
 
     fun sortPinnedFirst(markets: List<MarketGroup>, pinned: Set<String>): List<MarketGroup> =
-        markets.sortedWith(compareBy<MarketGroup> { if (it.key in pinned) 0 else 1 }.thenBy { it.name })
+        markets.sortedBy { if (it.key in pinned) 0 else 1 }
 
     fun columns(market: MarketGroup): Int {
         val name = market.name
@@ -277,7 +288,7 @@ object HomeChampionships {
         live: List<MatchCardModel>,
         excludeEsports: Boolean = false,
     ): List<CountryGroup> {
-        val source = if (excludeEsports) live.filter { it.sport != "esports" } else live
+        val source = if (excludeEsports) live.filterNot(FeaturedSports::isEsports) else live
         return CountryGrouping.groupByCountry(source)
     }
 

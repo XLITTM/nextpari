@@ -413,7 +413,10 @@ internal fun AuthenticatedShell(
                 popEnterTransition = { EnterTransition.None },
                 popExitTransition = { ExitTransition.None },
             ) {
-                com.nextpari.app.feature.favorites.FavoritesScreen()
+                com.nextpari.app.feature.favorites.FavoritesScreen(
+                    sportsbook = sportsbookViewModel,
+                    onOpenMatch = { navController.navigateTo(Destinations.match(it)) },
+                )
             }
             composable(
                 Destinations.BETSLIP,

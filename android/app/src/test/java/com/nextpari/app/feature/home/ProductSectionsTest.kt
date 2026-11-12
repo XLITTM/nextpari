@@ -8,10 +8,10 @@ class ProductSectionsTest {
     fun homeSectionOrderMatchesProductSpec() {
         assertThat(HomeSectionOrder.top).containsExactly(
             "sports",
-            "promos",
             "live",
             "line",
             "champs",
+            "promos",
             "esports-disciplines",
             "esports-live",
             "esports-line",

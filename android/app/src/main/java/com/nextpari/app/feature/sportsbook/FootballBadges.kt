@@ -10,6 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.nextpari.app.R
+import com.nextpari.app.feature.home.MatchCardModel
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +32,7 @@ internal data class FootballBadges(
     val home: String?,
     val away: String?,
     val competition: FootballCompetitionBadge?,
+    val competitionId: String?,
 ) {
     companion object {
         // PR #93 resolves participant IDs before assigning the home and away roles.
@@ -41,6 +45,7 @@ internal data class FootballBadges(
                 home = ownedBadgeUrl(field("home")),
                 away = ownedBadgeUrl(field("away")),
                 competition = if (competitionId != null && competition != null) FootballCompetitionBadge(competitionId, competition) else null,
+                competitionId = competitionId,
             )
         }
     }
@@ -109,3 +114,53 @@ private object FootballBadgeImages {
         }
     }
 }
+
+internal object BundledFootballBadges {
+    // PR #93 starter catalog: Premier League (BetsAPI 94), Arsenal (17230), Manchester City (708).
+    const val PREMIER_LEAGUE_ID = "football:eng:premier-league"
+
+    private fun isPremierLeague(match: MatchCardModel): Boolean {
+        if (match.sport != "football") return false
+        val canonical = match.competitionId ?: match.competitionBadge?.canonicalId
+        if (canonical != null) return canonical == PREMIER_LEAGUE_ID
+        val name = match.league.trim()
+        val country = SportsRegions.code(match.country)
+        return (country == "eng" && name.equals("Premier League", ignoreCase = true)) ||
+            (country in setOf("eng", "gb") && name.equals("England Premier League", ignoreCase = true))
+    }
+
+    fun competition(match: MatchCardModel): Int? = R.drawable.badge_premier_league.takeIf { isPremierLeague(match) }
+
+    fun team(match: MatchCardModel, name: String): Int? {
+        if (!isPremierLeague(match)) return null
+        return when {
+            name.trim().equals("Arsenal", ignoreCase = true) -> R.drawable.badge_arsenal
+            name.trim().equals("Manchester City", ignoreCase = true) -> R.drawable.badge_manchester_city
+            else -> null
+        }
+    }
+}
+
+@Composable
+internal fun CompetitionArtwork(
+    url: String?,
+    badgeRes: Int?,
+    country: String,
+    modifier: Modifier,
+    placeholder: @Composable () -> Unit = {},
+) {
+    FootballBadge(url, modifier) {
+        if (badgeRes != null) {
+            Image(painterResource(badgeRes), contentDescription = null, modifier = modifier, contentScale = ContentScale.Fit)
+        } else {
+            SportsFlag(SportsRegions.code(country), modifier, placeholder)
+        }
+    }
+}
+
+@Composable
+internal fun MatchCompetitionArtwork(
+    match: MatchCardModel,
+    modifier: Modifier,
+    placeholder: @Composable () -> Unit = {},
+) = CompetitionArtwork(match.competitionBadge?.url, BundledFootballBadges.competition(match), match.country, modifier, placeholder)
