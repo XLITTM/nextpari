@@ -5,6 +5,7 @@ import { mainOutcomeButtons } from '../lib/cardOdds';
 import { OddButton } from '../components/OddButton';
 import { clickableCardSelection } from '../lib/sportsSelection';
 import { SportIcon } from '../components/SportIcon';
+import { TeamLogo } from '../components/TeamLogo';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 
@@ -69,7 +70,9 @@ function MatchRowCard({
     >
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700">
         <div className="flex items-center gap-1.5 min-w-0">
-          <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0" />
+          {match.logos?.competition ? <TeamLogo teamName={match.league} logo={match.logos.competition} /> : (
+            <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0" />
+          )}
           <span className="text-xs font-bold text-gray-700 dark:text-gray-200 truncate">
             {match.country}. {match.league}
           </span>
@@ -88,17 +91,11 @@ function MatchRowCard({
       <div className="px-3 py-3 flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2">
-            <div
-              className="w-6 h-6 rounded-full shrink-0 border border-gray-200 dark:border-gray-600"
-              style={{ backgroundColor: match.team1Color }}
-            />
+            <TeamLogo teamName={match.team1} logo={match.logos ? match.logos.home : match.team1Logo} />
             <span className="text-sm font-bold text-gray-900 dark:text-white truncate">{match.team1}</span>
           </div>
           <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded-full shrink-0 border border-gray-200 dark:border-gray-600"
-              style={{ backgroundColor: match.team2Color }}
-            />
+            <TeamLogo teamName={match.team2} logo={match.logos ? match.logos.away : match.team2Logo} />
             <span className="text-sm font-bold text-gray-900 dark:text-white truncate">{match.team2}</span>
           </div>
         </div>

@@ -74,6 +74,13 @@ export interface H2HGame {
   score: string;
 }
 
+export interface SportsMatchLogos {
+  readonly competitionId: string | null;
+  readonly competition: string | null;
+  readonly home: string | null;
+  readonly away: string | null;
+}
+
 export interface MatchEvent {
   id: string;
   sport: SportId;
@@ -86,6 +93,7 @@ export interface MatchEvent {
   team2Color: string;
   team1Logo?: string;
   team2Logo?: string;
+  logos?: SportsMatchLogos;
   startTime: number;
   isLive: boolean;
   liveStatus?: string;

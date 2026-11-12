@@ -1,6 +1,9 @@
+import { useState } from 'react';
+import { Shield } from 'lucide-react';
+
 interface TeamLogoProps {
   teamName: string;
-  logo?: string;
+  logo?: string | null;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -13,21 +16,25 @@ const sizeMap = {
 };
 
 export function TeamLogo({ teamName, logo, size = 'sm', className = '' }: TeamLogoProps) {
-  const src = logo ?? `/crest${((teamName.charCodeAt(0) % 10) + 1)}.webp`;
+  const [failedUrl, setFailedUrl] = useState<string>();
 
   return (
     <div
       className={`${sizeMap[size]} rounded-full bg-white shadow-md shrink-0 flex items-center justify-center ${className}`}
     >
-      <img
-        src={src}
-        alt={teamName}
-        className="w-full h-full object-contain"
-        loading="lazy"
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = 'none';
-        }}
-      />
+      {logo && logo !== failedUrl ? (
+        <img
+          key={logo}
+          src={logo}
+          alt={teamName}
+          className="w-full h-full object-contain"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailedUrl(logo)}
+        />
+      ) : (
+        <Shield className="w-3/4 h-3/4 text-gray-400" aria-hidden="true" />
+      )}
     </div>
   );
 }
