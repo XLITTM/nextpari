@@ -26,6 +26,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -75,6 +77,9 @@ fun HomeScreen(
         "esports" -> esportsListState
         "casino" -> casinoListState
         else -> topListState
+    }
+    val visibleSections by remember(listState) {
+        derivedStateOf { listState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() }
     }
     Box(Modifier.fillMaxSize().background(colors.bg)) {
         key(state.mainTabId) {
@@ -129,6 +134,7 @@ fun HomeScreen(
                     MatchSection(
                         title = "Популярное LIVE",
                         matches = state.filteredLive,
+                        onViewport = if ("live" in visibleSections) sportsbook::visibleMatches else null,
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
                         body = HomeFeedVisibility.alwaysVisibleSection(football.loading, state.filteredLive.size),
@@ -141,6 +147,7 @@ fun HomeScreen(
                     MatchSection(
                         title = "Популярное Линия",
                         matches = state.filteredLine,
+                        onViewport = if ("line" in visibleSections) sportsbook::visibleMatches else null,
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
                         body = HomeFeedVisibility.alwaysVisibleSection(football.loading, state.filteredLine.size),
@@ -170,6 +177,7 @@ fun HomeScreen(
                         MatchSection(
                             title = "Популярное LIVE",
                             matches = state.filteredLive,
+                            onViewport = if ("live" in visibleSections) sportsbook::visibleMatches else null,
                             selectedOdds = football.selectedKeys,
                             onOddSelected = sportsbook::toggle,
                             body = liveBody,
@@ -183,6 +191,7 @@ fun HomeScreen(
                     MatchSection(
                         title = "Популярное Линия",
                         matches = state.filteredLine,
+                        onViewport = if ("line" in visibleSections) sportsbook::visibleMatches else null,
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
                         body = HomeFeedVisibility.alwaysVisibleSection(football.loading, state.filteredLine.size),
@@ -333,6 +342,7 @@ private fun MatchSection(
     filterLabel: String? = null,
     selectedOdds: Set<String> = emptySet(),
     onOddSelected: ((SportsBetSelection) -> Unit)? = null,
+    onViewport: ((Any, List<String>) -> Unit)? = null,
 ) {
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 16.dp)) {
@@ -352,7 +362,7 @@ private fun MatchSection(
                 fontSize = 14.sp,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             )
-            HomeSectionBody.Data -> MatchCarousel(matches, selectedOdds, onOddSelected) { match ->
+            HomeSectionBody.Data -> MatchCarousel(matches, selectedOdds, onOddSelected, onViewport) { match ->
                 onNavigate(Destinations.match(match.eventId))
             }
         }
