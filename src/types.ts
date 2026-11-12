@@ -106,6 +106,13 @@ export interface MatchEvent {
   startTime: number;
   isLive: boolean;
   liveStatus?: string;
+  liveClock?: {
+    minute: number;
+    second: number;
+    running: boolean;
+    observedAt: string;
+    stale: boolean;
+  } | null;
   liveScore?: { team1: number; team2: number };
   markets: { '1': number; x: number; '2': number };
   extraMarkets: number;

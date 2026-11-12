@@ -147,14 +147,14 @@ export class BetsApiReadOnlyClient {
 
   getInplay(): Promise<FeedResult> {
     return this.cached('inplay', PATHS.inplay, { sport_id: FOOTBALL_SPORT_ID }, (json) => (
-      normalizeFootballList(json, 'inplay')
+      normalizeFootballList(json, 'inplay', this.now())
     ));
   }
 
   getUpcoming(page = 1): Promise<FeedResult> {
     const safePage = Number.isInteger(page) && page >= 1 && page <= 5 ? page : 1;
     return this.cached('upcoming', PATHS.upcoming, { sport_id: FOOTBALL_SPORT_ID, page: String(safePage) }, (json) => (
-      normalizeFootballList(json, 'upcoming')
+      normalizeFootballList(json, 'upcoming', this.now())
     ));
   }
 
@@ -273,7 +273,7 @@ export class BetsApiReadOnlyClient {
 
   getEnded(day: string): Promise<FeedResult> {
     return this.cached('ended', PATHS.ended, { sport_id: FOOTBALL_SPORT_ID, day }, (json) => (
-      normalizeFootballList(json, 'ended')
+      normalizeFootballList(json, 'ended', this.now())
     ));
   }
 
@@ -282,7 +282,7 @@ export class BetsApiReadOnlyClient {
       return Promise.resolve({ ok: false, error: 'UPSTREAM', upstreamStatus: null, feed: null });
     }
     return this.cached('event', PATHS.view, { event_id: eventId }, (json) => {
-      const row = normalizeFootballDetails(json, null);
+      const row = normalizeFootballDetails(json, null, this.now());
       return row ? [row] : [];
     });
   }
@@ -395,7 +395,7 @@ export class BetsApiReadOnlyClient {
       oddsPayload = odds.json;
       oddsRate = snapshotOf(observation);
     }
-    const event = normalizeFootballDetails(view.json, oddsLimited ? null : oddsPayload);
+    const event = normalizeFootballDetails(view.json, oddsLimited ? null : oddsPayload, this.now());
     const entry: CacheEntry = {
       storedAt: this.now(),
       events: event ? [event] : [],

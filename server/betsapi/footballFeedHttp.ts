@@ -5,7 +5,8 @@ import {
   type EventOddsRead,
   type EventOddsState,
 } from './client.js';
-import type { FeedResult, NormalizedEvent, NormalizedMarket } from './types.js';
+import { publishLiveClock } from './liveClock.js';
+import type { FeedResult, LiveClock, NormalizedEvent, NormalizedMarket } from './types.js';
 
 export const FOOTBALL_FEED_PATH = '/api/player/sports/football-feed';
 const MAX_ODDS_IDS = 8;
@@ -32,6 +33,7 @@ export interface FootballFeedCard {
   kickoff: string | null;
   live: boolean;
   score: { home: number; away: number } | null;
+  liveClock: LiveClock | null;
   priceState: EventOddsState | 'unpriced';
   markets: FootballFeedMarket[];
 }
@@ -43,9 +45,9 @@ export interface FootballOddsQuote {
   markets: FootballFeedMarket[];
 }
 
-function cardsFrom(result: FeedResult | null): FootballFeedCard[] {
+function cardsFrom(result: FeedResult | null, now = Date.now()): FootballFeedCard[] {
   const events = result?.feed?.events ?? [];
-  return events.map(toCard);
+  return events.map((event) => toCard(event, now));
 }
 
 function priceStateOf(event: NormalizedEvent): FootballFeedCard['priceState'] {
@@ -75,7 +77,7 @@ function marketToCard(market: NormalizedMarket): FootballFeedMarket | null {
   };
 }
 
-function toCard(event: NormalizedEvent): FootballFeedCard {
+function toCard(event: NormalizedEvent, now = Date.now()): FootballFeedCard {
   return {
     id: event.eventId,
     league: event.league.name ?? '',
@@ -85,6 +87,7 @@ function toCard(event: NormalizedEvent): FootballFeedCard {
     kickoff: event.kickoff,
     live: event.status === 'live',
     score: event.score,
+    liveClock: publishLiveClock(event.liveClock, now),
     priceState: priceStateOf(event),
     markets: event.markets.flatMap((market) => {
       const card = marketToCard(market);

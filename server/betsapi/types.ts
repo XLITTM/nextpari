@@ -31,6 +31,14 @@ export interface NormalizedMarket {
   availability?: MarketAvailability;
 }
 
+export interface LiveClock {
+  minute: number;
+  second: number;
+  running: boolean;
+  observedAt: string;
+  stale: boolean;
+}
+
 export interface NormalizedEvent {
   eventId: string;
   sportId: typeof FOOTBALL_SPORT_ID;
@@ -42,6 +50,7 @@ export interface NormalizedEvent {
   status: EventStatus;
   timeStatus: string;
   score: { home: number; away: number } | null;
+  liveClock?: LiveClock | null;
   marketsKnown: boolean;
   markets: NormalizedMarket[];
   updatedAt: string | null;

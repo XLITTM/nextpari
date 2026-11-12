@@ -6,6 +6,8 @@ import { MatchTracker, type HeaderTab, type VenueSport } from '@/components/matc
 import { useBetSlip } from '../BetSlipContext';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useLiveOdds } from '../hooks/useLiveOdds';
+import { footballClockLabel } from '../lib/footballClock';
+import { useFootballClockNow } from '../lib/useFootballClock';
 import { isBetsapiMatch, resolveDetailsMatch } from '../lib/footballFeed';
 import { bet365Groups, fetchBet365Expanded } from '../lib/bet365View';
 import { matchEventFromStore } from '../lib/liveMatches';
@@ -95,6 +97,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
     }).catch(() => undefined);
   }, [catalogMatch, matchId]);
 
+  const clockNow = useFootballClockNow(catalogMatch?.liveClock);
   const match = useMemo(() => {
     const resolved = resolveDetailsMatch(
       catalogMatch,
@@ -132,12 +135,12 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
         match={match}
         sportLabel={sportLabel}
         sportKind={sportKind}
-        minute={storeState?.matchTime}
-        timeStr={storeState?.event.time_str}
+        minute={isBetsapiMatch(match) ? footballClockLabel(match.liveClock, clockNow) ?? undefined : storeState?.matchTime}
+        timeStr={isBetsapiMatch(match) ? undefined : storeState?.event.time_str}
         scoreText={storeState?.score}
-        clockRunning={storeState?.event.period !== 'HT' && storeState?.event.clock_running !== false}
-        period={storeState?.event.period}
-        kickoffUnix={Number(storeState?.event.start_time || storeState?.event.time || 0)}
+        clockRunning={isBetsapiMatch(match) ? false : storeState?.event.period !== 'HT' && storeState?.event.clock_running !== false}
+        period={isBetsapiMatch(match) ? undefined : storeState?.event.period}
+        kickoffUnix={isBetsapiMatch(match) ? 0 : Number(storeState?.event.start_time || storeState?.event.time || 0)}
         headerTab={headerTab}
         onHeaderTabChange={setHeaderTab}
         onBack={onBack}

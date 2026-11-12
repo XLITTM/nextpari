@@ -8,6 +8,8 @@ import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
 import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
+import { footballClockLabel } from '../lib/footballClock';
+import { useFootballClockNow } from '../lib/useFootballClock';
 import { advertisedExtraMarketCount, footballPriceNote, homeMarketsLabel, isBetsapiMatch } from '../lib/footballFeed';
 import {
   clickableCardSelection,
@@ -72,7 +74,8 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
   };
 
   const outcomeButtons = mainOutcomeButtons(match);
-  const liveMinute = formatCardMinute(match.liveStatus);
+  const clockNow = useFootballClockNow(match.liveClock);
+  const liveMinute = footballClockLabel(match.liveClock, clockNow) ?? formatCardMinute(match.liveStatus);
   const betsapi = isBetsapiMatch(match);
   const lsports = isLsportsMatch(match);
   const lsportsExtras = extraLsportsMarketRows(match);

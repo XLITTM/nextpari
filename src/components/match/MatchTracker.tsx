@@ -87,9 +87,7 @@ function formatLiveClock(
   football: boolean,
   period?: string,
 ): string {
-  if (period === 'HT' || (paused && football && elapsed >= FIRST_HALF_END - 20 && elapsed < 50 * 60)) {
-    return '45:00';
-  }
+  if (period === 'HT') return '45:00';
   if (!football) return formatMmSs(elapsed);
   if (elapsed >= FULL_TIME_END) return formatAdded(FULL_TIME_END, elapsed);
   if (period === '1' && elapsed >= FIRST_HALF_END) return formatAdded(FIRST_HALF_END, elapsed);
@@ -97,10 +95,11 @@ function formatLiveClock(
 }
 
 function periodLabel(period?: string, isLive?: boolean): string {
-  if (!isLive) return 'Не начался';
   if (period === 'HT') return 'Перерыв';
   if (period === '2') return '2-й тайм';
-  return '1-й тайм';
+  if (period === '1') return '1-й тайм';
+  if (!isLive) return 'Не начался';
+  return '';
 }
 
 function useTickingClock(
@@ -112,12 +111,12 @@ function useTickingClock(
   kickoffUnix?: number,
 ) {
   const ht = period === 'HT' || (!clockRunning && /ht|перерыв/i.test(`${apiClock ?? ''} ${liveStatus ?? ''}`));
-  let apiSeconds =
+  const parsedClock =
     parseClockSeconds(apiClock) ??
     parseClockSeconds(parseLiveClock(liveStatus).clock) ??
-    parseClockSeconds(liveStatus) ??
-    0;
-  if (period === '2' && apiSeconds < FIRST_HALF_END) apiSeconds += FIRST_HALF_END;
+    parseClockSeconds(liveStatus);
+  let apiSeconds = parsedClock ?? 0;
+  if (period === '2' && parsedClock != null && apiSeconds < FIRST_HALF_END) apiSeconds += FIRST_HALF_END;
 
   const sync = useMemo(
     () => ({ seconds: ht ? FIRST_HALF_END : apiSeconds, at: Date.now() }),
@@ -140,7 +139,7 @@ function useTickingClock(
     elapsed = Math.max(elapsed, FIRST_HALF_END + Math.max(0, sinceSecondHalf));
   }
 
-  return { elapsed, running: isLive && clockRunning && !ht };
+  return { elapsed, running: isLive && clockRunning && !ht, known: parsedClock != null || ht };
 }
 
 function formatKickoff(ts: number): string {
@@ -191,7 +190,7 @@ export function MatchTracker({
   const score2 = fromSs ? fromSs[2] : match.liveScore?.team2 ?? (match.isLive ? 0 : '—');
   const football = sportKind === 'football';
   const apiClock = laterClock(minute, timeStr);
-  const { elapsed, running } = useTickingClock(
+  const { elapsed, running, known } = useTickingClock(
     match.isLive,
     apiClock,
     match.liveStatus,
@@ -199,11 +198,13 @@ export function MatchTracker({
     period,
     kickoffUnix,
   );
-  const clockRaw = match.isLive
-    ? period === 'HT'
-      ? '45:00'
-      : formatLiveClock(elapsed, !running, football, period)
-    : formatKickoff(match.startTime);
+  const clockRaw = !match.isLive
+    ? formatKickoff(match.startTime)
+    : !known
+      ? '—'
+      : period === 'HT'
+        ? '45:00'
+        : formatLiveClock(elapsed, !running, football, period);
   const clockLabel = formatClockDisplay(clockRaw);
   const clockPlain = clockRaw.replace(/\s/g, '');
   const periodText = periodLabel(period, match.isLive);

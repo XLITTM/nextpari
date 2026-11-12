@@ -23,6 +23,7 @@ export interface FootballFeedCard {
   kickoff: string | null;
   live: boolean;
   score: { home: number; away: number } | null;
+  liveClock?: MatchEvent['liveClock'];
   priceState?: FootballPriceState;
   markets: FootballFeedMarket[];
 }
@@ -150,6 +151,10 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
     team2Color: '#1d4ed8',
     startTime: Number.isFinite(kickoff) ? kickoff : 0,
     isLive: card.live,
+    liveClock: card.liveClock ?? null,
+    liveStatus: card.liveClock
+      ? `${card.liveClock.minute}:${String(card.liveClock.second).padStart(2, '0')}`
+      : undefined,
     liveScore: card.score ? { team1: card.score.home, team2: card.score.away } : undefined,
     markets: { '1': price('home'), x: price('draw'), '2': price('away') },
     extraMarkets: groups.length,
@@ -291,13 +296,23 @@ export function footballQuoteIds(matches: MatchEvent[]): { primary: string[]; se
   return { primary, secondary };
 }
 
+function retainFootballClock(next: MatchEvent, previous?: MatchEvent): MatchEvent {
+  if (!next.isLive) return next.liveClock ? { ...next, liveClock: null } : next;
+  if (next.liveClock || !previous?.liveClock) return next;
+  return {
+    ...next,
+    liveClock: previous.liveClock,
+    liveStatus: previous.liveStatus ?? next.liveStatus,
+  };
+}
+
 export function mergeListedMatches(previous: MatchEvent[], listed: MatchEvent[]): MatchEvent[] {
   const prior = new Map(previous.map((match) => [match.id, match]));
   return listed.map((item) => {
     const old = prior.get(item.id);
-    if (!old || item.priceState !== 'unpriced') return item;
-    if (!old.priceState || old.priceState === 'unpriced') return item;
-    return {
+    if (!old || item.priceState !== 'unpriced') return retainFootballClock(item, old);
+    if (!old.priceState || old.priceState === 'unpriced') return retainFootballClock(item, old);
+    return retainFootballClock({
       ...item,
       markets: old.markets,
       extraMarkets: old.extraMarkets,
@@ -305,7 +320,7 @@ export function mergeListedMatches(previous: MatchEvent[], listed: MatchEvent[])
       betsapiQuotes: old.betsapiQuotes,
       marketsLocked: old.marketsLocked,
       priceState: old.priceState,
-    };
+    }, old);
   });
 }
 
@@ -329,10 +344,12 @@ export function applyFootballQuotes(matches: MatchEvent[], quotes: FootballOddsQ
       kickoff: match.startTime ? new Date(match.startTime).toISOString() : null,
       live: match.isLive,
       score: match.liveScore ? { home: match.liveScore.team1, away: match.liveScore.team2 } : null,
+      liveClock: match.liveClock,
       priceState: quote.priceState,
       markets: quote.markets,
     });
-    return quote.priceState === 'stale' ? { ...next, priceState: 'stale' } : next;
+    const priced = quote.priceState === 'stale' ? { ...next, priceState: 'stale' as const } : next;
+    return retainFootballClock(priced, match);
   });
 }
 

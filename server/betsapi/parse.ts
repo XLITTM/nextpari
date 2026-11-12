@@ -1,4 +1,5 @@
 import { toDecimalOdds } from '../../src/lib/decimalOdds.js';
+import { footballLiveClock } from './liveClock.js';
 import {
   FOOTBALL_SPORT_ID,
   type EventStatus,
@@ -446,7 +447,7 @@ function marketsFromEmbedded(row: Record<string, unknown>): { marketsKnown: bool
   return { marketsKnown: true, markets };
 }
 
-export function normalizeFootballEvent(row: unknown, oddsPayload?: unknown): NormalizedEvent | null {
+export function normalizeFootballEvent(row: unknown, oddsPayload?: unknown, observedAtMs?: number): NormalizedEvent | null {
   if (!isRecord(row) || !sportIsFootball(row)) return null;
   const eventId = text(row.id);
   if (!/^\d+$/.test(eventId)) return null;
@@ -469,6 +470,7 @@ export function normalizeFootballEvent(row: unknown, oddsPayload?: unknown): Nor
     status: status.status,
     timeStatus: status.timeStatus,
     score: footballScore(row, status.status),
+    liveClock: status.status === 'live' ? footballLiveClock(row.timer, observedAtMs) : null,
     marketsKnown: priced.marketsKnown,
     markets: priced.markets,
     updatedAt: latestIso(priced.markets.map((market) => market.updatedAt)),
@@ -484,6 +486,7 @@ function listRows(payload: unknown): unknown[] {
 export function normalizeFootballList(
   payload: unknown,
   endpoint: 'inplay' | 'upcoming' | 'ended',
+  observedAtMs?: number,
 ): NormalizedEvent[] {
   const allowed: Record<typeof endpoint, EventStatus[]> = {
     inplay: ['live'],
@@ -492,7 +495,7 @@ export function normalizeFootballList(
   };
   const events: NormalizedEvent[] = [];
   for (const row of listRows(payload)) {
-    const event = normalizeFootballEvent(row);
+    const event = normalizeFootballEvent(row, undefined, observedAtMs);
     if (!event || !allowed[endpoint].includes(event.status)) continue;
     events.push(event);
   }
@@ -506,8 +509,12 @@ function viewRecord(payload: unknown): unknown | null {
   return isRecord(results) ? results : null;
 }
 
-export function normalizeFootballDetails(viewPayload: unknown, oddsPayload: unknown | null): NormalizedEvent | null {
+export function normalizeFootballDetails(
+  viewPayload: unknown,
+  oddsPayload: unknown | null,
+  observedAtMs?: number,
+): NormalizedEvent | null {
   const row = viewRecord(viewPayload);
-  if (oddsPayload == null) return normalizeFootballEvent(row);
-  return normalizeFootballEvent(row, oddsPayload);
+  if (oddsPayload == null) return normalizeFootballEvent(row, undefined, observedAtMs);
+  return normalizeFootballEvent(row, oddsPayload, observedAtMs);
 }
