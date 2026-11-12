@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -23,6 +24,7 @@ import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
 import com.nextpari.app.feature.home.NextpariMatchCard
+import com.nextpari.app.feature.home.TrackFootballViewport
 
 @Composable
 fun LeagueScreen(
@@ -39,6 +41,9 @@ fun LeagueScreen(
     val football = viewModel.state.collectAsStateWithLifecycle().value
     val matches = viewModel.leagueMatches(leagueId, resolvedMode)
 
+    val listState = rememberLazyListState()
+    TrackFootballViewport(listState, viewModel::visibleMatches)
+
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF0F2F5))) {
         SportsbookScreenHeader(title = name, onBack = onBack, actions = emptyList())
         FootballFeedControl(football.loading, football.feed.notice, viewModel::refreshFeed)
@@ -52,7 +57,8 @@ fun LeagueScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
             )
             else -> LazyColumn(
-                Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(matches, key = { it.id }) { match ->
