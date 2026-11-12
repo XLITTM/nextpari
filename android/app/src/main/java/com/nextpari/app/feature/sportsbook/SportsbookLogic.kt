@@ -42,6 +42,7 @@ data class MarketOutcome(
     val locked: Boolean = false,
     val movement: OddsMovement = OddsMovement.None,
     val selection: SportsBetSelection? = null,
+    val observedUntil: Long? = null,
 )
 
 data class MarketGroup(
@@ -118,6 +119,14 @@ object SportsListCatalog {
         HomeSport("beach-volleyball", "Пляжный волейбол"),
         HomeSport("snooker", "Снукер"),
         HomeSport("futsal", "Футзал"),
+        HomeSport("handball", "Гандбол"), HomeSport("baseball", "Бейсбол"),
+        HomeSport("darts", "Дартс"), HomeSport("american-football", "Американский футбол"),
+        HomeSport("rugby", "Регби"), HomeSport("rugby-league", "Регбилиг"),
+        HomeSport("aussie-rules", "Австралийский футбол"), HomeSport("floorball", "Флорбол"),
+        HomeSport("polo", "Водное поло"), HomeSport("squash", "Сквош"),
+        HomeSport("mma", "ММА"), HomeSport("horse-racing", "Скачки"),
+        HomeSport("greyhounds", "Собачьи бега"), HomeSport("bowls", "Боулз"),
+        HomeSport("boxing", "Бокс"), HomeSport("gaelic-sports", "Гэльский спорт"),
     )
 
     val featuredIds: List<String> = listOf("football", "tennis", "basketball", "hockey", "esports")

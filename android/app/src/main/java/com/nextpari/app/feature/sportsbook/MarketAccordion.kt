@@ -20,8 +20,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -112,6 +115,12 @@ fun MarketOutcomeButton(
 ) {
     val colors = NextpariTheme.colors
     val locked = outcome.locked || outcome.odds.isNullOrBlank()
+    val expires = outcome.observedUntil
+    val observed by produceState(expires != null && expires > SystemClock.elapsedRealtime(), expires) {
+        value = expires != null && expires > SystemClock.elapsedRealtime()
+        if (expires != null && value) delay((expires - SystemClock.elapsedRealtime()).coerceAtLeast(0))
+        value = false
+    }
     val highlighted = selected && !locked
     val oddsColor = when {
         highlighted -> colors.accentInk
@@ -138,7 +147,7 @@ fun MarketOutcomeButton(
         Text(outcome.label, color = if (highlighted) colors.accentInk else colors.textSecondary,
             fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(end = 4.dp))
-        if (locked) {
+        if (locked && (!observed || outcome.odds == null)) {
             Icon(NextpariWebIcons.Lock, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(14.dp))
         } else {
             Text(outcome.odds.orEmpty(), color = oddsColor, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)

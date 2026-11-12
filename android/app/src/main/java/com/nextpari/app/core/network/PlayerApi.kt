@@ -97,7 +97,10 @@ interface PlayerApi {
     suspend fun usdtQuote(@Body body: JsonObject): Response<JsonObject>
 
     @GET("api/player/sports/football-feed")
-    suspend fun footballFeed(@Query("eventId") eventId: String? = null): Response<JsonObject>
+    suspend fun footballFeed(
+        @Query("eventId") eventId: String? = null,
+        @Query("includeSports") includeSports: String? = null,
+    ): Response<JsonObject>
 
     @GET("api/player/sports/football-feed")
     suspend fun footballOdds(@Query("oddsFor") eventIds: String): Response<JsonObject>

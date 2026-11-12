@@ -158,13 +158,13 @@ class SportsbookViewModel(
 
     fun loadEvent(id: String, refreshClock: Boolean) {
         val repository = football ?: return
-        if (!hasCurrentPlayer() || !footballEventId.matches(id)) return
+        if (!hasCurrentPlayer() || !isSportsFeedEventId(id)) return
         expirePrices()
         visibleDetail = id
         if (ui.value.detailId != id) detailJob?.cancel()
         val state = ui.value
         val listed = state.feed.canPrice && state.feed.fixtures.any { it.match.eventId == id }
-        val cached = state.fixtureFor(id)?.takeIf {
+        val cached = state.fixtureFor(id)?.takeIf { footballEventId.matches(id) }?.takeIf {
             listed ||
                 (state.detailId == id && state.detail.canPrice)
         }
@@ -191,7 +191,7 @@ class SportsbookViewModel(
                     if (newer != null) fresh.withPrices(newer) else fresh.stamped(order, started)
                 }
                 state.copy(detail = detail.copy(fixtures = fixtures,
-                    notice = detail.notice ?: fixtures.singleOrNull()?.priceState?.notice), detailLoading = false)
+                    notice = detail.notice ?: fixtures.singleOrNull()?.takeIf { footballEventId.matches(id) }?.priceState?.notice), detailLoading = false)
             }
             if (detail.fixtures.isNotEmpty()) scheduleOdds()
             scheduleExpiry()
@@ -344,7 +344,7 @@ class SportsbookViewModel(
 
     fun toggleMatchFavorite(id: String) {
         val owner = playerId ?: return
-        if (!hasCurrentPlayer() || !footballEventId.matches(id)) return
+        if (!hasCurrentPlayer() || !isSportsFeedEventId(id)) return
         val store = favoritesStore ?: return
         val run = generation
         viewModelScope.launch {
@@ -474,12 +474,13 @@ private fun attemptKey(fixture: FootballFixture) = "${fixture.match.eventId}:${f
 internal fun footballOddsCandidates(
     fixtures: List<FootballFixture>, visibleIds: List<String>, detail: FootballFixture?, allowFallback: Boolean,
 ): List<FootballFixture> {
-    val byId = fixtures.associateBy { it.match.eventId }
+    val footballOnly = fixtures.filter { it.match.sport == "football" && footballEventId.matches(it.match.eventId) }
+    val byId = footballOnly.associateBy { it.match.eventId }
     val visible = visibleIds.distinct().mapNotNull(byId::get)
     val candidates = if (visible.isNotEmpty()) visible else if (allowFallback && detail == null) {
-        fixtures.filter { it.match.isLive }.take(6) + fixtures.filterNot { it.match.isLive }.take(FOOTBALL_BATCH_SIZE)
+        footballOnly.filter { it.match.isLive }.take(6) + footballOnly.filterNot { it.match.isLive }.take(FOOTBALL_BATCH_SIZE)
     } else emptyList()
-    return (listOfNotNull(detail) + candidates.filter { it.match.isLive } + candidates.filterNot { it.match.isLive })
+    return (listOfNotNull(detail?.takeIf { it.match.sport == "football" && footballEventId.matches(it.match.eventId) }) + candidates.filter { it.match.isLive } + candidates.filterNot { it.match.isLive })
         .distinctBy { it.match.eventId }
 }
 

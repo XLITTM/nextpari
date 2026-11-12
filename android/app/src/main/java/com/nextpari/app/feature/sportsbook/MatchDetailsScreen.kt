@@ -35,11 +35,11 @@ fun MatchDetailsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(matchId, usePreview, lifecycle) {
-        if (!usePreview && footballEventId.matches(matchId)) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+        if (!usePreview && isSportsFeedEventId(matchId)) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             try {
                 viewModel.loadEvent(matchId, refreshClock = true)
                 while (true) {
-                    delay(45_000)
+                    delay(if (additionalSportEventId.matches(matchId)) 15_000 else 45_000)
                     viewModel.loadEvent(matchId, refreshClock = true)
                 }
             } finally {
@@ -47,7 +47,7 @@ fun MatchDetailsScreen(
             }
         }
     }
-    val loading = !usePreview && footballEventId.matches(matchId) && (state.detailId != matchId || state.detailLoading)
+    val loading = !usePreview && isSportsFeedEventId(matchId) && (state.detailId != matchId || state.detailLoading)
     val match = if (usePreview) SportsbookPreviewData.match else viewModel.matchById(matchId)
     val markets = if (usePreview) SportsbookPreviewData.markets else viewModel.marketsFor(matchId)
     val initialPinned = if (usePreview) setOf(SportsbookPreviewData.pinnedKey) else emptySet()

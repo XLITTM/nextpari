@@ -40,6 +40,7 @@ data class MatchCardModel(
     val competitionBadge: FootballCompetitionBadge? = null,
     val competitionId: String? = null,
     val kickoffEpochMs: Long? = null,
+    val serverTier: Int? = null,
 )
 
 data class ChampionshipRow(

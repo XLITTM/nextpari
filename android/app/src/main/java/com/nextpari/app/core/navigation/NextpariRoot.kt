@@ -280,7 +280,7 @@ internal fun AuthenticatedShell(
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
     val showsFootball = when (current) {
-        Destinations.HOME -> homeState.mainTabId in setOf("top", "sport")
+        Destinations.HOME -> homeState.mainTabId in setOf("top", "sport", "esports")
         Destinations.GAMELIST_LIVE, Destinations.GAMELIST_LINE, Destinations.SPORTS_LIVE,
         Destinations.SPORTS_LINE, Destinations.CHAMPIONSHIPS, Destinations.LEAGUE -> true
         else -> false

@@ -52,7 +52,8 @@ internal data class FootballBadges(
 }
 
 internal fun ownedBadgeUrl(value: String?): String? {
-    val url = value?.toHttpUrlOrNull() ?: return null
+    val relative = value?.takeIf { it.matches(Regex("/images/sports/football/[a-z0-9-]+\\.png")) }
+    val url = (relative?.let { "https://nextpari.net$it" } ?: value)?.toHttpUrlOrNull() ?: return null
     if (!url.isHttps || url.host != "nextpari.net" || url.port != 443 ||
         url.username.isNotEmpty() || url.password.isNotEmpty() || url.query != null || url.fragment != null) return null
     return url.takeIf { it.encodedPath.endsWith(".png") || it.encodedPath.endsWith(".webp") }?.toString()

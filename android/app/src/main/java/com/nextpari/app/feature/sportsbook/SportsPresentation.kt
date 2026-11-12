@@ -55,6 +55,7 @@ internal object FeaturedSports {
         (match.sport == "football" && isVirtualFootball(match.league))
 
     fun tier(match: MatchCardModel): Int {
+        match.serverTier?.takeIf { it in 0..3 }?.let { return it }
         if (isEsports(match)) return 3
         val league = normalized(match.league)
         if (match.sport != "football") return if (league in majorOtherSports[match.sport].orEmpty()) 0 else 1
