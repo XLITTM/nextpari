@@ -1,5 +1,7 @@
 package com.nextpari.app.feature.home
 
+import com.nextpari.app.feature.sportsbook.FootballCompetitionBadge
+import com.nextpari.app.feature.sportsbook.FootballLiveClock
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
 
 enum class OddsMovement { None, Up, Down }
@@ -31,6 +33,10 @@ data class MatchCardModel(
     val extraMarkets: Int = 0,
     val isFavorite: Boolean = false,
     val priceNote: String? = null,
+    val liveClock: FootballLiveClock? = null,
+    val homeBadgeUrl: String? = null,
+    val awayBadgeUrl: String? = null,
+    val competitionBadge: FootballCompetitionBadge? = null,
 )
 
 data class ChampionshipRow(
