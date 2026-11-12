@@ -5,6 +5,7 @@ import {
   type EventOddsRead,
   type EventOddsState,
 } from './client.js';
+import { rankFeaturedFootball } from './footballCoverage.js';
 import { publishLiveClock } from './liveClock.js';
 import type { FeedResult, LiveClock, NormalizedEvent, NormalizedMarket } from './types.js';
 
@@ -170,7 +171,10 @@ export async function handleFootballFeedRequest(
       ok: tokenMissing || live.ok || upcoming.ok,
       error: tokenMissing ? 'TOKEN_MISSING' : live.error ?? upcoming.error,
       stale: Boolean(live.feed?.stale || upcoming.feed?.stale),
-      events: [...cardsFrom(live), ...cardsFrom(upcoming)],
+      events: rankFeaturedFootball([
+        ...(live.feed?.events ?? []),
+        ...(upcoming.feed?.events ?? []),
+      ]).map((event) => toCard(event)),
     },
   };
 }

@@ -5,9 +5,12 @@ import { BetsApiReadOnlyClient } from './client.js';
 import { handleFootballFeedRequest } from './footballFeedHttp.js';
 import {
   coverageDays,
+  footballTier,
   isEsoccerLeague,
+  isSimulatedLeague,
   preparePrematch,
   PREMATCH_REQUEST_BUDGET,
+  rankFeaturedFootball,
   readUpcomingPager,
 } from './footballCoverage.js';
 import type { NormalizedEvent } from './types.js';
@@ -64,7 +67,32 @@ describe('real football prematch coverage', () => {
       event('4', 'UEFA Champions League', '2026-11-12T17:00:00.000Z'),
       event('5', 'Esoccer Battle Volta - 6 mins play', '2026-11-12T15:01:00.000Z', 'live'),
     ]);
-    assert.deepEqual(ranked.map((item) => item.eventId), ['3', '4', '2']);
+    assert.deepEqual(ranked.map((item) => item.eventId), ['4', '3', '2']);
+  });
+
+  it('ranks exact top leagues above other football and lower divisions, including live', () => {
+    assert.equal(footballTier({ name: 'England Premier League' }), 0);
+    assert.equal(footballTier({ name: '2. Bundesliga' }), 2);
+    assert.equal(footballTier({ name: 'National Premier League' }), 1);
+    assert.equal(isSimulatedLeague('Virtual Football League'), true);
+    assert.equal(isSimulatedLeague('Virtus Entella'), false);
+    const markets = event('10', 'England Premier League', '2026-11-12T15:00:00.000Z', 'live').markets;
+    const liveTop = {
+      ...event('10', 'England Premier League', '2026-11-12T15:00:00.000Z', 'live'),
+      markets,
+    };
+    const ranked = rankFeaturedFootball([
+      event('21', 'Esoccer Premier League', '2026-11-12T12:00:00.000Z', 'live'),
+      event('22', 'Virtual Football League', '2026-11-12T12:00:00.000Z', 'live'),
+      event('23', '2. Bundesliga', '2026-11-12T13:00:00.000Z', 'live'),
+      event('24', 'Regional Cup', '2026-11-12T18:00:00.000Z'),
+      event('25', 'UEFA Nations League', '2026-11-12T19:45:00.000Z'),
+      liveTop,
+      event('26', 'England League One', '2026-11-12T14:00:00.000Z'),
+    ]);
+    assert.deepEqual(ranked.map((item) => item.eventId), ['10', '25', '24', '23', '26']);
+    assert.equal(ranked[0]?.markets, markets);
+    assert.equal(ranked.every((item) => item.marketsKnown === false), true);
   });
 
   it('does not create a Nations League fixture that the provider did not return', () => {
