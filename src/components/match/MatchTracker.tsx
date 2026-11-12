@@ -292,6 +292,7 @@ export function MatchTracker({
           <button type="button" onClick={onBack} className="shrink-0 text-white active:scale-90" aria-label="Назад">
             <ArrowLeft className="h-5 w-5" strokeWidth={2.2} />
           </button>
+          <TeamLogo teamName={match.league} logo={match.logos?.competition} size="xs" />
           <p className="min-w-0 truncate text-[14px] font-semibold text-white">{tournamentTitle}</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -519,13 +520,13 @@ function ScoreSlide({
           <button type="button" onClick={onToggleFavorite} aria-label="В избранное">
             <Star className={`h-4 w-4 ${isFavorite ? 'fill-amber-300 text-amber-300' : 'text-zinc-400'} ${SLIDE1_SHADOW}`} />
           </button>
-          <TeamLogo teamName={match.team1} logo={match.team1Logo} size="md" className="!h-9 !w-9 bg-white p-0.5" />
+          <TeamLogo teamName={match.team1} logo={match.logos ? match.logos.home : match.team1Logo} size="md" className="!h-9 !w-9 bg-white p-0.5" />
         </div>
         <p className={`px-3 text-[28px] font-black tracking-widest text-white tabular-nums drop-shadow-md ${SLIDE1_SHADOW}`}>
           {score1} : {score2}
         </p>
         <div className="flex min-w-0 items-center justify-start gap-1.5">
-          <TeamLogo teamName={match.team2} logo={match.team2Logo} size="md" className="!h-9 !w-9 bg-white p-0.5" />
+          <TeamLogo teamName={match.team2} logo={match.logos ? match.logos.away : match.team2Logo} size="md" className="!h-9 !w-9 bg-white p-0.5" />
           <Star className={`h-4 w-4 text-zinc-500 ${SLIDE1_SHADOW}`} />
           <span className={`truncate text-[13px] font-bold text-white ${SLIDE1_SHADOW}`}>{match.team2}</span>
         </div>
@@ -576,7 +577,7 @@ function HalvesSlide({
       </div>
       <div className="grid grid-cols-[1fr_36px_36px] items-center py-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <TeamLogo teamName={match.team1} logo={match.team1Logo} size="xs" className="bg-white" />
+          <TeamLogo teamName={match.team1} logo={match.logos ? match.logos.home : match.team1Logo} size="xs" className="bg-white" />
           <EventBadges red={home.redFt} yellow={home.yellowFt} corners={home.cornersFt} />
           <span className="truncate text-[13px] font-bold text-white">{match.team1}</span>
         </div>
@@ -585,7 +586,7 @@ function HalvesSlide({
       </div>
       <div className="grid grid-cols-[1fr_36px_36px] items-center py-1">
         <div className="flex min-w-0 items-center gap-1.5">
-          <TeamLogo teamName={match.team2} logo={match.team2Logo} size="xs" className="bg-white" />
+          <TeamLogo teamName={match.team2} logo={match.logos ? match.logos.away : match.team2Logo} size="xs" className="bg-white" />
           <EventBadges red={away.redFt} yellow={away.yellowFt} corners={away.cornersFt} />
           <span className="truncate text-[13px] font-bold text-white">{match.team2}</span>
         </div>
@@ -680,8 +681,8 @@ function StatsSlide({
   return (
     <div className={CAPSULE}>
       <div className="mb-1.5 flex items-center justify-between px-1">
-        <TeamLogo teamName={match.team1} logo={match.team1Logo} size="sm" className="bg-white" />
-        <TeamLogo teamName={match.team2} logo={match.team2Logo} size="sm" className="bg-white" />
+        <TeamLogo teamName={match.team1} logo={match.logos ? match.logos.home : match.team1Logo} size="sm" className="bg-white" />
+        <TeamLogo teamName={match.team2} logo={match.logos ? match.logos.away : match.team2Logo} size="sm" className="bg-white" />
       </div>
       <div
         className={`px-0.5 ${
