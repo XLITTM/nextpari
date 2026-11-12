@@ -187,9 +187,15 @@ private fun CountryAccordion(
                         Modifier
                             .fillMaxWidth()
                             .clickable { onLeague(league) }
-                            .padding(start = 48.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+                            .padding(start = (if (league.badge == null) 48 else 24).dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        league.badge?.let {
+                            FootballBadge(it.url, Modifier.size(18.dp)) {
+                                Image(painterResource(SportIconRes.drawable("football")), null, Modifier.size(18.dp))
+                            }
+                            Spacer(Modifier.width(6.dp))
+                        }
                         Text(
                             league.name,
                             color = if (dark) Color(0xFFD1D5DB) else Color(0xFF374151),
