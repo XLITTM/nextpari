@@ -78,6 +78,10 @@ fun MatchTracker(
                     tint = Color.White,
                     modifier = Modifier.size(20.dp).clickable(onClick = onBack),
                 )
+                match.competitionBadge?.let {
+                    Spacer(Modifier.width(6.dp))
+                    FootballBadge(it.url, Modifier.size(18.dp))
+                }
                 Text(
                     "$sportLabel. ${match.league}",
                     color = Color.White,
@@ -166,7 +170,7 @@ private fun HeaderChip(label: String, active: Boolean, onClick: () -> Unit) {
 private fun ScoreSlide(match: MatchCardModel, favorite: Boolean, onToggleFavorite: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            TeamBlock(match.team1, match.team1LogoRes, Modifier.weight(1f))
+            TeamBlock(match.team1, match.team1LogoRes, match.homeBadgeUrl, Modifier.weight(1f))
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 8.dp)) {
                 Text(
                     if (match.isLive && !match.score.isNullOrBlank()) match.score else "— : —",
@@ -175,13 +179,13 @@ private fun ScoreSlide(match: MatchCardModel, favorite: Boolean, onToggleFavorit
                     fontWeight = FontWeight.ExtraBold,
                 )
                 Text(
-                    if (match.isLive) (match.period ?: "LIVE") else (match.kickoffLabel ?: "Не начался"),
+                    if (match.isLive) (footballLiveMinute(match) ?: "LIVE") else (match.kickoffLabel ?: "Не начался"),
                     color = Color(0xFFE5E7EB),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
-            TeamBlock(match.team2, match.team2LogoRes, Modifier.weight(1f))
+            TeamBlock(match.team2, match.team2LogoRes, match.awayBadgeUrl, Modifier.weight(1f))
         }
         Icon(
             if (favorite) NextpariWebIcons.Star else NextpariWebIcons.Star,
@@ -193,13 +197,16 @@ private fun ScoreSlide(match: MatchCardModel, favorite: Boolean, onToggleFavorit
 }
 
 @Composable
-private fun TeamBlock(name: String, logoRes: Int?, modifier: Modifier) {
+private fun TeamBlock(name: String, logoRes: Int?, badgeUrl: String?, modifier: Modifier) {
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
-            if (logoRes != null) {
-                Image(painterResource(logoRes), contentDescription = null, modifier = Modifier.size(40.dp), contentScale = ContentScale.Crop)
+        FootballBadge(badgeUrl, Modifier.size(40.dp)) {
+            Box(Modifier.size(40.dp).clip(CircleShape).background(Color(0x33FFFFFF)), contentAlignment = Alignment.Center) {
+                if (logoRes != null) {
+                Image(painterResource(logoRes), contentDescription = null,
+                    modifier = Modifier.size(40.dp), contentScale = ContentScale.Crop)
             } else {
                 Text(name.take(1).uppercase(), color = Color.White, fontWeight = FontWeight.Bold)
+            }
             }
         }
         Text(name, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 4.dp))
