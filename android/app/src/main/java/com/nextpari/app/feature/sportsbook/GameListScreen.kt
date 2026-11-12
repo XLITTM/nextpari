@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
@@ -36,6 +37,7 @@ import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
 import com.nextpari.app.feature.home.NextpariMatchCard
+import com.nextpari.app.feature.home.TrackFootballViewport
 
 @Composable
 fun GameListScreen(
@@ -50,6 +52,9 @@ fun GameListScreen(
     var actionNotice by rememberSaveable { mutableStateOf("") }
     val football = viewModel.state.collectAsStateWithLifecycle().value
     val matches = viewModel.pool(tab)
+
+    val listState = rememberLazyListState()
+    TrackFootballViewport(listState, viewModel::visibleMatches)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFE5E7EB))) {
         Column(Modifier.background(if (dark) Color(0xFF1E293B) else Color.White)) {
@@ -82,7 +87,8 @@ fun GameListScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
             )
             else -> LazyColumn(
-                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
+                state = listState,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(matches, key = { it.id }) { match ->
