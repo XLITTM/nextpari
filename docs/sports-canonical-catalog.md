@@ -222,3 +222,11 @@ npm run build
 
 The dedicated work branch has automatic Vercel deployments disabled in `vercel.json`
 to allow draft review without a preview deployment.
+
+### Owner-approved football artwork
+
+The owner confirmed commercial usage of the supplied football library on
+2026-11-13. The published subset uses the three reviewed BetsAPI Events
+identities in the starter catalog. Unreviewed archive rows stay out of the
+runtime lookup. Web uses sanitized local PNGs and Android can bundle the same
+raster files. Competition and participant identifier lookups are separate.
