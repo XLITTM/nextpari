@@ -88,7 +88,9 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
     >
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 min-w-0">
-          <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0 hover:scale-105 transition-transform" />
+          {match.logos?.competition ? <TeamLogo teamName={match.league} logo={match.logos.competition} /> : (
+            <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0 hover:scale-105 transition-transform" />
+          )}
           <span className="truncate font-bold text-gray-900 dark:text-white">{match.league}</span>
           <span className="text-gray-600 dark:text-gray-300">•</span>
           <span className="truncate font-bold text-gray-700 dark:text-gray-200">{match.country}</span>
@@ -130,7 +132,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
           <div className="flex-1 min-w-0 text-right">
             <div className="flex items-center justify-end gap-2">
               <span className="text-sm font-extrabold text-gray-900 dark:text-white truncate">{match.team1}</span>
-              <TeamLogo teamName={match.team1} logo={match.team1Logo} size="sm" />
+              <TeamLogo teamName={match.team1} logo={match.logos ? match.logos.home : match.team1Logo} size="sm" />
             </div>
           </div>
 
@@ -151,7 +153,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <TeamLogo teamName={match.team2} logo={match.team2Logo} size="sm" />
+              <TeamLogo teamName={match.team2} logo={match.logos ? match.logos.away : match.team2Logo} size="sm" />
               <span className="text-sm font-extrabold text-gray-900 dark:text-white truncate">{match.team2}</span>
             </div>
           </div>
