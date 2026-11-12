@@ -35,7 +35,7 @@ function trustedUrl(value: unknown, hosts: readonly string[]): URL | undefined {
   if (typeof value !== 'string') return undefined;
   try {
     const url = new URL(value);
-    if (url.protocol === 'https:' && !url.username && !url.password && !url.port && hosts.includes(url.hostname)) return url;
+    if (url.protocol === 'https:' && !url.username && !url.password && !url.port && !url.search && !url.hash && hosts.includes(url.hostname)) return url;
   } catch {
     return undefined;
   }
@@ -52,11 +52,14 @@ function verifiedUrl(lookup: LogoLookup): string | undefined {
     if (!exactExternalId(id, externalId)) return undefined;
     const url = trustedUrl(row?.strBadge, ['www.thesportsdb.com', 'thesportsdb.com', 'r2.thesportsdb.com']);
     const collection = kind === 'competition' ? 'league' : 'team';
-    if (url?.pathname.startsWith(`/images/media/${collection}/badge/`)) return url.href;
+    const badgePath = new RegExp(`^/images/media/${collection}/badge/[a-zA-Z0-9_-]+[.](png|webp|jpe?g)$`);
+    if (url && badgePath.test(url.pathname)) return url.href;
     return undefined;
   }
 
   if (sourceKey(source) !== sourceKey(LOGO_SOURCES.apiSportsFootball)) return undefined;
+  const errors = payload?.errors;
+  if (errors != null && (!record(errors) && !Array.isArray(errors) || Object.keys(errors).length)) return undefined;
   const rows = payload?.response;
   const envelope = Array.isArray(rows) && rows.length === 1 ? record(rows[0]) : undefined;
   const row = record(envelope?.[kind === 'competition' ? 'league' : 'team']);
@@ -93,12 +96,12 @@ export class SportsLogoCatalog {
     }
   }
 
-  get(kind: LogoEntityKind, canonicalId: string): VerifiedLogo | undefined {
+  get(kind: LogoEntityKind, canonicalId: string, allow: (logo: VerifiedLogo) => boolean = () => true): VerifiedLogo | undefined {
     for (const source of [LOGO_SOURCES.theSportsDb, LOGO_SOURCES.apiSportsFootball]) {
       const candidates = this.logos.get(identity(kind, canonicalId, sourceKey(source)))?.byIdentity;
       if (candidates?.size === 1) {
         const logo = candidates.values().next().value;
-        if (logo) return logo;
+        if (logo && allow(logo)) return logo;
       }
     }
     return undefined;
