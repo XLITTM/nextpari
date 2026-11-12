@@ -30,6 +30,7 @@ data class MatchCardModel(
     val outcomes: List<MatchOutcome> = emptyList(),
     val extraMarkets: Int = 0,
     val isFavorite: Boolean = false,
+    val priceNote: String? = null,
 )
 
 data class ChampionshipRow(
