@@ -41,9 +41,13 @@ fun MatchDetailsScreen(
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(matchId, usePreview, lifecycle) {
         if (!usePreview && footballEventId.matches(matchId)) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            while (true) {
-                viewModel.loadEvent(matchId)
-                delay(45_000)
+            try {
+                while (true) {
+                    viewModel.loadEvent(matchId)
+                    delay(45_000)
+                }
+            } finally {
+                viewModel.leaveEvent(matchId)
             }
         }
     }
