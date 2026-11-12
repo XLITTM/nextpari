@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Radio } from 'lucide-react';
+import { BetsapiMarkets } from '@/components/BetsapiMarkets';
 import { MarketsGrid } from '@/components/MarketsGrid';
 import { MatchTracker, type HeaderTab, type VenueSport } from '@/components/match/MatchTracker';
 import { useBetSlip } from '../BetSlipContext';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useLiveOdds } from '../hooks/useLiveOdds';
+import { isBetsapiMatch, resolveDetailsMatch } from '../lib/footballFeed';
 import { matchEventFromStore } from '../lib/liveMatches';
 import { useSportsStore } from '../stores/sportsStore';
 import type { Screen } from '../types';
@@ -42,9 +44,10 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
   const upsertEvent = useSportsStore((s) => s.upsertEvent);
   const isLive = storeState?.event.time_status === '1' || Boolean(catalogMatch?.isLive);
   const [headerTab, setHeaderTab] = useState<HeaderTab>('info');
+  const requestedOdds = useRef('');
 
   useEffect(() => {
-    if (!matchId || storeState || !catalogMatch) return;
+    if (!matchId || storeState || !catalogMatch || isBetsapiMatch(catalogMatch)) return;
     upsertEvent({
       id: matchId,
       sport_id:
@@ -72,17 +75,15 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
   useLiveOdds(matchId, isLive);
 
   useEffect(() => {
-    if (catalogMatch?.feedTag !== 'betsapi') return;
-    const state = catalogMatch.priceState;
-    if (state === 'open' || state === 'unavailable' || state === 'suspended' || state === 'unrecognized') return;
+    if (!isBetsapiMatch(catalogMatch) || requestedOdds.current === matchId) return;
+    requestedOdds.current = matchId;
     void ensurePrices([matchId]);
-  }, [catalogMatch?.feedTag, catalogMatch?.priceState, ensurePrices, matchId]);
+  }, [catalogMatch, ensurePrices, matchId]);
 
-  const match = useMemo(() => {
-    if (catalogMatch?.feedTag === 'betsapi') return catalogMatch;
-    const fromStore = storeState ? matchEventFromStore(storeState) : undefined;
-    return fromStore ?? catalogMatch;
-  }, [catalogMatch, storeState]);
+  const match = useMemo(() => resolveDetailsMatch(
+    catalogMatch,
+    storeState ? matchEventFromStore(storeState) : undefined,
+  ), [catalogMatch, storeState]);
   const { count: betCount } = useBetSlip();
 
   if (!match) {
@@ -122,7 +123,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
 
       <div className="flex-1 overscroll-contain">
         {headerTab === 'info' ? (
-          <MarketsGrid eventId={matchId} match={match} />
+          isBetsapiMatch(match) ? <BetsapiMarkets match={match} /> : <MarketsGrid eventId={matchId} match={match} />
         ) : (
           <StreamPanel hasStream={Boolean(match.hasStream)} />
         )}

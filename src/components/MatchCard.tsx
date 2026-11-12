@@ -8,7 +8,7 @@ import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
 import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
-import { advertisedExtraMarketCount, footballPriceNote } from '../lib/footballFeed';
+import { advertisedExtraMarketCount, footballPriceNote, homeMarketsLabel, isBetsapiMatch } from '../lib/footballFeed';
 import {
   clickableCardSelection,
   extraLsportsMarketRows,
@@ -73,11 +73,13 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
   const outcomeButtons = mainOutcomeButtons(match);
   const liveMinute = formatCardMinute(match.liveStatus);
+  const betsapi = isBetsapiMatch(match);
   const lsports = isLsportsMatch(match);
   const lsportsExtras = extraLsportsMarketRows(match);
-  const extraRows = lsports ? lsportsExtras : extraMarketRows(match);
+  const extraRows = betsapi ? [] : lsports ? lsportsExtras : extraMarketRows(match);
   const extraCount = advertisedExtraMarketCount(match, extraRows.length);
   const priceNote = footballPriceNote(match.priceState, !match.marketsLocked || extraRows.length > 0);
+  const footerLabel = betsapi ? homeMarketsLabel(match) : extraCount != null ? `+${extraCount} рынков` : priceNote;
 
   return (
     <div
@@ -182,7 +184,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             );
           })}
         </div>
-        {extrasOpen && extraRows.map((row) => (
+        {!betsapi && extrasOpen && extraRows.map((row) => (
           <div key={row.name} className="mt-1.5">
             <div className="mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">{row.name}</div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -206,20 +208,20 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             </div>
           </div>
         ))}
-        {(extraCount != null || priceNote) && (
+        {footerLabel && (
         <button
           className="w-full flex items-center justify-between mt-2 text-xs text-gray-700 dark:text-gray-200 px-1 hover:text-brand-600 transition-colors font-bold"
           onClick={(e) => {
             e.stopPropagation();
-            if (extraRows.length) {
+            if (!betsapi && extraRows.length) {
               setExtrasOpen((open) => !open);
               return;
             }
             onOpenMatch(match.id);
           }}
         >
-          <span className="font-bold">{extraCount != null ? `+${extraCount} рынков` : priceNote}</span>
-          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${extrasOpen ? 'rotate-90' : ''}`} strokeWidth={2.2} />
+          <span className="font-bold">{footerLabel}</span>
+          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${!betsapi && extrasOpen ? 'rotate-90' : ''}`} strokeWidth={2.2} />
         </button>
         )}
       </div>

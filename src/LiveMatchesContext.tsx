@@ -74,7 +74,14 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
     return () => window.clearInterval(timer);
   }, [clearEvents, refresh]);
 
-  const findMatch = useCallback((id: string) => matches.find((match) => match.id === id), [matches]);
+  const archive = useRef(new Map<string, MatchEvent>());
+  for (const match of matches) {
+    if (match.feedTag === 'betsapi') archive.current.set(match.id, match);
+  }
+  const findMatch = useCallback(
+    (id: string) => matches.find((match) => match.id === id) ?? archive.current.get(id),
+    [matches],
+  );
   const liveMatches = matches.filter((match) => match.isLive);
   const upcomingMatches = matches.filter((match) => !match.isLive);
 

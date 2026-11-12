@@ -161,6 +161,96 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
   };
 }
 
+export function isBetsapiMatch(match: Pick<MatchEvent, 'feedTag' | 'betsapiQuotes'> | undefined): boolean {
+  return match?.feedTag === 'betsapi' || Boolean(match?.betsapiQuotes && Object.keys(match.betsapiQuotes).length > 0);
+}
+
+export function resolveDetailsMatch(catalog?: MatchEvent, stored?: MatchEvent): MatchEvent | undefined {
+  if (isBetsapiMatch(catalog)) return catalog;
+  if (isBetsapiMatch(stored)) return stored;
+  return catalog ?? stored;
+}
+
+export interface BetsapiDetailLine {
+  id: string;
+  title: string;
+  tab: 'main' | 'totals' | 'handicaps';
+  outcomes: Array<{ label: string; odds: number; selection?: BetSelection }>;
+}
+
+export function betsapiDetailLines(match: MatchEvent): BetsapiDetailLine[] {
+  const lines: BetsapiDetailLine[] = [];
+  const main = [
+    { label: 'П1', odds: match.markets['1'] },
+    { label: 'X', odds: match.markets.x },
+    { label: 'П2', odds: match.markets['2'] },
+  ].filter((item) => item.odds > 1);
+  if (main.length) {
+    lines.push({ id: `${match.id}-1x2`, title: 'Исход', tab: 'main', outcomes: main });
+  }
+  for (const group of match.marketGroups ?? []) {
+    const tab = group.category === 'handicaps' || /фора/i.test(group.name)
+      ? 'handicaps'
+      : group.category === 'totals' || /тотал/i.test(group.name)
+        ? 'totals'
+        : null;
+    if (!tab) continue;
+    const outcomes = group.outcomes.filter((outcome) => outcome.odds > 1);
+    if (!outcomes.length) continue;
+    lines.push({
+      id: group.id,
+      title: group.name,
+      tab,
+      outcomes: outcomes.map((outcome) => ({
+        label: outcome.label,
+        odds: outcome.odds,
+        selection: outcome.provider === 'betsapi' ? {
+          id: `${outcome.fixtureId}-${outcome.marketKey}-${outcome.line ?? ''}-${outcome.outcomeId}`,
+          matchId: outcome.fixtureId || match.id,
+          matchLabel: outcome.matchLabel || `${match.team1} — ${match.team2}`,
+          market: group.name,
+          outcome: outcome.label,
+          odds: outcome.odds,
+          provider: 'betsapi',
+          feedType: outcome.feedType,
+          fixtureId: outcome.fixtureId,
+          marketId: outcome.marketId,
+          marketKey: outcome.marketKey,
+          line: outcome.line ?? '',
+          outcomeId: outcome.outcomeId,
+          providerLastUpdate: outcome.updatedAt,
+          bookmakerId: outcome.bookmakerId,
+          externalPeriodId: outcome.externalPeriodId,
+          externalMarketId: outcome.externalMarketId,
+          sourceSelectionId: outcome.sourceSelectionId,
+          homeTeam: match.team1,
+          awayTeam: match.team2,
+          sport: 'football',
+          isLive: match.isLive,
+        } : undefined,
+      })),
+    });
+  }
+  return lines;
+}
+
+export function betsapiDetailTabs(lines: BetsapiDetailLine[]): Array<{ id: 'all' | BetsapiDetailLine['tab']; label: string }> {
+  if (!lines.length) return [];
+  const tabs: Array<{ id: 'all' | BetsapiDetailLine['tab']; label: string }> = [{ id: 'all', label: 'Все' }];
+  if (lines.some((line) => line.tab === 'main')) tabs.push({ id: 'main', label: '1X2' });
+  if (lines.some((line) => line.tab === 'totals')) tabs.push({ id: 'totals', label: 'Тоталы' });
+  if (lines.some((line) => line.tab === 'handicaps')) tabs.push({ id: 'handicaps', label: 'Форы' });
+  return tabs;
+}
+
+export function homeMarketsLabel(match: MatchEvent): string | null {
+  if (!isBetsapiMatch(match)) return null;
+  const count = Number(match.extraMarkets) || match.marketGroups?.length || 0;
+  if (count > 0) return `Все рынки · ${count}`;
+  if (match.markets['1'] > 1 || match.markets.x > 1 || match.markets['2'] > 1) return 'Все рынки';
+  return footballPriceNote(match.priceState, false);
+}
+
 export function advertisedExtraMarketCount(match: MatchEvent, renderedRows: number): number | null {
   const count = match.feedTag === 'lsports'
     ? Math.max(Number(match.extraMarkets) || 0, renderedRows)
