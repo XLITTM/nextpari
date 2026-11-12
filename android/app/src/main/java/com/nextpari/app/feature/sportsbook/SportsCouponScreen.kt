@@ -56,6 +56,9 @@ fun SportsCouponScreen(
             Text("Добавьте коэффициент из матча", color = colors.textSecondary)
         }
         if (state.selections.isNotEmpty()) {
+            if (!state.picksCurrent && !state.retryRequired) {
+                Text("Обновите коэффициенты и выберите исходы заново", color = colors.textSecondary)
+            }
             Text(if (state.selections.size == 1) "Ординар" else "Экспресс", color = colors.textSecondary)
             for (pick in state.selections) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -78,7 +81,8 @@ fun SportsCouponScreen(
             )
             if (walletId.isNullOrBlank()) Text("Активный кошелёк недоступен", color = colors.textSecondary)
             Button(
-                enabled = !state.placing && !walletId.isNullOrBlank() && state.stakeText.isNotBlank(),
+                enabled = !state.placing && !walletId.isNullOrBlank() && state.stakeText.isNotBlank() &&
+                    (state.picksCurrent || state.retryRequired),
                 onClick = onSubmit,
                 modifier = Modifier.fillMaxWidth(),
             ) {
