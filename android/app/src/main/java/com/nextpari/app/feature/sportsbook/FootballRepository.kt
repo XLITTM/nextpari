@@ -1,5 +1,6 @@
 package com.nextpari.app.feature.sportsbook
 
+import android.os.SystemClock
 import com.nextpari.app.core.network.ApiErrorMapper
 import com.nextpari.app.core.network.PlayerApi
 import com.nextpari.app.core.network.userMessage
@@ -12,6 +13,7 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -178,7 +180,10 @@ class RemoteFootballRepository(
             if (response.code() == 401) "Сессия недействительна" else "Футбольная лента недоступна"
         }
         val feed = json.decodeFromJsonElement<FootballFeedDto>(body)
-        val snapshot = feed.toSnapshot(eventId)
+        val serverTimeMs = response.raw().headers["Date"]?.let {
+            runCatching { Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(it)).toEpochMilli() }.getOrNull()
+        } ?: System.currentTimeMillis()
+        val snapshot = feed.toSnapshot(eventId, serverTimeMs, SystemClock.elapsedRealtime())
         if (eventId == null) return snapshot
         val direct = feed.events.singleOrNull { it.id == eventId }
         // The detail endpoint's live=false also covers finished events. A direct link
@@ -245,14 +250,18 @@ internal data class FootballFeedDto(
     val stale: Boolean = false,
     val events: List<FootballEventDto> = emptyList(),
 ) {
-    fun toSnapshot(eventId: String?): FootballSnapshot {
+    fun toSnapshot(
+        eventId: String?,
+        receiptEpochMs: Long = 0,
+        receiptElapsedMs: Long = 0,
+    ): FootballSnapshot {
         val issue = when {
             stale -> "Лента устарела. Коэффициенты временно закрыты"
             !ok || error != null -> "Футбольная лента временно недоступна"
             else -> null
         }
         val fixtures = events.filter { eventId == null || it.id == eventId }
-            .mapNotNull(FootballEventDto::toFixture)
+            .mapNotNull { it.toFixture(receiptEpochMs, receiptElapsedMs, allowClock = issue == null) }
             .groupBy { it.match.id }
             .values.map { copies ->
                 val current = copies.filter { it.match.isLive }.ifEmpty { copies }
@@ -260,7 +269,10 @@ internal data class FootballFeedDto(
                 when {
                     stale -> fixture.locked()
                     issue != null -> fixture.locked(FootballPriceState.Upstream)
-                    current.any { it != fixture } -> fixture.locked(FootballPriceState.Unavailable)
+                    current.any { it != fixture } -> fixture.locked(FootballPriceState.Unavailable).let {
+                        it.copy(match = it.match.copy(liveClock = null, homeBadgeUrl = null,
+                            awayBadgeUrl = null, competitionBadge = null))
+                    }
                     else -> fixture
                 }
             }
@@ -318,8 +330,10 @@ internal data class FootballEventDto(
     val score: FootballScoreDto? = null,
     val markets: List<FootballMarketDto> = emptyList(),
     val priceState: String? = null,
+    val liveClock: JsonElement? = null,
+    val logos: JsonElement? = null,
 ) {
-    fun toFixture(): FootballFixture? {
+    fun toFixture(receiptEpochMs: Long = 0, receiptElapsedMs: Long = 0, allowClock: Boolean = true): FootballFixture? {
         if (!footballEventId.matches(id) || home.isBlank() || away.isBlank()) return null
         val kickoffLabel = kickoff?.let {
             try {
@@ -328,6 +342,7 @@ internal data class FootballEventDto(
                 null
             }
         }
+        val badges = FootballBadges.fromCatalog(logos)
         val match = MatchCardModel(
             id = id,
             sport = "football",
@@ -339,6 +354,10 @@ internal data class FootballEventDto(
             score = score?.takeIf { it.home >= 0 && it.away >= 0 }?.let { "${it.home} : ${it.away}" },
             kickoffLabel = kickoffLabel,
             marketTitle = "1X2",
+            liveClock = if (live && allowClock) FootballLiveClock.fromWire(liveClock, receiptEpochMs, receiptElapsedMs) else null,
+            homeBadgeUrl = badges?.home,
+            awayBadgeUrl = badges?.away,
+            competitionBadge = badges?.competition,
         )
         val availability = FootballPriceState.fromWire(priceState ?: if (markets.any { it.status == "open" }) "open" else "unpriced")
         return FootballFixture(match, emptyList()).withMarkets(markets, availability)
