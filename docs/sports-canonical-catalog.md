@@ -119,26 +119,102 @@ branch's tests.
 
 ## League and team logos
 
-`SportsLogoCatalog` consumes by-ID lookup responses and matches the exact returned ID
-and entity kind against a reviewed alias. TheSportsDB v1 is preferred. API-Sports
-Football is an optional fallback using its own ID namespace, with a URL that must
-match the exact entity ID and kind. Missing assets, conflicting matches and unrelated
-URLs produce no asset. Display a neutral placeholder when `get` returns no asset.
+`FootballLogoService` uses `SportsCatalog` to resolve exact source IDs and
+`SportsLogoCatalog` to verify the returned ID, entity kind and badge URL. It
+does not query by name. Senior, academy, reserve and women's squads require
+distinct verified IDs. Conflicting aliases or identical resolved sides produce
+placeholders for the affected teams. Use the Events namespace for BetsAPI
+Events IDs. The Bet365 and 1xBet native IDs belong to separate namespaces.
 
-`STARTER_LOGO_CATALOG` includes opt-in reviewed TheSportsDB links for the Premier
-League (4328) and Arsenal (133604). Merge the reviewed rows into the catalog by stable
-ID. Other competitions and teams need reviewed crosswalks and by-ID lookup responses.
-The engine does not send external requests or change the existing UI logo component.
+| Verified entity | BetsAPI Events ID | TheSportsDB ID | Seed asset |
+| --- | --- | --- | --- |
+| Premier League | 94 | 4328 | Badge URL recorded |
+| Arsenal senior men's team | 17230 | 133604 | Badge URL recorded |
+| Manchester City senior men's team | 708 | 133613 | Exact-ID lookup required |
 
-Provider references
+The [BetsAPI Event View sample](https://betsapi.com/docs/samples/event_view.json)
+was cross-checked against the [official Premier League fixture report](https://www.premierleague.com/en/match/2128331)
+for the competition, date, venue, home and away sides and score. TheSportsDB
+entity links are recorded alongside the aliases in `STARTER_LOGO_CATALOG`.
+These are three identity mappings and two badge observations. The approval
+list is empty by default, so none of these assets are published.
 
-- [TheSportsDB v1 by-ID lookups](https://www.thesportsdb.com/docs/api)
-- [API-Sports Football team and league lookups](https://www.api-football.com/documentation-v3)
+### Lookup and caching
+
+Keep one service per catalog revision and server worker. Supply
+`THESPORTSDB_API_KEY` for TheSportsDB v1 by-ID team and league lookups.
+TheSportsDB's shared public key is for development under its terms. Supply
+`API_SPORTS_FOOTBALL_KEY` only with authorized API-Football access and
+reviewed API-Sports crosswalks. API-Sports is tried only after TheSportsDB
+cannot supply an approved badge. Each lookup has a two-second timeout,
+an HTTPS host and path fixed in code, and a response-size limit. Redirects
+are refused. The server sends no credentials or raw provider responses to
+clients.
+
+Each worker allows four concurrent calls, coalesces identical reads and
+limits TheSportsDB to 12 requests per minute and API-Sports to six per
+minute and 60 per day. It honors provider rate-limit backoff. The bounded
+cache keeps successful verifications for seven days, missing assets for one
+hour and transient failures for one minute. Cache-only reads return immediately.
+For multiple server instances, warm shared logo snapshots through one
+quota-aware worker or enforce the upstream budget across instances before
+enabling runtime refresh at scale.
+
+### Handoff to the website feed and Android
+
+Reviewed against Draft PR #92 at
+`c6861f379d2e80dba95d0f91460defe9cca47b7f` and the supplied production
+reference `2b8ff12934b55523ad6fbc550c41a1831c62ff74`. This branch's
+`LiveMatchesContext` has no active football feed. Its shared match card,
+LIVE/prematch rows, match tracker and league header are ready to render the
+additive `MatchEvent.logos` fields. Existing league routes group by name, so
+a group receives a badge only if every row agrees on both canonical ID and
+badge. These components make no provider lookups. Missing and failed
+images use neutral placeholders.
+
+After both branches are available together:
+
+1. Assemble one `FootballLogoService` from reviewed aliases, current
+   seed observations and exact-asset publication approvals. Refresh badges
+   off the odds path. Use `forEvent(refs, 'cache-only')` for immediate
+   reads on the fixture list and detail endpoints.
+2. In PR #92's `server/betsapi/footballFeedHttp.ts`, add optional
+   `FootballFeedCard.logos` for list and `eventId` detail responses. Pass
+   `BETSAPI_EVENTS_LOGO_SOURCE` plus `event.sportId`, `event.league.id`,
+   `event.home.id` and `event.away.id` from `NormalizedEvent` into the
+   service. Use the output `{ competitionId, competition, home, away }`
+   as-is. The three URL fields are nullable. Keep `oddsFor` unchanged.
+3. In PR #92's `src/lib/footballFeed.ts`, copy `card.logos` in
+   `footballCardToMatch`. Preserve `match.logos` when `applyFootballQuotes`
+   reconstructs a row. Include this optional object in the Android DTO
+   and render nullable badges with a neutral fallback. Add list, detail
+   and odds-refresh contract tests before rollout.
+
+### Publication rights
+
+A reviewed ID establishes identity. Record permission separately for each
+exact image URL and intended use, including licence/version, rights holder,
+attribution and any written permission. Pass those records as
+`LogoPublicationApproval` only after review. A changed URL needs its own
+approval. Do not publish the seed URLs by default.
+
+TheSportsDB requires attribution on its paid tier, restricts free use to
+development and requires a paid subscription for app-store use. Neither its
+subscription nor a Creative Commons metadata flag clears third-party logos
+or trademarks. API-Sports provides its images for identification and
+descriptive use and notes that third-party rights can require additional
+authorization.
+
+- [TheSportsDB by-ID API](https://www.thesportsdb.com/docs_api_guide)
+- [TheSportsDB terms](https://www.thesportsdb.com/docs_terms_of_use.php)
+- [API-Sports Football API](https://www.api-football.com/documentation-v3)
+- [API-Sports terms](https://www.api-football.com/terms)
 
 ## Verification
 
 ```sh
-TSX_TSCONFIG_PATH=tsconfig.server.json node --import tsx --test server/sports/catalog/catalog.test.ts
+TSX_TSCONFIG_PATH=tsconfig.server.json node --import tsx --test server/sports/catalog/*.test.ts
+TSX_TSCONFIG_PATH=tsconfig.app.json node --import tsx --test src/components/TeamLogo.test.tsx
 npm run typecheck
 npm run typecheck:server
 npm run build
