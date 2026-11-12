@@ -31,6 +31,15 @@ object NetworkModule {
             .writeTimeout(20, TimeUnit.SECONDS)
             .followRedirects(true)
             .followSslRedirects(true)
+            .addInterceptor { chain ->
+                val request = chain.request()
+                val url = request.url
+                // A quote already started by the server can finish after its 20-second batch budget.
+                val isFootballBatch = url.encodedPath == "/api/player/sports/football-feed" &&
+                    "oddsFor" in url.queryParameterNames
+                val timed = if (isFootballBatch) chain.withReadTimeout(35, TimeUnit.SECONDS) else chain
+                timed.proceed(request)
+            }
         if (cookieJar != null) {
             builder.cookieJar(cookieJar)
             builder.addNetworkInterceptor { chain ->
