@@ -1,5 +1,14 @@
 package com.nextpari.app.feature.home
 
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import com.nextpari.app.feature.sportsbook.footballEventId
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -25,6 +34,7 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -115,6 +125,9 @@ fun NextpariMatchCard(
                     )
                 }
             }
+        }
+        model.priceNote?.let {
+            Text(it, color = colors.textMuted, fontSize = 11.sp, modifier = Modifier.padding(start = 12.dp, bottom = 8.dp))
         }
         if (model.extraMarkets > 0) {
             Row(
@@ -234,9 +247,13 @@ fun MatchCarousel(
     matches: List<MatchCardModel>,
     selectedOdds: Set<String> = emptySet(),
     onOddSelected: ((SportsBetSelection) -> Unit)? = null,
+    onViewport: ((Any, List<String>) -> Unit)? = null,
     onOpen: (MatchCardModel) -> Unit,
 ) {
+    val listState = rememberLazyListState()
+    TrackFootballViewport(listState, onViewport)
     androidx.compose.foundation.lazy.LazyRow(
+        state = listState,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -246,6 +263,25 @@ fun MatchCarousel(
                 model = match, carousel = true, onOpen = { onOpen(match) },
                 selectedOdds = selectedOdds, onOddSelected = onOddSelected,
             )
+        }
+    }
+}
+
+@Composable
+internal fun TrackFootballViewport(list: LazyListState, onViewport: ((Any, List<String>) -> Unit)?) {
+    val callback = rememberUpdatedState(onViewport)
+    val source = remember { Any() }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(list, lifecycle, onViewport != null) {
+        val report = callback.value ?: return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            try {
+                snapshotFlow {
+                    list.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }.filter(footballEventId::matches)
+                }.collect { report(source, it) }
+            } finally {
+                report(source, emptyList())
+            }
         }
     }
 }
