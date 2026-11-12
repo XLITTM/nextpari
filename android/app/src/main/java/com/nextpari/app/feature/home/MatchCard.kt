@@ -163,7 +163,7 @@ internal fun MatchTeamArtwork(
     placeholderTint: Color = NextpariTheme.colors.textMuted,
 ) {
     val name = if (home) model.team1 else model.team2
-    val logoRes = (if (home) model.team1LogoRes else model.team2LogoRes) ?: BundledFootballBadges.team(model, name)
+    val logoRes = (if (home) model.team1LogoRes else model.team2LogoRes) ?: BundledFootballBadges.team(model, name, home)
     val badgeUrl = if (home) model.homeBadgeUrl else model.awayBadgeUrl
     FootballBadge(badgeUrl, modifier) {
         if (logoRes != null) {

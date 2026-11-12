@@ -124,6 +124,7 @@ internal object BundledFootballBadges {
         if (match.sport != "football") return false
         val canonical = match.competitionId ?: match.competitionBadge?.canonicalId
         if (canonical != null) return canonical == PREMIER_LEAGUE_ID
+        if (match.hasLogoCatalog) return false
         val name = match.league.trim()
         val country = SportsRegions.code(match.country)
         return (country == "eng" && name.equals("Premier League", ignoreCase = true)) ||
@@ -132,7 +133,19 @@ internal object BundledFootballBadges {
 
     fun competition(match: MatchCardModel): Int? = R.drawable.badge_premier_league.takeIf { isPremierLeague(match) }
 
-    fun team(match: MatchCardModel, name: String): Int? {
+    fun team(match: MatchCardModel, name: String, home: Boolean? = null): Int? {
+        if (match.hasLogoCatalog) {
+            val url = when (home) {
+                true -> match.homeBadgeUrl
+                false -> match.awayBadgeUrl
+                null -> null
+            }
+            return when (url) {
+                "https://nextpari.net/images/sports/football/arsenal.png" -> R.drawable.badge_arsenal
+                "https://nextpari.net/images/sports/football/manchester-city.png" -> R.drawable.badge_manchester_city
+                else -> null
+            }
+        }
         if (!isPremierLeague(match)) return null
         return when {
             name.trim().equals("Arsenal", ignoreCase = true) -> R.drawable.badge_arsenal

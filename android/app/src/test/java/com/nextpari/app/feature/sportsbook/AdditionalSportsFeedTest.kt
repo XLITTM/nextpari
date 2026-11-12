@@ -1,6 +1,7 @@
 package com.nextpari.app.feature.sportsbook
 
 import java.time.Instant
+import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -38,4 +39,16 @@ class AdditionalSportsFeedTest {
         val wrong = basketball.markets.single().copy(externalMarketId = "1_1")
         assertTrue(basketball.copy(markets = listOf(wrong)).toFixture(time, 5_000)!!.markets.isEmpty())
     }
+    @Test
+    fun missingCatalogBadgeDoesNotFallBackToATeamName() {
+        val football = FootballEventDto(
+            id = "7", home = "Arsenal", away = "Manchester City", league = "England Premier League",
+            country = "GB", live = true,
+            logos = Json.parseToJsonElement("""{"competitionId":"football:eng:premier-league","home":null,"away":null}"""),
+        ).toFixture(time, 5_000)!!.match
+        assertTrue(football.hasLogoCatalog)
+        assertNull(BundledFootballBadges.team(football, football.team1, home = true))
+        assertNull(BundledFootballBadges.team(football, football.team2, home = false))
+    }
+
 }

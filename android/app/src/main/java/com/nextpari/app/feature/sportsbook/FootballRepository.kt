@@ -371,6 +371,7 @@ internal data class FootballEventDto(
             awayBadgeUrl = badges?.away,
             competitionBadge = badges?.competition,
             competitionId = badges?.competitionId,
+            hasLogoCatalog = badges != null,
         )
         val availability = FootballPriceState.fromWire(priceState ?: if (markets.any { it.status == "open" }) "open" else "unpriced")
         val fixture = FootballFixture(match, emptyList())
