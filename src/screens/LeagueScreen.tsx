@@ -1,6 +1,8 @@
 import { ChevronLeft } from 'lucide-react';
 import { MatchCard } from '../components/MatchCard';
 import { SkeletonLoader } from '../components/SkeletonLoader';
+import { TeamLogo } from '../components/TeamLogo';
+import { sharedCompetitionLogo } from '../lib/sportsLogos';
 import { fromLeagueId } from '../lib/leagueRoute';
 import { useLiveMatches } from '../LiveMatchesContext';
 
@@ -41,9 +43,10 @@ export function LeagueScreen({
           >
             <ChevronLeft className="h-6 w-6" />
           </button>
-          <h1 className="min-w-0 flex-1 truncate pr-10 text-center text-base font-bold text-gray-900 dark:text-white">
-            {name}
-          </h1>
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-2 pr-10">
+            <TeamLogo teamName={name} logo={sharedCompetitionLogo(matches)} />
+            <h1 className="truncate text-base font-bold text-gray-900 dark:text-white">{name}</h1>
+          </div>
         </div>
       </header>
 
