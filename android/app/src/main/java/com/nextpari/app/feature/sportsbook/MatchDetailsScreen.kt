@@ -42,9 +42,10 @@ fun MatchDetailsScreen(
     LaunchedEffect(matchId, usePreview, lifecycle) {
         if (!usePreview && footballEventId.matches(matchId)) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             try {
+                viewModel.loadEvent(matchId, refreshClock = true)
                 while (true) {
-                    viewModel.loadEvent(matchId)
                     delay(45_000)
+                    viewModel.loadEvent(matchId, refreshClock = true)
                 }
             } finally {
                 viewModel.leaveEvent(matchId)
@@ -63,7 +64,7 @@ fun MatchDetailsScreen(
         onNavigate = onNavigate,
         loading = loading,
         notice = state.detail.takeIf { !usePreview && state.detailId == matchId }?.notice,
-        onRefresh = if (usePreview) null else ({ viewModel.loadEvent(matchId) }),
+        onRefresh = if (usePreview) null else ({ viewModel.loadEvent(matchId, refreshClock = true) }),
         selected = state.selectedKeys,
         onSelect = { it.selection?.let(viewModel::toggle) },
     )
