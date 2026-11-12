@@ -20,35 +20,111 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 
+internal const val FOOTBALL_BATCH_SIZE = 8
 internal val footballEventId = Regex("[0-9]{1,20}")
 private val exactLine = Regex("[+-]?\\d+(?:\\.\\d+)?(?:,[+-]?\\d+(?:\\.\\d+)?)?")
 private val kickoffFormat = DateTimeFormatter.ofPattern("dd.MM HH:mm")
 
 interface FootballRepository {
     suspend fun read(eventId: String? = null): FootballSnapshot
+    suspend fun readOdds(eventIds: List<String>): FootballOddsBatch
     suspend fun place(request: SportsBetRequest): SportsBetResult
 }
 
 data class FootballSnapshot(
     val fixtures: List<FootballFixture> = emptyList(),
     val notice: String? = null,
+    val canPrice: Boolean = true,
 ) {
     fun locked(message: String) = copy(
         fixtures = fixtures.map(FootballFixture::locked),
         notice = message,
+        canPrice = false,
     )
+}
+
+enum class FootballPriceState(val notice: String?) {
+    Unpriced("Коэффициенты загружаются"),
+    Open(null),
+    Unavailable("Коэффициенты недоступны"),
+    Suspended("Коэффициенты приостановлены"),
+    Stale("Коэффициенты устарели"),
+    RateLimited("Лимит запросов. Повтор позже"),
+    Deferred("Коэффициенты ожидают обновления"),
+    Upstream("Не удалось обновить коэффициенты");
+
+    companion object {
+        fun fromWire(state: String, stale: Boolean = false): FootballPriceState = if (stale) Stale else when (state) {
+            "open" -> Open
+            "unpriced" -> Unpriced
+            "suspended" -> Suspended
+            "stale" -> Stale
+            "rate_limited" -> RateLimited
+            "deferred" -> Deferred
+            "upstream" -> Upstream
+            else -> Unavailable
+        }
+    }
+}
+
+data class FootballOddsBatch(
+    val quotes: Map<String, FootballOddsQuote> = emptyMap(),
+    val fallback: FootballPriceState = FootballPriceState.Unavailable,
+)
+
+@Serializable
+data class FootballOddsQuote(
+    val id: String,
+    val priceState: String,
+    val stale: Boolean = false,
+    val markets: List<FootballMarketDto> = emptyList(),
+) {
+    val availability: FootballPriceState get() = FootballPriceState.fromWire(priceState, stale)
 }
 
 data class FootballFixture(
     val match: MatchCardModel,
     val markets: List<MarketGroup>,
+    val priceState: FootballPriceState = FootballPriceState.Unpriced,
+    val quoteOrder: Long = 0,
+    val validUntil: Long = 0,
+    val fullMarkets: Boolean = false,
 ) {
-    fun locked() = copy(
-        match = match.copy(outcomes = match.outcomes.map { it.copy(odds = null, locked = true, selection = null) }),
+    fun locked(state: FootballPriceState = FootballPriceState.Stale) = copy(
+        match = match.copy(
+            outcomes = match.outcomes.map { it.copy(odds = null, locked = true, selection = null) },
+            priceNote = state.notice,
+        ),
         markets = markets.map { group ->
             group.copy(outcomes = group.outcomes.map { it.copy(odds = null, locked = true, selection = null) })
         },
+        priceState = state,
+        validUntil = 0,
     )
+
+    fun sameEvent(other: FootballFixture): Boolean =
+        match.eventId == other.match.eventId && match.isLive == other.match.isLive &&
+            match.team1 == other.match.team1 && match.team2 == other.match.team2
+
+    fun hasPrice(now: Long): Boolean = priceState == FootballPriceState.Open && validUntil > now
+
+    fun withPrices(from: FootballFixture): FootballFixture = from.copy(
+        match = match.copy(
+            outcomes = from.match.outcomes,
+            extraMarkets = from.match.extraMarkets,
+            priceNote = from.match.priceNote,
+        ),
+    )
+
+    fun withQuote(quote: FootballOddsQuote?, fallback: FootballPriceState, order: Long, until: Long): FootballFixture {
+        val exactQuote = quote?.takeIf { it.id == match.eventId }
+        val availability = exactQuote?.availability ?: fallback
+        return withMarkets(exactQuote?.markets.orEmpty(), availability).copy(
+            quoteOrder = order,
+            fullMarkets = exactQuote != null && availability == FootballPriceState.Open,
+            validUntil = if (availability == FootballPriceState.Open) until else 0,
+        )
+    }
 }
 
 @Serializable
@@ -64,9 +140,15 @@ data class SportsBetSelection(
     val league: String,
     val outcomeName: String,
     val provider: String = "betsapi",
+    val bookmakerId: String? = null,
+    val externalPeriodId: String? = null,
+    val externalMarketId: String? = null,
+    val sourceSelectionId: String? = null,
+    val updatedAt: String? = null,
 ) {
     val identity: String
-        get() = listOf(fixtureId, marketId, line, outcomeId).joinToString("|")
+        get() = quoteIdentity(provider, fixtureId, feedType, marketId, marketKey, line, outcomeId,
+            bookmakerId, externalPeriodId, externalMarketId, sourceSelectionId)
 }
 
 @Serializable
@@ -96,7 +178,33 @@ class RemoteFootballRepository(
             if (response.code() == 401) "Сессия недействительна" else "Футбольная лента недоступна"
         }
         val feed = json.decodeFromJsonElement<FootballFeedDto>(body)
-        return feed.toSnapshot(eventId)
+        val snapshot = feed.toSnapshot(eventId)
+        if (eventId == null) return snapshot
+        val direct = feed.events.singleOrNull { it.id == eventId }
+        // The detail endpoint's live=false also covers finished events. A direct link
+        // without a future kickoff cannot establish that the fixture is prematch.
+        if (direct != null && !direct.live && !isFutureKickoff(direct.kickoff)) {
+            return snapshot.copy(
+                fixtures = snapshot.fixtures.map { it.locked(FootballPriceState.Unavailable) },
+                canPrice = false,
+            )
+        }
+        return snapshot.copy(fixtures = snapshot.fixtures.map { it.copy(fullMarkets = true) })
+    }
+
+    override suspend fun readOdds(eventIds: List<String>): FootballOddsBatch {
+        val ids = eventIds.asSequence().filter(footballEventId::matches).distinct().take(FOOTBALL_BATCH_SIZE).toList()
+        if (ids.isEmpty()) return FootballOddsBatch()
+        val response = api.footballOdds(ids.joinToString(","))
+        if (response.code() == 429) return FootballOddsBatch(fallback = FootballPriceState.RateLimited)
+        val body = response.body()?.takeIf { response.isSuccessful }
+            ?: return FootballOddsBatch(fallback = FootballPriceState.Upstream)
+        val batch = json.decodeFromJsonElement<FootballOddsDto>(body)
+        if (!batch.ok || batch.error != null) return FootballOddsBatch(fallback = FootballPriceState.Upstream)
+        val byId = batch.quotes.filter { it.id in ids }.groupBy { it.id }
+        return FootballOddsBatch(byId.mapNotNull { (id, rows) ->
+            rows.singleOrNull()?.let { id to it }
+        }.toMap())
     }
 
     override suspend fun place(request: SportsBetRequest): SportsBetResult {
@@ -149,24 +257,41 @@ internal data class FootballFeedDto(
             .values.map { copies ->
                 val current = copies.filter { it.match.isLive }.ifEmpty { copies }
                 val fixture = current.first()
-                if (issue != null || current.any { it != fixture }) fixture.locked() else fixture
+                when {
+                    stale -> fixture.locked()
+                    issue != null -> fixture.locked(FootballPriceState.Upstream)
+                    current.any { it != fixture } -> fixture.locked(FootballPriceState.Unavailable)
+                    else -> fixture
+                }
             }
-        return FootballSnapshot(fixtures, issue)
+        return FootballSnapshot(fixtures, issue,
+            canPrice = ok && !stale && error !in setOf("TOKEN_MISSING", "RATE_LIMITED"))
     }
 }
+
+@Serializable
+private data class FootballOddsDto(
+    val ok: Boolean = false,
+    val error: String? = null,
+    val quotes: List<FootballOddsQuote> = emptyList(),
+)
 
 @Serializable
 internal data class FootballScoreDto(val home: Int, val away: Int)
 
 @Serializable
-internal data class FootballOutcomeDto(val key: String, val price: Double? = null)
+data class FootballOutcomeDto(val key: String, val price: Double? = null, val sourceSelectionId: String? = null)
 
 @Serializable
-internal data class FootballMarketDto(
+data class FootballMarketDto(
     val key: String,
     val line: String = "",
     val status: String,
     val outcomes: List<FootballOutcomeDto> = emptyList(),
+    val bookmakerId: String? = null,
+    val externalPeriodId: String? = null,
+    val externalMarketId: String? = null,
+    val updatedAt: String? = null,
 )
 
 private enum class FootballMarket(
@@ -192,11 +317,10 @@ internal data class FootballEventDto(
     val live: Boolean,
     val score: FootballScoreDto? = null,
     val markets: List<FootballMarketDto> = emptyList(),
+    val priceState: String? = null,
 ) {
     fun toFixture(): FootballFixture? {
         if (!footballEventId.matches(id) || home.isBlank() || away.isBlank()) return null
-        val groups = FootballMarket.entries.mapNotNull(::marketGroup)
-        val mainOdds = groups.firstOrNull { it.marketId == FootballMarket.Result.id }?.outcomes.orEmpty()
         val kickoffLabel = kickoff?.let {
             try {
                 Instant.parse(it).atZone(ZoneId.systemDefault()).format(kickoffFormat)
@@ -215,40 +339,75 @@ internal data class FootballEventDto(
             score = score?.takeIf { it.home >= 0 && it.away >= 0 }?.let { "${it.home} : ${it.away}" },
             kickoffLabel = kickoffLabel,
             marketTitle = "1X2",
+        )
+        val availability = FootballPriceState.fromWire(priceState ?: if (markets.any { it.status == "open" }) "open" else "unpriced")
+        return FootballFixture(match, emptyList()).withMarkets(markets, availability)
+    }
+}
+
+private fun FootballFixture.withMarkets(rows: List<FootballMarketDto>, state: FootballPriceState): FootballFixture {
+    val groups = FootballMarket.entries.flatMap { market ->
+        rows.filter { row ->
+            row.key == market.key && (row.externalMarketId.isNullOrEmpty() || row.externalMarketId == market.id) &&
+                (if (market == FootballMarket.Result) row.line.isEmpty() else exactLine.matches(row.line))
+        }.groupBy { quoteIdentity(market.key, it.bookmakerId, it.externalPeriodId, it.externalMarketId) }
+            .map { (groupKey, sourcedRows) ->
+                val lines = sourcedRows.groupBy { it.line }
+                val outcomes = lines.flatMap { (line, quotes) ->
+                    val quote = quotes.singleOrNull()?.takeIf { it.status == "open" && state == FootballPriceState.Open }
+                    val prices = quote?.outcomes.orEmpty().groupBy { it.key }
+                    market.labels.map { (key, shortLabel) ->
+                        val label = if (line.isEmpty()) shortLabel else "$shortLabel $line"
+                        val outcome = prices[key]?.singleOrNull()
+                        val price = outcome?.price?.takeIf { it.isFinite() && it > 1 }
+                        val selection = if (price != null && quote != null) SportsBetSelection(
+                            fixtureId = match.eventId, feedType = if (match.isLive) "inplay" else "prematch",
+                            marketId = market.id, marketKey = market.key, line = line, outcomeId = key, price = price,
+                            matchLabel = "${match.team1} — ${match.team2}", league = match.league, outcomeName = label,
+                            bookmakerId = quote.bookmakerId, externalPeriodId = quote.externalPeriodId,
+                            externalMarketId = quote.externalMarketId, sourceSelectionId = outcome?.sourceSelectionId,
+                            updatedAt = quote.updatedAt,
+                        ) else null
+                        MarketOutcome(
+                            eventId = match.eventId, marketId = market.id, marketKey = market.key, line = line,
+                            outcomeId = key, label = label, odds = price?.let(::decimalOdds),
+                            locked = selection == null, selection = selection,
+                        )
+                    }
+                }
+                MarketGroup(groupKey, market.title, market.id, market.category, lines.size, outcomes)
+            }
+    }
+    // A card uses one complete 1X2 source. It never fills a missing outcome from a different source.
+    val main = groups.firstOrNull { it.marketId == FootballMarket.Result.id && it.outcomes.all { out -> out.selection != null } }
+        ?: groups.firstOrNull { it.marketId == FootballMarket.Result.id && it.outcomes.any { out -> out.selection != null } }
+    val effectiveState = if (state == FootballPriceState.Open && groups.none { group ->
+        group.outcomes.any { it.selection != null }
+    }) FootballPriceState.Unavailable else state
+    return copy(
+        match = match.copy(
             outcomes = FootballMarket.Result.labels.map { (key, label) ->
-                val outcome = mainOdds.firstOrNull { it.outcomeId == key }
+                val outcome = main?.outcomes?.firstOrNull { it.outcomeId == key }
                 MatchOutcome(label, outcome?.odds, locked = outcome?.selection == null, selection = outcome?.selection)
             },
             extraMarkets = groups.filter { it.marketId != FootballMarket.Result.id }.sumOf { it.lineCount },
-        )
-        return FootballFixture(match, groups)
-    }
-
-    private fun marketGroup(market: FootballMarket): MarketGroup? {
-        val lines = markets.filter {
-            it.key == market.key && if (market == FootballMarket.Result) it.line.isEmpty() else exactLine.matches(it.line)
-        }.groupBy { it.line }
-        if (lines.isEmpty()) return null
-        val outcomes = lines.flatMap { (line, quotes) ->
-            val quote = quotes.singleOrNull()?.takeIf { it.status == "open" }
-            val prices = quote?.outcomes.orEmpty().groupBy { it.key }
-            market.labels.map { (key, shortLabel) ->
-                val label = if (line.isEmpty()) shortLabel else "$shortLabel $line"
-                val price = prices[key]?.singleOrNull()?.price?.takeIf { it.isFinite() && it > 1 }
-                val selection = price?.let {
-                    SportsBetSelection(id, if (live) "inplay" else "prematch", market.id, market.key, line, key, it,
-                        "$home — $away", league, label)
-                }
-                MarketOutcome(
-                    eventId = id, marketId = market.id, marketKey = market.key, line = line,
-                    outcomeId = key, label = label, odds = price?.let(::decimalOdds),
-                    locked = selection == null, selection = selection,
-                )
-            }
-        }
-        return MarketGroup(market.key, market.title, market.id, market.category, lines.size, outcomes)
-    }
+            priceNote = effectiveState.notice,
+        ),
+        markets = groups,
+        priceState = effectiveState,
+    )
 }
+
+private fun quoteIdentity(vararg parts: String?): String =
+    parts.joinToString("") { if (it == null) "-:" else "${it.length}:$it" }
+
+private fun isFutureKickoff(value: String?): Boolean = value?.let {
+    try {
+        Instant.parse(it).isAfter(Instant.now())
+    } catch (_: java.time.DateTimeException) {
+        false
+    }
+} == true
 
 private fun decimalOdds(price: Double): String {
     val decimal = BigDecimal.valueOf(price).stripTrailingZeros()
