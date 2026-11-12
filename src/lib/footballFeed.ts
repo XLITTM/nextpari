@@ -3,7 +3,7 @@ import type { BetSelection, MarketGroup, MatchEvent } from '../types';
 export type FootballPriceState = NonNullable<MatchEvent['priceState']>;
 
 export interface FootballFeedMarket {
-  key: '1x2' | 'over_under' | 'asian_handicap';
+  key: '1x2' | 'moneyline' | 'over_under' | 'asian_handicap';
   name: string;
   line: string;
   status: 'open' | 'suspended';
@@ -16,6 +16,9 @@ export interface FootballFeedMarket {
 
 export interface FootballFeedCard {
   id: string;
+  sport?: MatchEvent['sport'];
+  tier?: number;
+  logos?: { competitionId?: string | null; competition?: string | null; home?: string | null; away?: string | null };
   league: string;
   country: string;
   home: string;
@@ -45,6 +48,7 @@ const LABELS: Record<string, string> = {
 
 const MARKET_IDS: Record<FootballFeedCard['markets'][number]['key'], string> = {
   '1x2': '1_1',
+  moneyline: '',
   asian_handicap: '1_2',
   over_under: '1_3',
 };
@@ -65,7 +69,7 @@ function selectionFor(
     provider: 'betsapi',
     feedType: card.live ? 'inplay' : 'prematch',
     fixtureId: card.id,
-    marketId: MARKET_IDS[market.key],
+    marketId: market.externalMarketId || MARKET_IDS[market.key],
     marketKey: market.key,
     line: market.line,
     outcomeId: outcome.key,
@@ -85,11 +89,11 @@ function selectionFor(
 }
 
 export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
-  const oneXtwo = card.markets.find((market) => market.key === '1x2' && market.status === 'open');
+  const oneXtwo = card.markets.find((market) => (market.key === '1x2' || market.key === 'moneyline') && market.status === 'open');
   const priceState: FootballPriceState = card.priceState ?? (oneXtwo ? 'open' : 'unpriced');
   const price = (key: string) => oneXtwo?.outcomes.find((outcome) => outcome.key === key)?.price ?? 0;
   const quotes: NonNullable<MatchEvent['betsapiQuotes']> = {};
-  for (const outcome of oneXtwo?.outcomes ?? []) {
+  for (const outcome of /^\d{1,20}$/.test(card.id) ? oneXtwo?.outcomes ?? [] : []) {
     const label = LABELS[outcome.key];
     if (!label || !(outcome.price > 1)) continue;
     const selection = selectionFor(card, oneXtwo!, outcome);
@@ -109,9 +113,9 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
     };
   }
   const groups: MarketGroup[] = card.markets
-    .filter((market) => market.key !== '1x2' && market.status === 'open')
+    .filter((market) => market.key !== '1x2' && market.key !== 'moneyline' && market.status === 'open')
     .map((market) => ({
-      id: `${card.id}-${market.key}-${market.line}`,
+      id: JSON.stringify([card.id, market.externalMarketId, market.externalPeriodId, market.bookmakerId, market.line]),
       name: market.key === 'over_under' ? `Тотал ${market.line}`.trim() : `Фора ${market.line}`.trim(),
       category: market.key === 'over_under' ? 'totals' as const : 'handicaps' as const,
       outcomes: market.outcomes.filter((outcome) => outcome.price > 1).map((outcome) => {
@@ -142,7 +146,13 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
   const kickoff = card.kickoff ? Date.parse(card.kickoff) : 0;
   return {
     id: card.id,
-    sport: 'football',
+    sport: card.sport ?? 'football',
+    sportsTier: card.tier,
+    observedMainAt: oneXtwo?.updatedAt ?? undefined,
+    leagueId: card.logos?.competitionId ?? undefined,
+    competitionLogo: card.logos?.competition ?? undefined,
+    team1Logo: card.logos?.home ?? undefined,
+    team2Logo: card.logos?.away ?? undefined,
     league: card.league,
     country: card.country,
     team1: card.home,
@@ -194,15 +204,24 @@ function detailTab(group: { category?: string; name: string }): BetsapiDetailLin
   return null;
 }
 
-export function betsapiDetailLines(match: MatchEvent): BetsapiDetailLine[] {
+export function isFreshSportsPrice(updatedAt: string | undefined, live: boolean, now = Date.now()): boolean {
+  const observed = Date.parse(updatedAt ?? '');
+  return observed <= now && now - observed <= (live ? 30_000 : 180_000);
+}
+
+export function betsapiDetailLines(match: MatchEvent, now = Date.now()): BetsapiDetailLine[] {
   const lines: BetsapiDetailLine[] = [];
+  const readOnly = match.id.startsWith('betsapi:') || match.sport === 'esports';
   const main = [
     { label: 'П1', odds: match.markets['1'] },
     { label: 'X', odds: match.markets.x },
     { label: 'П2', odds: match.markets['2'] },
-  ].filter((item) => item.odds > 1);
+  ].filter((item) => item.odds > 1 && (!readOnly || isFreshSportsPrice(match.observedMainAt, match.isLive, now)));
   if (main.length) {
-    lines.push({ id: `${match.id}-1x2`, title: 'Исход', tab: 'main', outcomes: main });
+    const outcomes = readOnly
+      ? main.map((item) => ({ ...item, locked: true }))
+      : main;
+    lines.push({ id: `${match.id}-1x2`, title: 'Исход', tab: 'main', outcomes });
   }
   for (const group of match.marketGroups ?? []) {
     const tab = detailTab(group);
@@ -215,9 +234,11 @@ export function betsapiDetailLines(match: MatchEvent): BetsapiDetailLine[] {
       tab,
       outcomes: outcomes.map((outcome) => ({
         label: outcome.label,
-        odds: outcome.odds,
-        locked: Boolean(outcome.locked) || !(outcome.odds > 1),
-        selection: outcome.provider === 'betsapi' ? {
+        odds: readOnly && !isFreshSportsPrice(outcome.updatedAt, match.isLive, now) ? 0 : outcome.odds,
+        locked: readOnly || match.priceState === 'stale' || Boolean(outcome.locked) || !(outcome.odds > 1)
+          || !isFreshSportsPrice(outcome.updatedAt, match.isLive, now)
+          || (outcome.marketKey === 'asian_handicap' && !/^[-+]?0+(?:\.0+)?$/.test(outcome.line ?? '')),
+        selection: !readOnly && outcome.provider === 'betsapi' ? {
           id: `${outcome.fixtureId}-${outcome.marketKey}-${outcome.line ?? ''}-${outcome.outcomeId}`,
           matchId: outcome.fixtureId || match.id,
           matchLabel: outcome.matchLabel || `${match.team1} — ${match.team2}`,
@@ -288,7 +309,7 @@ export function footballPriceNote(state: MatchEvent['priceState'], hasPrices: bo
 const RETRY_STATES = new Set<MatchEvent['priceState']>(['unpriced', 'deferred', 'rate_limited', 'upstream', 'stale', undefined]);
 
 export function footballQuoteIds(matches: MatchEvent[]): { primary: string[]; secondary: string[] } {
-  const needs = (match: MatchEvent) => match.feedTag === 'betsapi' && RETRY_STATES.has(match.priceState);
+  const needs = (match: MatchEvent) => match.feedTag === 'betsapi' && !match.id.startsWith('betsapi:') && match.sport !== 'esports' && RETRY_STATES.has(match.priceState);
   const live = matches.filter((match) => match.isLive && needs(match)).map((match) => match.id);
   const prematch = matches.filter((match) => !match.isLive && needs(match)).map((match) => match.id);
   const primary = [...live.slice(0, 6), ...prematch].slice(0, 8);
@@ -337,6 +358,9 @@ export function applyFootballQuotes(matches: MatchEvent[], quotes: FootballOddsQ
     }
     const next = footballCardToMatch({
       id: match.id,
+      sport: match.sport,
+      tier: match.sportsTier,
+      logos: { competitionId: match.leagueId, competition: match.competitionLogo, home: match.team1Logo, away: match.team2Logo },
       league: match.league,
       country: match.country,
       home: match.team1,
@@ -354,7 +378,7 @@ export function applyFootballQuotes(matches: MatchEvent[], quotes: FootballOddsQ
 }
 
 export async function fetchFootballFeed(signal?: AbortSignal): Promise<MatchEvent[]> {
-  const response = await fetch('/api/player/sports/football-feed', { signal, credentials: 'same-origin' });
+  const response = await fetch('/api/player/sports/football-feed?includeSports=1', { signal, credentials: 'same-origin' });
   if (!response.ok) return [];
   const body = await response.json() as { events?: FootballFeedCard[] };
   return (body.events ?? []).map(footballCardToMatch);
@@ -373,7 +397,7 @@ export async function fetchFootballQuotes(ids: string[], signal?: AbortSignal): 
 }
 
 export async function fetchFootballEvent(eventId: string, signal?: AbortSignal): Promise<MatchEvent | null> {
-  if (!/^\d{1,20}$/.test(eventId)) return null;
+  if (!/^(?:betsapi:\d{1,3}:)?\d{1,20}$/.test(eventId)) return null;
   const response = await fetch(`/api/player/sports/football-feed?eventId=${encodeURIComponent(eventId)}`, {
     signal,
     credentials: 'same-origin',
@@ -381,6 +405,6 @@ export async function fetchFootballEvent(eventId: string, signal?: AbortSignal):
   if (!response.ok) return null;
   const body = await response.json() as { events?: FootballFeedCard[] };
   const card = body.events?.[0];
-  if (!card) return null;
+  if (!card || card.id !== eventId) return null;
   return footballCardToMatch(card);
 }

@@ -1,10 +1,12 @@
+import type { EventsSportId, eventsSports } from './sportIds.js';
+
 export const FOOTBALL_SPORT_ID = '1' as const;
 
 export type FeedEndpoint = 'inplay' | 'upcoming' | 'ended' | 'event';
 
 export type EventStatus = 'live' | 'prematch' | 'finished' | 'closed';
 
-export type MarketKey = '1x2' | 'over_under' | 'asian_handicap';
+export type MarketKey = 'moneyline' | '1x2' | 'over_under' | 'asian_handicap';
 
 export type MarketStatus = 'open' | 'closed';
 export type MarketAvailability = 'open' | 'suspended' | 'unavailable';
@@ -41,8 +43,8 @@ export interface LiveClock {
 
 export interface NormalizedEvent {
   eventId: string;
-  sportId: typeof FOOTBALL_SPORT_ID;
-  sport: 'football';
+  sportId: EventsSportId;
+  sport: (typeof eventsSports)[EventsSportId];
   league: { id: string | null; name: string | null; countryCode: string | null };
   home: { id: string | null; name: string };
   away: { id: string | null; name: string };
@@ -68,7 +70,7 @@ export interface NormalizedFeed {
   betting: 'disabled';
   settlement: 'disabled';
   endpoint: FeedEndpoint;
-  sportId: typeof FOOTBALL_SPORT_ID;
+  sportId: EventsSportId;
   fetchedAt: string;
   updatedAt: string;
   stale: boolean;

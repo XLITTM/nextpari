@@ -1,3 +1,4 @@
+import { isFreshSportsPrice } from './footballFeed';
 import { isLsportsDisplayEvent } from './lsportsFeed';
 import { outcomeLabel, type ParsedMarket } from './odds-parser';
 import { useSportsStore } from '../stores/sportsStore';
@@ -62,8 +63,11 @@ function betsapiSelection(
   marketName: string,
 ): { selection: BetSelection; locked: boolean } | null {
   if (match.feedTag !== 'betsapi') return null;
+  if (!/^\d{1,20}$/.test(match.id) || match.sport === 'esports') {
+    return { selection: buildCardSelection(match, outcomeLabelText, 0, marketName), locked: true };
+  }
   const quote = match.betsapiQuotes?.[outcomeLabelText];
-  if (!quote || !(odds > 1)) {
+  if (!quote || !(odds > 1) || match.priceState === 'stale' || !isFreshSportsPrice(quote.updatedAt, match.isLive)) {
     return {
       selection: {
         ...buildCardSelection(match, outcomeLabelText, odds, marketName),

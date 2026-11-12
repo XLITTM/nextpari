@@ -1,3 +1,5 @@
+import { ownerFootballLogo } from '../sports/catalog/ownerFootballMedia.js';
+import type { EventsSportId } from './sportIds.js';
 import {
   BetsApiReadOnlyClient,
   getFootballOddsClient,
@@ -5,7 +7,7 @@ import {
   type EventOddsRead,
   type EventOddsState,
 } from './client.js';
-import { rankFeaturedFootball } from './footballCoverage.js';
+import { eventTier, rankFeaturedFootball } from './footballCoverage.js';
 import { publishLiveClock } from './liveClock.js';
 import type { FeedResult, LiveClock, NormalizedEvent, NormalizedMarket } from './types.js';
 
@@ -27,6 +29,9 @@ export interface FootballFeedMarket {
 
 export interface FootballFeedCard {
   id: string;
+  sport: NormalizedEvent['sport'];
+  tier: number;
+  logos: { competitionId: string | null; competition: string | null; home: string | null; away: string | null };
   league: string;
   country: string;
   home: string;
@@ -79,18 +84,34 @@ function marketToCard(market: NormalizedMarket): FootballFeedMarket | null {
 }
 
 function toCard(event: NormalizedEvent, now = Date.now()): FootballFeedCard {
+  const football = event.sportId === '1';
+  const competition = football ? ownerFootballLogo('competition', event.league.id) : null;
+  const tier = eventTier(event);
+  const markets = event.markets.filter((market) => {
+    if (football || market.availability === 'suspended') return true;
+    const observed = Date.parse(market.updatedAt ?? '');
+    return observed <= now && now - observed <= (event.status === 'live' ? 30_000 : 180_000);
+  });
   return {
-    id: event.eventId,
+    id: football ? event.eventId : `betsapi:${event.sportId}:${event.eventId}`,
+    sport: tier === 3 ? 'esports' : event.sport,
+    tier,
+    logos: {
+      competitionId: competition?.canonicalId ?? null,
+      competition: competition?.path ?? null,
+      home: football ? ownerFootballLogo('participant', event.home.id)?.path ?? null : null,
+      away: football ? ownerFootballLogo('participant', event.away.id)?.path ?? null : null,
+    },
     league: event.league.name ?? '',
-    country: event.league.countryCode ?? '',
+    country: competition?.canonicalId === 'football:eng:premier-league' ? 'eng' : event.league.countryCode ?? '',
     home: event.home.name,
     away: event.away.name,
     kickoff: event.kickoff,
     live: event.status === 'live',
     score: event.score,
     liveClock: publishLiveClock(event.liveClock, now),
-    priceState: priceStateOf(event),
-    markets: event.markets.flatMap((market) => {
+    priceState: priceStateOf({ ...event, markets }),
+    markets: markets.flatMap((market) => {
       const card = marketToCard(market);
       return card ? [card] : [];
     }),
@@ -151,8 +172,12 @@ export async function handleFootballFeedRequest(
   }
   const eventId = params.get('eventId') ?? '';
   if (eventId) {
-    if (!/^\d{1,20}$/.test(eventId)) return { status: 404, body: { ok: false, error: 'NOT_FOUND' } };
-    const event = await client.getEvent(eventId);
+    const additional = /^betsapi:(\d{1,3}):(\d{1,20})$/.exec(eventId);
+    const sportId = additional?.[1] as EventsSportId | undefined;
+    if (additional ? !sportId || !client.additionalSportIds().includes(sportId) : !/^\d{1,20}$/.test(eventId)) {
+      return { status: 404, body: { ok: false, error: 'NOT_FOUND' } };
+    }
+    const event = additional ? await client.getEvent(additional[2], sportId) : await client.getEvent(eventId);
     return {
       status: event.ok ? 200 : event.error === 'TOKEN_MISSING' ? 200 : 503,
       body: {
@@ -163,7 +188,11 @@ export async function handleFootballFeedRequest(
       },
     };
   }
-  const [live, upcoming] = await Promise.all([client.getInplay(), client.getPrematchCoverage()]);
+  const includeSports = params.get('includeSports') === '1';
+  const [live, upcoming, additional] = await Promise.all([
+    client.getInplay(), client.getPrematchCoverage(),
+    includeSports ? client.getAdditionalSports() : [],
+  ]);
   const tokenMissing = live.error === 'TOKEN_MISSING' || upcoming.error === 'TOKEN_MISSING';
   return {
     status: tokenMissing || live.ok || upcoming.ok ? 200 : 503,
@@ -171,10 +200,16 @@ export async function handleFootballFeedRequest(
       ok: tokenMissing || live.ok || upcoming.ok,
       error: tokenMissing ? 'TOKEN_MISSING' : live.error ?? upcoming.error,
       stale: Boolean(live.feed?.stale || upcoming.feed?.stale),
+      coverage: additional.map(({ sportId, prematch, result }) => ({
+        sportId, phase: prematch ? 'prematch' : 'live', observed: Boolean(result?.ok && !result.feed?.stale),
+        count: result?.feed?.events.length ?? 0, upstreamStatus: result?.upstreamStatus ?? null, error: result?.error ?? null,
+      })),
       events: rankFeaturedFootball([
         ...(live.feed?.events ?? []),
         ...(upcoming.feed?.events ?? []),
-      ]).map((event) => toCard(event)),
+        ...additional.flatMap(({ result }) => result?.feed?.events.filter((event) =>
+          event.status !== 'prematch' || Date.parse(event.kickoff ?? '') > Date.now()) ?? []),
+      ], includeSports).map((event) => toCard(event)),
     },
   };
 }

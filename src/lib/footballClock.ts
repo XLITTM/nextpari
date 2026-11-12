@@ -30,6 +30,6 @@ export function presentedFootballClock(
 
 export function footballClockLabel(clock: FootballLiveClock | null | undefined, now = Date.now()): string | null {
   const shown = presentedFootballClock(clock, now);
-  if (!shown) return null;
+  if (!shown || shown.stale) return null;
   return `${shown.minute}:${String(shown.second).padStart(2, '0')}`;
 }

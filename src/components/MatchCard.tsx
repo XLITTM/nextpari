@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bell, Star, ChevronRight, Play, Lock } from 'lucide-react';
+import { Star, Lock } from 'lucide-react';
 import type { MatchEvent, BetSelection } from '../types';
 import { useBetSlip } from '../BetSlipContext';
 import { useOddInteraction } from '../hooks/useOddInteraction';
@@ -7,16 +7,12 @@ import { OddsFlashValue } from './OddButton';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '../hooks/useOddsFlash';
 import { SportIcon } from './SportIcon';
 import { TeamLogo } from './TeamLogo';
-import { extraMarketRows, mainOutcomeButtons } from '../lib/cardOdds';
+import { mainOutcomeButtons } from '../lib/cardOdds';
 import { footballClockLabel } from '../lib/footballClock';
 import { useFootballClockNow } from '../lib/useFootballClock';
-import { advertisedExtraMarketCount, footballPriceNote, homeMarketsLabel, isBetsapiMatch } from '../lib/footballFeed';
-import {
-  clickableCardSelection,
-  extraLsportsMarketRows,
-  hasCompleteLsportsIdentity,
-  isLsportsMatch,
-} from '../lib/sportsSelection';
+import { isBetsapiMatch } from '../lib/footballFeed';
+import { clickableCardSelection } from '../lib/sportsSelection';
+import { sportsRegion } from '../lib/sportsRegion';
 
 interface MatchCardProps {
   match: MatchEvent;
@@ -39,7 +35,6 @@ function formatCardMinute(status?: string): string {
 export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, onToggleFavorite }: MatchCardProps) {
   const { isSelectionActive } = useBetSlip();
   const [scoreHighlight, setScoreHighlight] = useState(false);
-  const [extrasOpen, setExtrasOpen] = useState(false);
   const scoreKey =
     match.isLive && match.liveScore
       ? `${match.liveScore.team1}:${match.liveScore.team2}`
@@ -73,38 +68,26 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
     return `${day} ${months[d.getMonth()]}, ${time}`;
   };
 
-  const outcomeButtons = mainOutcomeButtons(match);
+  const outcomeButtons = match.id.startsWith('betsapi:') ? [] : mainOutcomeButtons(match);
   const clockNow = useFootballClockNow(match.liveClock);
-  const liveMinute = footballClockLabel(match.liveClock, clockNow) ?? formatCardMinute(match.liveStatus);
-  const betsapi = isBetsapiMatch(match);
-  const lsports = isLsportsMatch(match);
-  const lsportsExtras = extraLsportsMarketRows(match);
-  const extraRows = betsapi ? [] : lsports ? lsportsExtras : extraMarketRows(match);
-  const extraCount = advertisedExtraMarketCount(match, extraRows.length);
-  const priceNote = footballPriceNote(match.priceState, !match.marketsLocked || extraRows.length > 0);
-  const footerLabel = betsapi ? homeMarketsLabel(match) : extraCount != null ? `+${extraCount} рынков` : priceNote;
+  const liveMinute = footballClockLabel(match.liveClock, clockNow) ?? (!isBetsapiMatch(match) ? formatCardMinute(match.liveStatus) : '');
+  const region = sportsRegion(match.country);
 
   return (
     <div
-      className={`bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden active:scale-[0.99] transition-transform cursor-pointer ${
+      className={`flex h-[144px] flex-col bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden active:scale-[0.99] transition-transform cursor-pointer ${
         carousel ? 'w-[85%] shrink-0' : 'w-full'
       }`}
       onClick={() => onOpenMatch(match.id)}
     >
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 min-w-0">
-          <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0 hover:scale-105 transition-transform" />
+          {match.competitionLogo ? <TeamLogo teamName={match.league} logo={match.competitionLogo} /> :
+            <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0" />}
           <span className="truncate font-bold text-gray-900 dark:text-white">{match.league}</span>
-          <span className="text-gray-600 dark:text-gray-300">•</span>
-          <span className="truncate font-bold text-gray-700 dark:text-gray-200">{match.country}</span>
+          {region && <span className="truncate text-gray-600 dark:text-gray-300">{region}</span>}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button
-            className="w-7 h-7 flex items-center justify-center text-gray-700 dark:text-gray-200 hover:text-brand-600 transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Bell className="w-4 h-4" strokeWidth={2.2} />
-          </button>
           <button
             type="button"
             className="w-7 h-7 flex items-center justify-center text-gray-700 dark:text-gray-200 hover:text-green-500 transition-colors"
@@ -119,18 +102,10 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
               strokeWidth={2.2}
             />
           </button>
-          {match.hasStream && (
-            <button
-              className="w-7 h-7 flex items-center justify-center text-brand-600"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Play className="w-4 h-4" strokeWidth={2.5} />
-            </button>
-          )}
         </div>
       </div>
 
-      <div className="px-3 py-2">
+      <div className="min-h-0 flex-1 px-3 py-1.5">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0 text-right">
             <div className="flex items-center justify-end gap-2">
@@ -139,13 +114,13 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             </div>
           </div>
 
-          {match.isLive && match.liveScore ? (
+          {match.isLive ? (
             <span
               className={`font-bold text-xl transition-colors duration-300 tabular-nums shrink-0 ${
-                scoreHighlight ? 'text-green-500' : 'text-gray-900'
+                scoreHighlight ? 'text-green-500' : 'text-gray-900 dark:text-white'
               }`}
             >
-              {match.liveScore.team1} : {match.liveScore.team2}
+              {match.liveScore ? `${match.liveScore.team1} : ${match.liveScore.team2}` : '—'}
             </span>
           ) : (
             <div className="shrink-0 bg-gray-100 dark:bg-[#1e293b] rounded-lg px-2 py-1 border border-gray-200 dark:border-gray-600 flex flex-col items-center leading-tight">
@@ -163,7 +138,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
         </div>
 
         {match.isLive && (
-          <div className="flex items-center justify-center gap-1.5 mt-2">
+          <div className="flex items-center justify-center gap-1.5 mt-1">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse-live" />
             <span className="text-xs text-red-500 font-semibold">LIVE</span>
             {liveMinute ? <span className="text-xs text-red-500 font-semibold">{liveMinute}</span> : null}
@@ -187,46 +162,6 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             );
           })}
         </div>
-        {!betsapi && extrasOpen && extraRows.map((row) => (
-          <div key={row.name} className="mt-1.5">
-            <div className="mb-1 text-[10px] font-bold text-gray-500 dark:text-gray-400">{row.name}</div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {row.outcomes.map((item) => {
-                const clickable = item.selection?.provider === 'betsapi' && item.selection.outcomeId
-                  ? { selection: item.selection, locked: false }
-                  : item.selection && hasCompleteLsportsIdentity(item.selection)
-                  ? { selection: item.selection, locked: false }
-                  : clickableCardSelection(match, item.label, row.name, item.odds);
-                return (
-                  <MatchOddButton
-                    key={`${row.name}-${item.label}`}
-                    selection={clickable.selection}
-                    label={item.label}
-                    odds={item.odds}
-                    locked={clickable.locked}
-                    isActive={isSelectionActive(match.id, item.label, clickable.selection.market)}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ))}
-        {footerLabel && (
-        <button
-          className="w-full flex items-center justify-between mt-2 text-xs text-gray-700 dark:text-gray-200 px-1 hover:text-brand-600 transition-colors font-bold"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!betsapi && extraRows.length) {
-              setExtrasOpen((open) => !open);
-              return;
-            }
-            onOpenMatch(match.id);
-          }}
-        >
-          <span className="font-bold">{footerLabel}</span>
-          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${!betsapi && extrasOpen ? 'rotate-90' : ''}`} strokeWidth={2.2} />
-        </button>
-        )}
       </div>
     </div>
   );

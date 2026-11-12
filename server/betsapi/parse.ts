@@ -1,3 +1,4 @@
+import { eventsSports, type EventsSportId } from './sportIds.js';
 import { toDecimalOdds } from '../../src/lib/decimalOdds.js';
 import { footballLiveClock } from './liveClock.js';
 import {
@@ -16,7 +17,20 @@ const MARKET_DEFS = [
   { id: '1_2', key: 'asian_handicap', name: 'Asian Handicap' },
 ] as const;
 
-type MarketDef = (typeof MARKET_DEFS)[number];
+type MarketDef = { id: string; key: NormalizedMarket['key']; name: string };
+
+function marketDefs(sportId: EventsSportId): readonly MarketDef[] {
+  if (sportId === FOOTBALL_SPORT_ID) return MARKET_DEFS;
+  return MARKET_DEFS.map((market) => ({
+    ...market,
+    id: `${sportId}_${market.id.slice(2)}`,
+    ...(market.key === '1x2' ? { key: 'moneyline' as const, name: 'Исход' } : {}),
+  }));
+}
+
+function isOutcomeMarket(def: MarketDef): boolean {
+  return def.key === '1x2' || def.key === 'moneyline';
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -129,10 +143,6 @@ function footballScore(
   return parseFootballScore(row.ss) ?? scoreFromPeriods(row.scores);
 }
 
-function sportIsFootball(row: Record<string, unknown>): boolean {
-  return text(row.sport_id ?? row.sportId) === FOOTBALL_SPORT_ID;
-}
-
 function teamOf(value: unknown): { id: string | null; name: string } | null {
   if (typeof value === 'string') {
     const name = value.trim();
@@ -208,12 +218,12 @@ function collectPriced(
   return entries.flatMap(([, value]) => collectPriced(value, bookmakerId, externalPeriodId));
 }
 
-function findMarketNodes(root: Record<string, unknown>): Record<string, unknown> {
+function findMarketNodes(root: Record<string, unknown>, defs: readonly MarketDef[] = MARKET_DEFS): Record<string, unknown> {
   const found: Record<string, unknown> = {};
   const visit = (value: unknown, depth: number) => {
     if (depth > 4 || !isRecord(value)) return;
     for (const [key, nested] of Object.entries(value)) {
-      if (key === '1_1' || key === '1_2' || key === '1_3') {
+      if (defs.some((def) => def.id === key)) {
         if (!(key in found)) found[key] = nested;
         continue;
       }
@@ -293,14 +303,14 @@ function closedMarket(
 }
 
 function lineOf(def: MarketDef, row: Record<string, unknown>): string | null {
-  if (def.key === '1x2') return null;
+  if (isOutcomeMarket(def)) return null;
   const raw = row.handicap ?? row.line ?? row.ha ?? row.hd ?? row.goal_line;
   return def.key === 'over_under' ? normalizeTotalLine(raw) : normalizeHandicapLine(raw);
 }
 
 function rowMatchesMarket(def: MarketDef, row: Record<string, unknown>): boolean {
   const handicap = text(row.handicap ?? row.line ?? row.ha ?? row.hd ?? row.goal_line);
-  if (def.key === '1x2') return !handicap && row.over_od == null && row.under_od == null;
+  if (isOutcomeMarket(def)) return !handicap && row.over_od == null && row.under_od == null;
   if (def.key === 'over_under') return row.draw_od == null || row.over_od != null || row.under_od != null;
   return row.draw_od == null && row.over_od == null && row.under_od == null;
 }
@@ -316,13 +326,18 @@ function marketFromPriced(def: MarketDef, priced: PricedRow): NormalizedMarket {
   };
   if (rowSuspended(row)) return closedMarket(def, line, updatedAt, { ...identity, availability: 'suspended' });
   if (!rowMatchesMarket(def, row)) return closedMarket(def, line, updatedAt, identity);
-  if (def.key !== '1x2' && !line) return closedMarket(def, null, updatedAt, identity);
+  if (!isOutcomeMarket(def) && !line) return closedMarket(def, null, updatedAt, identity);
 
+  // Generic Events handicap rows do not document an unambiguous signed side.
+  if (def.id !== '1_2' && def.key === 'asian_handicap' && line !== '0') {
+    return closedMarket(def, line, updatedAt, { ...identity, availability: 'suspended' });
+  }
   let outcomes: Array<NormalizedOutcome | null>;
-  if (def.key === '1x2') {
+  if (isOutcomeMarket(def)) {
     outcomes = [
       outcome('home', 'Home', readPrice(row, ['home_od', 'home']), selectionId(row, 'home')),
-      outcome('draw', 'Draw', readPrice(row, ['draw_od', 'draw']), selectionId(row, 'draw')),
+      ...(def.key === '1x2' || (row.draw_od != null && text(row.draw_od) !== '') || row.draw != null
+        ? [outcome('draw', 'Draw', readPrice(row, ['draw_od', 'draw']), selectionId(row, 'draw'))] : []),
       outcome('away', 'Away', readPrice(row, ['away_od', 'away']), selectionId(row, 'away')),
     ];
   } else if (def.key === 'over_under') {
@@ -338,7 +353,7 @@ function marketFromPriced(def: MarketDef, priced: PricedRow): NormalizedMarket {
   }
   if (outcomes.some((item) => item == null)) return closedMarket(def, line, updatedAt, identity);
   return {
-    key: def.key,
+    key: def.key === 'moneyline' && outcomes.length === 3 ? '1x2' : def.key,
     name: def.name,
     line,
     status: 'open',
@@ -352,18 +367,27 @@ function marketFromPriced(def: MarketDef, priced: PricedRow): NormalizedMarket {
 }
 
 function latestRows(def: MarketDef, rows: PricedRow[]): NormalizedMarket[] {
-  const grouped = new Map<string, { priced: PricedRow; order: number }>();
+  const grouped = new Map<string, { priced: PricedRow; order: number; conflict?: boolean }>();
   rows.forEach((priced, order) => {
     const line = lineOf(def, priced.row);
-    const key = def.key === '1x2' ? '1x2' : (line ?? '');
+    const key = JSON.stringify([line, priced.bookmakerId, priced.externalPeriodId]);
     const prev = grouped.get(key);
-    if (!prev || rowTime(priced.row) > rowTime(prev.priced.row) || (rowTime(priced.row) === rowTime(prev.priced.row) && order >= prev.order)) {
+    if (!prev || rowTime(priced.row) > rowTime(prev.priced.row)) {
       grouped.set(key, { priced, order });
+    } else if (rowTime(priced.row) === rowTime(prev.priced.row)) {
+      if (def.id.startsWith('1_')) grouped.set(key, { priced, order });
+      else if (JSON.stringify(marketFromPriced(def, prev.priced)) !== JSON.stringify(marketFromPriced(def, priced))) {
+        prev.conflict = true;
+      }
     }
   });
   const markets = [...grouped.values()]
     .sort((left, right) => left.order - right.order)
-    .map((entry) => marketFromPriced(def, entry.priced));
+    .map(({ priced, conflict }) => conflict
+      ? closedMarket(def, lineOf(def, priced.row), unixToIso(priced.row.add_time), {
+        bookmakerId: priced.bookmakerId, externalPeriodId: priced.externalPeriodId, availability: 'suspended',
+      })
+      : marketFromPriced(def, priced));
   return markets.length ? markets : [closedMarket(def, null, null)];
 }
 
@@ -371,11 +395,16 @@ export function eventWithOdds(event: NormalizedEvent, oddsPayload: unknown): Nor
   return { ...event, marketsKnown: true, markets: marketsFromOddsPayload(oddsPayload) };
 }
 
-export function marketsFromOddsPayload(payload: unknown): NormalizedMarket[] {
+export function marketsFromOddsPayload(payload: unknown, sportId: EventsSportId = FOOTBALL_SPORT_ID): NormalizedMarket[] {
+  const defs = marketDefs(sportId);
+  if (sportId !== FOOTBALL_SPORT_ID) {
+    const results = isRecord(payload) && isRecord(payload.results) ? payload.results : null;
+    if (!results || !isRecord(results.stats) || text(results.stats.matching_dir) !== '1') return [];
+  }
   const container = oddsContainer(payload);
-  if (!container) return MARKET_DEFS.map((def) => closedMarket(def, null, null));
-  const nodes = findMarketNodes(container);
-  return MARKET_DEFS.flatMap((def) => {
+  if (!container) return defs.map((def) => closedMarket(def, null, null));
+  const nodes = findMarketNodes(container, defs);
+  return defs.flatMap((def) => {
     if (!(def.id in nodes)) return [closedMarket(def, null, null)];
     return latestRows(def, collectPriced(nodes[def.id], null, null));
   });
@@ -448,7 +477,11 @@ function marketsFromEmbedded(row: Record<string, unknown>): { marketsKnown: bool
 }
 
 export function normalizeFootballEvent(row: unknown, oddsPayload?: unknown, observedAtMs?: number): NormalizedEvent | null {
-  if (!isRecord(row) || !sportIsFootball(row)) return null;
+  return normalizeSportEvent(row, FOOTBALL_SPORT_ID, oddsPayload, observedAtMs);
+}
+
+export function normalizeSportEvent(row: unknown, sportId: EventsSportId, oddsPayload?: unknown, observedAtMs?: number): NormalizedEvent | null {
+  if (!isRecord(row) || text(row.sport_id ?? row.sportId) !== sportId) return null;
   const eventId = text(row.id);
   if (!/^\d+$/.test(eventId)) return null;
   const status = eventStatusOf(row.time_status);
@@ -456,21 +489,23 @@ export function normalizeFootballEvent(row: unknown, oddsPayload?: unknown, obse
   const home = teamOf(row.home);
   const away = teamOf(row.away);
   if (!home || !away) return null;
+  const football = sportId === FOOTBALL_SPORT_ID;
+  if (!football && (!home.id || !away.id || home.id === away.id || !leagueOf(row).id)) return null;
   const priced = oddsPayload === undefined
-    ? marketsFromEmbedded(row)
-    : { marketsKnown: true, markets: marketsFromOddsPayload(oddsPayload) };
+    ? football ? marketsFromEmbedded(row) : { marketsKnown: false, markets: [] }
+    : { marketsKnown: true, markets: marketsFromOddsPayload(oddsPayload, sportId) };
   return {
     eventId,
-    sportId: FOOTBALL_SPORT_ID,
-    sport: 'football',
+    sportId,
+    sport: eventsSports[sportId],
     league: leagueOf(row),
     home,
     away,
     kickoff: unixToIso(row.time),
     status: status.status,
     timeStatus: status.timeStatus,
-    score: footballScore(row, status.status),
-    liveClock: status.status === 'live' ? footballLiveClock(row.timer, observedAtMs) : null,
+    score: football ? footballScore(row, status.status) : parseFootballScore(row.ss),
+    liveClock: football && status.status === 'live' ? footballLiveClock(row.timer, observedAtMs) : null,
     marketsKnown: priced.marketsKnown,
     markets: priced.markets,
     updatedAt: latestIso(priced.markets.map((market) => market.updatedAt)),
@@ -487,6 +522,7 @@ export function normalizeFootballList(
   payload: unknown,
   endpoint: 'inplay' | 'upcoming' | 'ended',
   observedAtMs?: number,
+  sportId: EventsSportId = FOOTBALL_SPORT_ID,
 ): NormalizedEvent[] {
   const allowed: Record<typeof endpoint, EventStatus[]> = {
     inplay: ['live'],
@@ -495,7 +531,7 @@ export function normalizeFootballList(
   };
   const events: NormalizedEvent[] = [];
   for (const row of listRows(payload)) {
-    const event = normalizeFootballEvent(row, undefined, observedAtMs);
+    const event = normalizeSportEvent(row, sportId, undefined, observedAtMs);
     if (!event || !allowed[endpoint].includes(event.status)) continue;
     events.push(event);
   }
@@ -513,8 +549,8 @@ export function normalizeFootballDetails(
   viewPayload: unknown,
   oddsPayload: unknown | null,
   observedAtMs?: number,
+  sportId: EventsSportId = FOOTBALL_SPORT_ID,
 ): NormalizedEvent | null {
   const row = viewRecord(viewPayload);
-  if (oddsPayload == null) return normalizeFootballEvent(row, undefined, observedAtMs);
-  return normalizeFootballEvent(row, oddsPayload, observedAtMs);
+  return normalizeSportEvent(row, sportId, oddsPayload ?? undefined, observedAtMs);
 }

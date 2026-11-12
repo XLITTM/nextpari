@@ -1,4 +1,7 @@
 {
+  "git": {
+    "deploymentEnabled": { "cursor/betsapi-readonly-feed-b001": false }
+  },
   "functions": {
     "api/player/sports/football-feed.ts": {
       "maxDuration": 60

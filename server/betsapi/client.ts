@@ -1,3 +1,4 @@
+import { configuredAdditionalSports, type EventsSportId } from './sportIds.js';
 import {
   BACKOFF_START_MS,
   readRateLimitHeaders,
@@ -69,6 +70,7 @@ interface CacheEntry {
   endpoint: FeedEndpoint;
   rateLimit: RateLimitSnapshot | null;
   pager?: UpcomingPager | null;
+  sportId?: EventsSportId;
 }
 
 export type EventOddsState = OddsDiagnosis | 'rate_limited' | 'stale' | 'upstream';
@@ -134,6 +136,10 @@ export class BetsApiReadOnlyClient {
   private readonly freshMs: Record<CacheKind, number>;
   private readonly staleMs: Record<CacheKind, number>;
   private readonly cache = new Map<string, CacheEntry>();
+  private additionalCursor = 0;
+  private additionalRead: Promise<void> | null = null;
+  private additionalReadAt = 0;
+  private readonly additionalPages = new Map<string, { at: number; feed: FeedResult }>();
   private readonly inflight = new Map<string, Promise<FeedResult>>();
   private readonly oddsCache = new Map<string, OddsCacheEntry>();
   private readonly oddsInflight = new Map<string, Promise<EventOddsRead>>();
@@ -154,19 +160,43 @@ export class BetsApiReadOnlyClient {
     this.staleMs = { ...STALE_MS, ...options.staleMs };
   }
 
-  getInplay(): Promise<FeedResult> {
-    return this.cached('inplay', PATHS.inplay, { sport_id: FOOTBALL_SPORT_ID }, (json) => (
-      normalizeFootballList(json, 'inplay', this.now())
+  additionalSportIds(): EventsSportId[] {
+    return configuredAdditionalSports(this.env.BETSAPI_MULTISPORT_SPORT_IDS ?? '');
+  }
+
+  /** At most one additional phase read per interval, on the existing account budget. */
+  async getAdditionalSports() {
+    const tasks = this.additionalSportIds().flatMap((sportId) => [false, true].map((prematch) => ({ sportId, prematch })));
+    if (tasks.length && !this.additionalRead && !this.budget.coolingDown() &&
+        (!this.additionalReadAt || this.now() - this.additionalReadAt >= 15_000)) {
+      const { sportId, prematch } = tasks[this.additionalCursor++ % tasks.length];
+      this.additionalReadAt = this.now();
+      this.additionalRead = (async () => {
+        const feed = await (prematch ? this.getUpcoming(1, undefined, sportId) : this.getInplay(sportId));
+        this.additionalPages.set(`${sportId}:${prematch}`, { at: this.now(), feed });
+      })().finally(() => { this.additionalRead = null; });
+    }
+    await this.additionalRead;
+    return tasks.map(({ sportId, prematch }) => {
+      const snapshot = this.additionalPages.get(`${sportId}:${prematch}`);
+      const usable = snapshot && this.now() - snapshot.at <= (prematch ? 600_000 : 90_000);
+      return { sportId, prematch, result: usable ? snapshot.feed : null };
+    });
+  }
+
+  getInplay(sportId: EventsSportId = FOOTBALL_SPORT_ID): Promise<FeedResult> {
+    return this.cached('inplay', PATHS.inplay, { sport_id: sportId }, (json) => (
+      normalizeFootballList(json, 'inplay', this.now(), sportId)
     ));
   }
 
-  getUpcoming(page = 1, filters?: { day?: string; skipEsports?: boolean }): Promise<FeedResult> {
+  getUpcoming(page = 1, filters?: { day?: string; skipEsports?: boolean }, sportId: EventsSportId = FOOTBALL_SPORT_ID): Promise<FeedResult> {
     const safePage = Number.isInteger(page) && page >= 1 && page <= 5 ? page : 1;
-    const query: Record<string, string> = { sport_id: FOOTBALL_SPORT_ID, page: String(safePage) };
+    const query: Record<string, string> = { sport_id: sportId, page: String(safePage) };
     if (filters?.skipEsports) query.skip_esports = '1';
     if (filters?.day && /^\d{8}$/.test(filters.day)) query.day = filters.day;
     return this.cached('upcoming', PATHS.upcoming, query, (json) => (
-      normalizeFootballList(json, 'upcoming', this.now())
+      normalizeFootballList(json, 'upcoming', this.now(), sportId)
     ));
   }
 
@@ -368,11 +398,11 @@ export class BetsApiReadOnlyClient {
     });
   }
 
-  getEvent(eventId: string): Promise<FeedResult> {
-    const key = `event:${eventId}`;
+  getEvent(eventId: string, sportId: EventsSportId = FOOTBALL_SPORT_ID): Promise<FeedResult> {
+    const key = `event:${sportId}:${eventId}`;
     const pending = this.inflight.get(key);
     if (pending) return pending;
-    const run = this.loadEvent(eventId).finally(() => {
+    const run = this.loadEvent(eventId, sportId).finally(() => {
       this.inflight.delete(key);
     });
     this.inflight.set(key, run);
@@ -437,13 +467,14 @@ export class BetsApiReadOnlyClient {
       endpoint,
       rateLimit: snapshotOf(observation),
       pager: readUpcomingPager(upstream.json),
+      sportId: query.sport_id as EventsSportId | undefined,
     };
     this.cache.set(key, entry);
     return this.ok(entry, false, false);
   }
 
-  private async loadEvent(eventId: string): Promise<FeedResult> {
-    const viewKey = `event:${eventId}`;
+  private async loadEvent(eventId: string, sportId: EventsSportId): Promise<FeedResult> {
+    const viewKey = `event:${sportId}:${eventId}`;
     const cached = this.cache.get(viewKey) ?? null;
     const age = cached ? this.now() - cached.storedAt : Number.POSITIVE_INFINITY;
     if (cached && age <= this.freshMs.event) return this.ok(cached, false, false);
@@ -462,6 +493,10 @@ export class BetsApiReadOnlyClient {
     const viewObservation = readRateLimitHeaders(view.headers, this.now());
     this.budget.noteQuota(viewObservation);
 
+    const observed = normalizeFootballDetails(view.json, null, this.now(), sportId);
+    if (sportId !== FOOTBALL_SPORT_ID && observed?.eventId !== eventId) {
+      return this.ok({ storedAt: this.now(), events: [], endpoint: 'event', sportId, rateLimit: snapshotOf(viewObservation) }, false, false);
+    }
     let oddsPayload: unknown | null = null;
     let oddsRate: RateLimitSnapshot | null = null;
     let oddsLimited = false;
@@ -477,11 +512,12 @@ export class BetsApiReadOnlyClient {
       oddsPayload = odds.json;
       oddsRate = snapshotOf(observation);
     }
-    const event = normalizeFootballDetails(view.json, oddsLimited ? null : oddsPayload, this.now());
+    const event = normalizeFootballDetails(view.json, oddsLimited ? null : oddsPayload, this.now(), sportId);
     const entry: CacheEntry = {
       storedAt: this.now(),
-      events: event ? [event] : [],
+      events: event?.eventId === eventId ? [event] : [],
       endpoint: 'event',
+      sportId,
       rateLimit: oddsRate ?? snapshotOf(viewObservation),
     };
     this.cache.set(viewKey, entry);
@@ -521,7 +557,7 @@ export class BetsApiReadOnlyClient {
       betting: 'disabled',
       settlement: 'disabled',
       endpoint: entry.endpoint,
-      sportId: FOOTBALL_SPORT_ID,
+      sportId: entry.sportId ?? FOOTBALL_SPORT_ID,
       fetchedAt: at,
       updatedAt: at,
       stale,
@@ -571,6 +607,7 @@ export class BetsApiReadOnlyClient {
       url.search = params.toString();
       const response = await this.fetchImpl(url, {
         headers: { Accept: 'application/json' },
+        redirect: 'error',
         signal: controller.signal,
       });
       const body = await response.text();

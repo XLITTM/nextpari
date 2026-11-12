@@ -183,17 +183,18 @@ export function MatchTracker({
   const minSwipeDistance = 50;
   const isFavorite = useFavoritesStore((s) => s.isMatchFavorite(match.id));
   const toggleMatchFavorite = useFavoritesStore((s) => s.toggleMatchFavorite);
-  const { data: apiExtras } = useMatchWidgetExtras(match.id, true);
+  const slides = match.feedTag === 'betsapi' ? 1 : SLIDE_COUNT;
+  const { data: apiExtras } = useMatchWidgetExtras(match.id, match.feedTag !== 'betsapi');
 
   const fromSs = String(scoreText || '').match(/^(\d+)\s*[-:]\s*(\d+)/);
-  const score1 = fromSs ? fromSs[1] : match.liveScore?.team1 ?? (match.isLive ? 0 : '—');
-  const score2 = fromSs ? fromSs[2] : match.liveScore?.team2 ?? (match.isLive ? 0 : '—');
+  const score1 = fromSs ? fromSs[1] : match.liveScore?.team1 ?? '—';
+  const score2 = fromSs ? fromSs[2] : match.liveScore?.team2 ?? '—';
   const football = sportKind === 'football';
   const apiClock = laterClock(minute, timeStr);
   const { elapsed, running, known } = useTickingClock(
     match.isLive,
     apiClock,
-    match.liveStatus,
+    match.feedTag === 'betsapi' ? undefined : match.liveStatus,
     clockRunning && period !== 'HT',
     period,
     kickoffUnix,
@@ -247,7 +248,7 @@ export function MatchTracker({
   );
 
   const goSlide = (next: number) => {
-    const clamped = Math.max(0, Math.min(SLIDE_COUNT - 1, next));
+    const clamped = Math.max(0, Math.min(slides - 1, next));
     if (clamped !== slide) setIsExpanded(false);
     setSlide(clamped);
   };
@@ -275,7 +276,7 @@ export function MatchTracker({
     setDragPx(0);
     if (axis === 'x' && Math.abs(dx) > 48) {
       setIsExpanded(false);
-      setSlide((current) => Math.max(0, Math.min(SLIDE_COUNT - 1, current + (dx < 0 ? 1 : -1))));
+      setSlide((current) => Math.max(0, Math.min(slides - 1, current + (dx < 0 ? 1 : -1))));
     }
   };
 
@@ -293,6 +294,7 @@ export function MatchTracker({
           <button type="button" onClick={onBack} className="shrink-0 text-white active:scale-90" aria-label="Назад">
             <ArrowLeft className="h-5 w-5" strokeWidth={2.2} />
           </button>
+          {match.competitionLogo && <TeamLogo teamName={match.league} logo={match.competitionLogo} />}
           <p className="min-w-0 truncate text-[14px] font-semibold text-white">{tournamentTitle}</p>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -317,7 +319,7 @@ export function MatchTracker({
         >
           Информация
         </button>
-        <button
+        {match.hasStream && <button
           type="button"
           onClick={() => onHeaderTabChange('stream')}
           className={
@@ -327,7 +329,7 @@ export function MatchTracker({
           }
         >
           Трансляция
-        </button>
+        </button>}
       </div>
 
       <div
@@ -430,7 +432,7 @@ export function MatchTracker({
 
       <div className="relative z-10 flex shrink-0 flex-col">
         <div className="flex items-center justify-center gap-1.5 pb-1" aria-label="Слайды виджета">
-          {Array.from({ length: SLIDE_COUNT }, (_, index) => (
+          {Array.from({ length: slides > 1 ? slides : 0 }, (_, index) => (
             <button
               key={index}
               type="button"
@@ -448,7 +450,7 @@ export function MatchTracker({
         <div className="z-10 flex h-7 items-center justify-between border-t border-white/10 bg-black/40 px-3 text-[12px] text-zinc-200 backdrop-blur-md">
           <p className="min-w-0 truncate">{footerScore}</p>
           <p className="shrink-0 tabular-nums">
-            {match.isLive ? `Прошло  ${clockPlain}` : `Начало  ${clockPlain}`}
+            {match.isLive ? (clockPlain === '—' ? 'LIVE' : `Прошло  ${clockPlain}`) : `Начало  ${clockPlain}`}
           </p>
         </div>
       </div>

@@ -9,6 +9,19 @@ export type SportId =
   | 'table-tennis'
   | 'badminton'
   | 'baseball'
+  | 'handball'
+  | 'darts'
+  | 'american-football'
+  | 'rugby'
+  | 'rugby-league'
+  | 'aussie-rules'
+  | 'floorball'
+  | 'squash'
+  | 'horse-racing'
+  | 'greyhounds'
+  | 'bowls'
+  | 'boxing'
+  | 'gaelic-sports'
   | 'polo'
   | 'cricket'
   | 'beach-volleyball'
@@ -101,6 +114,9 @@ export interface MatchEvent {
   team2: string;
   team1Color: string;
   team2Color: string;
+  competitionLogo?: string;
+  sportsTier?: number;
+  observedMainAt?: string;
   team1Logo?: string;
   team2Logo?: string;
   startTime: number;

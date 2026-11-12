@@ -8,7 +8,7 @@ import { useLiveMatches } from '../LiveMatchesContext';
 import { useLiveOdds } from '../hooks/useLiveOdds';
 import { footballClockLabel } from '../lib/footballClock';
 import { useFootballClockNow } from '../lib/useFootballClock';
-import { isBetsapiMatch, resolveDetailsMatch } from '../lib/footballFeed';
+import { fetchFootballEvent, isBetsapiMatch, resolveDetailsMatch } from '../lib/footballFeed';
 import { bet365Groups, fetchBet365Expanded } from '../lib/bet365View';
 import { matchEventFromStore } from '../lib/liveMatches';
 import { useSportsStore } from '../stores/sportsStore';
@@ -42,7 +42,9 @@ function venueBgClass(kind: VenueSport): string {
 
 export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetailsScreenProps) {
   const { findMatch, ensurePrices } = useLiveMatches();
-  const catalogMatch = findMatch(matchId);
+  const [detail, setDetail] = useState<Awaited<ReturnType<typeof fetchFootballEvent>>>(null);
+  const listed = findMatch(matchId);
+  const catalogMatch = detail?.id === matchId ? detail : listed;
   const storeState = useSportsStore((s) => s.events[matchId]);
   const upsertEvent = useSportsStore((s) => s.upsertEvent);
   const isLive = storeState?.event.time_status === '1' || Boolean(catalogMatch?.isLive);
@@ -86,8 +88,23 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
     void ensurePrices([matchId]);
   }, [catalogMatch, ensurePrices, matchId]);
 
+  const providerMatch = Boolean(listed && isBetsapiMatch(listed)) || /^(?:betsapi:\d{1,3}:)?\d{1,20}$/.test(matchId);
   useEffect(() => {
-    if (!isBetsapiMatch(catalogMatch) || requestedBet365.current === matchId) return;
+    if (!providerMatch) return;
+    const controller = new AbortController();
+    let timer: number | undefined;
+    const load = async () => {
+      const result = await fetchFootballEvent(matchId, controller.signal).catch(() => null);
+      if (controller.signal.aborted) return;
+      setDetail(result);
+      timer = window.setTimeout(() => void load(), result?.isLive ? 15_000 : 45_000);
+    };
+    void load();
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [matchId, providerMatch]);
+
+  useEffect(() => {
+    if (!isBetsapiMatch(catalogMatch) || catalogMatch?.sport !== 'football' || requestedBet365.current === matchId) return;
     requestedBet365.current = matchId;
     const live = Boolean(catalogMatch?.isLive);
     void fetchBet365Expanded(matchId, live).then((result) => {
@@ -130,7 +147,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
     sportKind === 'esports' ? 'Киберспорт' : 'Спорт';
 
   return (
-    <div className="flex min-h-full flex-col bg-[#F5F5F5]">
+    <div className="flex min-h-full flex-col bg-[#F5F5F5] dark:bg-gray-900">
       <MatchTracker
         match={match}
         sportLabel={sportLabel}

@@ -1,21 +1,26 @@
-import { useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { useBetSlip } from '@/BetSlipContext';
 import { useOddInteraction } from '@/hooks/useOddInteraction';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '@/hooks/useOddsFlash';
-import { betsapiDetailLines, betsapiDetailTabs, footballPriceNote, type BetsapiDetailLine } from '@/lib/footballFeed';
+import { betsapiDetailLines, betsapiDetailTabs, type BetsapiDetailLine } from '@/lib/footballFeed';
 import { clickableCardSelection } from '@/lib/sportsSelection';
 import type { BetSelection, MatchEvent } from '@/types';
 
 export function BetsapiMarkets({ match }: { match: MatchEvent }) {
-  const lines = betsapiDetailLines(match);
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const lines = betsapiDetailLines(match, now);
+  const readOnly = match.id.startsWith('betsapi:') || match.sport === 'esports';
   const tabs = betsapiDetailTabs(lines);
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('all');
   const activeTab = tabs.some((item) => item.id === tab) ? tab : 'all';
   const visible = lines.filter((line) => activeTab === 'all' || line.tab === activeTab);
-  const note = footballPriceNote(match.priceState, visible.length > 0);
 
   return (
-    <div className="relative z-10 -mt-4 space-y-2 rounded-t-3xl bg-[#F5F5F5] px-2 pb-24 pt-3 shadow-[0_-8px_20px_rgba(0,0,0,0.12)]">
+    <div className="relative z-10 -mt-4 space-y-2 rounded-t-3xl bg-[#F5F5F5] dark:bg-gray-900 px-2 pb-24 pt-3 shadow-[0_-8px_20px_rgba(0,0,0,0.12)]">
       {tabs.length > 1 && (
         <div className="flex gap-1 overflow-x-auto px-1">
           {tabs.map((item) => (
@@ -23,8 +28,8 @@ export function BetsapiMarkets({ match }: { match: MatchEvent }) {
               key={item.id}
               type="button"
               onClick={() => setTab(item.id)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-bold ${
-                activeTab === item.id ? 'bg-[#22C55E] text-white' : 'bg-white text-[#1A1A1A]'
+              className={`shrink-0 rounded-full border border-gray-200 dark:border-gray-600 px-3 py-1.5 text-xs font-bold ${
+                activeTab === item.id ? 'bg-[#22C55E] text-white' : 'bg-white text-[#1A1A1A] dark:bg-gray-800 dark:text-white'
               }`}
             >
               {item.label}
@@ -33,24 +38,21 @@ export function BetsapiMarkets({ match }: { match: MatchEvent }) {
         </div>
       )}
       {visible.map((line) => (
-        <LineCard key={line.id} line={line} match={match} />
+        <LineCard key={line.id} line={line} match={match} readOnly={readOnly} />
       ))}
       {!visible.length && (
         <p className="py-16 text-center text-sm font-semibold text-[#666666]">
-          {note ?? 'Коэффициенты не опубликованы'}
+          Рынки пока недоступны
         </p>
-      )}
-      {visible.length > 0 && note && (
-        <p className="px-1 pb-2 text-center text-xs font-semibold text-[#666666]">{note}</p>
       )}
     </div>
   );
 }
 
-function LineCard({ line, match }: { line: BetsapiDetailLine; match: MatchEvent }) {
+function LineCard({ line, match, readOnly }: { line: BetsapiDetailLine; match: MatchEvent; readOnly: boolean }) {
   return (
-    <section className="rounded-xl bg-white p-2">
-      <h3 className="px-1 pb-2 text-sm font-semibold text-[#1A1A1A]">{line.title}</h3>
+    <details open={line.tab === 'main'} className="rounded-xl border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-800">
+      <summary className="cursor-pointer px-1 pb-2 text-sm font-semibold text-[#1A1A1A] dark:text-white">{line.title}</summary>
       <div className={`grid gap-1.5 ${line.outcomes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
         {line.outcomes.map((item) => {
           const fromQuote = item.selection || line.tab !== 'main'
@@ -58,6 +60,11 @@ function LineCard({ line, match }: { line: BetsapiDetailLine; match: MatchEvent 
             : clickableCardSelection(match, item.label, '1X2', item.odds);
           const selection = item.selection ?? fromQuote?.selection;
           const locked = Boolean(item.locked) || (fromQuote ? fromQuote.locked || item.odds <= 1 : !selection || item.odds <= 1);
+          if (readOnly) return (
+            <div key={item.label} className="flex justify-between rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-600 dark:text-white">
+              <span>{item.label}</span><strong>{item.odds > 1 ? item.odds : '—'}</strong>
+            </div>
+          );
           if (!selection) return null;
           return (
             <PriceButton
@@ -71,7 +78,7 @@ function LineCard({ line, match }: { line: BetsapiDetailLine; match: MatchEvent 
           );
         })}
       </div>
-    </section>
+    </details>
   );
 }
 

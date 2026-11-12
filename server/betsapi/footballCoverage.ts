@@ -103,15 +103,36 @@ export function upcomingHasAnotherPage(pager: UpcomingPager | null, eventCount: 
   return eventCount >= UPCOMING_PAGE_SIZE;
 }
 
-export function rankFeaturedFootball(events: readonly NormalizedEvent[]): NormalizedEvent[] {
+const majorCompetitions: Readonly<Record<string, ReadonlySet<string>>> = {
+  tennis: new Set(['australian open', 'roland garros', 'french open', 'wimbledon', 'us open', 'atp finals', 'wta finals']),
+  basketball: new Set(['nba', 'usa nba', 'euroleague', 'fiba world cup']),
+  hockey: new Set(['nhl', 'usa nhl', 'iihf world championship']),
+  volleyball: new Set(['volleyball nations league', 'fivb world championship']),
+  handball: new Set(['ehf champions league', 'ihf world championship']),
+  baseball: new Set(['mlb', 'usa mlb', 'world baseball classic']),
+  'table-tennis': new Set(['world table tennis championships', 'ittf world championships']),
+};
+
+export function eventTier(event: NormalizedEvent): number {
+  const name = leagueName(event.league.name);
+  if (event.sport === 'esports' || isEsoccerLeague(name) || isSimulatedLeague(name)) return 3;
+  if (event.sport === 'football') {
+    const tier = footballTier(event.league);
+    return tier === 1 && /\b(?:reserve|reserves|u[12][0-9]|amateur)\b/.test(name) ? 2 : tier;
+  }
+  return majorCompetitions[event.sport]?.has(name) ? 0 : 1;
+}
+
+export function rankFeaturedFootball(events: readonly NormalizedEvent[], includeVirtual = false): NormalizedEvent[] {
   const byId = new Map<string, NormalizedEvent>();
   for (const event of events) {
-    if (isEsoccerLeague(event.league.name) || isSimulatedLeague(event.league.name)) continue;
-    const previous = byId.get(event.eventId);
-    if (!previous || (event.status === 'live' && previous.status !== 'live')) byId.set(event.eventId, event);
+    if (!includeVirtual && eventTier(event) === 3) continue;
+    const key = `${event.sportId}:${event.eventId}`;
+    const previous = byId.get(key);
+    if (!previous || (event.status === 'live' && previous.status !== 'live')) byId.set(key, event);
   }
   return [...byId.values()].sort((left, right) => {
-    const tier = footballTier(left.league) - footballTier(right.league);
+    const tier = eventTier(left) - eventTier(right);
     if (tier !== 0) return tier;
     if (left.status === 'live' && right.status !== 'live') return -1;
     if (right.status === 'live' && left.status !== 'live') return 1;

@@ -27,12 +27,14 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const [matches, setMatches] = useState<MatchEvent[]>(EMPTY_MATCHES);
   const [loading, setLoading] = useState(false);
   const generation = useRef(0);
+  const latest = useRef<MatchEvent[]>(EMPTY_MATCHES);
 
   const applyQuotes = useCallback(async (ids: string[], ticket: number) => {
     if (!ids.length || ticket !== generation.current) return;
     const quotes = await fetchFootballQuotes(ids);
     if (ticket !== generation.current) return;
-    setMatches((current) => applyFootballQuotes(current, quotes));
+    latest.current = applyFootballQuotes(latest.current, quotes);
+    setMatches(latest.current);
     return quotes;
   }, []);
 
@@ -47,11 +49,9 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
     try {
       const listed = await fetchFootballFeed();
       if (ticket !== generation.current) return;
-      let merged: MatchEvent[] = [];
-      setMatches((current) => {
-        merged = mergeListedMatches(current, listed);
-        return merged;
-      });
+      const merged = mergeListedMatches(latest.current, listed);
+      latest.current = merged;
+      setMatches(merged);
       const plan = footballQuoteIds(merged);
       const first = await applyQuotes(plan.primary, ticket);
       const limited = first?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
