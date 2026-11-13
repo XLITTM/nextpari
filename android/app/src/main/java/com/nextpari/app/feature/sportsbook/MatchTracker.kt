@@ -1,6 +1,7 @@
 package com.nextpari.app.feature.sportsbook
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -26,11 +27,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.R
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.feature.home.MatchCardModel
 import com.nextpari.app.feature.home.MatchTeamArtwork
@@ -108,6 +112,28 @@ private fun ScoreTeam(match: MatchCardModel, home: Boolean, modifier: Modifier) 
 
 @Composable
 private fun MatchVenue(sport: String, modifier: Modifier) {
+    if (sport != "football" && sport != "futsal") {
+        CourtBackground(sport, modifier)
+        return
+    }
+    Box(modifier.background(Color(0xFF0A1F12))) {
+        // The original NextPari web match background from .match-bg-football.
+        Image(
+            painter = painterResource(R.drawable.np_match_football_stadium),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.matchParentSize(),
+        )
+        Box(
+            Modifier.matchParentSize().background(
+                Brush.verticalGradient(listOf(Color(0xA405130F), Color(0x65051010), Color(0xB005160D))),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun CourtBackground(sport: String, modifier: Modifier) {
     Canvas(modifier) {
         val w = size.width
         val h = size.height
@@ -128,7 +154,6 @@ private fun MatchVenue(sport: String, modifier: Modifier) {
             "basketball" -> Color(0xFF9C693B)
             "tennis" -> Color(0xFF338079)
             "hockey" -> Color(0xFF9DBCC8)
-            "football", "futsal" -> Color(0xFF32734F)
             else -> Color(0xFF31545B)
         }
         val court = Path().apply {
@@ -144,7 +169,7 @@ private fun MatchVenue(sport: String, modifier: Modifier) {
         drawPath(court, color = ink, style = Stroke(stroke))
         drawLine(ink, point(.5f, .46f), point(.5f, 1f), stroke)
         when (sport) {
-            "football", "futsal", "basketball", "hockey" -> {
+            "basketball", "hockey" -> {
                 drawOval(ink, topLeft = point(.44f, .64f), size = Size(w * .12f, h * .16f), style = Stroke(stroke))
                 drawLine(ink, point(.16f, .69f), point(.30f, .69f), stroke)
                 drawLine(ink, point(.30f, .69f), point(.24f, .89f), stroke)

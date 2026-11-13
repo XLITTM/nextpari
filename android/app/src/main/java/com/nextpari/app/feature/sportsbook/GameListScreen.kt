@@ -99,7 +99,7 @@ fun GameListScreen(
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
                 state = listState,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 items(matches, key = { it.id }) { match ->
                     NextpariMatchCard(

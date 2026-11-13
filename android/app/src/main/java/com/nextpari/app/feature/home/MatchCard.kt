@@ -55,7 +55,7 @@ import com.nextpari.app.feature.sportsbook.SportsRegions
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
 import com.nextpari.app.feature.sportsbook.matchLiveStatus
 
-internal val MatchCardHeight = 168.dp
+internal val MatchCardHeight = 148.dp
 private val MatchCardShape = RoundedCornerShape(18.dp)
 private val MatchCardWidth = 320.dp
 
@@ -95,7 +95,7 @@ fun NextpariMatchCard(
             .clickable(onClickLabel = "Открыть матч", onClick = onOpen),
     ) {
         Row(
-            Modifier.fillMaxWidth().height(36.dp).padding(horizontal = 10.dp),
+            Modifier.fillMaxWidth().height(32.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -114,7 +114,7 @@ fun NextpariMatchCard(
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
-        Row(Modifier.fillMaxWidth().height(51.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             TeamSide(model, home = true, modifier = Modifier.weight(1f))
             Text(
                 if (model.isLive) model.score ?: "—" else "VS",
@@ -124,7 +124,7 @@ fun NextpariMatchCard(
             )
             TeamSide(model, home = false, modifier = Modifier.weight(1f))
         }
-        Box(Modifier.fillMaxWidth().height(21.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxWidth().height(18.dp), contentAlignment = Alignment.Center) {
             val status = if (model.isLive) matchLiveStatus(model) else model.kickoffLabel
             status?.let {
                 Text(
@@ -138,7 +138,7 @@ fun NextpariMatchCard(
                 )
             }
         }
-        Box(Modifier.fillMaxWidth().height(16.dp).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.fillMaxWidth().height(13.dp).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
             model.marketTitle?.let {
                 Text(it, color = colors.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
             }
@@ -216,7 +216,7 @@ private fun OutcomeButton(
     }
     Row(
         modifier
-            .height(36.dp)
+            .height(32.dp)
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, if (dark) Color(0xFF4B5563) else Color(0xFFE5E7EB), RoundedCornerShape(12.dp))
             .background(if (selected) colors.surfaceMuted else if (dark) Color(0xFF0F172A) else Color.White)
@@ -249,8 +249,8 @@ fun MatchCarousel(
         val cardWidth = carouselCardWidth(maxWidth)
         androidx.compose.foundation.lazy.LazyRow(
             state = listState,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             items(matches.size, key = { matches[it].id }) { index ->
                 val match = matches[index]
@@ -291,19 +291,19 @@ fun MatchSkeletonCarousel(count: Int = 2) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val width = carouselCardWidth(maxWidth)
         androidx.compose.foundation.lazy.LazyRow(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             items(count) {
                 Column(
                     Modifier.width(width).height(MatchCardHeight).clip(MatchCardShape).background(card),
                 ) {
-                    Box(Modifier.fillMaxWidth().height(36.dp).background(bar))
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Box(Modifier.fillMaxWidth().height(32.dp).background(bar))
+                    Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                         Box(Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(10.dp)).background(bar))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             repeat(3) {
-                                Box(Modifier.weight(1f).height(36.dp).clip(RoundedCornerShape(10.dp)).background(bar))
+                                Box(Modifier.weight(1f).height(32.dp).clip(RoundedCornerShape(10.dp)).background(bar))
                             }
                         }
                     }

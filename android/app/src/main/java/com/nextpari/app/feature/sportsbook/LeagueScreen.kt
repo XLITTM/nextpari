@@ -59,7 +59,7 @@ fun LeagueScreen(
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
                 state = listState,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 items(matches, key = { it.id }) { match ->
                     NextpariMatchCard(

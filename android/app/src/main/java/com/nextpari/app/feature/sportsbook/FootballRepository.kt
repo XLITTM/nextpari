@@ -279,7 +279,7 @@ internal data class FootballFeedDto(
                     stale -> fixture.locked()
                     issue != null -> fixture.locked(FootballPriceState.Upstream)
                     current.any { it != fixture } -> fixture.locked(FootballPriceState.Unavailable).let {
-                        it.copy(match = it.match.copy(liveClock = null, homeBadgeUrl = null,
+                        it.copy(match = it.match.copy(liveClock = null, period = null, homeBadgeUrl = null,
                             awayBadgeUrl = null, competitionBadge = null, competitionId = null))
                     }
                     else -> fixture
@@ -353,6 +353,9 @@ internal data class FootballEventDto(
         if (readOnly != null && (expectedSport == null || (expectedSport != sport && !(sport == "esports" && tier == 3)))) return null
         val kickoffTime = kickoff?.let { runCatching { Instant.parse(it) }.getOrNull() }
         val kickoffLabel = kickoffTime?.atZone(ZoneId.systemDefault())?.format(kickoffFormat)
+        val clock = if (live && allowClock && sport == "football") {
+            FootballLiveClock.fromWire(liveClock, receiptEpochMs, receiptElapsedMs)
+        } else null
         val badges = FootballBadges.fromCatalog(logos)
         val match = MatchCardModel(
             id = id,
@@ -364,11 +367,11 @@ internal data class FootballEventDto(
             team2 = away,
             isLive = live,
             score = score?.takeIf { it.home >= 0 && it.away >= 0 }?.let { "${it.home} : ${it.away}" },
-            period = period,
+            period = period.takeIf { live && allowClock && (liveClock == null || clock != null) },
             kickoffLabel = kickoffLabel,
             kickoffEpochMs = kickoffTime?.toEpochMilli(),
             marketTitle = "1X2".takeIf { readOnly == null },
-            liveClock = if (live && allowClock && sport == "football") FootballLiveClock.fromWire(liveClock, receiptEpochMs, receiptElapsedMs) else null,
+            liveClock = clock,
             homeBadgeUrl = badges?.home,
             awayBadgeUrl = badges?.away,
             competitionBadge = badges?.competition,

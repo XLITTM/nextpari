@@ -47,6 +47,11 @@ private val majorOtherSports = mapOf(
     "hockey" to setOf("nhl", "iihf world championship", "iihf world championships", "ice hockey world championship"),
 )
 
+private val lowerPriorityFootball = Regex(
+    """\b(?:reserves?|u[- ]?[12][0-9]|under[- ]?[12][0-9]|youth|academy|amateur|club friendl(?:y|ies))\b""",
+)
+private const val FEATURED_LINE_WINDOW_MS = 24 * 60 * 60 * 1_000L
+
 internal object FeaturedSports {
     fun isVirtualFootball(league: String): Boolean =
         normalized(league).substringBefore(' ') in setOf("esoccer", "e-soccer", "virtual", "simulated")
@@ -55,9 +60,11 @@ internal object FeaturedSports {
         (match.sport == "football" && isVirtualFootball(match.league))
 
     fun tier(match: MatchCardModel): Int {
-        match.serverTier?.takeIf { it in 0..3 }?.let { return it }
         if (isEsports(match)) return 3
         val league = normalized(match.league)
+        // Older servers classify youth and club friendlies as ordinary competitions.
+        if (match.sport == "football" && lowerPriorityFootball.containsMatchIn(league)) return 2
+        match.serverTier?.takeIf { it in 0..3 }?.let { return it }
         if (match.sport != "football") return if (league in majorOtherSports[match.sport].orEmpty()) 0 else 1
         if (league in nationalCompetitions || league in internationalClubCompetitions || league in qualifiedDomestic) return 0
         if ((match.competitionId ?: match.competitionBadge?.canonicalId) == BundledFootballBadges.PREMIER_LEAGUE_ID) return 0
@@ -65,6 +72,15 @@ internal object FeaturedSports {
         if (country != null && majorDomestic[league] == country) return 0
         return if (league in lowerFootball) 2 else 1
     }
+
+    fun popularLive(matches: List<MatchCardModel>): List<MatchCardModel> =
+        ordered(matches.filter { it.isLive && tier(it) < 3 })
+
+    fun popularLine(matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> =
+        matches.filter { match ->
+            !match.isLive && tier(match) < 3 &&
+                match.kickoffEpochMs?.let { it > nowMs && it <= nowMs + FEATURED_LINE_WINDOW_MS } == true
+        }.sortedWith(compareBy<MatchCardModel>(::tier).thenBy { it.kickoffEpochMs })
 
     fun ordered(matches: List<MatchCardModel>): List<MatchCardModel> {
         val ranks = matches.map(::tier)

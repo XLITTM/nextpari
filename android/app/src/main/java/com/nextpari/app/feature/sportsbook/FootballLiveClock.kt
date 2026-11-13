@@ -22,7 +22,7 @@ private const val MAX_SECONDS = 130 * 60 + 59
 
 data class FootballLiveClock private constructor(
     private val elapsedSeconds: Int,
-    internal val running: Boolean,
+    private val running: Boolean,
     private val ageAtReceiptMs: Long,
     private val receiptElapsedMs: Long,
 ) {
@@ -80,15 +80,16 @@ private fun footballLiveMinute(match: MatchCardModel): String? {
 internal fun matchLiveStatus(match: MatchCardModel): String? {
     if (!match.isLive) return null
     val time = footballLiveMinute(match)
-    val period = match.period?.trim()?.takeIf { it.isNotEmpty() && !it.equals("LIVE", ignoreCase = true) }
-    if (time == null) return period
-    val minute = time.substringBefore(':').toIntOrNull()
-    val state = period ?: when {
-        match.liveClock?.running == false -> "Пауза"
-        minute != null && minute in 0..44 -> "1-й тайм"
-        // Leave room for first-half stoppage time. The feed does not publish a separate phase.
-        minute != null && minute in 55..89 -> "2-й тайм"
+    if (match.liveClock != null && time == null) return null
+    return liveStatusText(match.period, time)
+}
+
+internal fun liveStatusText(period: String?, time: String?): String? {
+    val phase = when (period?.trim()) {
+        "first_half", "1-й тайм" -> "1-й тайм"
+        "second_half", "2-й тайм" -> "2-й тайм"
+        "half_time", "Перерыв" -> "Перерыв"
         else -> null
     }
-    return listOfNotNull(state, time).distinct().joinToString(" · ")
+    return listOfNotNull(phase, time).joinToString(" · ").ifEmpty { null }
 }

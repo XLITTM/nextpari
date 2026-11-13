@@ -30,7 +30,7 @@ class SportsPresentationTest {
         val basketball = nations.copy(id = "105", league = "NBA", sport = "basketball")
         val verified = listOf(basketball, nations, youth, reserve, low)
         assertEquals(verified, FeaturedSports.ordered(verified))
-        assertEquals(listOf(nations, basketball, reserve, youth, low, virtual),
+        assertEquals(listOf(nations, basketball, low, reserve, youth, virtual),
             FeaturedSports.ordered(listOf(virtual, low, reserve, nations, youth, basketball)))
         assertEquals("EU", HomeChampionships.groups(listOf(virtual, reserve, nations), true).first().country)
         assertTrue(FeaturedSports.isEsports(virtual))
@@ -44,6 +44,38 @@ class SportsPresentationTest {
         val late = early.copy(id = "2", kickoffEpochMs = 2L)
         val other = early.copy(id = "3", league = "Regional Cup")
         assertEquals(listOf(early, late, other), FeaturedSports.ordered(listOf(other, late, early)))
+    }
+
+    @Test
+    fun featuredSectionsRankRealMajorEventsAndLimitLineToTheNextDay() {
+        val now = 1_000_000L
+        val nextDay = now + 86_400_000
+        val youth = nations.copy(id = "200", league = "U-20 World Cup", serverTier = 1)
+        val nba = nations.copy(id = "201", sport = "basketball", league = "NBA", serverTier = 0)
+        val friendly = nations.copy(id = "202", league = "Club Friendlies", serverTier = 1)
+        val virtual = nations.copy(id = "203", league = "Esoccer GT Leagues", serverTier = 1)
+        assertEquals(listOf(nba, nations, youth, friendly),
+            FeaturedSports.popularLive(listOf(youth, nba, virtual, friendly, nations)))
+
+        val early = friendly.copy(isLive = false, kickoffEpochMs = now + 1)
+        val major = nba.copy(isLive = false, kickoffEpochMs = nextDay)
+        val past = nations.copy(isLive = false, kickoffEpochMs = now)
+        val later = nations.copy(isLive = false, kickoffEpochMs = nextDay + 1)
+        assertEquals(listOf(major, early), FeaturedSports.popularLine(
+            listOf(early, past, major, later, nations, virtual.copy(isLive = false, kickoffEpochMs = now + 1),
+                youth.copy(isLive = false, kickoffEpochMs = null)),
+            now,
+        ))
+    }
+
+    @Test
+    fun liveStatusShowsOnlyKnownPhaseAndObservedTime() {
+        assertEquals("1-й тайм · 34:12", liveStatusText("first_half", "34:12"))
+        assertEquals("2-й тайм · 63:38", liveStatusText("second_half", "63:38"))
+        assertEquals("2-й тайм", liveStatusText("second_half", null))
+        assertEquals("63:38", liveStatusText(null, "63:38"))
+        assertNull(liveStatusText("LIVE", null))
+        assertNull(liveStatusText(null, null))
     }
 
     @Test
@@ -77,7 +109,7 @@ class SportsPresentationTest {
         assertEquals(288.dp, carouselCardWidth(320.dp))
         assertEquals(320.dp, carouselCardWidth(360.dp))
         assertEquals(320.dp, carouselCardWidth(412.dp))
-        assertEquals(168.dp, MatchCardHeight)
+        assertEquals(148.dp, MatchCardHeight)
         val source = File("src/main/java/com/nextpari/app/feature/home/MatchCard.kt").readText()
         assertEquals(2, Regex("\\.height\\(MatchCardHeight\\)").findAll(source).count())
         assertFalse(source.contains("priceNote"))
