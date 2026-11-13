@@ -11,6 +11,7 @@ import { asRecord, createSoftAggregator } from './softAggregator.js';
 import { handleWalletCallback, walletError, type WalletReply } from './softAggregatorTestWallet.js';
 
 const provider = createSoftAggregator(process.env, fetch, Date.now, 'standard');
+const previewCatalog = createSoftAggregator(process.env, fetch, Date.now, 'preview-catalog');
 const headers = {
   'Cache-Control': 'private, no-store, max-age=0',
   'Referrer-Policy': 'no-referrer',
@@ -48,6 +49,14 @@ export async function standardCasinoVercel(
   const env = process.env;
   let cookies: string[] | undefined;
   try {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    if (env.VERCEL_ENV === 'preview' && env.VERCEL_GIT_COMMIT_REF === 'work/casino-demo-softaggregator-w001' &&
+        env.SOFTAGGREGATOR_TEST_CATALOG_PREVIEW === '1' && env.SOFTAGGREGATOR_REAL_CATALOG_ENABLED !== '1' &&
+        req.method === 'GET' && url.searchParams.get('quote') !== '1') {
+      const catalog = await previewCatalog.list(url.searchParams);
+      writeStaffJson(res, { status: 200, headers, body: { ok: true, launchEnabled: false, catalogPreview: true, ...catalog } });
+      return;
+    }
     if (env.SOFTAGGREGATOR_REAL_CATALOG_ENABLED !== '1') throw staffError('CASINO_STANDARD_DISABLED', 503);
     const raw = value(req.headers, 'cookie');
     const parsed = readPlayerCookies(raw);
@@ -56,7 +65,6 @@ export async function standardCasinoVercel(
     const session = await resolvePlayerSession(ports, raw, requestIsSecure(req.headers));
     cookies = session.cookies;
     const { id: player } = await ports.getAuthUser(session.accessToken);
-    const url = new URL(req.url ?? '/', 'http://localhost');
     const pilot = env.SOFTAGGREGATOR_REAL_PILOT_PLAYER;
     const launchEnabled = (env.VERCEL_ENV === 'production' || (env.VERCEL_ENV === 'preview' && pilot === player)) &&
       env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED === '1' &&

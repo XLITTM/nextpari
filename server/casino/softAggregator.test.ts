@@ -137,3 +137,32 @@ test('standard catalog includes authorized games without demo support and requir
     'mobile', 'https://nextpari.net');
   assert.deepEqual(methods, ['getGameList', 'getCurrencies', 'createPlayer', 'getGame']);
 });
+
+test('casino branch Preview can browse existing provider metadata but cannot launch games', async () => {
+  const methods: string[] = [];
+  const settings = {
+    ...env, VERCEL_ENV: 'preview', VERCEL_GIT_COMMIT_REF: 'work/casino-demo-softaggregator-w001',
+    SOFTAGGREGATOR_TEST_CATALOG_PREVIEW: '1',
+  };
+  const fetcher: typeof fetch = async (_url, request) => {
+    const body = JSON.parse(String(request?.body));
+    methods.push(body.method);
+    assert.equal(body.api_login, env.SOFTAGGREGATOR_DEMO_LOGIN);
+    return Response.json({ error: 0, response: [
+      { ...demo, play_for_fun_supported: false },
+      { ...demo, game_type: 'live', id_hash: 'another/Live', provider: 'another' },
+    ] });
+  };
+  const preview = createSoftAggregator(settings, fetcher, Date.now, 'preview-catalog');
+  const data = await preview.list(new URLSearchParams('category=slots'));
+  assert.equal(data.total, 1);
+  assert.equal(data.games[0].demo, false);
+  assert.deepEqual(data.providers.map(({ id }) => id), [demo.provider]);
+  await assert.rejects(preview.standardGame(data.games[0].id), /CASINO_STANDARD_DISABLED/);
+  await assert.rejects(preview.launch(data.games[0].id, 'mobile', 'https://nextpari.net'), /CASINO_STANDARD_DISABLED/);
+  await assert.rejects(createSoftAggregator({ ...settings, VERCEL_ENV: 'production' }, fetcher, Date.now, 'preview-catalog')
+    .list(new URLSearchParams()), /CASINO_DEMO_DISABLED/);
+  await assert.rejects(createSoftAggregator({ ...settings, VERCEL_GIT_COMMIT_REF: 'main' }, fetcher, Date.now, 'preview-catalog')
+    .list(new URLSearchParams()), /CASINO_DEMO_DISABLED/);
+  assert.deepEqual(methods, ['getGameList']);
+});

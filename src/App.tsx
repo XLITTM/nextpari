@@ -536,7 +536,19 @@ function AppContent() {
       case 'casino-demo':
         return <div className="py-2"><CasinoDemoBack onBack={goBack} /><CasinoDemoCatalog onNavigate={setScreen} /></div>;
       case 'casino-real':
-        return <div className="py-2"><CasinoDemoBack onBack={goBack} /><CasinoDemoCatalog key={screen.category} standard categoryFilter={screen.category} onNavigate={setScreen} /></div>;
+        return (
+          <div className="py-2">
+            <CasinoDemoBack onBack={goBack} />
+            <nav aria-label="Каталог казино" className="flex gap-2 px-4 pb-3">
+              {([['slots', 'Слоты'], ['live', 'Лайв казино']] as const).map(([category, label]) => (
+                <button key={category} type="button" aria-pressed={screen.category === category}
+                  className="rounded-xl border border-[var(--np-border)] px-3 py-2 text-sm aria-pressed:bg-emerald-400 aria-pressed:text-emerald-950"
+                  onClick={() => setScreen({ name: 'casino-real', category })}>{label}</button>
+              ))}
+            </nav>
+            <CasinoDemoCatalog key={screen.category} standard categoryFilter={screen.category} onNavigate={setScreen} />
+          </div>
+        );
       case 'casino-demo-game':
         return <CasinoDemoGameScreen key={pathForScreen(screen)} gameId={screen.gameId} standard={screen.standard}
           onBack={() => { if (screen.standard) void refreshWallet(); goBack(); }} />;

@@ -18,7 +18,7 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
   const [page, setPage] = useState(1);
   const [retry, setRetry] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'disabled'>('loading');
-  const [data, setData] = useState<(Catalog & { conversion?: CasinoConversion; launchEnabled?: boolean }) | null>(null);
+  const [data, setData] = useState<(Catalog & { conversion?: CasinoConversion; launchEnabled?: boolean; catalogPreview?: boolean }) | null>(null);
   const [games, setGames] = useState<CasinoDemoGame[]>([]);
 
   useEffect(() => {
@@ -27,7 +27,7 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
       const params = new URLSearchParams({ q: query, category: categoryFilter ?? category, provider, page: String(page) });
       fetch((standard ? casinoRealApi : casinoDemoApi) + '?' + params, { signal: controller.signal, cache: 'no-store' })
         .then(async (response) => {
-          const result = await response.json() as Catalog & { error?: string; conversion?: CasinoConversion; launchEnabled?: boolean };
+          const result = await response.json() as Catalog & { error?: string; conversion?: CasinoConversion; launchEnabled?: boolean; catalogPreview?: boolean };
           if (controller.signal.aborted) return;
           if (result.error === 'CASINO_DEMO_DISABLED' || result.error === 'CASINO_STANDARD_DISABLED' ||
               (hideUnavailable && !response.ok)) {
@@ -63,6 +63,9 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
         <h2 className="text-lg font-extrabold" id={standard ? 'casino-standard-title' : 'casino-demo-title'}>{standard ? (categoryFilter === 'live' ? 'Лайв казино' : categoryFilter === 'slots' ? 'Слоты' : 'SoftAggregator') : 'Демо-игры'}</h2>
         <span className="text-xs font-medium text-[var(--np-text-secondary)]">{standard ? 'Игровая валюта USD' : 'Без списания средств'}</span>
       </div>
+      {data?.catalogPreview && (
+        <p role="status" className="text-sm text-[var(--np-text-secondary)]">Предпросмотр каталога. Запуск игр отключён.</p>
+      )}
       {standard && data?.conversion && (
         <div role="status" className="rounded-xl border border-[var(--np-border)] p-3 text-sm">
           <p>Ваш баланс отображается в USD по курсу NextPari. Кошелёк ведётся в TMT.</p>
