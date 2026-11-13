@@ -57,8 +57,8 @@ export interface FootballOddsQuote {
 
 function feedFreshness(result: FeedResult, partial: boolean): 'fresh' | 'stale' | 'partial' | 'absent' {
   if (!result.ok || !result.feed) return 'absent';
-  if (result.feed.stale) return 'stale';
   if (partial) return 'partial';
+  if (result.feed.stale) return 'stale';
   return 'fresh';
 }
 
