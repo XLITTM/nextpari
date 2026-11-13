@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -13,13 +14,19 @@ import kotlinx.coroutines.launch
 
 class WalletsViewModel(
     private val repository: WalletsRepository,
+    walletUpdates: Flow<Long>? = null,
 ) : ViewModel() {
     private val ui = MutableStateFlow(loadState())
     val uiState: StateFlow<WalletsUiState> = ui.asStateFlow()
+    private var refreshQueued = false
+
+    init {
+        if (walletUpdates != null) viewModelScope.launch { walletUpdates.collect { publishOwned() } }
+    }
 
     fun refresh() {
         if (ui.value.busy) {
-            publishOwned()
+            refreshQueued = true
             return
         }
         publishOwned()
@@ -77,6 +84,10 @@ class WalletsViewModel(
                 completedMutations = if (closeMenu) it.completedMutations + 1 else it.completedMutations,
             )
         }
+        if (refreshQueued) {
+            refreshQueued = false
+            refresh()
+        }
     }
 
     private fun publishOwned() {
@@ -101,7 +112,7 @@ class WalletsViewModel(
         val Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return WalletsViewModel(AppGraph.walletsRepository) as T
+                return WalletsViewModel(AppGraph.walletsRepository, AppGraph.playerStateStore.walletRevision) as T
             }
         }
     }

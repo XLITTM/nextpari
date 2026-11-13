@@ -11,9 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
@@ -35,6 +36,7 @@ import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
 import com.nextpari.app.feature.home.NextpariMatchCard
+import com.nextpari.app.feature.home.TrackFootballViewport
 
 @Composable
 fun GameListScreen(
@@ -46,8 +48,14 @@ fun GameListScreen(
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(if (initialMode == "line") "line" else "live") }
-    var actionNotice by rememberSaveable { mutableStateOf("") }
-    val matches = viewModel.pool(tab)
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val football = viewModel.state.collectAsStateWithLifecycle().value
+    val realMatches = viewModel.pool(tab).filterNot(FeaturedSports::isEsports)
+    val matches = SportsbookCatalog.search(realMatches, query)
+
+    val listState = rememberLazyListState()
+    TrackFootballViewport(listState, viewModel::visibleMatches)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFE5E7EB))) {
         Column(Modifier.background(if (dark) Color(0xFF1E293B) else Color.White)) {
@@ -55,10 +63,14 @@ fun GameListScreen(
                 title = "Список игр",
                 onBack = onBack,
                 actions = listOf(NextpariWebIcons.Search to "Поиск"),
-                onAction = { actionNotice = sportsActionMessage(it) },
+                onAction = {
+                    searching = !searching
+                    if (!searching) query = ""
+                },
             )
-            if (actionNotice.isNotBlank()) {
-                Text(actionNotice, color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            if (searching) {
+                OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Поиск матчей") },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
             }
             Row(
                 Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth(),
@@ -68,10 +80,11 @@ fun GameListScreen(
                 GameListTab("Линия", tab == "line", Modifier.weight(1f)) { tab = "line" }
             }
         }
+        FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
         when {
-            viewModel.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
-            matches.isEmpty() -> Text(
-                "Сейчас матчей нет",
+            football.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
+            matches.isEmpty() && !footballFeedFailed(football) -> Text(
+                if (query.isBlank()) "Сейчас матчей нет" else "Матчи не найдены",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
@@ -79,14 +92,18 @@ fun GameListScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
             )
             else -> LazyColumn(
-                Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 12.dp),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 items(matches, key = { it.id }) { match ->
                     NextpariMatchCard(
                         model = match,
                         carousel = false,
                         onOpen = { onNavigate(Destinations.match(match.id)) },
+                        onToggleFavorite = { viewModel.toggleMatchFavorite(match.id) },
+                        selectedOdds = football.selectedKeys,
+                        onOddSelected = viewModel::toggle,
                     )
                 }
             }
@@ -108,7 +125,7 @@ private fun GameListTab(label: String, active: Boolean, modifier: Modifier, onCl
     ) {
         Text(
             label,
-            color = if (active) Color.White else if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
+            color = if (active) colors.accentInk else if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
         )

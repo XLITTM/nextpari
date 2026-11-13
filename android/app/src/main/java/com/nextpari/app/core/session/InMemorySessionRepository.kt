@@ -14,7 +14,7 @@ class InMemorySessionRepository : SessionRepository {
     override val session: StateFlow<AuthSession> = state.asStateFlow()
     override val ready: StateFlow<Boolean> = readyState.asStateFlow()
 
-    override suspend fun setSession(session: AuthSession) {
+    override fun setSession(session: AuthSession) {
         state.value = session
     }
 

@@ -30,11 +30,6 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 
 val SportsbookGold = Color(0xFFD9822B)
 
-fun sportsActionMessage(label: String): String = when (label) {
-    "Трансляции" -> "Трансляции недоступны: провайдер не подключён."
-    else -> "Поиск событий недоступен: лента матчей не подключена."
-}
-
 @Composable
 fun SportsbookScreenHeader(
     title: String,
@@ -53,7 +48,7 @@ fun SportsbookScreenHeader(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(40.dp).clickable(onClick = onBack), contentAlignment = Alignment.Center) {
-            Icon(NextpariWebIcons.ChevronLeft, contentDescription = "Назад", tint = Color(0xFF6B7280), modifier = Modifier.size(24.dp))
+            Icon(NextpariWebIcons.ChevronLeft, contentDescription = "Назад", tint = colors.textSecondary, modifier = Modifier.size(24.dp))
         }
         Text(
             title,
@@ -71,7 +66,7 @@ fun SportsbookScreenHeader(
             } else {
                 actions.forEach { (icon, desc) ->
                     Box(Modifier.size(36.dp).clickable { onAction(desc) }, contentAlignment = Alignment.Center) {
-                        Icon(icon, contentDescription = desc, tint = Color(0xFF6B7280), modifier = Modifier.size(20.dp))
+                        Icon(icon, contentDescription = desc, tint = colors.textSecondary, modifier = Modifier.size(20.dp))
                     }
                 }
             }
@@ -108,7 +103,7 @@ fun SportsbookSegmentedTabs(
             ) {
                 Text(
                     label,
-                    color = if (active) Color.White else Color(0xFF6B7280),
+                    color = if (active) Color.White else colors.textSecondary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                 )

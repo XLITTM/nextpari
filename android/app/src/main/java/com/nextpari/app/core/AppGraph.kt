@@ -34,6 +34,8 @@ import com.nextpari.app.feature.history.HistoryRepository
 import com.nextpari.app.feature.history.RemoteHistoryRepository
 import com.nextpari.app.feature.home.FakeHomeCatalogRepository
 import com.nextpari.app.feature.home.HomeCatalogRepository
+import com.nextpari.app.feature.sportsbook.FootballRepository
+import com.nextpari.app.feature.sportsbook.RemoteFootballRepository
 import com.nextpari.app.feature.profile.FakePersonalDataRepository
 import com.nextpari.app.feature.profile.PersonalDataRepository
 import com.nextpari.app.feature.profile.RemotePersonalDataRepository
@@ -79,6 +81,8 @@ object AppGraph {
     var sportsFavorites: SportsFavoritesStore = SportsFavoritesStore(preferencesStorage)
         private set
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
+    var footballRepository: FootballRepository? = null
+        private set
     private var sessionCoordinator: PlayerSessionCoordinator? = null
     private var secureCookieJar: SecureCookieJar? = null
     private val restorePhase = MutableStateFlow(SessionRestorePhase.Checking)
@@ -108,9 +112,6 @@ object AppGraph {
         val coordinator = sessionCoordinator ?: return
         appScope.launch { coordinator.refreshPlayerState() }
     }
-
-    fun applyServerBalance(balanceAfter: Double, walletId: String = ""): Boolean =
-        sessionCoordinator?.applyBalanceAfter(balanceAfter, walletId) ?: false
 
     fun bindFromApplication(app: Application) {
         bindPreferences(DataStorePreferencesStorage(app))
@@ -144,9 +145,11 @@ object AppGraph {
             api = api,
             json = NetworkModule.json,
             hasSession = { cookieJar.hasPlayerSessionCookies() },
+            onUnauthorized = coordinator::onUnauthorized,
         )
         personalDataRepository = RemotePersonalDataRepository(playerStateStore, api, NetworkModule.json, sessionReady)
         gameRepository = RemoteGameRepository(api, NetworkModule.json)
+        footballRepository = RemoteFootballRepository(api, NetworkModule.json)
         sessionRepository.setReady(false)
         restorePhase.value = SessionRestorePhase.Checking
         restoreDetail.value = null

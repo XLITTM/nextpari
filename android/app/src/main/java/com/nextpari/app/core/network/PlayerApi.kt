@@ -1,5 +1,6 @@
 package com.nextpari.app.core.network
 
+import com.nextpari.app.core.network.session.WalletResponseScope
 import kotlinx.serialization.json.JsonObject
 import retrofit2.Response
 import retrofit2.http.Body
@@ -7,8 +8,24 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
+import retrofit2.http.Tag
 
 interface PlayerApi {
+    @GET("api/player/casino/real")
+    suspend fun casinoRealCatalog(
+        @Query("q") query: String,
+        @Query("category") category: String,
+        @Query("page") page: Int,
+    ): Response<com.nextpari.app.feature.casino.CasinoDemoPage>
+
+    @GET("api/player/casino/demo")
+    suspend fun casinoDemoCatalog(
+        @Query("q") query: String,
+        @Query("category") category: String,
+        @Query("page") page: Int,
+    ): Response<com.nextpari.app.feature.casino.CasinoDemoPage>
+
     @POST("api/player/auth/login")
     suspend fun login(@Body body: JsonObject): Response<JsonObject>
 
@@ -19,16 +36,16 @@ interface PlayerApi {
     suspend fun logout(): Response<JsonObject>
 
     @GET("api/player/me")
-    suspend fun me(): Response<JsonObject>
+    suspend fun me(@Tag scope: WalletResponseScope? = null): Response<JsonObject>
 
     @GET("api/player/profile")
-    suspend fun profile(): Response<JsonObject>
+    suspend fun profile(@Tag scope: WalletResponseScope? = null): Response<JsonObject>
 
     @GET("api/player/wallet")
     suspend fun wallet(): Response<JsonObject>
 
     @GET("api/player/wallets")
-    suspend fun wallets(): Response<JsonObject>
+    suspend fun wallets(@Tag scope: WalletResponseScope? = null): Response<JsonObject>
 
     @POST("api/player/wallets/add")
     suspend fun addWallet(@Body body: JsonObject): Response<JsonObject>
@@ -92,6 +109,18 @@ interface PlayerApi {
 
     @POST("api/player/crypto/usdt-quote")
     suspend fun usdtQuote(@Body body: JsonObject): Response<JsonObject>
+
+    @GET("api/player/sports/football-feed")
+    suspend fun footballFeed(
+        @Query("eventId") eventId: String? = null,
+        @Query("includeSports") includeSports: String? = null,
+    ): Response<JsonObject>
+
+    @GET("api/player/sports/football-feed")
+    suspend fun footballOdds(@Query("oddsFor") eventIds: String): Response<JsonObject>
+
+    @POST("api/player/sports/place")
+    suspend fun placeSportsBet(@Body body: JsonObject): Response<JsonObject>
 
     @GET("api/player/sports/bets")
     suspend fun sportsBets(): Response<JsonObject>

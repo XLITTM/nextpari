@@ -1,5 +1,11 @@
 package com.nextpari.app.feature.home
 
+import com.nextpari.app.feature.sportsbook.FeaturedSports
+import com.nextpari.app.feature.sportsbook.FootballCompetitionBadge
+import com.nextpari.app.feature.sportsbook.FootballLiveClock
+import com.nextpari.app.feature.sportsbook.MatchInsights
+import com.nextpari.app.feature.sportsbook.SportsBetSelection
+
 enum class OddsMovement { None, Up, Down }
 
 data class MatchOutcome(
@@ -7,6 +13,7 @@ data class MatchOutcome(
     val odds: String? = null,
     val locked: Boolean = false,
     val movement: OddsMovement = OddsMovement.None,
+    val selection: SportsBetSelection? = null,
 )
 
 data class MatchCardModel(
@@ -27,6 +34,16 @@ data class MatchCardModel(
     val outcomes: List<MatchOutcome> = emptyList(),
     val extraMarkets: Int = 0,
     val isFavorite: Boolean = false,
+    val priceNote: String? = null,
+    val liveClock: FootballLiveClock? = null,
+    val homeBadgeUrl: String? = null,
+    val awayBadgeUrl: String? = null,
+    val competitionBadge: FootballCompetitionBadge? = null,
+    val competitionId: String? = null,
+    val hasLogoCatalog: Boolean = false,
+    val kickoffEpochMs: Long? = null,
+    val serverTier: Int? = null,
+    val insights: MatchInsights? = null,
 )
 
 data class ChampionshipRow(
@@ -60,7 +77,7 @@ object ChampionshipColors {
 
 object ChampionshipsMapper {
     fun fromLive(matches: List<MatchCardModel>, excludeEsports: Boolean = false): List<ChampionshipRow> {
-        val source = if (excludeEsports) matches.filter { it.sport != "esports" } else matches
+        val source = FeaturedSports.ordered(if (excludeEsports) matches.filterNot(FeaturedSports::isEsports) else matches)
         return source
             .groupBy { "${it.country}|${it.league}" }
             .map { (_, group) ->
@@ -73,7 +90,6 @@ object ChampionshipsMapper {
                     color = ChampionshipColors.colorFromName(first.league),
                 )
             }
-            .sortedByDescending { it.count }
             .take(8)
     }
 }
@@ -81,22 +97,13 @@ object ChampionshipsMapper {
 object SportsbookFilters {
     fun matchesForSport(matches: List<MatchCardModel>, sportId: String, excludeEsportsWhenAll: Boolean): List<MatchCardModel> {
         val bySport = if (sportId == "all") matches else matches.filter { it.sport == sportId }
-        return if (excludeEsportsWhenAll && sportId == "all") bySport.filter { it.sport != "esports" } else bySport
+        return if (excludeEsportsWhenAll && sportId == "all") bySport.filterNot(FeaturedSports::isEsports) else bySport
     }
 }
 
 object HomeSectionOrder {
-    val top = listOf(
-        "sports",
-        "promos",
-        "live",
-        "line",
-        "champs",
-        "esports-disciplines",
-        "esports-live",
-        "esports-line",
-    )
-    val sport = listOf("sports", "live", "line", "champs")
+    val sport = listOf("sports", "promos", "live", "line", "champs")
+    val top = sport + listOf("esports-disciplines", "esports-live", "esports-line")
     val esports = listOf("esports-disciplines", "esports-live", "esports-line", "esports-tournaments")
     val casino = listOf("casino-entries", "casino-featured", "casino-tournaments", "casino-categories")
 

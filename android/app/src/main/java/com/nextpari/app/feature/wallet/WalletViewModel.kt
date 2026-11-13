@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.feature.wallets.WalletsCatalog
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +15,7 @@ import java.util.UUID
 
 class WalletViewModel(
     private val repository: WalletRepository,
+    walletUpdates: Flow<Long>? = null,
 ) : ViewModel() {
     private val ui = MutableStateFlow(initialState())
     val uiState: StateFlow<WalletUiState> = ui.asStateFlow()
@@ -22,6 +24,9 @@ class WalletViewModel(
 
     init {
         refreshLocal()
+        if (walletUpdates != null) viewModelScope.launch {
+            walletUpdates.collect { ui.update(::withCurrentWallet) }
+        }
     }
 
     fun openDeposit() {
@@ -200,6 +205,16 @@ class WalletViewModel(
         }
     }
 
+    private fun withCurrentWallet(state: WalletUiState): WalletUiState {
+        val snapshot = repository.snapshot()
+        return state.copy(
+            balanceLabel = WalletCatalog.balanceText(snapshot.displayBalance, WalletsCatalog.displayCurrency(snapshot.currency)),
+            currency = snapshot.currency,
+            publicId = repository.publicId(),
+            available = repository.availableAmount(),
+        )
+    }
+
     private fun refreshLocal() {
         val snapshot = repository.snapshot()
         ui.value = initialState().copy(
@@ -237,7 +252,7 @@ class WalletViewModel(
         val Factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                return WalletViewModel(AppGraph.walletRepository) as T
+                return WalletViewModel(AppGraph.walletRepository, AppGraph.playerStateStore.walletRevision) as T
             }
         }
     }

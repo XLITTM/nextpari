@@ -9,6 +9,8 @@ data class LeagueRow(
     val country: String,
     val count: Int,
     val favorite: Boolean = false,
+    val badge: FootballCompetitionBadge? = null,
+    val badgeRes: Int? = null,
 )
 
 data class CountryGroup(
@@ -39,6 +41,8 @@ data class MarketOutcome(
     val odds: String? = null,
     val locked: Boolean = false,
     val movement: OddsMovement = OddsMovement.None,
+    val selection: SportsBetSelection? = null,
+    val observedUntil: Long? = null,
 )
 
 data class MarketGroup(
@@ -68,22 +72,36 @@ object LeagueIds {
 object CountryGrouping {
     fun groupByCountry(matches: List<MatchCardModel>): List<CountryGroup> {
         val countries = linkedMapOf<String, MutableCountry>()
-        for (match in matches) {
+        for (match in FeaturedSports.ordered(matches)) {
             val country = match.country.trim()
             val name = match.league.trim()
             if (name.isEmpty()) continue
             val countryRow = countries.getOrPut(country) { MutableCountry() }
             countryRow.count += 1
             val league = countryRow.leagues.getOrPut(name) { LeagueRow(name = name, country = country, count = 0) }
-            countryRow.leagues[name] = league.copy(count = league.count + 1)
+            val badge = match.competitionBadge.takeIf { league.count == 0 || league.badge == it }
+            val bundledBadge = BundledFootballBadges.competition(match).takeIf { league.count == 0 || league.badgeRes == it }
+            countryRow.leagues[name] = league.copy(count = league.count + 1, badge = badge, badgeRes = bundledBadge)
         }
         return countries.map { (country, row) ->
             CountryGroup(
                 country = country,
                 count = row.count,
-                leagues = row.leagues.values.sortedWith(compareByDescending<LeagueRow> { it.count }.thenBy { it.name }),
+                leagues = row.leagues.values.toList(),
             )
-        }.sortedWith(compareByDescending<CountryGroup> { it.count }.thenBy { it.country })
+        }
+    }
+
+    internal fun search(groups: List<CountryGroup>, query: String, countryOnly: Boolean): List<CountryGroup> {
+        val term = query.trim()
+        if (term.isEmpty()) return groups
+        return groups.mapNotNull { group ->
+            if (SportsRegions.name(group.country).contains(term, ignoreCase = true) ||
+                group.country.contains(term, ignoreCase = true)) return@mapNotNull group
+            if (countryOnly) return@mapNotNull null
+            val leagues = group.leagues.filter { it.name.contains(term, ignoreCase = true) }
+            group.copy(count = leagues.sumOf(LeagueRow::count), leagues = leagues).takeIf { leagues.isNotEmpty() }
+        }
     }
 
     fun initialExpanded(groups: List<CountryGroup>): String = groups.firstOrNull()?.country.orEmpty()
@@ -100,6 +118,8 @@ object CountryGrouping {
 }
 
 object SportsListCatalog {
+    const val EMPTY_MATCHES = "Сейчас матчей нет"
+
     val supported: List<HomeSport> = listOf(
         HomeSport("football", "Футбол"),
         HomeSport("tennis", "Теннис"),
@@ -113,28 +133,29 @@ object SportsListCatalog {
         HomeSport("beach-volleyball", "Пляжный волейбол"),
         HomeSport("snooker", "Снукер"),
         HomeSport("futsal", "Футзал"),
+        HomeSport("handball", "Гандбол"), HomeSport("baseball", "Бейсбол"),
+        HomeSport("darts", "Дартс"), HomeSport("american-football", "Американский футбол"),
+        HomeSport("rugby", "Регби"), HomeSport("rugby-league", "Регбилиг"),
+        HomeSport("aussie-rules", "Австралийский футбол"), HomeSport("floorball", "Флорбол"),
+        HomeSport("polo", "Водное поло"), HomeSport("squash", "Сквош"),
+        HomeSport("mma", "ММА"), HomeSport("horse-racing", "Скачки"),
+        HomeSport("greyhounds", "Собачьи бега"), HomeSport("bowls", "Боулз"),
+        HomeSport("boxing", "Бокс"), HomeSport("gaelic-sports", "Гэльский спорт"),
     )
 
-    val featuredIds: List<String> = listOf("football", "tennis", "basketball", "hockey", "esports")
+    fun selector(
+        @Suppress("UNUSED_PARAMETER") live: List<MatchCardModel>,
+        @Suppress("UNUSED_PARAMETER") line: List<MatchCardModel>,
+    ): List<HomeSport> =
+        listOf(HomeSport("all", "Все")) + supported.filterNot { it.id == "esports" }
 
     fun rows(tab: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<SportListRow> {
         val pool = if (tab == "line") line else live
-        return supported
-            .filter { sport -> if (tab == "cybers") sport.id == "esports" else true }
-            .map { sport -> SportListRow(sport.id, sport.name, pool.count { it.sport == sport.id }) }
-            .sortedWith { a, b ->
-                val ai = featuredIds.indexOf(a.id)
-                val bi = featuredIds.indexOf(b.id)
-                when {
-                    ai != -1 || bi != -1 -> {
-                        if (ai == -1) 1
-                        else if (bi == -1) -1
-                        else ai - bi
-                    }
-                    else -> b.count - a.count
-                }
-            }
-            .filter { it.count > 0 || it.id in featuredIds }
+        val counts = pool.filter { FeaturedSports.isEsports(it) == (tab == "cybers") }
+            .groupingBy { if (tab == "cybers") "esports" else it.sport }.eachCount()
+        return supported.mapNotNull { sport ->
+            counts[sport.id]?.let { SportListRow(sport.id, sport.name, it) }
+        }
     }
 
     fun sportName(id: String): String = supported.firstOrNull { it.id == id }?.name ?: "Спорт"
@@ -149,6 +170,9 @@ object MarketTabs {
         MarketTabSpec("1st-half", "1-й тайм"),
         MarketTabSpec("2nd-half", "2-й тайм"),
         MarketTabSpec("corners", "Угловые"),
+        MarketTabSpec("double-chance", "Двойной шанс"),
+        MarketTabSpec("btts", "Обе забьют"),
+        MarketTabSpec("cards", "Карточки"),
         MarketTabSpec("goals", "Голы"),
     )
     val tennis = listOf(
@@ -184,13 +208,24 @@ object MarketTabs {
         else -> football
     }
 
+    fun available(sport: String, markets: List<MarketGroup>): List<MarketTabSpec> {
+        val configured = forSport(sport)
+        val shared = football.filter { it.id in setOf("totals", "handicaps") }
+        return (configured + shared).distinctBy(MarketTabSpec::id)
+            .filter { tab -> tab.id == "all" || markets.any { matchesTab(it, tab.id) } }
+    }
+
     fun matchesTab(market: MarketGroup, tab: String): Boolean {
         val name = market.name.lowercase()
         return when (tab) {
             "all" -> true
-            "totals" -> Regex("тотал|under/over|total|exactly").containsMatchIn(name) &&
-                !Regex("corner|гол|забьют|точный|goal|btts").containsMatchIn(name)
-            "handicaps" -> Regex("фора|handicap").containsMatchIn(name) && !name.contains("corner")
+            "double-chance" -> market.category == "double-chance" || name in setOf("двойной шанс", "double chance")
+            "btts" -> market.category == "btts" || market.marketId == "btts" || name in setOf("обе забьют", "both teams to score")
+            "cards" -> market.category == "cards"
+            "totals" -> market.category == "totals" || (Regex("тотал|under/over|total|exactly").containsMatchIn(name) &&
+                !Regex("corner|гол|забьют|точный|goal|btts").containsMatchIn(name))
+            "handicaps" -> market.category == "handicaps" ||
+                (Regex("фора|handicap").containsMatchIn(name) && !name.contains("corner"))
             "goals" -> Regex("голы|забьют|точный счёт|btts|both teams|индивидуальный тотал|team total|next goal|correct score|last team to score").containsMatchIn(name) ||
                 market.marketId == "btts"
             "corners" -> market.category == "corners" || Regex("угл|corner").containsMatchIn(name)
@@ -223,7 +258,7 @@ object MarketAccordionLogic {
         key in open || key in pinned
 
     fun sortPinnedFirst(markets: List<MarketGroup>, pinned: Set<String>): List<MarketGroup> =
-        markets.sortedWith(compareBy<MarketGroup> { if (it.key in pinned) 0 else 1 }.thenBy { it.name })
+        markets.sortedBy { if (it.key in pinned) 0 else 1 }
 
     fun columns(market: MarketGroup): Int {
         val name = market.name
@@ -263,6 +298,15 @@ object SportsbookCatalog {
     fun matchById(matches: List<MatchCardModel>, id: String): MatchCardModel? =
         matches.firstOrNull { it.id == id || it.eventId == id }
 
+    internal fun search(matches: List<MatchCardModel>, query: String): List<MatchCardModel> {
+        val term = query.trim()
+        if (term.isEmpty()) return matches
+        return matches.filter { match ->
+            listOf(match.team1, match.team2, match.league, SportsRegions.name(match.country))
+                .any { it.contains(term, ignoreCase = true) }
+        }
+    }
+
     fun pool(mode: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<MatchCardModel> =
         if (mode == "line") line else live
 }
@@ -274,7 +318,7 @@ object HomeChampionships {
         live: List<MatchCardModel>,
         excludeEsports: Boolean = false,
     ): List<CountryGroup> {
-        val source = if (excludeEsports) live.filter { it.sport != "esports" } else live
+        val source = if (excludeEsports) live.filterNot(FeaturedSports::isEsports) else live
         return CountryGrouping.groupByCountry(source)
     }
 

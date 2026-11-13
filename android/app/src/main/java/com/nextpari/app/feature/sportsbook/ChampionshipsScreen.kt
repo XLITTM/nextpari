@@ -20,13 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -66,7 +60,10 @@ fun ChampionshipsScreen(
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(if (initialMode == "line") "line" else "live") }
-    val groups = viewModel.championships(sport, tab)
+    val football = viewModel.state.collectAsStateWithLifecycle().value
+    var searchLabel by rememberSaveable { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
+    val groups = CountryGrouping.search(viewModel.championships(sport, tab), query, searchLabel == "Страна")
     var expanded by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(groups.map { it.country }) {
         expanded = CountryGrouping.nextExpanded(groups, expanded)
@@ -88,8 +85,21 @@ fun ChampionshipsScreen(
                     NextpariWebIcons.Globe to "Страна",
                     NextpariWebIcons.Tv to "Трансляции",
                 ),
-                onAction = { actionNotice = sportsActionMessage(it) },
+                onAction = { label ->
+                    if (label == "Трансляции") {
+                        actionNotice = "Трансляции недоступны"
+                    } else {
+                        actionNotice = ""
+                        searchLabel = if (searchLabel == label) "" else label
+                        query = ""
+                    }
+                },
             )
+            if (searchLabel.isNotEmpty()) {
+                OutlinedTextField(query, { query = it }, singleLine = true,
+                    label = { Text(if (searchLabel == "Страна") "Поиск по стране" else "Поиск чемпионатов") },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
+            }
             if (actionNotice.isNotBlank()) {
                 Text(actionNotice, color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
@@ -107,10 +117,11 @@ fun ChampionshipsScreen(
             Spacer(Modifier.width(8.dp))
             Text(sportName.uppercase(), color = if (dark) Color(0xFFD1D5DB) else Color(0xFF4B5563), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
+        FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
         when {
-            viewModel.loading && groups.isEmpty() -> MatchSkeletonCarousel(count = 4)
-            groups.isEmpty() -> Text(
-                "Сейчас матчей нет",
+            football.loading && groups.isEmpty() -> MatchSkeletonCarousel(count = 4)
+            groups.isEmpty() && !footballFeedFailed(football) -> Text(
+                if (query.isBlank()) "Сейчас матчей нет" else "Чемпионаты не найдены",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
                 fontSize = 14.sp,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
@@ -157,10 +168,12 @@ private fun CountryAccordion(
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(NextpariWebIcons.Globe, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            SportsFlag(SportsRegions.code(group.country), Modifier.size(20.dp)) {
+                Icon(NextpariWebIcons.Trophy, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.width(12.dp))
             Text(
-                group.country,
+                SportsRegions.name(group.country),
                 color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937),
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Medium,
@@ -185,9 +198,13 @@ private fun CountryAccordion(
                         Modifier
                             .fillMaxWidth()
                             .clickable { onLeague(league) }
-                            .padding(start = 48.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+                            .padding(start = 24.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        CompetitionArtwork(league.badge?.url, league.badgeRes, league.country, Modifier.size(18.dp)) {
+                            Icon(NextpariWebIcons.Trophy, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(18.dp))
+                        }
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             league.name,
                             color = if (dark) Color(0xFFD1D5DB) else Color(0xFF374151),

@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "work/android-betsapi-football-w002": false
+    }
+  },
   "rewrites": [
     {
       "source": "/api/betsapi/:path*",

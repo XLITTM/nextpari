@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -16,12 +17,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
 import com.nextpari.app.feature.home.NextpariMatchCard
+import com.nextpari.app.feature.home.TrackFootballViewport
 
 @Composable
 fun LeagueScreen(
@@ -35,13 +38,18 @@ fun LeagueScreen(
     val dark = colors.bg == NextpariColors.Dark.bg
     val (_, name) = LeagueIds.fromLeagueId(leagueId)
     val resolvedMode = viewModel.rememberMode(mode)
+    val football = viewModel.state.collectAsStateWithLifecycle().value
     val matches = viewModel.leagueMatches(leagueId, resolvedMode)
+
+    val listState = rememberLazyListState()
+    TrackFootballViewport(listState, viewModel::visibleMatches)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF0F2F5))) {
         SportsbookScreenHeader(title = name, onBack = onBack, actions = emptyList())
+        FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
         when {
-            viewModel.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
-            matches.isEmpty() -> Text(
+            football.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
+            matches.isEmpty() && !footballFeedFailed(football) -> Text(
                 "Сейчас матчей нет",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
                 fontSize = 14.sp,
@@ -49,14 +57,18 @@ fun LeagueScreen(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
             )
             else -> LazyColumn(
-                Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 16.dp),
+                state = listState,
+                verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 items(matches, key = { it.id }) { match ->
                     NextpariMatchCard(
                         model = match,
                         carousel = false,
                         onOpen = { onNavigate(Destinations.match(match.id)) },
+                        onToggleFavorite = { viewModel.toggleMatchFavorite(match.id) },
+                        selectedOdds = football.selectedKeys,
+                        onOddSelected = viewModel::toggle,
                     )
                 }
             }

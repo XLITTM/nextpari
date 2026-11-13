@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
+import com.nextpari.app.core.player.VerifiedWallet
 import com.nextpari.app.core.network.ApiErrorMapper
 import com.nextpari.app.core.network.userMessage
 import com.nextpari.app.core.player.formatServerBalance
@@ -47,8 +48,9 @@ data class ActiveWalletReading(
     val walletId: String = "",
     val amount: Double? = null,
     val currency: String = "",
+    val revision: Long = 0,
 ) {
-    val verified: Boolean get() = amount != null && amount.isFinite() && amount >= 0.0 && currency.isNotBlank()
+    val verified: Boolean get() = walletId.isNotBlank() && amount != null && amount.isFinite() && amount >= 0.0 && currency.isNotBlank()
 }
 
 data class GameUiState(
@@ -68,7 +70,7 @@ class GamePlayViewModel(
     val spec: GameSpec,
     private val games: GameRepository,
     private val readWallet: () -> ActiveWalletReading,
-    private val applyBalance: (Double, String) -> Boolean,
+    private val applyBalance: (Double, ActiveWalletReading) -> Boolean,
 ) : ViewModel() {
     private val ui = MutableStateFlow(GameUiState(stakeText = spec.defaultStake))
     val uiState = ui.asStateFlow()
@@ -160,7 +162,7 @@ class GamePlayViewModel(
 
     private fun accept(round: PlayerGameRound, stamp: ActiveWalletReading, started: Boolean) {
         val now = readWallet()
-        val staleWallet = stamp.walletId.isNotBlank() && now.walletId != stamp.walletId
+        val staleWallet = now.walletId != stamp.walletId || now.revision != stamp.revision || !sameCurrency(now.currency, stamp.currency)
         val foreignRound = round.walletId.isNotBlank() && stamp.walletId.isNotBlank() && round.walletId != stamp.walletId
         val foreignCurrency = round.currency.isNotBlank() && !sameCurrency(round.currency, stamp.currency)
         if (staleWallet || foreignRound || foreignCurrency || !stamp.verified) {
@@ -194,7 +196,7 @@ class GamePlayViewModel(
             )
             return
         }
-        val applied = applyBalance(round.balanceAfter, stamp.walletId)
+        val applied = applyBalance(round.balanceAfter, stamp)
         val shown = readWallet()
         val trusted = applied && shown.verified && shown.walletId == stamp.walletId
         ui.value = ui.value.copy(
@@ -241,7 +243,10 @@ class GamePlayViewModel(
                     spec = GameSpecs.forCode(gameCode),
                     games = games,
                     readWallet = { activeWalletReading(store) },
-                    applyBalance = { amount, walletId -> AppGraph.applyServerBalance(amount, walletId) },
+                    applyBalance = { amount, stamp ->
+                        val expected = VerifiedWallet(stamp.walletId, stamp.currency, checkNotNull(stamp.amount), stamp.revision)
+                        store.applyBalanceAfter(amount, expected)
+                    },
                 ) as T
             }
         }
@@ -249,15 +254,8 @@ class GamePlayViewModel(
 }
 
 internal fun activeWalletReading(store: com.nextpari.app.core.player.PlayerStateStore): ActiveWalletReading {
-    val me = store.me()
-    val active = store.wallets().firstOrNull { it.isActive }
-    val currency = active?.currency?.takeIf { it.isNotBlank() } ?: me?.wallet?.currency.orEmpty()
-    val amount = me?.wallet?.balance?.takeIf { it.isFinite() && it >= 0.0 }
-    return ActiveWalletReading(
-        walletId = active?.walletId.orEmpty(),
-        amount = if (me == null || currency.isBlank()) null else amount,
-        currency = currency,
-    )
+    val wallet = store.verifiedWallet() ?: return ActiveWalletReading()
+    return ActiveWalletReading(wallet.walletId, wallet.balance, wallet.currency, wallet.revision)
 }
 
 internal fun expectedBalanceAfterStart(before: Double, round: PlayerGameRound): Double? {

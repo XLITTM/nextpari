@@ -24,7 +24,7 @@ class NavigationAuditTest {
     }
 
     @Test
-    fun intentionalPlaceholdersRemainRegistered() {
+    fun couponCasinoAndIntentionalPlaceholdersRemainRegistered() {
         val root = moduleFile("src/main/java/com/nextpari/app/core/navigation/NextpariRoot.kt").readText()
         listOf(
             Destinations.FAVORITES,
@@ -43,10 +43,15 @@ class NavigationAuditTest {
         ).forEach { route ->
             assertThat(root).contains(routeConstant(route))
         }
-        assertThat(root).contains("FavoritesScreen()")
-        assertThat(root).contains("Купон пуст. Приём ставок выключен")
-        assertThat(root).contains("placeholder(navController, Destinations.SLOTS")
-        assertThat(root).contains("placeholder(navController, Destinations.LIVE_CASINO")
+        assertThat(root).contains("FavoritesScreen(")
+        assertThat(root).contains("SportsCouponScreen(")
+        assertThat(root).doesNotContain("Купон пуст. Приём ставок выключен")
+        assertThat(root).contains("composable(Destinations.SLOTS)")
+        assertThat(root).contains("composable(Destinations.LIVE_CASINO)")
+        assertThat(root).contains("GameWebViewScreen(\"casino-slots\")")
+        assertThat(root).contains("GameWebViewScreen(\"casino-live\")")
+        assertThat(root).doesNotContain("CasinoDemoCatalog(")
+        assertThat(root).doesNotContain("Демо-игры")
         assertThat(root).contains("placeholder(navController, Destinations.PROVIDER_SPORTSBOOK")
         assertThat(root).contains("composable(Destinations.INBOX_PLACEHOLDER)")
         assertThat(root).doesNotContain("placeholder(navController, Destinations.BLACKJACK")

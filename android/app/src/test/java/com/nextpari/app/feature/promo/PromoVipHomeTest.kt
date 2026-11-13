@@ -108,7 +108,7 @@ class PromoVipHomeTest {
             "sports", "promos", "live", "line", "champs",
             "esports-disciplines", "esports-live", "esports-line",
         ).inOrder()
-        assertThat(HomeSectionOrder.sport).containsExactly("sports", "live", "line", "champs").inOrder()
+        assertThat(HomeSectionOrder.sport).containsExactly("sports", "promos", "live", "line", "champs").inOrder()
 
         val accordion = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeChampionshipsAccordion.kt").readText()
         assertThat(accordion).doesNotContain("HomeModeTab")
