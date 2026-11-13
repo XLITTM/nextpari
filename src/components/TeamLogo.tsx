@@ -1,6 +1,10 @@
+import { useState } from 'react';
+import { Shield } from 'lucide-react';
+import { approvedFootballLogo } from '../lib/sportsRegion';
+
 interface TeamLogoProps {
   teamName: string;
-  logo?: string;
+  logo?: string | null;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -13,21 +17,26 @@ const sizeMap = {
 };
 
 export function TeamLogo({ teamName, logo, size = 'sm', className = '' }: TeamLogoProps) {
-  const src = logo ?? `/crest${((teamName.charCodeAt(0) % 10) + 1)}.webp`;
+  const src = approvedFootballLogo(logo);
+  const [failedUrl, setFailedUrl] = useState<string>();
 
   return (
     <div
-      className={`${sizeMap[size]} rounded-full bg-white shadow-md shrink-0 flex items-center justify-center ${className}`}
+      className={`${sizeMap[size]} ${src ? '' : 'rounded-full bg-white shadow-md dark:bg-zinc-800'} shrink-0 flex items-center justify-center ${className}`}
     >
-      <img
-        src={src}
-        alt={teamName}
-        className="w-full h-full object-contain"
-        loading="lazy"
-        onError={(e) => {
-          (e.target as HTMLImageElement).style.display = 'none';
-        }}
-      />
+      {src && src !== failedUrl ? (
+        <img
+          key={logo}
+          src={src}
+          alt={teamName}
+          className="w-full h-full object-contain"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailedUrl(src)}
+        />
+      ) : (
+        <Shield className="w-3/4 h-3/4 text-gray-400" aria-hidden="true" />
+      )}
     </div>
   );
 }

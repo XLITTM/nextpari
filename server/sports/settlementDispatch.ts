@@ -35,7 +35,7 @@ export async function dispatchSettlementNotices(
   if (!notices.length) return;
   const log = ports.log ?? (() => {});
   const batch = uniformSettlementProvider(notices);
-  if (!batch.ok) {
+  if ('error' in batch) {
     log({
       action: 'settlement-webhook-rejected',
       reason: batch.error,

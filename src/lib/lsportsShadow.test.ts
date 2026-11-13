@@ -58,8 +58,10 @@ describe('lsports shadow client guards', () => {
     assert.equal(context.includes('useEventsList'), false);
     assert.equal(context.includes('useLsportsShadowFeed'), false);
     assert.equal(context.includes('fetchSportsFeed'), false);
+    assert.equal(context.includes('useLsportsShadowFeed'), false);
+    assert.equal(context.includes('b365api'), false);
     assert.match(context, /clearEvents/);
-    assert.match(context, /loading: false/);
+    assert.match(context, /fetchFootballFeed/);
   });
 
   it('locks stale LSports feeds without fabricating 2.10/3.25/2.80', () => {

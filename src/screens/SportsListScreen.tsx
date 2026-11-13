@@ -25,6 +25,14 @@ const SUPPORTED_SPORTS: { id: SportId; name: string }[] = [
   { id: 'beach-volleyball', name: 'Пляжный волейбол' },
   { id: 'snooker', name: 'Снукер' },
   { id: 'futsal', name: 'Футзал' },
+  { id: 'handball', name: 'Гандбол' }, { id: 'baseball', name: 'Бейсбол' },
+  { id: 'darts', name: 'Дартс' }, { id: 'american-football', name: 'Американский футбол' },
+  { id: 'rugby', name: 'Регби' }, { id: 'rugby-league', name: 'Регбилиг' },
+  { id: 'aussie-rules', name: 'Австралийский футбол' }, { id: 'floorball', name: 'Флорбол' },
+  { id: 'squash', name: 'Сквош' }, { id: 'horse-racing', name: 'Скачки' },
+  { id: 'greyhounds', name: 'Собачьи бега' }, { id: 'bowls', name: 'Боулз' },
+  { id: 'boxing', name: 'Бокс' }, { id: 'gaelic-sports', name: 'Гэльский спорт' },
+  { id: 'mma', name: 'ММА' }, { id: 'polo', name: 'Водное поло' },
 ];
 
 export function SportsListScreen({ initialMode = 'live', onBack, onNavigate, onSearchClick }: SportsListScreenProps) {
@@ -34,23 +42,13 @@ export function SportsListScreen({ initialMode = 'live', onBack, onNavigate, onS
   const toggleSportFavorite = useFavoritesStore((s) => s.toggleSportFavorite);
   const pool = activeTab === 'line' ? upcomingMatches : liveMatches;
   const sports = SUPPORTED_SPORTS
-    .filter((sport) => (activeTab === 'cybers' ? sport.id === 'esports' : true))
+    .filter((sport) => (activeTab === 'cybers' ? sport.id === 'esports' : sport.id !== 'esports'))
     .map((sport) => ({
       ...sport,
       count: pool.filter((match) => match.sport === sport.id).length,
     }))
-    .sort((a, b) => {
-      const featured = ['football', 'tennis', 'basketball', 'hockey', 'esports'];
-      const ai = featured.indexOf(a.id);
-      const bi = featured.indexOf(b.id);
-      if (ai !== -1 || bi !== -1) {
-        if (ai === -1) return 1;
-        if (bi === -1) return -1;
-        return ai - bi;
-      }
-      return b.count - a.count;
-    })
-    .filter((sport) => sport.count > 0 || ['football', 'tennis', 'basketball', 'hockey', 'esports'].includes(sport.id));
+    .filter((sport) => sport.count > 0)
+    .sort((a, b) => pool.findIndex((match) => match.sport === a.id) - pool.findIndex((match) => match.sport === b.id));
 
   return (
     <div className="min-h-full flex flex-col bg-gray-100 dark:bg-gray-900">

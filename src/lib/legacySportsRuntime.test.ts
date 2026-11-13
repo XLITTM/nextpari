@@ -19,10 +19,12 @@ describe('legacy sports runtime retirement — browser/vite', () => {
     assert.equal(src.includes('useLsportsShadowFeed'), false);
     assert.equal(src.includes("from './hooks/useEventsList'"), false);
     assert.equal(src.includes("from './hooks/useLsportsShadowFeed'"), false);
-    assert.match(src, /liveMatches: EMPTY_MATCHES/);
-    assert.match(src, /upcomingMatches: EMPTY_MATCHES/);
-    assert.match(src, /loading: false/);
+    assert.match(src, /EMPTY_MATCHES/);
     assert.match(src, /clearEvents/);
+    assert.match(src, /fetchFootballFeed/);
+    assert.match(read('src/lib/footballFeed.ts'), /\/api\/player\/sports\/football-feed/);
+    assert.equal(src.includes('b365api'), false);
+    assert.equal(src.includes('VITE_BETSAPI'), false);
   });
 
   it('B. active Vite config does not register legacy sports plugins', () => {

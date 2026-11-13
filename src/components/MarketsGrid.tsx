@@ -10,6 +10,7 @@ import { hasCompleteLsportsIdentity } from '@/lib/sportsPlaceIdentity';
 import { selectionFromProviderBetId } from '@/lib/sportsSelection';
 import { useSportsStore } from '@/stores/sportsStore';
 import type { BetSelection, MatchEvent, SportId } from '@/types';
+import { BetsapiMarkets } from '@/components/BetsapiMarkets';
 
 type MarketTab = 'all' | 'main' | 'totals' | 'handicaps' | 'goals' | 'corners' | '1st-half' | '2nd-half' | 'sets' | 'games' | 'quarters' | 'halves';
 
@@ -311,6 +312,10 @@ export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchE
       return next;
     });
   };
+
+  if (match.feedTag === 'betsapi' || (match.betsapiQuotes && Object.keys(match.betsapiQuotes).length > 0)) {
+    return <BetsapiMarkets match={match} />;
+  }
 
   if (!state) {
     return (

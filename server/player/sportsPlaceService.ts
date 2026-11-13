@@ -4,6 +4,7 @@ import { createSportsPlaceAsPlayerRpc, createSportsLookupExistingPlaceRpc, type 
 import { sanitizeChangedLeg } from '../sports/changedLeg.js';
 import { decideSportsQuote } from '../sports/quote.js';
 import { resolveSportsQuoteProvider, SportsProviderUnsupportedError, normalizeSportsProviderId } from '../sports/quoteProvider.js';
+import { betsapiStakeAllowed, retiredProviderStillBlocks, SPORTSBOOK_ACCOUNT_NOT_AUTHORIZED } from '../sports/betsapiActivation.js';
 import { isRetiredSportsProvider, SPORTS_PROVIDER_RETIRED } from '../sports/retiredProviders.js';
 import { evaluateSportsRisk } from '../sports/risk.js';
 import type { SportsQuote, SportsQuoteRequest } from '../sports/types.js';
@@ -49,7 +50,12 @@ function isUuid(value: string): boolean {
 }
 
 function quoteHttpStatus(reason: string): number {
-  if (reason === 'SPORTS_BET_DISABLED' || reason === SPORTS_PROVIDER_RETIRED) return 403;
+  if (
+    reason === 'SPORTS_BET_DISABLED'
+    || reason === SPORTS_PROVIDER_RETIRED
+    || reason === 'SPORTSBOOK_EMERGENCY_STOP'
+    || reason === SPORTSBOOK_ACCOUNT_NOT_AUTHORIZED
+  ) return 403;
   if (reason === 'INVALID_PRICE' || reason === 'MISSING_BET_ID' || reason === 'MISSING_FIXTURE' || reason === 'CURRENCY_AMOUNT_SCALE_INVALID') return 400;
   if (
     reason === 'SPORTS_STAKE_LIMIT'
@@ -237,7 +243,9 @@ export async function placeSportsBet(
     }
   }
 
-  const retired = requests.find((row) => isRetiredSportsProvider(row.provider));
+  const retired = requests.find((row) => (
+    isRetiredSportsProvider(row.provider) && retiredProviderStillBlocks(row.provider, session.userId, env)
+  ));
   if (retired) {
     await recordPlaceDecision(ports, {
       idempotencyKey,
@@ -297,7 +305,7 @@ export async function placeSportsBet(
     const decision = decideSportsQuote(request, quote, {
       bettingEnabled: isCanonicalSportsBetEnabled(env),
     });
-    if (!decision.ok) {
+    if ('reason' in decision) {
       const currentPrice = decision.currentPrice ?? decision.quote?.price ?? quote.price ?? null;
       await recordPlaceDecision(ports, {
         idempotencyKey,
@@ -338,8 +346,24 @@ export async function placeSportsBet(
     });
   }
 
+  if (requests.some((row) => normalizeSportsProviderId(row.provider) === 'betsapi')) {
+    const cap = betsapiStakeAllowed(stake, env);
+    if ('code' in cap) {
+      await recordPlaceDecision(ports, {
+        idempotencyKey,
+        playerUserId: session.userId,
+        providers: 'betsapi',
+        mode,
+        stake,
+        decision: 'rejected',
+        decisionCode: cap.code,
+      });
+      throw staffError(cap.code, 409);
+    }
+  }
+
   const risk = evaluateSportsRisk({ stake, mode, quotes });
-  if (!risk.ok) {
+  if ('code' in risk) {
     await recordPlaceDecision(ports, {
       idempotencyKey,
       playerUserId: session.userId,

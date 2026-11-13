@@ -1,4 +1,21 @@
 {
+  "git": {
+    "deploymentEnabled": { "cursor/betsapi-readonly-feed-b001": false }
+  },
+  "functions": {
+    "api/player/sports/football-feed.ts": {
+      "maxDuration": 60
+    },
+    "api/internal/sports/betsapi-settle.ts": {
+      "maxDuration": 60
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/internal/sports/betsapi-settle",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/betsapi/:path*",

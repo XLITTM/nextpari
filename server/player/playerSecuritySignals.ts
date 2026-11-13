@@ -51,7 +51,7 @@ export function resetPlayerSecurityConfigWarnings(): void {
 
 export function loadPlayerSecurityPepper(log?: { error(event: string, fields: Record<string, unknown>): void }): PlayerSecurityPepperState {
   const loaded = loadPlayerSecuritySignalPepper();
-  if (!loaded.ok) {
+  if ('reason' in loaded) {
     warnPlayerSecurityConfig(loaded.reason, log);
   }
   return loaded;
