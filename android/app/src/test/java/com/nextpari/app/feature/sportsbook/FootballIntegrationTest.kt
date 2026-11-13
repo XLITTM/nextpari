@@ -295,6 +295,32 @@ class FootballIntegrationTest {
     }
 
     @Test
+    fun returnedOpenRowsStillRequireAFreshProviderTimestamp() = runBlocking {
+        MockWebServer().use { server ->
+            val repository = RemoteFootballRepository(
+                NetworkModule.playerApi(NetworkModule.okHttpClient(), server.url("/").toString()), json,
+            )
+            val main = """{"key":"1x2","status":"open","updatedAt":"2026-11-13T12:00:00Z",
+                "outcomes":[{"key":"home","price":2.01},{"key":"draw","price":3.3},{"key":"away","price":3.1}]}"""
+            val totals = """{"key":"over_under","line":"2.5","status":"open",
+                "outcomes":[{"key":"over","price":1.95},{"key":"under","price":1.9}]}"""
+            val batch = """{"ok":true,"quotes":[{"id":"100","priceState":"open","markets":[$main,$totals]}]}"""
+            val fixture = live.copy(markets = emptyList()).toFixture()!!
+            server.enqueue(jsonResponse(batch).setHeader("Date", "Fri, 13 Nov 2026 12:00:29 GMT"))
+            val fresh = fixture.withQuote(repository.readOdds(listOf("100")).quotes["100"],
+                FootballPriceState.Unavailable, 1, 30_000)
+            assertEquals(listOf("2.01", "3.30", "3.10"), fresh.match.outcomes.map { it.odds })
+            assertEquals(1_000L, fresh.validUntil)
+            assertTrue(fresh.markets.single { it.marketId == "1_3" }.outcomes.all { it.locked && it.odds == null })
+
+            server.enqueue(jsonResponse(batch).setHeader("Date", "Fri, 13 Nov 2026 12:00:30 GMT"))
+            val expired = fixture.withQuote(repository.readOdds(listOf("100")).quotes["100"],
+                FootballPriceState.Unavailable, 2, 30_000)
+            assertTrue(expired.match.outcomes.all { it.locked && it.odds == null })
+        }
+    }
+
+    @Test
     fun delayedBatchUsesItsOwnReadTimeout() = runBlocking {
         MockWebServer().use { server ->
             val client = NetworkModule.okHttpClient().newBuilder().readTimeout(100, TimeUnit.MILLISECONDS).build()

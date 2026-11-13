@@ -127,13 +127,20 @@ data class FootballFixture(
         ),
     )
 
+    internal fun marketDeadline(fallback: Long): Long = markets.asSequence()
+        .flatMap { it.outcomes.asSequence() }
+        .filter { it.selection != null }
+        .mapNotNull(MarketOutcome::observedUntil)
+        .minOrNull()?.coerceAtMost(fallback) ?: fallback
+
     fun withQuote(quote: FootballOddsQuote?, fallback: FootballPriceState, order: Long, until: Long): FootballFixture {
         val exactQuote = quote?.takeIf { it.id == match.eventId }
         val availability = exactQuote?.availability ?: fallback
-        return withMarkets(exactQuote?.markets.orEmpty(), availability).copy(
+        val priced = withMarkets(exactQuote?.markets.orEmpty(), availability)
+        return priced.copy(
             quoteOrder = order,
             fullMarkets = exactQuote != null && availability == FootballPriceState.Open,
-            validUntil = if (availability == FootballPriceState.Open) until else 0,
+            validUntil = if (priced.priceState == FootballPriceState.Open) priced.marketDeadline(until) else 0,
         )
     }
 }
@@ -187,10 +194,8 @@ class RemoteFootballRepository(
         if (response.code() == 404 && eventId != null) return FootballSnapshot()
         if (!response.isSuccessful || body == null) throw FootballFeedHttpException(response.code())
         val feed = json.decodeFromJsonElement<FootballFeedDto>(body)
-        val serverTimeMs = response.raw().headers["Date"]?.let {
-            runCatching { Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(it)).toEpochMilli() }.getOrNull()
-        } ?: System.currentTimeMillis()
-        val snapshot = feed.toSnapshot(eventId, serverTimeMs, SystemClock.elapsedRealtime())
+        val receipt = responseTime(response.raw())
+        val snapshot = feed.toSnapshot(eventId, receipt, SystemClock.elapsedRealtime(), checkMarketAge = true)
         if (eventId == null) return snapshot
         if (additionalSportEventId.matches(eventId)) return snapshot.copy(canPrice = false, fixtures = snapshot.fixtures.map { it.copy(fullMarkets = true) })
         val direct = feed.events.singleOrNull { it.id == eventId }
@@ -214,9 +219,13 @@ class RemoteFootballRepository(
             ?: return FootballOddsBatch(fallback = FootballPriceState.Upstream)
         val batch = json.decodeFromJsonElement<FootballOddsDto>(body)
         if (!batch.ok || batch.error != null) return FootballOddsBatch(fallback = FootballPriceState.Upstream)
+        val receipt = responseTime(response.raw())
+        val elapsed = SystemClock.elapsedRealtime()
         val byId = batch.quotes.filter { it.id in ids }.groupBy { it.id }
         return FootballOddsBatch(byId.mapNotNull { (id, rows) ->
-            rows.singleOrNull()?.let { id to it }
+            rows.singleOrNull()?.let { quote -> id to quote.copy(
+                markets = quote.markets.map { it.checkedAt(receipt, elapsed) },
+            ) }
         }.toMap())
     }
 
@@ -243,6 +252,10 @@ class RemoteFootballRepository(
         }
     }
 }
+
+private fun responseTime(response: okhttp3.Response): Long = response.headers["Date"]?.let {
+    runCatching { Instant.from(DateTimeFormatter.RFC_1123_DATE_TIME.parse(it)).toEpochMilli() }.getOrNull()
+} ?: System.currentTimeMillis()
 
 internal class FootballFeedHttpException(status: Int) : IllegalStateException(
     if (status == 401) "Сессия недействительна" else "Футбольная лента недоступна",
@@ -271,6 +284,7 @@ internal data class FootballFeedDto(
         eventId: String?,
         receiptEpochMs: Long = 0,
         receiptElapsedMs: Long = 0,
+        checkMarketAge: Boolean = false,
     ): FootballSnapshot {
         val issue = when {
             stale -> "Лента устарела. Коэффициенты временно закрыты"
@@ -278,7 +292,7 @@ internal data class FootballFeedDto(
             else -> null
         }
         val fixtures = events.filter { eventId == null || it.id == eventId }
-            .mapNotNull { it.toFixture(receiptEpochMs, receiptElapsedMs, allowClock = issue == null) }
+            .mapNotNull { it.toFixture(receiptEpochMs, receiptElapsedMs, allowClock = issue == null, checkMarketAge = checkMarketAge) }
             .groupBy { it.match.id }
             .values.map { copies ->
                 val current = copies.filter { it.match.isLive }.ifEmpty { copies }
@@ -333,7 +347,24 @@ data class FootballMarketDto(
     val externalPeriodId: String? = null,
     val externalMarketId: String? = null,
     val updatedAt: String? = null,
-)
+) {
+    @kotlinx.serialization.Transient
+    internal var observation: MarketObservation? = null
+        private set
+
+    internal fun checkedAt(epoch: Long, elapsed: Long): FootballMarketDto =
+        copy().also { it.observation = MarketObservation(epoch, elapsed) }
+
+    internal fun deadline(live: Boolean): Long? {
+        val receipt = observation ?: return null
+        val timestamp = updatedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() } ?: return null
+        val limit = if (live) 30_000L else 180_000L
+        val age = (receipt.epoch - timestamp).takeIf { it in -1_000 until limit } ?: return null
+        return receipt.elapsed + limit - age.coerceAtLeast(0)
+    }
+}
+
+internal data class MarketObservation(val epoch: Long, val elapsed: Long)
 
 private enum class FootballMarket(
     val key: String,
@@ -366,7 +397,9 @@ internal data class FootballEventDto(
     val logos: JsonElement? = null,
     val insights: JsonElement? = null,
 ) {
-    fun toFixture(receiptEpochMs: Long = 0, receiptElapsedMs: Long = 0, allowClock: Boolean = true): FootballFixture? {
+    fun toFixture(
+        receiptEpochMs: Long = 0, receiptElapsedMs: Long = 0, allowClock: Boolean = true, checkMarketAge: Boolean = false,
+    ): FootballFixture? {
         if (!isSportsFeedEventId(id) || home.isBlank() || away.isBlank()) return null
         val readOnly = additionalSportEventId.matchEntire(id)
         val expectedSport = readOnly?.groupValues?.get(1)?.let(providerSports::get)
@@ -403,8 +436,10 @@ internal data class FootballEventDto(
         )
         val availability = FootballPriceState.fromWire(priceState ?: if (markets.any { it.status == "open" }) "open" else "unpriced")
         val fixture = FootballFixture(match, emptyList())
-        return if (readOnly == null) fixture.withMarkets(markets, availability)
-        else fixture.withObservedMarkets(markets, readOnly.groupValues[1], receiptEpochMs, receiptElapsedMs)
+        return if (readOnly == null) {
+            val rows = if (checkMarketAge) markets.map { it.checkedAt(receiptEpochMs, receiptElapsedMs) } else markets
+            fixture.withMarkets(rows, availability)
+        } else fixture.withObservedMarkets(markets, readOnly.groupValues[1], receiptEpochMs, receiptElapsedMs)
 
     }
 }
@@ -462,7 +497,10 @@ private fun FootballFixture.withMarkets(rows: List<FootballMarketDto>, state: Fo
             .map { (groupKey, sourcedRows) ->
                 val lines = sourcedRows.groupBy { it.line }
                 val outcomes = lines.flatMap { (line, quotes) ->
-                    val quote = quotes.singleOrNull()?.takeIf { it.status == "open" && state == FootballPriceState.Open }
+                    val quote = quotes.singleOrNull()?.takeIf {
+                        it.status == "open" && state == FootballPriceState.Open &&
+                            (it.observation == null || it.deadline(match.isLive) != null)
+                    }
                     val prices = quote?.outcomes.orEmpty().groupBy { it.key }
                     market.labels.map { (key, shortLabel) ->
                         // The normalized legacy wire carries only a market line, with no signed per-outcome handicap.
@@ -486,7 +524,7 @@ private fun FootballFixture.withMarkets(rows: List<FootballMarketDto>, state: Fo
                         MarketOutcome(
                             eventId = match.eventId, marketId = market.id, marketKey = market.key, line = line,
                             outcomeId = key, label = label, odds = price?.let(::decimalOdds),
-                            locked = selection == null, selection = selection,
+                            locked = selection == null, selection = selection, observedUntil = quote?.deadline(match.isLive),
                         )
                     }
                 }

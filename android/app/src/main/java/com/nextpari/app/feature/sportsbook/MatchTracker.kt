@@ -266,7 +266,7 @@ private fun ScoreSlide(match: MatchCardModel, liveStatus: String?) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                if (match.isLive) match.score ?: "—" else "VS", color = Color.White,
+                match.score ?: if (match.isLive) "—" else "VS", color = Color.White,
                 fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
             )
             (if (match.isLive) liveStatus else match.kickoffLabel)?.let {

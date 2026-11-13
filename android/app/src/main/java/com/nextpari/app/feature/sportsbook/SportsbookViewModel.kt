@@ -199,8 +199,8 @@ class SportsbookViewModel(
             ui.update { state ->
                 val fixtures = detail.fixtures.map { fresh ->
                     val current = state.fixtureFor(id)?.takeIf { it.sameEvent(fresh) }
-                    if (current != null && (current.quoteOrder > order ||
-                            (detail.canPrice && fresh.priceState == FootballPriceState.Unpriced && current.hasPrice(now())))) {
+                    if (detail.canPrice && current != null && (current.quoteOrder > order ||
+                            (fresh.priceState == FootballPriceState.Unpriced && current.hasPrice(now())))) {
                         fresh.withPrices(current)
                     } else fresh.stamped(order, started)
                 }
@@ -329,7 +329,7 @@ class SportsbookViewModel(
 
     private fun FootballFixture.stamped(order: Long, started: Long): FootballFixture {
         val fixture = copy(quoteOrder = order,
-            validUntil = if (priceState == FootballPriceState.Open) started + FOOTBALL_QUOTE_MAX_AGE_MS else 0)
+            validUntil = if (priceState == FootballPriceState.Open) marketDeadline(started + FOOTBALL_QUOTE_MAX_AGE_MS) else 0)
         return if (fixture.priceState == FootballPriceState.Open && !fixture.hasPrice(now())) fixture.locked() else fixture
     }
 
