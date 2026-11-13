@@ -27,6 +27,7 @@ object Destinations {
     const val SPORTS_CYBERS = "sports/cybers"
     const val CHAMPIONSHIPS = "championships/{sport}/{mode}"
     const val SLOTS = "slots"
+    const val CASINO_DEMO_GAME = "casino/demo/{gameId}"
     const val LIVE_CASINO = "live-casino"
     const val PROVIDER_SPORTSBOOK = "provider-sportsbook"
     const val GAMES = "games"
@@ -131,7 +132,7 @@ object Destinations {
         if (route == LEAGUE || route.startsWith("league/")) return true
         if (route == CHAMPIONSHIPS || route.startsWith("championships/")) return true
         if (route.startsWith("gamelist/")) return true
-        if (route.startsWith("sports/")) return true
+        if (route.startsWith("sports/") || route.startsWith("casino/demo/")) return true
         return route in homeOwnedExact
     }
 
@@ -146,6 +147,7 @@ object Destinations {
 
     fun showsMainTabs(route: String?): Boolean = route == HOME
 
+    fun casinoDemoGame(gameId: String) = "casino/demo/$gameId"
     fun match(matchId: String) = "match/$matchId"
     fun betDetails(betId: String) = "bet-details/$betId"
     fun championships(sport: String, mode: String) = "championships/$sport/$mode"

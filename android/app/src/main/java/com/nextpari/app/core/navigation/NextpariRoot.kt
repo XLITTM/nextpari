@@ -76,6 +76,8 @@ import com.nextpari.app.feature.auth.RegisterOneClickResultScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
 import com.nextpari.app.feature.games.web.GameWebViewScreen
+import com.nextpari.app.feature.casino.CasinoDemoCatalog
+import com.nextpari.app.feature.sportsbook.SportsbookScreenHeader
 import com.nextpari.app.feature.update.ReleaseUpdateCard
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
@@ -322,7 +324,8 @@ internal fun AuthenticatedShell(
         if (current == Destinations.WALLET || (previousWasGame && !arcade)) walletsViewModel.refresh()
         previousWasGame = arcade
     }
-    val showBottomBar = current != Destinations.GAMES && !arcade
+    val casinoDemo = current == Destinations.CASINO_DEMO_GAME
+    val showBottomBar = current != Destinations.GAMES && !arcade && !casinoDemo
     val showHeader = Destinations.showsHeader(current)
     val showMainTabs = Destinations.showsMainTabs(current)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -378,7 +381,7 @@ internal fun AuthenticatedShell(
             }
         },
     ) { padding ->
-        val gamesOwnsInsets = current == Destinations.GAMES || arcade
+        val gamesOwnsInsets = current == Destinations.GAMES || arcade || casinoDemo
         val layoutDirection = LocalLayoutDirection.current
         val couponClearance = if (showBottomBar) 32.dp else 0.dp
         NavHost(
@@ -597,8 +600,21 @@ internal fun AuthenticatedShell(
                     )
                 }
             }
-            placeholder(navController, Destinations.SLOTS, "Слоты", "Слоты недоступны: казино-провайдер не подключён.")
-            placeholder(navController, Destinations.LIVE_CASINO, "Лайв казино", "Лайв-казино недоступно: казино-провайдер не подключён.")
+            composable(Destinations.SLOTS) {
+                Column {
+                    SportsbookScreenHeader("Слоты", onBack = { navController.popBackStack() })
+                    CasinoDemoCatalog(onOpen = { navController.navigateTo(Destinations.casinoDemoGame(it)) }, category = "slots")
+                }
+            }
+            composable(Destinations.LIVE_CASINO) {
+                Column {
+                    SportsbookScreenHeader("Лайв казино", onBack = { navController.popBackStack() })
+                    CasinoDemoCatalog(onOpen = { navController.navigateTo(Destinations.casinoDemoGame(it)) }, category = "live")
+                }
+            }
+            composable(Destinations.CASINO_DEMO_GAME) { entry ->
+                GameWebViewScreen(entry.arguments?.getString("gameId").orEmpty()) { navController.popBackStack() }
+            }
             placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера", "Спортбук провайдера недоступен: запуск не включён.")
             composable(Destinations.PROMO_DETAILS) {
                 PromoDetailsScreen(onBack = { navController.popBackStack() })
@@ -674,7 +690,7 @@ internal fun AuthenticatedShell(
             }
         }
     }
-    if (!arcade && current != Destinations.GAMES && !searchOpen) {
+    if (!arcade && !casinoDemo && current != Destinations.GAMES && !searchOpen) {
         ReleaseUpdateCard(
             Modifier
                 .align(Alignment.BottomCenter)

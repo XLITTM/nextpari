@@ -48,6 +48,7 @@ import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.casino.CasinoDemoCatalog
 
 @Composable
 fun CasinoHomeContent(
@@ -59,11 +60,11 @@ fun CasinoHomeContent(
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
         ProductSectionHeader(title = "Казино")
-        CasinoEntry("Слоты", "Игры появятся после подключения провайдера", NextpariWebIcons.Dices, NextpariWebIcons.MenuGreen) {
+        CasinoEntry("Слоты", "Каталог демо-слотов", NextpariWebIcons.Dices, NextpariWebIcons.MenuGreen) {
             onNavigate(Destinations.SLOTS)
         }
         Spacer(Modifier.height(8.dp))
-        CasinoEntry("Лайв казино", "Столы появятся после подключения провайдера", NextpariSectionIcons.Casino, Color.Unspecified) {
+        CasinoEntry("Лайв казино", "Доступные демо-столы", NextpariSectionIcons.Casino, Color.Unspecified) {
             onNavigate(Destinations.LIVE_CASINO)
         }
         if (features.isNotEmpty()) {
@@ -102,12 +103,7 @@ fun CasinoHomeContent(
                 }
             }
         }
-        Text(
-            "Казино-провайдеры появятся после подключения",
-            color = colors.textMuted,
-            fontSize = 14.sp,
-            modifier = Modifier.padding(16.dp),
-        )
+        CasinoDemoCatalog(onOpen = { onNavigate(Destinations.casinoDemoGame(it)) })
     }
 }
 
