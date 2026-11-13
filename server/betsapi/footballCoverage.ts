@@ -118,7 +118,7 @@ export function eventTier(event: NormalizedEvent): number {
   if (event.sport === 'esports' || isEsoccerLeague(name) || isSimulatedLeague(name)) return 3;
   if (event.sport === 'football') {
     const tier = footballTier(event.league);
-    return tier === 1 && /\b(?:reserve|reserves|u[12][0-9]|amateur)\b/.test(name) ? 2 : tier;
+    return tier === 1 && /\b(?:reserves?|u[- ]?[12][0-9]|under[- ]?[12][0-9]|youth|academy|amateur|club friendl(?:y|ies))\b/.test(name) ? 2 : tier;
   }
   return majorCompetitions[event.sport]?.has(name) ? 0 : 1;
 }

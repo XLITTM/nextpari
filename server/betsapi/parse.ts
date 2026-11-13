@@ -4,6 +4,8 @@ import { footballLiveClock } from './liveClock.js';
 import {
   FOOTBALL_SPORT_ID,
   type EventStatus,
+  type FootballPeriod,
+  type LiveClock,
   type MarketAvailability,
   type NormalizedEvent,
   type NormalizedMarket,
@@ -133,6 +135,18 @@ function scoreFromPeriods(value: unknown): { home: number; away: number } | null
     found = true;
   }
   return found ? { home, away } : null;
+}
+
+function footballPeriod(row: Record<string, unknown>, clock: LiveClock | null): FootballPeriod | null {
+  if (!clock || !isRecord(row.timer)) return null;
+  const mode = text(row.timer.md);
+  // In the Events sample md=0 is used before half-time. md=1 alone is
+  // insufficient: also require the recorded half-time score and elapsed time.
+  if (mode === '0' && clock.running && clock.minute < 45) return 'first_half';
+  if (mode !== '1' || clock.minute < 45 || clock.minute >= 90 || !clock.running || !isRecord(row.scores)) return null;
+  const halfTime = row.scores['1'];
+  return isRecord(halfTime) && /^\d+$/.test(text(halfTime.home)) && /^\d+$/.test(text(halfTime.away))
+    ? 'second_half' : null;
 }
 
 function footballScore(
@@ -494,6 +508,7 @@ export function normalizeSportEvent(row: unknown, sportId: EventsSportId, oddsPa
   const priced = oddsPayload === undefined
     ? football ? marketsFromEmbedded(row) : { marketsKnown: false, markets: [] }
     : { marketsKnown: true, markets: marketsFromOddsPayload(oddsPayload, sportId) };
+  const liveClock = football && status.status === 'live' ? footballLiveClock(row.timer, observedAtMs) : null;
   return {
     eventId,
     sportId,
@@ -505,7 +520,8 @@ export function normalizeSportEvent(row: unknown, sportId: EventsSportId, oddsPa
     status: status.status,
     timeStatus: status.timeStatus,
     score: football ? footballScore(row, status.status) : parseFootballScore(row.ss),
-    liveClock: football && status.status === 'live' ? footballLiveClock(row.timer, observedAtMs) : null,
+    liveClock,
+    period: footballPeriod(row, liveClock),
     marketsKnown: priced.marketsKnown,
     markets: priced.markets,
     updatedAt: latestIso(priced.markets.map((market) => market.updatedAt)),

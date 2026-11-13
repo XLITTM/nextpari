@@ -33,6 +33,8 @@ export interface NormalizedMarket {
   availability?: MarketAvailability;
 }
 
+export type FootballPeriod = 'first_half' | 'second_half';
+
 export interface LiveClock {
   minute: number;
   second: number;
@@ -53,6 +55,7 @@ export interface NormalizedEvent {
   timeStatus: string;
   score: { home: number; away: number } | null;
   liveClock?: LiveClock | null;
+  period?: FootballPeriod | null;
   marketsKnown: boolean;
   markets: NormalizedMarket[];
   updatedAt: string | null;

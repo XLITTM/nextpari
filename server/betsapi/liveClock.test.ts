@@ -66,6 +66,20 @@ describe('football live clock', () => {
     assert.deepEqual(malformed.map((event) => event.liveClock), [null, null, null, null]);
   });
 
+  it('publishes only provider-supported phases and leaves ambiguous rows blank', () => {
+    const first = { tm: 34, ts: 12, tt: '1', md: 0 };
+    const second = { tm: 63, ts: 38, tt: '1', md: 1 };
+    const halfTime = { scores: { '1': { home: '0', away: '0' } } };
+    const phase = (timer: object, extra: Record<string, unknown> = {}) =>
+      normalizeFootballDetails({ results: [row(timer, extra)] }, null, NOW)?.period;
+    assert.equal(phase(first), 'first_half');
+    assert.equal(phase({ ...first, tm: 0, ts: 0, tt: '0' }), null);
+    assert.equal(phase(second, halfTime), 'second_half');
+    assert.equal(phase(second), null);
+    assert.equal(phase({ ...second, tm: 45, ts: 0, tt: '0' }, halfTime), null);
+    assert.equal(phase({ ...second, md: 9 }, halfTime), null);
+  });
+
   it('keeps the clock when odds replace markets and marks an old observation stale', () => {
     const details = normalizeFootballDetails({
       success: 1,
@@ -94,13 +108,14 @@ describe('football live clock', () => {
       sleep: async () => undefined,
       fetchImpl: async (input) => {
         paths.push(new URL(String(input)).pathname);
-        return response({ success: 1, results: [row({ tm: 8, ts: 4, tt: '1' })] });
+        return response({ success: 1, results: [row({ tm: 8, ts: 4, tt: '1', md: 0 })] });
       },
     });
     const list = await handleFootballFeedRequest({ method: 'GET', url: '/api/player/sports/football-feed' }, client, client);
-    const events = list.body.events as Array<{ liveClock: { minute: number; running: boolean } | null }>;
+    const events = list.body.events as Array<{ liveClock: { minute: number; running: boolean } | null; period: string | null }>;
     assert.equal(events[0]?.liveClock?.minute, 8);
     assert.equal(events[0]?.liveClock?.running, true);
+    assert.equal(events[0]?.period, 'first_half');
     assert.equal(paths.includes('/v3/events/inplay'), true);
     assert.equal(paths.every((path) => path === '/v3/events/inplay' || path === '/v3/events/upcoming'), true);
     assert.equal(paths.includes('/v2/event/odds'), false);

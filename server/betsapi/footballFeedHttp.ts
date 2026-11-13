@@ -9,7 +9,7 @@ import {
 } from './client.js';
 import { eventTier, rankFeaturedFootball } from './footballCoverage.js';
 import { publishLiveClock } from './liveClock.js';
-import type { FeedResult, LiveClock, NormalizedEvent, NormalizedMarket } from './types.js';
+import type { FeedResult, FootballPeriod, LiveClock, NormalizedEvent, NormalizedMarket } from './types.js';
 
 export const FOOTBALL_FEED_PATH = '/api/player/sports/football-feed';
 const MAX_ODDS_IDS = 8;
@@ -40,6 +40,7 @@ export interface FootballFeedCard {
   live: boolean;
   score: { home: number; away: number } | null;
   liveClock: LiveClock | null;
+  period: FootballPeriod | null;
   priceState: EventOddsState | 'unpriced';
   markets: FootballFeedMarket[];
 }
@@ -87,6 +88,7 @@ function toCard(event: NormalizedEvent, now = Date.now()): FootballFeedCard {
   const football = event.sportId === '1';
   const competition = football ? ownerFootballLogo('competition', event.league.id) : null;
   const tier = eventTier(event);
+  const liveClock = publishLiveClock(event.liveClock, now);
   const markets = event.markets.filter((market) => {
     if (football || market.availability === 'suspended') return true;
     const observed = Date.parse(market.updatedAt ?? '');
@@ -109,7 +111,8 @@ function toCard(event: NormalizedEvent, now = Date.now()): FootballFeedCard {
     kickoff: event.kickoff,
     live: event.status === 'live',
     score: event.score,
-    liveClock: publishLiveClock(event.liveClock, now),
+    liveClock,
+    period: liveClock && !liveClock.stale && tier !== 3 ? event.period ?? null : null,
     priceState: priceStateOf({ ...event, markets }),
     markets: markets.flatMap((market) => {
       const card = marketToCard(market);

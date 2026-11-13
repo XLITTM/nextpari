@@ -493,7 +493,8 @@ export class BetsApiReadOnlyClient {
     const viewObservation = readRateLimitHeaders(view.headers, this.now());
     this.budget.noteQuota(viewObservation);
 
-    const observed = normalizeFootballDetails(view.json, null, this.now(), sportId);
+    const viewObservedAt = this.now();
+    const observed = normalizeFootballDetails(view.json, null, viewObservedAt, sportId);
     if (sportId !== FOOTBALL_SPORT_ID && observed?.eventId !== eventId) {
       return this.ok({ storedAt: this.now(), events: [], endpoint: 'event', sportId, rateLimit: snapshotOf(viewObservation) }, false, false);
     }
@@ -512,7 +513,7 @@ export class BetsApiReadOnlyClient {
       oddsPayload = odds.json;
       oddsRate = snapshotOf(observation);
     }
-    const event = normalizeFootballDetails(view.json, oddsLimited ? null : oddsPayload, this.now(), sportId);
+    const event = normalizeFootballDetails(view.json, oddsLimited ? null : oddsPayload, viewObservedAt, sportId);
     const entry: CacheEntry = {
       storedAt: this.now(),
       events: event?.eventId === eventId ? [event] : [],
