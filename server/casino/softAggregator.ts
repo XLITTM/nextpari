@@ -42,7 +42,7 @@ export function normalizeCatalog(payload: unknown, artworkOrigins: ReadonlySet<s
     const title = text(row.name, 250);
     const category = text(row.game_type, 30) as CasinoDemoGame['category'];
     if (row.play_for_fun_supported !== true || !provider || !sourceId.trim() || !title ||
-        !Object.hasOwn(casinoCategories, category)) continue;
+        !Object.prototype.hasOwnProperty.call(casinoCategories, category)) continue;
     const id = 'sa-' + createHash('sha256').update(JSON.stringify([provider, sourceId])).digest('hex').slice(0, 32);
     const art = httpsUrl(row.image);
     const image = art && artworkOrigins.has(art.origin) && !art.search && !art.hash ? art.href : null;
