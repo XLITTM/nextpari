@@ -78,6 +78,9 @@ class SportsPresentationTest {
         assertEquals("63:38", liveStatusText(null, "63:38"))
         assertNull(liveStatusText("LIVE", null))
         assertNull(liveStatusText(null, null))
+        assertEquals("LIVE", liveCardStatus(null, null))
+        assertEquals("1-й тайм · 34:12", liveCardStatus("first_half", "34:12"))
+        assertEquals("2-й тайм", liveCardStatus("second_half", null))
     }
 
     @Test

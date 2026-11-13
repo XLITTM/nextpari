@@ -189,7 +189,7 @@ fun HomeScreen(
                 item(key = "sports") { SportsSelector(state, viewModel::selectSport) }
                 if (state.promos.isNotEmpty()) item(key = "promos") { PromoRow(state.promos, onNavigate) }
                 item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, sportsbook::refreshFeed) }
-                val liveBody = HomeFeedVisibility.topLive(football.loading, popularLive.size)
+                val liveBody = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLive.size)
                 if (liveBody != HomeSectionBody.Hidden) {
                     item(key = "live") {
                         MatchSection(
@@ -404,7 +404,7 @@ private fun MatchSection(
             HomeSectionBody.Hidden -> Unit
             HomeSectionBody.Skeleton -> MatchSkeletonCarousel()
             HomeSectionBody.EmptyText -> Text(
-                "Сейчас матчей нет",
+                SportsListCatalog.EMPTY_MATCHES,
                 color = colors.textMuted,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),

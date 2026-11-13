@@ -118,6 +118,8 @@ object CountryGrouping {
 }
 
 object SportsListCatalog {
+    const val EMPTY_MATCHES = "Сейчас матчей нет"
+
     val supported: List<HomeSport> = listOf(
         HomeSport("football", "Футбол"),
         HomeSport("tennis", "Теннис"),
@@ -141,11 +143,11 @@ object SportsListCatalog {
         HomeSport("boxing", "Бокс"), HomeSport("gaelic-sports", "Гэльский спорт"),
     )
 
-    fun selector(live: List<MatchCardModel>, line: List<MatchCardModel>): List<HomeSport> {
-        val available = (live.asSequence() + line.asSequence())
-            .filterNot(FeaturedSports::isEsports).map { it.sport }.toSet()
-        return listOf(HomeSport("all", "Все")) + supported.filter { it.id in available }
-    }
+    fun selector(
+        @Suppress("UNUSED_PARAMETER") live: List<MatchCardModel>,
+        @Suppress("UNUSED_PARAMETER") line: List<MatchCardModel>,
+    ): List<HomeSport> =
+        listOf(HomeSport("all", "Все")) + supported.filterNot { it.id == "esports" }
 
     fun rows(tab: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<SportListRow> {
         val pool = if (tab == "line") line else live

@@ -79,10 +79,11 @@ private fun footballLiveMinute(match: MatchCardModel): String? {
 @Composable
 internal fun matchLiveStatus(match: MatchCardModel): String? {
     if (!match.isLive) return null
-    val time = footballLiveMinute(match)
-    if (match.liveClock != null && time == null) return null
-    return liveStatusText(match.period, time)
+    return liveCardStatus(match.period, footballLiveMinute(match))
 }
+
+internal fun liveCardStatus(period: String?, time: String?): String =
+    liveStatusText(period, time) ?: "LIVE"
 
 internal fun liveStatusText(period: String?, time: String?): String? {
     val phase = when (period?.trim()) {
