@@ -98,7 +98,7 @@ class FootballIntegrationTest {
             server.enqueue(jsonResponse("""{"ok":true,"stale":false,"events":[$fixture]}"""))
             assertTrue(repository.read().fixtures.single().match.isLive)
             val list = server.takeRequest()
-            assertEquals("/api/player/sports/football-feed", list.path)
+            assertEquals("/api/player/sports/football-feed?includeSports=1", list.path)
             assertEquals("test-player-session=test-value", list.getHeader("Cookie"))
             server.enqueue(jsonResponse("""{"ok":true,"events":[$fixture]}"""))
             assertEquals("100", repository.read("100").fixtures.single().match.id)
