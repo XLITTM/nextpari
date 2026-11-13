@@ -79,6 +79,9 @@ BEGIN
     END IF;
     v_version := md5(jsonb_build_array(v_tmt.rate::text, extract(epoch FROM v_tmt.updated_at), v_usd.rate::text, extract(epoch FROM v_usd.updated_at))::text);
     IF p_confirm_launch THEN
+        IF p_rate_version IS DISTINCT FROM v_version THEN
+            RAISE EXCEPTION 'SOFTAGGREGATOR_RATE_CHANGED';
+        END IF;
         UPDATE private.softaggregator_sessions
         SET debit_until = clock_timestamp() + interval '2 hours'
         WHERE id = p_session AND player_user_id = p_player AND provider_game_id = p_game
@@ -124,6 +127,7 @@ DECLARE
     v_round_net numeric;
     v_adjusted numeric;
     v_original_debit text;
+    v_attribution_ref text;
 BEGIN
     IF p_call IS NULL OR p_call !~ '^[a-f0-9]{64}$' OR p_fingerprint IS NULL OR p_fingerprint !~ '^[a-f0-9]{64}$'
        OR p_action IS NULL OR p_action NOT IN ('balance','debit','credit')
@@ -199,6 +203,13 @@ BEGIN
                 FROM private.softaggregator_wallet_calls c
                 WHERE c.session_id = p_session AND c.provider_round_id = p_round
                   AND c.action = 'debit' AND NOT c.rollback AND c.error = 0 AND c.ledger_id IS NOT NULL;
+                IF v_original_debit IS NULL THEN
+                    -- No unique original debit: the shared attribution trigger
+                    -- handles the credit as uncorrelated, with no cashier guess.
+                    v_attribution_ref := p_call;
+                ELSE
+                    v_attribution_ref := v_original_debit;
+                END IF;
             END IF;
             SELECT a.ledger_id, a.available_balance INTO STRICT v_entry, v_available
             FROM private.apply_wallet_entry(v_session.wallet_id, v_delta, 0, v_op, 'casino',
@@ -207,7 +218,7 @@ BEGIN
                     'wallet_currency', 'TMT', 'usdt_tmt', v_session.usdt_tmt::text,
                     'usdt_usd', v_session.usdt_usd::text, 'session_id', p_session,
                     'game_id', p_game, 'round_id', p_round, 'rollback', p_rollback,
-                    'related_transaction_id', v_original_debit)) a;
+                    'related_transaction_id', v_attribution_ref)) a;
             v_balance := private.softaggregator_usd_minor(v_available, v_session.usdt_tmt, v_session.usdt_usd);
         END IF;
     END IF;

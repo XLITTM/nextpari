@@ -169,6 +169,7 @@ export function createSoftAggregator(
   }
 
   return {
+    standardLaunchConfigured: mode === 'standard' && enabled && launchOrigins.size > 0,
     async list(params: URLSearchParams) {
       const snapshot = await catalog();
       const term = (params.get('q') ?? '').trim().slice(0, 120).toLowerCase();

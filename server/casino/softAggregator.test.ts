@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSoftAggregator, normalizeCatalog } from './softAggregator.js';
 import { casinoDemoRequest } from './http.js';
+import { standardCasinoGates } from './softAggregatorReal.js';
 
 const demo = {
   provider: 'verified-studio', provider_name: 'Verified Studio',
@@ -15,6 +16,29 @@ const env = {
   SOFTAGGREGATOR_ARTWORK_ORIGINS: 'https://art.example.test',
   SOFTAGGREGATOR_LAUNCH_ORIGINS: 'https://launch.example.test',
 };
+
+test('production callback can verify a balance while all wallet mutations stay disabled', () => {
+  const settings = {
+    VERCEL_ENV: 'production',
+    SOFTAGGREGATOR_REAL_CALLBACK_HOST: 'nextpari.net',
+    SOFTAGGREGATOR_REAL_CALLBACK_ENABLED: '1',
+    SOFTAGGREGATOR_REAL_SALT: 'fixture-salt',
+    SOFTAGGREGATOR_REAL_PLAYER_SECRET: 'x'.repeat(32),
+    SOFTAGGREGATOR_REAL_LAUNCH_ENABLED: '1',
+    SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY: '1',
+    SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '1',
+  };
+  assert.deepEqual(standardCasinoGates({ ...settings, SOFTAGGREGATOR_CATALOG_ONLY: '1' }), {
+    callback: true, launch: false, approvedWallet: false, newDebits: false,
+  });
+  assert.deepEqual(standardCasinoGates({ ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1' }), {
+    callback: true, launch: true, approvedWallet: false, newDebits: false,
+  });
+  assert.deepEqual(standardCasinoGates({
+    ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
+    SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '0',
+  }), { callback: true, launch: true, approvedWallet: true, newDebits: false });
+});
 
 test('uses exact entitled identities, filters and coalesces concurrent reads', async () => {
   const calls: string[] = [];
