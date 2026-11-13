@@ -123,6 +123,11 @@ export class SharedRequestBudget {
     return this.now() < this.backoffUntil;
   }
 
+  /** Time the next upstream call must wait before it can start. */
+  delayUntilNext(): number {
+    return Math.max(0, Math.max(this.nextAt, this.backoffUntil) - this.now());
+  }
+
   noteQuota(observation: RateLimitObservation): void {
     this.noteSuccess();
     this.noteRemainingExhausted(observation);

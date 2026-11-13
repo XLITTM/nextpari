@@ -5,6 +5,7 @@ import {
   BetsApiReadOnlyClient,
   getFootballOddsClient,
   getSharedBetsApiClient,
+  LISTED_FEED_DEADLINE_MS,
   type EventOddsRead,
   type EventOddsState,
 } from './client.js';
@@ -52,6 +53,13 @@ export interface FootballOddsQuote {
   priceState: EventOddsState | 'deferred';
   stale: boolean;
   markets: FootballFeedMarket[];
+}
+
+function feedFreshness(result: FeedResult, partial: boolean): 'fresh' | 'stale' | 'partial' | 'absent' {
+  if (!result.ok || !result.feed) return 'absent';
+  if (result.feed.stale) return 'stale';
+  if (partial) return 'partial';
+  return 'fresh';
 }
 
 function cardsFrom(result: FeedResult | null, now = Date.now()): FootballFeedCard[] {
@@ -195,10 +203,8 @@ export async function handleFootballFeedRequest(
     };
   }
   const includeSports = params.get('includeSports') === '1';
-  const [live, upcoming, additional] = await Promise.all([
-    client.getInplay(), client.getPrematchCoverage(),
-    includeSports ? client.getAdditionalSports() : [],
-  ]);
+  const listed = await client.readListedFootball(Date.now() + LISTED_FEED_DEADLINE_MS, includeSports);
+  const { live, upcoming, additional } = listed;
   const tokenMissing = live.error === 'TOKEN_MISSING' || upcoming.error === 'TOKEN_MISSING';
   return {
     status: tokenMissing || live.ok || upcoming.ok ? 200 : 503,
@@ -206,6 +212,11 @@ export async function handleFootballFeedRequest(
       ok: tokenMissing || live.ok || upcoming.ok,
       error: tokenMissing ? 'TOKEN_MISSING' : live.error ?? upcoming.error,
       stale: Boolean(live.feed?.stale || upcoming.feed?.stale),
+      freshness: {
+        live: feedFreshness(live, false),
+        prematch: feedFreshness(upcoming, listed.coveragePartial),
+        deadlineMs: LISTED_FEED_DEADLINE_MS,
+      },
       coverage: additional.map(({ sportId, prematch, result }) => ({
         sportId, phase: prematch ? 'prematch' : 'live', observed: Boolean(result?.ok && !result.feed?.stale),
         count: result?.feed?.events.length ?? 0, upstreamStatus: result?.upstreamStatus ?? null, error: result?.error ?? null,
