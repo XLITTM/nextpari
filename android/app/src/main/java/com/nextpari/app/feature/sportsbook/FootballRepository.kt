@@ -40,9 +40,14 @@ data class FootballSnapshot(
     val notice: String? = null,
     val canPrice: Boolean = true,
     val retryable: Boolean = false,
+    val featuredLive: List<String>? = null,
+    val featuredLine: List<String>? = null,
+    val schedule: List<String>? = null,
 ) {
     fun locked(message: String, canRetry: Boolean = true) = copy(
-        fixtures = fixtures.map(FootballFixture::locked),
+        fixtures = fixtures.map { fixture ->
+            fixture.locked().let { it.copy(match = it.match.copy(insights = null)) }
+        },
         notice = message,
         canPrice = false,
         retryable = canRetry,
@@ -258,6 +263,9 @@ internal data class FootballFeedDto(
     val error: String? = null,
     val stale: Boolean = false,
     val events: List<FootballEventDto> = emptyList(),
+    val featuredLive: List<FootballEventDto>? = null,
+    val featuredLine: List<FootballEventDto>? = null,
+    val schedule: List<FootballEventDto>? = null,
 ) {
     fun toSnapshot(
         eventId: String?,
@@ -280,12 +288,23 @@ internal data class FootballFeedDto(
                     issue != null -> fixture.locked(FootballPriceState.Upstream)
                     current.any { it != fixture } -> fixture.locked(FootballPriceState.Unavailable).let {
                         it.copy(match = it.match.copy(liveClock = null, period = null, homeBadgeUrl = null,
-                            awayBadgeUrl = null, competitionBadge = null, competitionId = null))
+                            awayBadgeUrl = null, competitionBadge = null, competitionId = null, insights = null))
                     }
                     else -> fixture
                 }
             }
+        val byId = fixtures.associateBy { it.match.eventId }
+        fun listIds(rows: List<FootballEventDto>?): List<String>? = rows?.mapNotNull { row ->
+            val match = byId[row.id]?.match ?: return@mapNotNull null
+            row.id.takeIf {
+                match.isLive == row.live && match.team1 == row.home && match.team2 == row.away &&
+                    !FeaturedSports.isEsports(match)
+            }
+        }?.distinct()
         return FootballSnapshot(fixtures, issue,
+            featuredLive = listIds(featuredLive?.filter(FootballEventDto::live)),
+            featuredLine = listIds(featuredLine?.filterNot(FootballEventDto::live)),
+            schedule = listIds(schedule),
             canPrice = ok && !stale && error !in setOf("TOKEN_MISSING", "RATE_LIMITED"),
             retryable = !stale && error !in setOf("TOKEN_MISSING", "RATE_LIMITED") && (!ok || error != null))
     }
@@ -345,12 +364,13 @@ internal data class FootballEventDto(
     val period: String? = null,
     val liveClock: JsonElement? = null,
     val logos: JsonElement? = null,
+    val insights: JsonElement? = null,
 ) {
     fun toFixture(receiptEpochMs: Long = 0, receiptElapsedMs: Long = 0, allowClock: Boolean = true): FootballFixture? {
         if (!isSportsFeedEventId(id) || home.isBlank() || away.isBlank()) return null
         val readOnly = additionalSportEventId.matchEntire(id)
         val expectedSport = readOnly?.groupValues?.get(1)?.let(providerSports::get)
-        if (readOnly != null && (expectedSport == null || (expectedSport != sport && !(sport == "esports" && tier == 3)))) return null
+        if (readOnly != null && (expectedSport == null || (expectedSport != sport && !(sport == "esports" && tier in setOf(3, 5))))) return null
         val kickoffTime = kickoff?.let { runCatching { Instant.parse(it) }.getOrNull() }
         val kickoffLabel = kickoffTime?.atZone(ZoneId.systemDefault())?.format(kickoffFormat)
         val clock = if (live && allowClock && sport == "football") {
@@ -361,6 +381,9 @@ internal data class FootballEventDto(
             id = id,
             sport = if (FeaturedSports.isVirtualFootball(league)) "esports" else sport,
             serverTier = tier,
+            insights = if (allowClock && sport == "football" && !FeaturedSports.isVirtualFootball(league)) {
+                MatchInsights.fromWire(insights, receiptEpochMs, receiptElapsedMs)
+            } else null,
             league = league.ifBlank { "Футбол" },
             country = country,
             team1 = home,

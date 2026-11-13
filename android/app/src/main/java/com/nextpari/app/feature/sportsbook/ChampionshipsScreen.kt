@@ -20,13 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.Language
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material.icons.outlined.Tv
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,7 +61,9 @@ fun ChampionshipsScreen(
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(if (initialMode == "line") "line" else "live") }
     val football = viewModel.state.collectAsStateWithLifecycle().value
-    val groups = viewModel.championships(sport, tab)
+    var searchLabel by rememberSaveable { mutableStateOf("") }
+    var query by rememberSaveable { mutableStateOf("") }
+    val groups = CountryGrouping.search(viewModel.championships(sport, tab), query, searchLabel == "Страна")
     var expanded by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(groups.map { it.country }) {
         expanded = CountryGrouping.nextExpanded(groups, expanded)
@@ -89,8 +85,21 @@ fun ChampionshipsScreen(
                     NextpariWebIcons.Globe to "Страна",
                     NextpariWebIcons.Tv to "Трансляции",
                 ),
-                onAction = { actionNotice = sportsActionMessage(it) },
+                onAction = { label ->
+                    if (label == "Трансляции") {
+                        actionNotice = "Трансляции недоступны"
+                    } else {
+                        actionNotice = ""
+                        searchLabel = if (searchLabel == label) "" else label
+                        query = ""
+                    }
+                },
             )
+            if (searchLabel.isNotEmpty()) {
+                OutlinedTextField(query, { query = it }, singleLine = true,
+                    label = { Text(if (searchLabel == "Страна") "Поиск по стране" else "Поиск чемпионатов") },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
+            }
             if (actionNotice.isNotBlank()) {
                 Text(actionNotice, color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
             }
@@ -112,7 +121,7 @@ fun ChampionshipsScreen(
         when {
             football.loading && groups.isEmpty() -> MatchSkeletonCarousel(count = 4)
             groups.isEmpty() -> Text(
-                "Сейчас матчей нет",
+                if (query.isBlank()) "Сейчас матчей нет" else "Чемпионаты не найдены",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
                 fontSize = 14.sp,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),

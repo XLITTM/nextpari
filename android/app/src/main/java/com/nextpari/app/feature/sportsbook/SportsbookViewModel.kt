@@ -142,8 +142,12 @@ class SportsbookViewModel(
                     }
                 })
                 val listedDetail = state.detailId?.let { id -> feed.fixtures.firstOrNull { it.match.eventId == id } }
-                val detail = if (listedDetail != null) FootballSnapshot(listOf(listedDetail), feed.notice ?: listedDetail.priceState.notice, feed.canPrice, feed.retryable)
-                    else state.detail
+                val detail = if (listedDetail != null) {
+                    val previous = state.detail.fixtures.singleOrNull()?.takeIf(listedDetail::sameEvent)
+                    val match = listedDetail.match.copy(insights = previous?.match?.insights.takeIf { feed.notice == null })
+                    FootballSnapshot(listOf(listedDetail.copy(match = match)),
+                        feed.notice ?: listedDetail.priceState.notice, feed.canPrice, feed.retryable)
+                } else state.detail
                 state.copy(feed = feed, detail = detail, loading = false)
             }
             val presentIds = ui.value.feed.fixtures.mapTo(mutableSetOf()) { attemptKey(it) }
@@ -169,12 +173,19 @@ class SportsbookViewModel(
                 (state.detailId == id && state.detail.canPrice)
         }
         if (cached != null) {
-            ui.update { it.copy(detailId = id, detail = FootballSnapshot(listOf(cached), cached.priceState.notice), detailLoading = false) }
+            val previous = state.detail.fixtures.singleOrNull()?.takeIf(cached::sameEvent)
+            val match = cached.match.copy(insights = previous?.match?.insights ?: cached.match.insights)
+            ui.update { it.copy(detailId = id, detail = FootballSnapshot(listOf(cached.copy(match = match)),
+                cached.priceState.notice), detailLoading = false) }
             scheduleOdds()
-            if (!refreshClock || !cached.match.isLive) return
-            if (listed) {
-                refreshFeed()
-                return
+            if (!refreshClock) return
+            // Only the detail route includes insights in the current server contract.
+            if (state.feed.featuredLive == null) {
+                if (!cached.match.isLive) return
+                if (listed) {
+                    refreshFeed()
+                    return
+                }
             }
         }
         if (ui.value.detailId == id && detailJob?.isActive == true) return
@@ -187,8 +198,11 @@ class SportsbookViewModel(
             if (!current(run) || ui.value.detailId != id) return@launch
             ui.update { state ->
                 val fixtures = detail.fixtures.map { fresh ->
-                    val newer = state.fixtureFor(id)?.takeIf { it.sameEvent(fresh) && it.quoteOrder > order }
-                    if (newer != null) fresh.withPrices(newer) else fresh.stamped(order, started)
+                    val current = state.fixtureFor(id)?.takeIf { it.sameEvent(fresh) }
+                    if (current != null && (current.quoteOrder > order ||
+                            (detail.canPrice && fresh.priceState == FootballPriceState.Unpriced && current.hasPrice(now())))) {
+                        fresh.withPrices(current)
+                    } else fresh.stamped(order, started)
                 }
                 state.copy(detail = detail.copy(fixtures = fixtures,
                     notice = detail.notice ?: fixtures.singleOrNull()?.takeIf { footballEventId.matches(id) }?.priceState?.notice), detailLoading = false)
@@ -326,7 +340,24 @@ class SportsbookViewModel(
 
     fun live(): List<MatchCardModel> = matches(true)
     fun line(): List<MatchCardModel> = matches(false)
-    fun pool(mode: String): List<MatchCardModel> = SportsbookCatalog.pool(mode, live(), line())
+    fun pool(mode: String): List<MatchCardModel> {
+        val matches = if (mode == "line") line() else live()
+        val real = orderedByIds(matches, ui.value.feed.schedule) ?: return matches
+        return real + matches.filter(FeaturedSports::isEsports)
+    }
+
+    fun featured(live: Boolean, matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> {
+        val feed = ui.value.feed
+        val order = if (live) feed.featuredLive else feed.featuredLine
+        if (order == null) return if (live) FeaturedSports.popularLive(matches) else FeaturedSports.popularLine(matches, nowMs)
+        return orderedByIds(matches, order).orEmpty()
+    }
+
+    private fun orderedByIds(matches: List<MatchCardModel>, ids: List<String>?): List<MatchCardModel>? {
+        if (ids == null) return null
+        val byId = matches.associateBy(MatchCardModel::eventId)
+        return ids.mapNotNull(byId::get)
+    }
     fun sportRows(tab: String): List<SportListRow> = SportsListCatalog.rows(tab, live(), line())
     fun championships(sport: String, mode: String): List<CountryGroup> =
         CountryGrouping.groupByCountry(pool(mode).filter { it.sport == sport })
@@ -336,8 +367,7 @@ class SportsbookViewModel(
     fun matchById(id: String): MatchCardModel? {
         val current = ui.value
         val detailMatch = detailFixture(id)?.match
-        val match = if (current.detailId == id && !current.detailLoading && current.detail.notice == null) detailMatch
-            else detailMatch ?: current.feed.fixtures.firstOrNull { it.match.id == id }?.match
+        val match = detailMatch ?: current.feed.fixtures.firstOrNull { it.match.id == id }?.match
         return match?.copy(isFavorite = id in current.favoriteMatchIds)
     }
     fun marketsFor(id: String): List<MarketGroup> = detailFixture(id)?.markets.orEmpty()

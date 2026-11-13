@@ -11,14 +11,19 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -90,6 +95,7 @@ import com.nextpari.app.feature.sportsbook.ChampionshipsScreen
 import com.nextpari.app.feature.sportsbook.GameListScreen
 import com.nextpari.app.feature.sportsbook.MatchDetailsScreen
 import com.nextpari.app.feature.sportsbook.SportsListScreen
+import com.nextpari.app.feature.sportsbook.SportsbookCatalog
 import com.nextpari.app.feature.sportsbook.SportsbookPreviewData
 import com.nextpari.app.feature.sportsbook.SportsbookViewModel
 import com.nextpari.app.feature.sportsbook.LeagueScreen
@@ -637,14 +643,34 @@ internal fun AuthenticatedShell(
     }
 
     if (searchOpen) {
+        LaunchedEffect(Unit) { sportsbookViewModel.refreshFeed() }
+        var query by rememberSaveable { mutableStateOf("") }
+        val matches = if (query.isBlank()) emptyList() else SportsbookCatalog.search(
+            (sportsbookViewModel.live() + sportsbookViewModel.line()).distinctBy { it.eventId }, query,
+        )
         ModalBottomSheet(
             onDismissRequest = { searchOpen = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = colors.surface,
         ) {
-            Column(Modifier.padding(24.dp).fillMaxSize()) {
-                Text("Поиск", color = colors.text, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                Text("Введите название события или чемпионата", color = colors.textMuted, modifier = Modifier.padding(top = 8.dp))
+            Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                OutlinedTextField(query, { query = it }, singleLine = true,
+                    label = { Text("Поиск матча или чемпионата") }, modifier = Modifier.fillMaxWidth())
+                if (matches.isEmpty() && query.isNotBlank()) {
+                    Text(if (football.loading) "Загрузка событий…" else "Матчи не найдены",
+                        color = colors.textSecondary, modifier = Modifier.padding(vertical = 12.dp))
+                }
+                LazyColumn(Modifier.weight(1f)) {
+                    items(matches, key = { it.eventId }) { match ->
+                        Column(Modifier.fillMaxWidth().clickable {
+                            searchOpen = false
+                            navController.navigateTo(Destinations.match(match.eventId))
+                        }.padding(vertical = 10.dp)) {
+                            Text("${match.team1} — ${match.team2}", color = colors.text)
+                            Text(match.league, color = colors.textSecondary)
+                        }
+                    }
+                }
             }
         }
     }

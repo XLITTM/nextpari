@@ -92,6 +92,18 @@ object CountryGrouping {
         }
     }
 
+    internal fun search(groups: List<CountryGroup>, query: String, countryOnly: Boolean): List<CountryGroup> {
+        val term = query.trim()
+        if (term.isEmpty()) return groups
+        return groups.mapNotNull { group ->
+            if (SportsRegions.name(group.country).contains(term, ignoreCase = true) ||
+                group.country.contains(term, ignoreCase = true)) return@mapNotNull group
+            if (countryOnly) return@mapNotNull null
+            val leagues = group.leagues.filter { it.name.contains(term, ignoreCase = true) }
+            group.copy(count = leagues.sumOf(LeagueRow::count), leagues = leagues).takeIf { leagues.isNotEmpty() }
+        }
+    }
+
     fun initialExpanded(groups: List<CountryGroup>): String = groups.firstOrNull()?.country.orEmpty()
 
     fun nextExpanded(groups: List<CountryGroup>, current: String): String {
@@ -129,26 +141,19 @@ object SportsListCatalog {
         HomeSport("boxing", "Бокс"), HomeSport("gaelic-sports", "Гэльский спорт"),
     )
 
-    val featuredIds: List<String> = listOf("football", "tennis", "basketball", "hockey", "esports")
+    fun selector(live: List<MatchCardModel>, line: List<MatchCardModel>): List<HomeSport> {
+        val available = (live.asSequence() + line.asSequence())
+            .filterNot(FeaturedSports::isEsports).map { it.sport }.toSet()
+        return listOf(HomeSport("all", "Все")) + supported.filter { it.id in available }
+    }
 
     fun rows(tab: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<SportListRow> {
         val pool = if (tab == "line") line else live
-        return supported
-            .filter { sport -> if (tab == "cybers") sport.id == "esports" else sport.id != "esports" }
-            .map { sport -> SportListRow(sport.id, sport.name, pool.count { it.sport == sport.id }) }
-            .sortedWith { a, b ->
-                val ai = featuredIds.indexOf(a.id)
-                val bi = featuredIds.indexOf(b.id)
-                when {
-                    ai != -1 || bi != -1 -> {
-                        if (ai == -1) 1
-                        else if (bi == -1) -1
-                        else ai - bi
-                    }
-                    else -> b.count - a.count
-                }
-            }
-            .filter { it.count > 0 || it.id in featuredIds }
+        val counts = pool.filter { FeaturedSports.isEsports(it) == (tab == "cybers") }
+            .groupingBy { if (tab == "cybers") "esports" else it.sport }.eachCount()
+        return supported.mapNotNull { sport ->
+            counts[sport.id]?.let { SportListRow(sport.id, sport.name, it) }
+        }
     }
 
     fun sportName(id: String): String = supported.firstOrNull { it.id == id }?.name ?: "Спорт"
@@ -201,8 +206,12 @@ object MarketTabs {
         else -> football
     }
 
-    fun available(sport: String, markets: List<MarketGroup>): List<MarketTabSpec> =
-        forSport(sport).filter { tab -> tab.id == "all" || markets.any { matchesTab(it, tab.id) } }
+    fun available(sport: String, markets: List<MarketGroup>): List<MarketTabSpec> {
+        val configured = forSport(sport)
+        val shared = football.filter { it.id in setOf("totals", "handicaps") }
+        return (configured + shared).distinctBy(MarketTabSpec::id)
+            .filter { tab -> tab.id == "all" || markets.any { matchesTab(it, tab.id) } }
+    }
 
     fun matchesTab(market: MarketGroup, tab: String): Boolean {
         val name = market.name.lowercase()
@@ -211,9 +220,10 @@ object MarketTabs {
             "double-chance" -> market.category == "double-chance" || name in setOf("двойной шанс", "double chance")
             "btts" -> market.category == "btts" || market.marketId == "btts" || name in setOf("обе забьют", "both teams to score")
             "cards" -> market.category == "cards"
-            "totals" -> Regex("тотал|under/over|total|exactly").containsMatchIn(name) &&
-                !Regex("corner|гол|забьют|точный|goal|btts").containsMatchIn(name)
-            "handicaps" -> Regex("фора|handicap").containsMatchIn(name) && !name.contains("corner")
+            "totals" -> market.category == "totals" || (Regex("тотал|under/over|total|exactly").containsMatchIn(name) &&
+                !Regex("corner|гол|забьют|точный|goal|btts").containsMatchIn(name))
+            "handicaps" -> market.category == "handicaps" ||
+                (Regex("фора|handicap").containsMatchIn(name) && !name.contains("corner"))
             "goals" -> Regex("голы|забьют|точный счёт|btts|both teams|индивидуальный тотал|team total|next goal|correct score|last team to score").containsMatchIn(name) ||
                 market.marketId == "btts"
             "corners" -> market.category == "corners" || Regex("угл|corner").containsMatchIn(name)
@@ -285,6 +295,15 @@ object SportsbookCatalog {
 
     fun matchById(matches: List<MatchCardModel>, id: String): MatchCardModel? =
         matches.firstOrNull { it.id == id || it.eventId == id }
+
+    internal fun search(matches: List<MatchCardModel>, query: String): List<MatchCardModel> {
+        val term = query.trim()
+        if (term.isEmpty()) return matches
+        return matches.filter { match ->
+            listOf(match.team1, match.team2, match.league, SportsRegions.name(match.country))
+                .any { it.contains(term, ignoreCase = true) }
+        }
+    }
 
     fun pool(mode: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<MatchCardModel> =
         if (mode == "line") line else live

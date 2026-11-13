@@ -56,15 +56,14 @@ internal object FeaturedSports {
     fun isVirtualFootball(league: String): Boolean =
         normalized(league).substringBefore(' ') in setOf("esoccer", "e-soccer", "virtual", "simulated")
 
-    fun isEsports(match: MatchCardModel) = match.sport == "esports" ||
+    fun isEsports(match: MatchCardModel) = match.serverTier == 5 || match.sport == "esports" ||
         (match.sport == "football" && isVirtualFootball(match.league))
 
     fun tier(match: MatchCardModel): Int {
-        if (isEsports(match)) return 3
+        if (isEsports(match)) return 5
+        match.serverTier?.takeIf { it in 0..5 }?.let { return it }
         val league = normalized(match.league)
-        // Older servers classify youth and club friendlies as ordinary competitions.
         if (match.sport == "football" && lowerPriorityFootball.containsMatchIn(league)) return 2
-        match.serverTier?.takeIf { it in 0..3 }?.let { return it }
         if (match.sport != "football") return if (league in majorOtherSports[match.sport].orEmpty()) 0 else 1
         if (league in nationalCompetitions || league in internationalClubCompetitions || league in qualifiedDomestic) return 0
         if ((match.competitionId ?: match.competitionBadge?.canonicalId) == BundledFootballBadges.PREMIER_LEAGUE_ID) return 0
@@ -74,11 +73,11 @@ internal object FeaturedSports {
     }
 
     fun popularLive(matches: List<MatchCardModel>): List<MatchCardModel> =
-        ordered(matches.filter { it.isLive && tier(it) < 3 })
+        ordered(matches.filter { it.isLive && !isEsports(it) })
 
     fun popularLine(matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> =
         matches.filter { match ->
-            !match.isLive && tier(match) < 3 &&
+            !match.isLive && !isEsports(match) &&
                 match.kickoffEpochMs?.let { it > nowMs && it <= nowMs + FEATURED_LINE_WINDOW_MS } == true
         }.sortedWith(compareBy<MatchCardModel>(::tier).thenBy { it.kickoffEpochMs })
 

@@ -36,6 +36,8 @@ class SportsPresentationTest {
         assertTrue(FeaturedSports.isEsports(virtual))
         assertFalse(FeaturedSports.isEsports(nations))
         assertEquals(1, FeaturedSports.tier(nations.copy(league = "Premier League", country = "AR")))
+        assertEquals(1, FeaturedSports.tier(youth.copy(serverTier = 1)))
+        assertTrue(FeaturedSports.isEsports(nations.copy(serverTier = 5)))
     }
 
     @Test
@@ -50,9 +52,9 @@ class SportsPresentationTest {
     fun featuredSectionsRankRealMajorEventsAndLimitLineToTheNextDay() {
         val now = 1_000_000L
         val nextDay = now + 86_400_000
-        val youth = nations.copy(id = "200", league = "U-20 World Cup", serverTier = 1)
+        val youth = nations.copy(id = "200", league = "U-20 World Cup", serverTier = 2)
         val nba = nations.copy(id = "201", sport = "basketball", league = "NBA", serverTier = 0)
-        val friendly = nations.copy(id = "202", league = "Club Friendlies", serverTier = 1)
+        val friendly = nations.copy(id = "202", league = "Club Friendlies", serverTier = 2)
         val virtual = nations.copy(id = "203", league = "Esoccer GT Leagues", serverTier = 1)
         assertEquals(listOf(nba, nations, youth, friendly),
             FeaturedSports.popularLive(listOf(youth, nba, virtual, friendly, nations)))
@@ -76,6 +78,23 @@ class SportsPresentationTest {
         assertEquals("63:38", liveStatusText(null, "63:38"))
         assertNull(liveStatusText("LIVE", null))
         assertNull(liveStatusText(null, null))
+    }
+
+    @Test
+    fun trackerHasSixPagesAndAnExplicitUnavailableStateForUnsupportedStats() {
+        assertEquals(
+            listOf("Счёт", "Периоды", "Статистика", "Хронология", "История", "О матче"),
+            MatchTrackerPage.entries.map { it.label },
+        )
+        assertEquals("Статистика недоступна", MatchTrackerPage.Statistics.unavailable)
+        assertEquals("История встреч недоступна", MatchTrackerPage.History.unavailable)
+        val tracker = File("src/main/java/com/nextpari/app/feature/sportsbook/MatchTracker.kt").readText()
+        assertTrue(tracker.contains("HorizontalPager("))
+        assertTrue(tracker.contains("Трансляция недоступна"))
+        assertTrue(tracker.contains("R.drawable.np_match_football_stadium"))
+        val details = File("src/main/java/com/nextpari/app/feature/sportsbook/MatchDetailsScreen.kt").readText()
+        assertTrue(details.contains("Destinations.BETSLIP"))
+        assertTrue(details.contains("rememberSaveableStateHolder()"))
     }
 
     @Test

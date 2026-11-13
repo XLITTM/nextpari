@@ -13,8 +13,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -54,10 +52,7 @@ fun GameListScreen(
     var query by rememberSaveable { mutableStateOf("") }
     val football = viewModel.state.collectAsStateWithLifecycle().value
     val realMatches = viewModel.pool(tab).filterNot(FeaturedSports::isEsports)
-    val matches = if (query.isBlank()) realMatches else realMatches.filter { match ->
-        listOf(match.team1, match.team2, match.league, SportsRegions.name(match.country))
-            .any { it.contains(query.trim(), ignoreCase = true) }
-    }
+    val matches = SportsbookCatalog.search(realMatches, query)
 
     val listState = rememberLazyListState()
     TrackFootballViewport(listState, viewModel::visibleMatches)
@@ -130,7 +125,7 @@ private fun GameListTab(label: String, active: Boolean, modifier: Modifier, onCl
     ) {
         Text(
             label,
-            color = if (active) Color.White else if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
+            color = if (active) colors.accentInk else if (dark) Color(0xFFE5E7EB) else Color(0xFF374151),
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
         )

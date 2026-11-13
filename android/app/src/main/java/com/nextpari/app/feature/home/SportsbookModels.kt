@@ -3,6 +3,7 @@ package com.nextpari.app.feature.home
 import com.nextpari.app.feature.sportsbook.FeaturedSports
 import com.nextpari.app.feature.sportsbook.FootballCompetitionBadge
 import com.nextpari.app.feature.sportsbook.FootballLiveClock
+import com.nextpari.app.feature.sportsbook.MatchInsights
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
 
 enum class OddsMovement { None, Up, Down }
@@ -42,6 +43,7 @@ data class MatchCardModel(
     val hasLogoCatalog: Boolean = false,
     val kickoffEpochMs: Long? = null,
     val serverTier: Int? = null,
+    val insights: MatchInsights? = null,
 )
 
 data class ChampionshipRow(
@@ -100,17 +102,8 @@ object SportsbookFilters {
 }
 
 object HomeSectionOrder {
-    val top = listOf(
-        "sports",
-        "live",
-        "line",
-        "champs",
-        "promos",
-        "esports-disciplines",
-        "esports-live",
-        "esports-line",
-    )
-    val sport = listOf("sports", "live", "line", "champs")
+    val sport = listOf("sports", "promos", "live", "line", "champs")
+    val top = sport + listOf("esports-disciplines", "esports-live", "esports-line")
     val esports = listOf("esports-disciplines", "esports-live", "esports-line", "esports-tournaments")
     val casino = listOf("casino-entries", "casino-featured", "casino-tournaments", "casino-categories")
 

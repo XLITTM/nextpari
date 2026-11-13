@@ -10,6 +10,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -20,6 +25,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
 import com.nextpari.app.BuildConfig
+import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchCardModel
 
@@ -56,6 +62,7 @@ fun MatchDetailsScreen(
         markets = markets,
         initialPinned = initialPinned,
         onBack = onBack,
+        onOpenCoupon = { onNavigate(Destinations.BETSLIP) },
         loading = loading,
         notice = state.detail.takeIf { !usePreview && state.detailId == matchId }?.notice,
         retryable = !usePreview && state.detailId == matchId && state.detail.retryable,
@@ -79,6 +86,7 @@ fun MatchDetailsBody(
     selected: Set<String> = emptySet(),
     onSelect: (MarketOutcome) -> Unit = {},
     onToggleFavorite: (() -> Unit)? = null,
+    onOpenCoupon: (() -> Unit)? = null,
 ) {
     if (match == null) {
         Column(Modifier.fillMaxSize().background(NextpariTheme.colors.bg)) {
@@ -90,18 +98,27 @@ fun MatchDetailsBody(
         }
         return
     }
-    Column(Modifier.fillMaxSize().background(NextpariTheme.colors.bg).verticalScroll(rememberScrollState())) {
-        MatchTracker(match, SportsListCatalog.sportName(match.sport), onBack, onToggleFavorite)
-        if (onRefresh != null) FootballFeedControl(loading, notice, retryable, onRefresh)
-        androidx.compose.runtime.key(match.id) {
-            MarketsGrid(
-                sport = match.sport,
-                markets = markets,
-                initialPinned = initialPinned,
-                loading = loading,
-                selected = selected,
-                onSelect = onSelect,
+    key(match.id) {
+        var showBroadcast by rememberSaveable { mutableStateOf(false) }
+        val marketsState = rememberSaveableStateHolder()
+        Column(Modifier.fillMaxSize().background(NextpariTheme.colors.bg).verticalScroll(rememberScrollState())) {
+            MatchTracker(
+                match, SportsListCatalog.sportName(match.sport), showBroadcast, { showBroadcast = it },
+                onBack, onToggleFavorite, onOpenCoupon,
             )
+            if (!showBroadcast) {
+                if (onRefresh != null) FootballFeedControl(loading, notice, retryable, onRefresh)
+                marketsState.SaveableStateProvider("markets") {
+                    MarketsGrid(
+                        sport = match.sport,
+                        markets = markets,
+                        initialPinned = initialPinned,
+                        loading = loading,
+                        selected = selected,
+                        onSelect = onSelect,
+                    )
+                }
+            }
         }
     }
 }
@@ -110,6 +127,19 @@ fun MatchDetailsBody(
 @Composable
 private fun MatchDetailsPreview() {
     NextpariTheme(darkTheme = false) {
+        MatchDetailsBody(
+            match = SportsbookPreviewData.match,
+            markets = SportsbookPreviewData.markets,
+            initialPinned = setOf(SportsbookPreviewData.pinnedKey),
+            onBack = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 360, heightDp = 740)
+@Composable
+private fun MatchDetailsDarkPreview() {
+    NextpariTheme(darkTheme = true) {
         MatchDetailsBody(
             match = SportsbookPreviewData.match,
             markets = SportsbookPreviewData.markets,

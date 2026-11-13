@@ -109,6 +109,61 @@ class FootballIntegrationTest {
     }
 
     @Test
+    fun publishedFeaturedAndScheduleListsUseTheExactExistingEvents() = runBlocking {
+        MockWebServer().use { server ->
+            val repository = RemoteFootballRepository(
+                NetworkModule.playerApi(NetworkModule.okHttpClient(), server.url("/").toString()), json,
+            )
+            val domestic = """{"id":"100","sport":"football","tier":1,"league":"England Premier League","home":"A","away":"B","live":true}"""
+            val youth = """{"id":"101","sport":"football","tier":4,"league":"Youth League","home":"C","away":"D","live":true}"""
+            val basketball = """{"id":"betsapi:18:100","sport":"basketball","tier":3,"league":"NBA","home":"E","away":"F","live":false}"""
+            val virtual = """{"id":"102","sport":"esports","tier":5,"home":"G","away":"H","live":true}"""
+            val mismatched = """{"id":"100","sport":"football","home":"B","away":"A","live":true}"""
+            server.enqueue(jsonResponse("""{"ok":true,"events":[$domestic,$youth,$basketball,$virtual],
+                "featuredLive":[$mismatched,$youth,$domestic,$virtual,$domestic],
+                "featuredLine":[],"schedule":[$basketball,$youth,$domestic]}"""))
+            val snapshot = repository.read()
+            assertEquals(listOf("101", "100"), snapshot.featuredLive)
+            assertEquals(emptyList<String>(), snapshot.featuredLine)
+            assertEquals(listOf("betsapi:18:100", "101", "100"), snapshot.schedule)
+            assertEquals("basketball", snapshot.fixtures.single { it.match.id == "betsapi:18:100" }.match.sport)
+            assertEquals(4, snapshot.fixtures.size)
+            assertEquals("/api/player/sports/football-feed?includeSports=1", server.takeRequest().path)
+        }
+    }
+
+    @Test
+    fun detailDecodesOnlyExactFreshProviderInsights() = runBlocking {
+        MockWebServer().use { server ->
+            val repository = RemoteFootballRepository(
+                NetworkModule.playerApi(NetworkModule.okHttpClient(), server.url("/").toString()), json,
+            )
+            val insight = """{"source":"betsapi","observedAt":"2026-11-13T12:00:00Z",
+                "statistics":[{"key":"corners","label":"Угловые","home":6,"away":3}],
+                "timeline":[{"id":"88","text":"12 min - Corner"}],
+                "periodScores":[{"period":"1","home":1,"away":0}],
+                "availability":{"statistics":"available","timeline":"available","headToHead":"absent","previousMatches":"absent"}}"""
+            val response = """{"ok":true,"events":[{"id":"100","sport":"football","home":"A","away":"B","live":true,
+                "period":"second_half","insights":$insight}]}"""
+            val now = "Fri, 13 Nov 2026 12:00:10 GMT"
+            server.enqueue(jsonResponse(response).setHeader("Date", now))
+            val match = repository.read("100").fixtures.single().match
+            assertEquals("second_half", match.period)
+            assertEquals(MatchInsights.Statistic("corners", "Угловые", 6, 3), match.insights?.statistics?.single())
+            assertEquals("12 min - Corner", match.insights?.timeline?.single()?.text)
+            assertEquals(MatchInsights.PeriodScore("1", 1, 0), match.insights?.periodScores?.single())
+            assertEquals("/api/player/sports/football-feed?eventId=100", server.takeRequest().path)
+
+            server.enqueue(jsonResponse(response).setHeader("Date", "Fri, 13 Nov 2026 12:01:31 GMT"))
+            assertNull(repository.read("100").fixtures.single().match.insights)
+            server.enqueue(jsonResponse(response.replace("available", "absent")).setHeader("Date", now))
+            assertTrue(repository.read("100").fixtures.single().match.insights!!.statistics.isEmpty())
+            server.enqueue(jsonResponse(response).setHeader("Date", now))
+            assertTrue(repository.read("999").fixtures.isEmpty())
+        }
+    }
+
+    @Test
     fun placementSerializesExactProviderIdentityAndTrustsOnlyServerReceipts() = runBlocking {
         MockWebServer().use { server ->
             var cleared = 0
