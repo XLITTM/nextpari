@@ -14,6 +14,17 @@ import {
   upcomingHasAnotherPage,
   type UpcomingPager,
 } from './footballCoverage.js';
+
+/** Player responses stop before this, leaving margin under the 60s function limit. */
+export const LISTED_FEED_DEADLINE_MS = 35_000;
+const LISTED_COVERAGE_NETWORK_SLICES = 1;
+
+export interface ListedFootballRead {
+  live: FeedResult;
+  upcoming: FeedResult;
+  additional: Array<{ sportId: EventsSportId; prematch: boolean; result: FeedResult | null }>;
+  coveragePartial: boolean;
+}
 import { diagnoseOddsPayload, marketsFromOddsPayload, normalizeFootballDetails, normalizeFootballList, type OddsDiagnosis } from './parse.js';
 import {
   bet365Directory,
@@ -137,6 +148,14 @@ export class BetsApiReadOnlyClient {
   private readonly staleMs: Record<CacheKind, number>;
   private readonly cache = new Map<string, CacheEntry>();
   private additionalCursor = 0;
+  private coverageEvents: NormalizedEvent[] = [];
+  private coverageCursor = 0;
+  private coverageUpdatedAt = 0;
+  private coverageStale = false;
+  private coverageRateLimited = false;
+  private coverageSawFeed = false;
+  private coverageComplete = false;
+  private listedRead: Promise<void> | null = null;
   private additionalRead: Promise<void> | null = null;
   private additionalReadAt = 0;
   private readonly additionalPages = new Map<string, { at: number; feed: FeedResult }>();
@@ -268,9 +287,134 @@ export class BetsApiReadOnlyClient {
         stale,
         rateLimited,
         rateLimit: null,
-        events,
+      events,
+    },
+  };
+}
+
+  /**
+   * One live read plus at most one new prematch page. Earlier pages stay cached
+   * on this instance and are returned without another paced upstream call.
+   */
+  async readListedFootball(deadlineAt: number, includeSports = false): Promise<ListedFootballRead> {
+    while (this.listedRead) await this.listedRead;
+    let release: () => void = () => undefined;
+    this.listedRead = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      return await this.readListedFootballOnce(deadlineAt, includeSports);
+    } finally {
+      this.listedRead = null;
+      release();
+    }
+  }
+
+  private async readListedFootballOnce(deadlineAt: number, includeSports: boolean): Promise<ListedFootballRead> {
+    const live = await this.getInplay();
+    if (live.error === 'TOKEN_MISSING') {
+      return {
+        live,
+        upcoming: { ok: false, error: 'TOKEN_MISSING', upstreamStatus: null, feed: null },
+        additional: includeSports ? this.additionalView() : [],
+        coveragePartial: true,
+      };
+    }
+    const jobs = this.coverageJobs();
+    if (this.coverageCursor >= jobs.length) this.coverageCursor = 0;
+    let networkSlices = 0;
+    while (this.coverageCursor < jobs.length) {
+      const job = jobs[this.coverageCursor];
+      const cached = this.cache.get(`upcoming:${new URLSearchParams(this.upcomingQuery(job)).toString()}`);
+      const fresh = Boolean(cached && this.now() - cached.storedAt <= this.freshMs.upcoming);
+      if (!fresh) {
+        if (networkSlices >= LISTED_COVERAGE_NETWORK_SLICES || !this.canSpend(deadlineAt)) break;
+        networkSlices += 1;
+      }
+      const result = await this.getUpcoming(job.page, { day: job.day, skipEsports: true, leagueId: job.leagueId });
+      if (result.error === 'TOKEN_MISSING') break;
+      if (result.error === 'RATE_LIMITED' || result.feed?.rateLimited) {
+        this.coverageRateLimited = true;
+        if (result.feed?.events.length) this.rememberCoverage(result.feed.events, true);
+        break;
+      }
+      if (!result.ok || !result.feed) break;
+      this.rememberCoverage(result.feed.events, result.feed.stale);
+      this.coverageCursor += 1;
+      if (this.coverageCursor >= jobs.length) {
+        this.coverageCursor = 0;
+        this.coverageComplete = true;
+        break;
+      }
+    }
+    const additional = includeSports
+      ? await (this.canSpend(deadlineAt) ? this.getAdditionalSports() : Promise.resolve(this.additionalView()))
+      : [];
+    return { live, upcoming: this.coverageResult(), additional, coveragePartial: !this.coverageComplete };
+  }
+
+  private canSpend(deadlineAt: number): boolean {
+    if (this.budget.coolingDown()) return false;
+    return this.now() + this.budget.delayUntilNext() + this.timeoutMs <= deadlineAt;
+  }
+
+  private coverageJobs(): Array<{ page: number; day?: string; leagueId?: string }> {
+    const days = coverageDays(this.now());
+    return [
+      ...days.map((day) => ({ page: 1, day })),
+      { page: 1, day: days[0], leagueId: '94' },
+      { page: 1 },
+    ];
+  }
+
+  private upcomingQuery(job: { page: number; day?: string; leagueId?: string }): Record<string, string> {
+    const query: Record<string, string> = { sport_id: FOOTBALL_SPORT_ID, page: String(job.page), skip_esports: '1' };
+    if (job.day) query.day = job.day;
+    if (job.leagueId) query.league_id = job.leagueId;
+    return query;
+  }
+
+  private rememberCoverage(events: readonly NormalizedEvent[], stale: boolean): void {
+    this.coverageEvents = preparePrematch([...this.coverageEvents, ...events]);
+    this.coverageUpdatedAt = this.now();
+    this.coverageStale = stale;
+    this.coverageSawFeed = true;
+    if (!stale) this.coverageRateLimited = false;
+  }
+
+  private coverageResult(): FeedResult {
+    if (!this.coverageSawFeed) {
+      return { ok: false, error: this.coverageRateLimited ? 'RATE_LIMITED' : 'UPSTREAM', upstreamStatus: null, feed: null };
+    }
+    const at = new Date(this.coverageUpdatedAt || this.now()).toISOString();
+    return {
+      ok: true,
+      error: null,
+      upstreamStatus: 200,
+      feed: {
+        source: 'betsapi',
+        mode: 'read-only',
+        betting: 'disabled',
+        settlement: 'disabled',
+        endpoint: 'upcoming',
+        sportId: FOOTBALL_SPORT_ID,
+        fetchedAt: at,
+        updatedAt: at,
+        stale: this.coverageStale,
+        rateLimited: this.coverageRateLimited,
+        rateLimit: null,
+        events: this.coverageEvents,
       },
     };
+  }
+
+  private additionalView() {
+    const tasks = this.additionalSportIds().flatMap((sportId) => [false, true].map((prematch) => ({ sportId, prematch })));
+    return tasks.map(({ sportId, prematch }) => {
+      const snapshot = this.additionalPages.get(`${sportId}:${prematch}`);
+      const usable = snapshot && this.now() - snapshot.at <= (prematch ? 600_000 : 90_000);
+      return { sportId, prematch, result: usable ? snapshot.feed : null };
+    });
   }
 
   async getOddsPayload(eventId: string): Promise<unknown | null> {
