@@ -7,6 +7,10 @@ const catalogTtl = 10 * 60_000;
 const maxResponse = 64 * 1024 * 1024;
 type Raw = Record<string, unknown>;
 type Entry = { game: CasinoDemoGame; sourceId: string };
+type CatalogCounts = {
+  returned: number; demoTrue: number; demoFalse: number; demoOne: number;
+  demoOther: number; demoMissing: number; categories: Record<string, number>;
+};
 
 export const asRecord = (value: unknown): Raw =>
   value != null && typeof value === 'object' && !Array.isArray(value) ? value as Raw : {};
@@ -55,6 +59,24 @@ export function normalizeCatalog(payload: unknown, artworkOrigins: ReadonlySet<s
   return [...games.values()].filter(({ game }) => !conflicting.has(game.id));
 }
 
+function catalogCounts(rows: unknown[]): CatalogCounts {
+  const counts: CatalogCounts = { returned: rows.length, demoTrue: 0, demoFalse: 0,
+    demoOne: 0, demoOther: 0, demoMissing: 0, categories: {} };
+  for (const item of rows) {
+    const row = asRecord(item);
+    const flag = row.play_for_fun_supported;
+    if (flag === true) counts.demoTrue++;
+    else if (flag === false) counts.demoFalse++;
+    else if (flag === 1 || flag === '1' || flag === 'true') counts.demoOne++;
+    else if (flag == null) counts.demoMissing++;
+    else counts.demoOther++;
+    const category = text(row.game_type, 30);
+    const key = Object.prototype.hasOwnProperty.call(casinoCategories, category) ? category : 'unrecognized';
+    counts.categories[key] = (counts.categories[key] ?? 0) + 1;
+  }
+  return counts;
+}
+
 async function readBoundedJson(response: Response): Promise<unknown> {
   if (Number(response.headers.get('content-length')) > maxResponse || !response.body) {
     await response.body?.cancel().catch(() => {});
@@ -83,8 +105,9 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
   const artworkOrigins = origins(env.SOFTAGGREGATOR_ARTWORK_ORIGINS);
   const launchOrigins = origins(env.SOFTAGGREGATOR_LAUNCH_ORIGINS);
   const enabled = env.SOFTAGGREGATOR_DEMO_ENABLED === '1' && Boolean(login && password);
-  let cached: { expires: number; games: Entry[] } | undefined;
-  let inflight: Promise<Entry[]> | undefined;
+  type Snapshot = { expires: number; games: Entry[]; counts?: CatalogCounts };
+  let cached: Snapshot | undefined;
+  let inflight: Promise<Snapshot> | undefined;
   let cooldown = 0;
 
   async function call(method: 'getGameList' | 'getGameDemo', payload: Raw = {}): Promise<unknown> {
@@ -118,13 +141,14 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
     return row.response;
   }
 
-  async function catalog(): Promise<Entry[]> {
-    if (cached && cached.expires > now()) return cached.games;
+  async function catalog(): Promise<Snapshot> {
+    if (cached && cached.expires > now()) return cached;
     if (!inflight) inflight = call('getGameList')
       .then((response) => {
         const games = normalizeCatalog(response, artworkOrigins);
-        cached = { games, expires: now() + catalogTtl };
-        return games;
+        const counts = env.VERCEL_ENV === 'preview' && Array.isArray(response) ? catalogCounts(response) : undefined;
+        cached = { games, counts, expires: now() + catalogTtl };
+        return cached;
       })
       .finally(() => { inflight = undefined; });
     return inflight;
@@ -132,13 +156,13 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
 
   return {
     async list(params: URLSearchParams) {
-      const catalogRows = await catalog();
+      const snapshot = await catalog();
       const term = (params.get('q') ?? '').trim().slice(0, 120).toLowerCase();
       const provider = (params.get('provider') ?? '').slice(0, 100);
       const category = (params.get('category') ?? '').slice(0, 30);
       const rawPage = params.get('page') ?? '';
       const page = /^\d{1,5}$/.test(rawPage) ? Math.max(1, Number(rawPage)) : 1;
-      const games = catalogRows.map(({ game }) => game);
+      const games = snapshot.games.map(({ game }) => game);
       const matches = games.filter((game) => (!provider || game.provider === provider) &&
         (!category || game.category === category) &&
         (!term || `${game.title} ${game.studio}`.toLowerCase().includes(term)));
@@ -149,10 +173,11 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
         categories: [...new Set(games.map((g) => g.category))],
         total: matches.length,
         nextPage: matches.length > page * 24 ? page + 1 : null,
+        ...(params.get('diagnostics') === '1' && snapshot.counts ? { diagnostics: snapshot.counts } : {}),
       };
     },
     async launch(id: string, device: 'mobile' | 'desktop', returnOrigin: string) {
-      const entry = (await catalog()).find(({ game }) => game.id === id);
+      const entry = (await catalog()).games.find(({ game }) => game.id === id);
       if (!entry) throw staffError('CASINO_DEMO_GAME_NOT_FOUND', 404);
       if (!launchOrigins.size) throw staffError('CASINO_DEMO_ORIGINS_UNCONFIGURED', 503);
       const result = await call('getGameDemo', {
