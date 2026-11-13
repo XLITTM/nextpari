@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSoftAggregator, normalizeCatalog } from './softAggregator.js';
 import { casinoDemoRequest } from './http.js';
-import { standardCasinoGates } from './softAggregatorReal.js';
+import { deriveProviderPlayer, standardCasinoGates } from './softAggregatorReal.js';
 
 const demo = {
   provider: 'verified-studio', provider_name: 'Verified Studio',
@@ -38,6 +38,16 @@ test('production callback can verify a balance while all wallet mutations stay d
     ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
     SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '0',
   }), { callback: true, launch: true, approvedWallet: true, newDebits: false });
+});
+
+test('provider identity is stable within an authorized jurisdiction and changes across jurisdictions', () => {
+  const secret = 'x'.repeat(64);
+  const first = deriveProviderPlayer(secret, 'player', 'studio/Game', 'rate-version', 'GB');
+  assert.deepEqual(deriveProviderPlayer(secret, 'player', 'studio/Game', 'rate-version', 'GB'), first);
+  const moved = deriveProviderPlayer(secret, 'player', 'studio/Game', 'rate-version', 'MT');
+  assert.notEqual(moved.session, first.session);
+  assert.notEqual(moved.username, first.username);
+  assert.notEqual(moved.password, first.password);
 });
 
 test('uses exact entitled identities, filters and coalesces concurrent reads', async () => {

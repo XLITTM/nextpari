@@ -22,6 +22,7 @@ import {
   claimPlayerLoginPhone,
   createManagedPasswordUser,
   deleteManagedAuthUser,
+  recordRegistrationAgeDeclaration,
   resolvePlayerLoginEmail,
 } from '../auth/playerIdentityAdmin.js';
 import type { PlayerSecurityObserver } from './playerSecurityService.js';
@@ -70,6 +71,7 @@ export interface PlayerOwnWallet {
 export interface PlayerAuthGatewayPorts {
   signInWithPassword: (email: string, password: string) => Promise<PlayerAuthTokens>;
   signUp: (email: string, password: string, phone: string) => Promise<PlayerAuthTokens>;
+  recordRegistrationAgeDeclaration?: (player: string, method: RegistrationMethod) => Promise<void>;
   resolveLoginEmail?: (kind: 'public_id' | 'phone', value: string) => Promise<{
     ok: true;
     email: string;
@@ -102,6 +104,10 @@ export interface PlayerAuthGatewayPorts {
   signOut?: (accessToken: string, refreshToken: string | null) => Promise<void>;
   assertLiveAuthSession?: (userId: string, sessionId: string) => Promise<boolean>;
 }
+
+type RegistrationMethod = 'email' | 'phone' | 'one_click';
+// This versions the existing 18+ declaration, independent of other legal terms.
+export const registrationAgeTermsVersion = 'registration-age-18-v1';
 
 export interface PlayerAuthHttpResult {
   status: number;
@@ -225,6 +231,7 @@ async function bootstrapPlayerSession(
   tokens: PlayerAuthTokens,
   secure: boolean,
   displayCurrency?: string | null,
+  registrationMethod?: RegistrationMethod,
 ): Promise<PlayerSessionBootstrap> {
   let provisioned = false;
   let publicId = '';
@@ -243,6 +250,7 @@ async function bootstrapPlayerSession(
         throw staffError('SESSION_EXPIRED', 401);
       }
     }
+    if (registrationMethod) await ports.recordRegistrationAgeDeclaration?.(user.id, registrationMethod);
     const provision = await ports.ensurePlayerAccount(tokens.accessToken, displayCurrency);
     publicId = parseLoginPlayerId(provision.publicId) ?? '';
     if (!provision.walletId || !publicId) {
@@ -359,10 +367,11 @@ async function finishManagedRegistration(
   created: { id: string; email: string },
   tokens: PlayerAuthTokens,
   secure: boolean,
+  registrationMethod: RegistrationMethod,
   oneClickPassword?: string,
   displayCurrency?: string | null,
 ): Promise<{ provisioned: boolean; result: PlayerAuthHttpResult }> {
-  const boot = await bootstrapPlayerSession(ports, tokens, secure, displayCurrency);
+  const boot = await bootstrapPlayerSession(ports, tokens, secure, displayCurrency, registrationMethod);
   if (!boot.provisioned) {
     await abandonCreatedAuthUser(ports, created);
     return { provisioned: false, result: failedRegistrationResult(boot.result, secure) };
@@ -418,6 +427,10 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
         throw staffError('AUTH_FAILED', 401);
       }
       if (data.user && !data.session) {
+        // A duplicate signup can return an obfuscated user with no identities.
+        if (data.user.identities?.length) {
+          await recordRegistrationAgeDeclaration(data.user.id, 'email', registrationAgeTermsVersion);
+        }
         throw staffError('EMAIL_CONFIRMATION_REQUIRED', 409);
       }
       const accessToken = data.session?.access_token?.trim() ?? '';
@@ -427,6 +440,8 @@ export function livePlayerAuthPorts(): PlayerAuthGatewayPorts {
       }
       return { accessToken, refreshToken };
     },
+    recordRegistrationAgeDeclaration: (player, method) =>
+      recordRegistrationAgeDeclaration(player, method, registrationAgeTermsVersion),
     resolveLoginEmail: resolvePlayerLoginEmail,
     createManagedPasswordUser,
     claimLoginPhone: claimPlayerLoginPhone,
@@ -696,7 +711,7 @@ async function registerWithEmail(
       cookies: clearPlayerCookies(secure),
     };
   }
-  return issuedSession(ports, tokens, secure, {}, displayCurrency);
+  return (await bootstrapPlayerSession(ports, tokens, secure, displayCurrency, 'email')).result;
 }
 
 async function registerWithPhone(
@@ -751,7 +766,7 @@ async function registerWithPhone(
       await ports.claimLoginPhone(created.id, phone);
     }
     const tokens = await ports.signInWithPassword(created.email, password);
-    const finished = await finishManagedRegistration(ports, created, tokens, secure, undefined, displayCurrency);
+    const finished = await finishManagedRegistration(ports, created, tokens, secure, 'phone', undefined, displayCurrency);
     provisioned = finished.provisioned;
     return finished.result;
   } catch (err) {
@@ -785,7 +800,7 @@ async function registerOneClick(
       metadata: { loginKind: 'one_click' },
     });
     const tokens = await ports.signInWithPassword(created.email, password);
-    const finished = await finishManagedRegistration(ports, created, tokens, secure, password, displayCurrency);
+    const finished = await finishManagedRegistration(ports, created, tokens, secure, 'one_click', password, displayCurrency);
     provisioned = finished.provisioned;
     return finished.result;
   } catch (err) {

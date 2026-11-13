@@ -52,8 +52,8 @@ function sameOrigin(headers: IncomingMessage['headers']) {
     value(headers, 'origin') === 'https://' + host ? 'https://' + host : null;
 }
 
-export function deriveProviderPlayer(secret: string, player: string, game: string, version: string) {
-  const id = createHmac('sha256', secret).update(JSON.stringify([player, game, version])).digest('hex').slice(0, 32);
+export function deriveProviderPlayer(secret: string, player: string, game: string, version: string, country: string) {
+  const id = createHmac('sha256', secret).update(JSON.stringify([player, game, version, country])).digest('hex').slice(0, 32);
   const session = [id.slice(0, 8), id.slice(8, 12), id.slice(12, 16), id.slice(16, 20), id.slice(20)].join('-');
   return { session, username: 'np_real_' + id,
     password: createHmac('sha256', secret).update('player-password:' + id).digest('hex') };
@@ -92,14 +92,11 @@ export async function standardCasinoVercel(
         if (error.message.includes('SOFTAGGREGATOR_RATE_CHANGED')) throw staffError('CASINO_STANDARD_RATE_CHANGED', 409);
         throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
       }
-      const { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country } = asRecord(data);
-      if (typeof usdtTmt !== 'string' || typeof usdtUsd !== 'string' ||
+      const { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country, eligibilityPolicyApplied } = asRecord(data);
+      if (eligibilityPolicyApplied !== true || typeof usdtTmt !== 'string' || typeof usdtUsd !== 'string' ||
           typeof rateVersion !== 'string' || !/^[a-f0-9]{32}$/.test(rateVersion) ||
           typeof balanceUsdMinor !== 'number' || !Number.isSafeInteger(balanceUsdMinor) || balanceUsdMinor < 0 ||
           typeof country !== 'string' || !/^[A-Z]{2}$/.test(country)) throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
-      if (!(env.SOFTAGGREGATOR_REAL_COUNTRIES ?? '').split(',').map((code) => code.trim()).includes(country)) {
-        throw staffError('CASINO_STANDARD_INELIGIBLE', 403);
-      }
       return { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country };
     }
 
@@ -133,9 +130,12 @@ export async function standardCasinoVercel(
     if (typeof body.id !== 'string' || !validCasinoDemoId(body.id) || typeof body.rateVersion !== 'string' ||
         (body.device !== 'mobile' && body.device !== 'desktop')) throw staffError('BODY_INVALID', 400);
 
+    const current = await quote();
+    if (current.rateVersion !== body.rateVersion) throw staffError('CASINO_STANDARD_RATE_CHANGED', 409);
     const entry = await provider.standardGame(body.id);
-    const identity = deriveProviderPlayer(env.SOFTAGGREGATOR_REAL_PLAYER_SECRET, player, entry.sourceId, body.rateVersion);
+    const identity = deriveProviderPlayer(env.SOFTAGGREGATOR_REAL_PLAYER_SECRET, player, entry.sourceId, body.rateVersion, current.country);
     const conversion = await quote({ p_session: identity.session, p_game: entry.sourceId, p_rate_version: body.rateVersion });
+    if (conversion.country !== current.country) throw staffError('CASINO_STANDARD_INELIGIBLE', 403);
     const game = await provider.launchStandard(entry, { ...identity, country: conversion.country }, body.device, origin);
     if (gates.newDebits) {
       const { error } = await serviceClient().rpc('softaggregator_session', {

@@ -11,9 +11,17 @@ All movements use the shared Wallet Core. Provider amounts are integer USD cents
 ## Controlled release
 
 - Use the existing operator credentials for the authorized site. The production callback is `/api/internal/casino/softaggregator/callback`. It requires both signatures documented by SoftAggregator and its fixed source IP.
-- Use branch-scoped real login/password, salt, exact callback host, launch-origin allowlist, independent player-identity secret and approved country allowlist. Variable names have the prefix `SOFTAGGREGATOR_REAL_` and are read by `server/casino/softAggregatorReal.ts` and `server/casino/softAggregator.ts`. Apply the additive wallet migration only to the designated environment after verification.
+- Use branch-scoped real login/password, salt, exact callback host, launch-origin allowlist and independent player-identity secret. Variable names have the prefix `SOFTAGGREGATOR_REAL_` and are read by `server/casino/softAggregatorReal.ts` and `server/casino/softAggregator.ts`. Approved countries come from the database policy used by both launches and new debits.
 - `CALLBACK_ENABLED` admits signed balance reads, including in catalog-only mode. `LAUNCH_ENABLED` permits an eligible player to open `getGame` once the launch origins, market and operator credit are configured. `CALLBACK_VERIFIED` and `WALLET_VERIFIED` permit financial callbacks after signed verification and reconciliation. `NEW_PLAY_ENABLED` independently allows new debits. The SQL callback enforces the verified player binding, currency, exact game ID and wallet lock. Preview requires a designated pilot.
 - For an incident, disable `NEW_PLAY_ENABLED` and leave the settlement callback active. The public catalog can be hidden separately with `CATALOG_ENABLED`. Until a supported operator-credit API is confirmed, credit readiness is an explicit operator control. Upstream launch errors do not activate a new debit window.
+
+## Eligibility
+
+Registration records the 18+ declaration and its text version in private storage. No identity, independent age or withdrawal check is inferred from registration or deposits. There is no historical declaration backfill.
+
+An operator-approved row in `private.casino_jurisdiction_policies` sets the current licence and provider policy for one country. An expired or missing policy blocks new play. A trusted compliance or verification adapter submits normalized results through the server-only `record_casino_player_evidence` RPC after authenticating its source and binding the result to the player. The RPC rejects stale updates. It stores outcome and audit reference only.
+
+Both launch and each new debit use the same policy. Current jurisdiction and self-exclusion checks are required. Age, identity and AML checks follow the approved policy, and explicit adverse age, identity or AML results block play. Cashier evidence can satisfy only an age check and only under a policy that permits it. A country's independent verification provider and its integration credentials must be supplied before that flow can accept genuine results. Withdrawal evidence is independent and the existing withdrawal path is unchanged.
 
 ## Reconcile a session
 

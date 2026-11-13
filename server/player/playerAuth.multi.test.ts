@@ -11,7 +11,7 @@ import {
   PLAYER_ME_PATH,
   handlePlayerAuthRequest,
 } from './playerAuthHttp.js';
-import type { PlayerAuthGatewayPorts } from './playerAuthService.js';
+import { registerPlayerWithPassword, type PlayerAuthGatewayPorts } from './playerAuthService.js';
 import { generateOneClickPassword } from '../auth/oneClickPassword.js';
 import { PLAYER_ACCESS_COOKIE, PLAYER_REFRESH_COOKIE } from './playerCookies.js';
 
@@ -125,6 +125,21 @@ function createPorts(init?: {
 }
 
 describe('multi-identifier player auth', () => {
+  it('records an 18+ declaration for each registration method against the authenticated account', async () => {
+    for (const method of ['email', 'phone', 'one_click'] as const) {
+      const ports = createPorts({ resolve: 'missing' });
+      const calls: unknown[] = [];
+      ports.recordRegistrationAgeDeclaration = async (player, registrationMethod) => {
+        calls.push([player, registrationMethod]);
+      };
+      const input = { method, email: PLAYER_EMAIL, phone: PLAYER_PHONE, password: PLAYER_PASSWORD, currency: 'TMT' };
+      assert.equal((await registerPlayerWithPassword(ports, { ...input, ageConfirmed: false }, true)).status, 400);
+      assert.deepEqual(calls, []);
+      assert.equal((await registerPlayerWithPassword(ports, { ...input, ageConfirmed: true }, true)).status, 200);
+      assert.deepEqual(calls, [['auth-user-1', method]]);
+    }
+  });
+
   it('email login still succeeds with the legacy body', async () => {
     const ports = createPorts();
     const result = await handlePlayerAuthRequest(

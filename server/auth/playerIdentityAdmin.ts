@@ -19,6 +19,13 @@ function staffClient() {
   return createServiceRoleClient(env.supabaseUrl, env.supabaseServiceRoleKey);
 }
 
+export async function recordRegistrationAgeDeclaration(player: string, method: string, termsVersion: string) {
+  const { error } = await staffClient().rpc('record_registration_age_declaration', {
+    p_player: player, p_method: method, p_terms_version: termsVersion,
+  });
+  if (error) throw staffError('AGE_DECLARATION_UNAVAILABLE', 503);
+}
+
 export async function resolvePlayerLoginEmail(
   kind: 'public_id' | 'phone',
   value: string,
