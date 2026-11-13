@@ -122,11 +122,52 @@ export function isSimulatedLeague(name: string | null | undefined): boolean {
   return first === 'virtual' || first === 'simulated';
 }
 
+export function isNationsLeagueName(name: string | null | undefined): boolean {
+  return /^uefa nations league(?: [a-d])?$/.test(leagueName(name));
+}
+
+export function isPriorityInternationalLeague(name: string | null | undefined): boolean {
+  const normalized = leagueName(name);
+  return INTERNATIONAL_LEAGUE_NAMES.has(normalized) || isNationsLeagueName(normalized);
+}
+
+export interface CoverageJob {
+  page: number;
+  day?: string;
+  leagueId?: string;
+}
+
+export function coverageJobKey(job: CoverageJob): string {
+  return `${job.day ?? ''}:${job.leagueId ?? ''}:${job.page}`;
+}
+
+/** Major leagues already seen, then later pages of today, before the rest of the week. */
+export function planCoverageJobs(nowMs: number, majorLeagueIds: readonly string[]): CoverageJob[] {
+  const days = coverageDays(nowMs);
+  const today = days[0];
+  const jobs: CoverageJob[] = [];
+  const seen = new Set<string>();
+  const add = (job: CoverageJob) => {
+    const key = coverageJobKey(job);
+    if (seen.has(key)) return;
+    seen.add(key);
+    jobs.push(job);
+  };
+  for (const leagueId of majorLeagueIds) {
+    if (/^\d{1,12}$/.test(leagueId)) add({ page: 1, day: today, leagueId });
+  }
+  for (const page of [1, 2, 3]) add({ page, day: today });
+  add({ page: 1, day: today, leagueId: '94' });
+  for (const day of days.slice(1)) add({ page: 1, day });
+  add({ page: 1 });
+  return jobs;
+}
+
 export function footballTier(league: { id?: string | null; name?: string | null }): 0 | 1 | 3 | 4 {
   const verified = league.id ? VERIFIED_FOOTBALL_LEAGUE_IDS[league.id] : undefined;
   if (verified !== undefined) return verified;
   const name = leagueName(league.name);
-  if (INTERNATIONAL_LEAGUE_NAMES.has(name)) return 0;
+  if (isNationsLeagueName(name) || INTERNATIONAL_LEAGUE_NAMES.has(name)) return 0;
   if (DOMESTIC_LEAGUE_NAMES.has(name)) return 1;
   if (LOWER_LEAGUE_NAMES.has(name) || YOUTH_OR_FRIENDLY.test(name)) return 4;
   return 3;

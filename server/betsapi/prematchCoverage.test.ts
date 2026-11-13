@@ -8,6 +8,7 @@ import {
   footballTier,
   isEsoccerLeague,
   isSimulatedLeague,
+  planCoverageJobs,
   preparePrematch,
   PREMATCH_REQUEST_BUDGET,
   rankFeaturedFootball,
@@ -73,7 +74,12 @@ describe('real football prematch coverage', () => {
   });
 
   it('ranks exact top leagues above other football and lower divisions, including live', () => {
-    assert.equal(footballTier({ name: 'England Premier League' }), 1);
+    assert.equal(footballTier({ name: 'UEFA Nations League' }), 0);
+    assert.equal(footballTier({ name: 'UEFA Nations League C' }), 0);
+    assert.equal(footballTier({ name: 'UEFA Nations League Women' }), 3);
+    const jobs = planCoverageJobs(NOW, ['30976']);
+    assert.equal(jobs[0]?.leagueId, '30976');
+    assert.deepEqual(jobs.slice(1, 4).map((job) => job.page), [1, 2, 3]);
     assert.equal(footballTier({ id: '94', name: 'Unlisted league name' }), 1);
     assert.equal(footballTier({ name: 'England Championship' }), 1);
     assert.equal(footballTier({ name: '2. Bundesliga' }), 4);

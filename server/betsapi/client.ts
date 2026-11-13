@@ -1,3 +1,4 @@
+import { getCache } from '@vercel/functions';
 import { configuredAdditionalSports, type EventsSportId } from './sportIds.js';
 import {
   BACKOFF_START_MS,
@@ -8,16 +9,19 @@ import {
 } from './budget.js';
 import {
   coverageDays,
+  coverageJobKey,
+  isPriorityInternationalLeague,
+  planCoverageJobs,
   preparePrematch,
   PREMATCH_REQUEST_BUDGET,
   readUpcomingPager,
   upcomingHasAnotherPage,
+  type CoverageJob,
   type UpcomingPager,
 } from './footballCoverage.js';
 
 /** Player responses stop before this, leaving margin under the 60s function limit. */
 export const LISTED_FEED_DEADLINE_MS = 35_000;
-const LISTED_COVERAGE_NETWORK_SLICES = 1;
 
 export interface ListedFootballRead {
   live: FeedResult;
@@ -148,6 +152,11 @@ export class BetsApiReadOnlyClient {
   private readonly staleMs: Record<CacheKind, number>;
   private readonly cache = new Map<string, CacheEntry>();
   private additionalCursor = 0;
+  private fetchedJobs = new Set<string>();
+  private majorLeagueIds = new Set<string>();
+  private pricedChecks = new Set<string>();
+  private coverageHydrated = false;
+  private readonly coverageCacheKey: string;
   private coverageEvents: NormalizedEvent[] = [];
   private coverageCursor = 0;
   private coverageUpdatedAt = 0;
@@ -177,6 +186,7 @@ export class BetsApiReadOnlyClient {
     });
     this.freshMs = { ...FRESH_MS, ...options.freshMs };
     this.staleMs = { ...STALE_MS, ...options.staleMs };
+    this.coverageCacheKey = options.fetchImpl ? `football-listed-coverage:${Math.random()}` : 'football-listed-coverage';
   }
 
   additionalSportIds(): EventsSportId[] {
@@ -311,6 +321,7 @@ export class BetsApiReadOnlyClient {
   }
 
   private async readListedFootballOnce(deadlineAt: number, includeSports: boolean): Promise<ListedFootballRead> {
+    await this.hydrateCoverage();
     const live = await this.getInplay();
     if (live.error === 'TOKEN_MISSING') {
       return {
@@ -320,58 +331,90 @@ export class BetsApiReadOnlyClient {
         coveragePartial: true,
       };
     }
-    const jobs = this.coverageJobs();
-    if (this.coverageCursor >= jobs.length) this.coverageCursor = 0;
-    let networkSlices = 0;
-    while (this.coverageCursor < jobs.length) {
-      const job = jobs[this.coverageCursor];
-      const cached = this.cache.get(`upcoming:${new URLSearchParams(this.upcomingQuery(job)).toString()}`);
-      const fresh = Boolean(cached && this.now() - cached.storedAt <= this.freshMs.upcoming);
-      if (!fresh) {
-        if (networkSlices >= LISTED_COVERAGE_NETWORK_SLICES || !this.canSpend(deadlineAt)) break;
-        networkSlices += 1;
-      }
-      const result = await this.getUpcoming(job.page, { day: job.day, skipEsports: true, leagueId: job.leagueId });
-      if (result.error === 'TOKEN_MISSING') break;
-      if (result.error === 'RATE_LIMITED' || result.feed?.rateLimited) {
-        this.coverageRateLimited = true;
-        if (result.feed?.events.length) this.rememberCoverage(result.feed.events, true);
-        break;
-      }
-      if (!result.ok || !result.feed) break;
-      this.rememberCoverage(result.feed.events, result.feed.stale);
-      this.coverageCursor += 1;
-      if (this.coverageCursor >= jobs.length) {
-        this.coverageCursor = 0;
-        this.coverageComplete = true;
-        break;
+    this.noteMajorLeagues([...(live.feed?.events ?? []), ...this.coverageEvents]);
+    const jobs = planCoverageJobs(this.now(), [...this.majorLeagueIds]);
+    const pending = jobs.find((job) => !this.fetchedJobs.has(coverageJobKey(job)));
+    if (pending && this.canSpend(deadlineAt)) {
+      const result = await this.getUpcoming(pending.page, { day: pending.day, skipEsports: true, leagueId: pending.leagueId });
+      if (result.error === 'RATE_LIMITED' || result.feed?.rateLimited) this.coverageRateLimited = true;
+      if (result.ok && result.feed) {
+        this.rememberCoverage(result.feed.events, result.feed.stale);
+        this.noteMajorLeagues(result.feed.events);
+        this.fetchedJobs.add(coverageJobKey(pending));
       }
     }
+    const visible = [...(live.feed?.events ?? []), ...this.coverageEvents];
+    await this.attachOneMajorPrice(deadlineAt, visible);
+    await this.persistCoverage(jobs);
     const additional = includeSports
       ? await (this.canSpend(deadlineAt) ? this.getAdditionalSports() : Promise.resolve(this.additionalView()))
       : [];
-    return { live, upcoming: this.coverageResult(), additional, coveragePartial: !this.coverageComplete };
+    return { live, upcoming: this.coverageResult(), additional, coveragePartial: this.fetchedJobs.size < jobs.length };
+  }
+
+  private noteMajorLeagues(events: readonly NormalizedEvent[]): void {
+    for (const event of events) {
+      if (event.sportId !== FOOTBALL_SPORT_ID || !event.league.id) continue;
+      if (!isPriorityInternationalLeague(event.league.name)) continue;
+      if (/^\d{1,12}$/.test(event.league.id)) this.majorLeagueIds.add(event.league.id);
+    }
+  }
+
+  private async attachOneMajorPrice(deadlineAt: number, events: NormalizedEvent[]): Promise<void> {
+    const target = events.find((event) => (
+      event.sportId === FOOTBALL_SPORT_ID
+      && isPriorityInternationalLeague(event.league.name)
+      && !event.markets.some((market) => market.key === '1x2' && market.status === 'open')
+    ));
+    if (!target || this.pricedChecks.has(target.eventId) || !this.canSpend(deadlineAt)) return;
+    this.pricedChecks.add(target.eventId);
+    const payload = await this.getOddsPayload(target.eventId);
+    const priced = marketsFromOddsPayload(payload).filter((market) => market.key === '1x2' && market.status === 'open');
+    if (!priced.length) return;
+    target.markets = priced;
+    target.marketsKnown = true;
+  }
+
+  private async hydrateCoverage(): Promise<void> {
+    if (this.coverageHydrated) return;
+    this.coverageHydrated = true;
+    try {
+      const saved = await getCache({ namespace: 'nextpari-football' }).get(this.coverageCacheKey);
+      if (!saved || typeof saved !== 'object') return;
+      const record = saved as { day?: unknown; updatedAt?: unknown; events?: unknown; fetched?: unknown; majorLeagueIds?: unknown };
+      if (record.day !== coverageDays(this.now())[0] || !Array.isArray(record.events)) return;
+      this.coverageEvents = record.events as NormalizedEvent[];
+      this.fetchedJobs = new Set(Array.isArray(record.fetched) ? record.fetched.filter((item): item is string => typeof item === 'string') : []);
+      for (const id of Array.isArray(record.majorLeagueIds) ? record.majorLeagueIds : []) {
+        if (typeof id === 'string' && /^\d{1,12}$/.test(id)) this.majorLeagueIds.add(id);
+      }
+      this.coverageUpdatedAt = typeof record.updatedAt === 'number' ? record.updatedAt : this.now();
+      this.coverageSawFeed = this.coverageEvents.length > 0 || this.fetchedJobs.size > 0;
+      this.coverageStale = this.now() - this.coverageUpdatedAt > this.freshMs.upcoming;
+      this.coverageComplete = false;
+    } catch {
+      this.coverageSawFeed = this.coverageSawFeed || false;
+    }
+  }
+
+  private async persistCoverage(jobs: readonly CoverageJob[]): Promise<void> {
+    try {
+      await getCache({ namespace: 'nextpari-football' }).set(this.coverageCacheKey, {
+        day: coverageDays(this.now())[0],
+        updatedAt: this.coverageUpdatedAt || this.now(),
+        events: this.coverageEvents,
+        fetched: [...this.fetchedJobs],
+        majorLeagueIds: [...this.majorLeagueIds],
+        partial: this.fetchedJobs.size < jobs.length,
+      }, { ttl: 600, name: 'football-listed-coverage' });
+    } catch {
+      return undefined;
+    }
   }
 
   private canSpend(deadlineAt: number): boolean {
     if (this.budget.coolingDown()) return false;
     return this.now() + this.budget.delayUntilNext() + this.timeoutMs <= deadlineAt;
-  }
-
-  private coverageJobs(): Array<{ page: number; day?: string; leagueId?: string }> {
-    const days = coverageDays(this.now());
-    return [
-      ...days.map((day) => ({ page: 1, day })),
-      { page: 1, day: days[0], leagueId: '94' },
-      { page: 1 },
-    ];
-  }
-
-  private upcomingQuery(job: { page: number; day?: string; leagueId?: string }): Record<string, string> {
-    const query: Record<string, string> = { sport_id: FOOTBALL_SPORT_ID, page: String(job.page), skip_esports: '1' };
-    if (job.day) query.day = job.day;
-    if (job.leagueId) query.league_id = job.leagueId;
-    return query;
   }
 
   private rememberCoverage(events: readonly NormalizedEvent[], stale: boolean): void {
