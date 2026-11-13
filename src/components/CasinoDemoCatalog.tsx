@@ -67,7 +67,8 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
 
   if (hideUnavailable && (status === 'loading' || status === 'error')) return null;
   if (status === 'disabled') {
-    return standard && !hideUnavailable ? <p className="px-4 py-2">Игры SoftAggregator временно недоступны.</p> : null;
+    if (hideUnavailable) return null;
+    return <p role="status" className="px-4 py-2">{standard ? 'Игры SoftAggregator временно недоступны.' : 'Демо-игры SoftAggregator сейчас недоступны.'}</p>;
   }
   return (
     <section className="space-y-3 px-4 pb-4 text-[var(--np-text)]" aria-labelledby={standard ? 'casino-standard-title' : 'casino-demo-title'}>

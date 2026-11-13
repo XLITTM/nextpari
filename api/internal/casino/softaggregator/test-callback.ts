@@ -15,14 +15,20 @@ export default async function softAggregatorTestCallback(req: IncomingMessage, r
       env.SOFTAGGREGATOR_TEST_SALT && env.SOFTAGGREGATOR_TEST_USERNAME && env.SOFTAGGREGATOR_TEST_CURRENCY &&
       env.SOFTAGGREGATOR_TEST_REDIS_URL && env.SOFTAGGREGATOR_TEST_REDIS_TOKEN) {
     try {
+      const wallet = createTestWalletStore(env.SOFTAGGREGATOR_TEST_REDIS_URL, env.SOFTAGGREGATOR_TEST_REDIS_TOKEN);
       reply = await handleTestWalletCallback({
         method: req.method, url: req.url, signature: header(req, 'x-signature'),
         sourceIp: header(req, 'x-vercel-forwarded-for'),
       }, {
         salt: env.SOFTAGGREGATOR_TEST_SALT, username: env.SOFTAGGREGATOR_TEST_USERNAME,
         currency: env.SOFTAGGREGATOR_TEST_CURRENCY,
-        writesApproved: env.SOFTAGGREGATOR_TEST_STANDARD_LAUNCH_APPROVED === '1',
-      }, createTestWalletStore(env.SOFTAGGREGATOR_TEST_REDIS_URL, env.SOFTAGGREGATOR_TEST_REDIS_TOKEN));
+        writesApproved: env.SOFTAGGREGATOR_TEST_STANDARD_LAUNCH_APPROVED === '1' &&
+          env.SOFTAGGREGATOR_TEST_CALLBACK_VERIFIED === '1',
+      }, async (call) => {
+        const result = await wallet(call);
+        if (call.action === 'balance' && result.error === 0) console.info('softaggregator_test_signed_balance_verified');
+        return result;
+      });
     } catch {
       // Never log the signed URL, credentials or provider/storage error payloads.
     }

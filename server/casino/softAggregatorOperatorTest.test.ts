@@ -95,6 +95,8 @@ const env = {
   SOFTAGGREGATOR_TEST_API_LOGIN: 'api-unit-login', SOFTAGGREGATOR_TEST_API_PASSWORD: 'api-unit-password',
   SOFTAGGREGATOR_TEST_USERNAME: config.username, SOFTAGGREGATOR_TEST_PLAYER_PASSWORD: 'p'.repeat(32),
   SOFTAGGREGATOR_TEST_CURRENCY: 'USD', SOFTAGGREGATOR_TEST_CALLBACK_ENABLED: '1',
+  SOFTAGGREGATOR_TEST_CALLBACK_HOST: 'preview.example', SOFTAGGREGATOR_TEST_SALT: config.salt,
+  SOFTAGGREGATOR_TEST_REDIS_URL: 'https://wallet-unit-test.upstash.io', SOFTAGGREGATOR_TEST_REDIS_TOKEN: 'unit-token',
   SOFTAGGREGATOR_TEST_LAUNCH_ORIGINS: 'https://approved.example', SOFTAGGREGATOR_TEST_GAME_ID: 'studio/Game',
   SOFTAGGREGATOR_TEST_COUNTRY: 'US',
 };
@@ -103,13 +105,15 @@ const headers = { host: 'preview.example', origin: 'https://preview.example',
 const launch = { method: 'POST', headers, body: { action: 'launch', device: 'mobile' } };
 const approved = { ...env, SOFTAGGREGATOR_TEST_STANDARD_LAUNCH_APPROVED: '1', SOFTAGGREGATOR_TEST_CALLBACK_VERIFIED: '1' };
 
-test('closes the operator route outside Preview and gates standard launch on verified callback and owner approval', async () => {
+test('closes the operator route outside Preview and requires callback configuration and launch approval', async () => {
   const noFetch = async () => assert.fail('provider invoked');
   assert.equal((await operatorTestRequest(launch, env, noFetch)).status, 403);
-  assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_TEST_CALLBACK_VERIFIED: '0' }, noFetch)).status, 403);
+  assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_TEST_CALLBACK_ENABLED: '0' }, noFetch)).status, 403);
+  assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_TEST_REDIS_URL: '' }, noFetch)).status, 403);
   assert.equal((await operatorTestRequest(launch, { ...approved, VERCEL_ENV: 'production' }, noFetch)).status, 404);
   assert.equal((await operatorTestRequest({ ...launch, headers: { ...headers, origin: 'https://different.example' } }, approved, noFetch)).status, 404);
   assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_DEMO_LOGIN: env.SOFTAGGREGATOR_TEST_API_LOGIN }, noFetch)).status, 503);
+  assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_REAL_LOGIN: env.SOFTAGGREGATOR_TEST_API_LOGIN }, noFetch)).status, 503);
 });
 
 test('checks currency, uses separate player credentials and launches only the configured game', async () => {
@@ -131,8 +135,24 @@ test('checks currency, uses separate player credentials and launches only the co
     return Response.json({ error: 0, response: 'https://approved.example/test-session' });
   };
   assert.equal((await operatorTestRequest({ ...launch, body: { action: 'createPlayer' } }, env, provider)).status, 200);
-  assert.equal((await operatorTestRequest(launch, approved, provider)).status, 200);
-  assert.deepEqual(methods, ['getCurrencies', 'createPlayer', 'getCurrencies', 'getGameList', 'getGame']);
+  assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_TEST_CALLBACK_VERIFIED: '0' }, provider)).status, 200);
+  assert.deepEqual(methods, ['getCurrencies', 'createPlayer', 'getCurrencies', 'getGameList', 'createPlayer', 'getGame']);
   assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_TEST_GAME_ID: 'absent' }, provider)).status, 404);
   assert.equal((await operatorTestRequest(launch, { ...approved, SOFTAGGREGATOR_TEST_LAUNCH_ORIGINS: 'https://another.example' }, provider)).status, 502);
+});
+
+test('returns a documented denial from the operator endpoint without forwarding upstream payloads', async () => {
+  const provider = (message: string) => async (_url: unknown, init?: RequestInit) => {
+    const { method } = JSON.parse(String(init?.body));
+    if (method === 'getCurrencies') return Response.json({ error: 0, response: { currencies: ['USD'] } });
+    if (method === 'getGameList') return Response.json({ error: 0, response: [{ id_hash: 'studio/Game', game_type: 'slots' }] });
+    if (method === 'createPlayer') return Response.json({ error: 0 });
+    return Response.json({ error: 1, message, response: env.SOFTAGGREGATOR_TEST_PLAYER_PASSWORD });
+  };
+  const message = 'Game not available in your country';
+  assert.deepEqual(await operatorTestRequest(launch, approved, provider(message)), {
+    status: 502, body: { ok: false, providerMethod: 'getGame', providerStatus: 200, providerError: 1, providerMessage: message },
+  });
+  const privateDenial = await operatorTestRequest(launch, approved, provider(env.SOFTAGGREGATOR_TEST_PLAYER_PASSWORD));
+  assert.doesNotMatch(JSON.stringify(privateDenial), new RegExp(env.SOFTAGGREGATOR_TEST_PLAYER_PASSWORD));
 });

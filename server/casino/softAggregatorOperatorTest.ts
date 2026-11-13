@@ -48,7 +48,7 @@ export async function operatorTestRequest(
   const playerPassword = env.SOFTAGGREGATOR_TEST_PLAYER_PASSWORD ?? '';
   const currency = env.SOFTAGGREGATOR_TEST_CURRENCY ?? '';
   const gameid = env.SOFTAGGREGATOR_TEST_GAME_ID;
-  if (!login || !password || login === env.SOFTAGGREGATOR_DEMO_LOGIN) {
+  if (!login || !password || login === env.SOFTAGGREGATOR_DEMO_LOGIN || login === env.SOFTAGGREGATOR_REAL_LOGIN) {
     return { status: 503, body: unavailable };
   }
   if (action !== 'capabilities' && (!isTestIdentity(username, currency) ||
@@ -57,22 +57,38 @@ export async function operatorTestRequest(
   const origins = (env.SOFTAGGREGATOR_TEST_LAUNCH_ORIGINS ?? '').split(',').map(approvedOrigin);
   const country = env.SOFTAGGREGATOR_TEST_COUNTRY ?? '';
   if (action === 'launch' && (env.SOFTAGGREGATOR_TEST_STANDARD_LAUNCH_APPROVED !== '1' ||
-      env.SOFTAGGREGATOR_TEST_CALLBACK_ENABLED !== '1' || env.SOFTAGGREGATOR_TEST_CALLBACK_VERIFIED !== '1' ||
+      env.SOFTAGGREGATOR_TEST_CALLBACK_ENABLED !== '1' ||
+      !env.SOFTAGGREGATOR_TEST_CALLBACK_HOST || !env.SOFTAGGREGATOR_TEST_SALT ||
+      !env.SOFTAGGREGATOR_TEST_REDIS_URL || !env.SOFTAGGREGATOR_TEST_REDIS_TOKEN ||
       !origins.some(Boolean) || !gameid || !/^[A-Z]{2}$/.test(country) ||
       (device !== 'mobile' && device !== 'desktop'))) return { status: 403, body: unavailable };
 
+  let providerMethod: Method = 'getCurrencies';
+  let providerStatus: number | undefined;
+  let providerError: number | undefined;
+  let providerMessage: string | undefined;
   async function call(method: Method, params: Record<string, unknown> = {}) {
+    providerMethod = method;
+    providerStatus = undefined;
     const response = await fetcher(softAggregatorEndpoint, {
       method: 'POST', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(12_000),
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ ...params, method, api_login: login, api_password: password }),
     });
+    providerStatus = response.status;
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
       throw new Error('Provider unavailable');
     }
     const result = asRecord(await readBoundedJson(response));
-    if (result.error !== 0) throw new Error('Provider declined');
+    if (result.error !== 0) {
+      if (typeof result.error === 'number' && Number.isSafeInteger(result.error)) providerError = result.error;
+      // Only expose documented constant messages; upstream text can include session or account data.
+      if (result.message === 'Game not available in your country' || result.message === 'country is required on getGame') {
+        providerMessage = result.message;
+      }
+      throw new Error('Provider declined');
+    }
     return result.response;
   }
 
@@ -96,6 +112,7 @@ export async function operatorTestRequest(
     if (matches.length !== 1 || !['slots', 'live', 'crash', 'table', 'instant', 'bingo', 'keno', 'fishing', 'other']
         .includes(String(matches[0].game_type))) return { status: 404, body: unavailable };
 
+    await call('createPlayer', player);
     const result = await call('getGame', {
       ...player, gameid, country, device, lang: 'en', homeurl: 'https://' + host + '/casino/demo',
     });
@@ -108,7 +125,7 @@ export async function operatorTestRequest(
     }
     return { status: 200, body: { ok: true, launchUrl: url.href } };
   } catch {
-    return { status: 502, body: unavailable };
+    return { status: 502, body: { ok: false, providerMethod, providerStatus, providerError, providerMessage } };
   }
 }
 
