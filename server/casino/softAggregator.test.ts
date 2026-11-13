@@ -166,3 +166,22 @@ test('casino branch Preview can browse existing provider metadata but cannot lau
     .list(new URLSearchParams()), /CASINO_DEMO_DISABLED/);
   assert.deepEqual(methods, ['getGameList']);
 });
+
+test('production catalog-only mode limits provider calls to metadata even with launch flags set', async () => {
+  const settings = {
+    ...env, VERCEL_ENV: 'production', SOFTAGGREGATOR_CATALOG_ONLY: '1',
+    SOFTAGGREGATOR_REAL_CATALOG_ENABLED: '1',
+    SOFTAGGREGATOR_REAL_LOGIN: 'test-login', SOFTAGGREGATOR_REAL_PASSWORD: 'test-password',
+  };
+  const methods: string[] = [];
+  const fetcher: typeof fetch = async (_url, request) => {
+    methods.push(JSON.parse(String(request?.body)).method);
+    return Response.json({ error: 0, response: [{ ...demo, play_for_fun_supported: false }] });
+  };
+  const metadata = createSoftAggregator(settings, fetcher, Date.now, 'preview-catalog');
+  assert.equal((await metadata.list(new URLSearchParams('category=slots'))).total, 1);
+  await assert.rejects(metadata.standardGame('unused'), /CASINO_STANDARD_DISABLED/);
+  await assert.rejects(createSoftAggregator(settings, fetcher, Date.now, 'standard').list(new URLSearchParams()), /CASINO_DEMO_DISABLED/);
+  await assert.rejects(createSoftAggregator(settings, fetcher).list(new URLSearchParams()), /CASINO_DEMO_DISABLED/);
+  assert.deepEqual(methods, ['getGameList']);
+});

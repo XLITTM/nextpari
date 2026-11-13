@@ -7,7 +7,7 @@ import { staffError, StaffOnboardingError } from '../staff/errors.js';
 import { loadStaffOnboardingEnv } from '../staff/env.js';
 import { parseJsonPayload, writeStaffJson, type StaffJsonResponse } from '../staff/httpHandler.js';
 import { createServiceRoleClient } from '../supabase/admin.js';
-import { asRecord, createSoftAggregator } from './softAggregator.js';
+import { asRecord, createSoftAggregator, softAggregatorCatalogOnly } from './softAggregator.js';
 import { handleWalletCallback, walletError, type WalletReply } from './softAggregatorTestWallet.js';
 
 const provider = createSoftAggregator(process.env, fetch, Date.now, 'standard');
@@ -50,9 +50,8 @@ export async function standardCasinoVercel(
   let cookies: string[] | undefined;
   try {
     const url = new URL(req.url ?? '/', 'http://localhost');
-    if (env.VERCEL_ENV === 'preview' && env.VERCEL_GIT_COMMIT_REF === 'work/casino-demo-softaggregator-w001' &&
-        env.SOFTAGGREGATOR_TEST_CATALOG_PREVIEW === '1' && env.SOFTAGGREGATOR_REAL_CATALOG_ENABLED !== '1' &&
-        req.method === 'GET' && url.searchParams.get('quote') !== '1') {
+    if (softAggregatorCatalogOnly(env)) {
+      if (req.method !== 'GET' || url.searchParams.get('quote') === '1') throw staffError('CASINO_STANDARD_DISABLED', 503);
       const catalog = await previewCatalog.list(url.searchParams);
       writeStaffJson(res, { status: 200, headers, body: { ok: true, launchEnabled: false, catalogPreview: true, ...catalog } });
       return;
@@ -128,7 +127,8 @@ export async function standardCasinoVercel(
 export async function standardWalletVercel(req: IncomingMessage, res: ServerResponse) {
   const env = process.env;
   let reply = walletError;
-  if ((env.VERCEL_ENV === 'production' || (env.VERCEL_ENV === 'preview' && env.SOFTAGGREGATOR_REAL_PILOT_PLAYER)) &&
+  if (!softAggregatorCatalogOnly(env) &&
+      (env.VERCEL_ENV === 'production' || (env.VERCEL_ENV === 'preview' && env.SOFTAGGREGATOR_REAL_PILOT_PLAYER)) &&
       env.SOFTAGGREGATOR_REAL_CALLBACK_ENABLED === '1' && env.SOFTAGGREGATOR_REAL_SALT &&
       env.SOFTAGGREGATOR_REAL_CALLBACK_HOST && value(req.headers, 'host') === env.SOFTAGGREGATOR_REAL_CALLBACK_HOST) {
     reply = await handleWalletCallback({

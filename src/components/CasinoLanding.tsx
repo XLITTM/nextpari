@@ -11,14 +11,14 @@ interface CasinoLandingProps {
 const ENTRIES: { label: string; desc: string; screen: Screen; icon: 'slots' | 'live' }[] = [
   {
     label: 'Слоты',
-    desc: 'Игры появятся после подключения провайдера',
-    screen: { name: 'slots' },
+    desc: 'Каталог слотов',
+    screen: { name: 'casino-real', category: 'slots' },
     icon: 'slots',
   },
   {
     label: 'Лайв казино',
-    desc: 'Столы появятся после подключения провайдера',
-    screen: { name: 'live-casino' },
+    desc: 'Каталог игр с дилерами',
+    screen: { name: 'casino-real', category: 'live' },
     icon: 'live',
   },
 ];
@@ -30,7 +30,7 @@ export function CasinoLanding({ onNavigate }: CasinoLandingProps) {
       <div className="flex flex-col gap-2 px-4">
         {ENTRIES.map((entry) => (
           <button
-            key={entry.screen.name}
+            key={entry.icon}
             type="button"
             onClick={() => onNavigate(entry.screen)}
             className="flex w-full items-center gap-3 rounded-2xl bg-white p-4 text-left shadow-sm active:scale-[0.98] transition-transform dark:bg-gray-800"

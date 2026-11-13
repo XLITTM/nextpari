@@ -11,6 +11,6 @@ const assets = {
 
 export function ownerFootballLogo(kind: keyof typeof assets, providerId: string | null) {
   const byId: Readonly<Record<string, { id: string; file: string }>> = assets[kind];
-  const asset = providerId && Object.prototype.hasOwnProperty.call(byId, providerId) ? byId[providerId] : null;
+  const asset = providerId && Object.hasOwn(byId, providerId) ? byId[providerId] : null;
   return asset ? { canonicalId: asset.id, path: `/images/sports/football/${asset.file}.png` } : null;
 }

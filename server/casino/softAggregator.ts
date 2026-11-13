@@ -99,6 +99,14 @@ export async function readBoundedJson(response: Response): Promise<unknown> {
   }
 }
 
+export function softAggregatorCatalogOnly(env: NodeJS.ProcessEnv): boolean {
+  if (env.VERCEL_ENV === 'production') return env.SOFTAGGREGATOR_CATALOG_ONLY === '1';
+  return env.VERCEL_ENV === 'preview' &&
+    env.VERCEL_GIT_COMMIT_REF === 'work/casino-demo-softaggregator-w001' &&
+    env.SOFTAGGREGATOR_DEMO_ENABLED === '1' && env.SOFTAGGREGATOR_TEST_CATALOG_PREVIEW === '1' &&
+    env.SOFTAGGREGATOR_REAL_CATALOG_ENABLED !== '1';
+}
+
 export function createSoftAggregator(
   env: NodeJS.ProcessEnv, fetcher: typeof fetch = fetch, now = Date.now, mode: 'demo' | 'standard' | 'preview-catalog' = 'demo',
 ) {
@@ -108,9 +116,9 @@ export function createSoftAggregator(
   const password = mode !== 'standard' ? env.SOFTAGGREGATOR_DEMO_PASSWORD : env.SOFTAGGREGATOR_REAL_PASSWORD;
   const artworkOrigins = origins(env.SOFTAGGREGATOR_ARTWORK_ORIGINS);
   const launchOrigins = origins(demo ? env.SOFTAGGREGATOR_LAUNCH_ORIGINS : env.SOFTAGGREGATOR_REAL_LAUNCH_ORIGINS);
-  const enabled = (mode === 'standard' ? env.SOFTAGGREGATOR_REAL_CATALOG_ENABLED : env.SOFTAGGREGATOR_DEMO_ENABLED) === '1' &&
-    Boolean(login && password) && (!previewCatalog || (env.VERCEL_ENV === 'preview' &&
-      env.VERCEL_GIT_COMMIT_REF === 'work/casino-demo-softaggregator-w001' && env.SOFTAGGREGATOR_TEST_CATALOG_PREVIEW === '1'));
+  const catalogOnly = softAggregatorCatalogOnly(env);
+  const enabled = Boolean(login && password) && (previewCatalog ? catalogOnly : !catalogOnly &&
+    (demo ? env.SOFTAGGREGATOR_DEMO_ENABLED : env.SOFTAGGREGATOR_REAL_CATALOG_ENABLED) === '1');
   type Snapshot = { expires: number; games: Entry[]; counts?: CatalogCounts };
   let cached: Snapshot | undefined;
   let inflight: Promise<Snapshot> | undefined;

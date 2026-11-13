@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Gamepad2, Search } from 'lucide-react';
 import { casinoCategories, casinoDemoApi, casinoRealApi, type CasinoDemoCatalog as Catalog, type CasinoDemoGame } from '../lib/casinoDemo';
-import { casinoRateLabel, casinoUsdLabel, type CasinoConversion } from '../lib/casinoConversion';
+import { casinoRateLabel, casinoUsdLabel, fetchCasinoDisplayConversion, type CasinoConversion, type CasinoDisplayConversion } from '../lib/casinoConversion';
 import type { Screen } from '../types';
 
 const fieldClass = 'min-w-0 rounded-xl border border-[var(--np-border)] bg-[var(--np-surface)] px-3 py-2 text-sm text-[var(--np-text)]';
@@ -19,6 +19,7 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
   const [retry, setRetry] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'disabled'>('loading');
   const [data, setData] = useState<(Catalog & { conversion?: CasinoConversion; launchEnabled?: boolean; catalogPreview?: boolean }) | null>(null);
+  const [displayConversion, setDisplayConversion] = useState<CasinoDisplayConversion | null>(null);
   const [games, setGames] = useState<CasinoDemoGame[]>([]);
 
   useEffect(() => {
@@ -46,6 +47,17 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
     return () => { clearTimeout(timer); controller.abort(); };
   }, [category, categoryFilter, hideUnavailable, page, provider, query, retry, standard]);
 
+  const showDisplayQuote = standard && categoryFilter === 'live' && data?.catalogPreview === true;
+  useEffect(() => {
+    if (!showDisplayQuote) return;
+    const controller = new AbortController();
+    void fetchCasinoDisplayConversion(controller.signal).then((quote) => {
+      if (!controller.signal.aborted) setDisplayConversion(quote);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [showDisplayQuote]);
+  const conversion = data?.conversion ?? (showDisplayQuote ? displayConversion : null);
+
   function change(update: () => void) {
     setGames([]);
     setPage(1);
@@ -61,15 +73,15 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
     <section className="space-y-3 px-4 pb-4 text-[var(--np-text)]" aria-labelledby={standard ? 'casino-standard-title' : 'casino-demo-title'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-extrabold" id={standard ? 'casino-standard-title' : 'casino-demo-title'}>{standard ? (categoryFilter === 'live' ? 'Лайв казино' : categoryFilter === 'slots' ? 'Слоты' : 'SoftAggregator') : 'Демо-игры'}</h2>
-        <span className="text-xs font-medium text-[var(--np-text-secondary)]">{standard ? 'Игровая валюта USD' : 'Без списания средств'}</span>
+        <span className="text-xs font-medium text-[var(--np-text-secondary)]">{standard ? 'USD' : 'Без списания средств'}</span>
       </div>
       {data?.catalogPreview && (
-        <p role="status" className="text-sm text-[var(--np-text-secondary)]">Предпросмотр каталога. Запуск игр отключён.</p>
+        <p role="status" className="text-sm text-[var(--np-text-secondary)]">Запуск игр временно недоступен.</p>
       )}
-      {standard && data?.conversion && (
+      {standard && (categoryFilter === 'live' || conversion) && (
         <div role="status" className="rounded-xl border border-[var(--np-border)] p-3 text-sm">
-          <p>Ваш баланс отображается в USD по курсу NextPari. Кошелёк ведётся в TMT.</p>
-          <p>{casinoRateLabel(data.conversion)} · {casinoUsdLabel(data.conversion.balanceUsdMinor)}</p>
+          <p>В игре баланс отображается в USD по курсу NextPari. Кошелёк ведётся в TMT.</p>
+          {conversion && <p>{casinoRateLabel(conversion)} · {casinoUsdLabel(conversion.balanceUsdMinor)}</p>}
         </div>
       )}
       <div className="grid gap-2 sm:grid-cols-3">

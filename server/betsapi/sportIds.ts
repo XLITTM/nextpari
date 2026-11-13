@@ -13,5 +13,5 @@ export type EventsSportId = keyof typeof eventsSports;
 
 export function configuredAdditionalSports(value = process.env.BETSAPI_MULTISPORT_SPORT_IDS): EventsSportId[] {
   return [...new Set((value ?? '').split(',').map((id) => id.trim()))]
-    .filter((id): id is EventsSportId => id !== '1' && Object.prototype.hasOwnProperty.call(eventsSports, id));
+    .filter((id): id is EventsSportId => id !== '1' && Object.hasOwn(eventsSports, id));
 }
