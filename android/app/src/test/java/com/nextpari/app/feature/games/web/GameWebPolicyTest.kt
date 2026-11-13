@@ -73,6 +73,17 @@ class GameWebPolicyTest {
     }
 
     @Test
+    fun standardCasinoUsesSameOriginCatalogAndGameRoutes() {
+        val game = "https://nextpari.net/casino/real/sa-0123456789abcdef0123456789abcdef"
+        assertThat(GameWebPolicy.gameUrl("casino-live")).isEqualTo("https://nextpari.net/casino/real/live")
+        assertThat(GameWebPolicy.decideMainFrame(game, "casino-live")).isEqualTo(GameFrameDecision.Allow)
+        assertThat(GameWebPolicy.decideMainFrame("$game?extra=1", "casino-live")).isEqualTo(GameFrameDecision.Block)
+        assertThat(GameWebPolicy.decideMainFrame(game.replace("nextpari.net", "example.org"), "casino-live"))
+            .isEqualTo(GameFrameDecision.Block)
+        assertThat(GameWebPolicy.decideMainFrame("https://nextpari.net/games", "casino-live")).isEqualTo(GameFrameDecision.Leave)
+    }
+
+    @Test
     fun handoffCopiesOnlySecureHttpOnlyCookiesForTheSamePlayer() = runTest {
         val store = RecordingCookieStore()
         WebSessionBridge.install(store)

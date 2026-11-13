@@ -26,6 +26,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -318,14 +319,14 @@ internal fun AuthenticatedShell(
     LaunchedEffect(lifecycle, session.playerPublicId) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { walletsViewModel.refresh() }
     }
+    val casinoWeb = current == Destinations.CASINO_DEMO_GAME || current == Destinations.CASINO_STANDARD
     var previousWasGame by remember { mutableStateOf(false) }
     LaunchedEffect(current) {
         if (current == null) return@LaunchedEffect
-        if (current == Destinations.WALLET || (previousWasGame && !arcade)) walletsViewModel.refresh()
-        previousWasGame = arcade
+        if (current == Destinations.WALLET || (previousWasGame && !arcade && !casinoWeb)) walletsViewModel.refresh()
+        previousWasGame = arcade || casinoWeb
     }
-    val casinoDemo = current == Destinations.CASINO_DEMO_GAME
-    val showBottomBar = current != Destinations.GAMES && !arcade && !casinoDemo
+    val showBottomBar = current != Destinations.GAMES && !arcade && !casinoWeb
     val showHeader = Destinations.showsHeader(current)
     val showMainTabs = Destinations.showsMainTabs(current)
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -381,7 +382,7 @@ internal fun AuthenticatedShell(
             }
         },
     ) { padding ->
-        val gamesOwnsInsets = current == Destinations.GAMES || arcade || casinoDemo
+        val gamesOwnsInsets = current == Destinations.GAMES || arcade || casinoWeb
         val layoutDirection = LocalLayoutDirection.current
         val couponClearance = if (showBottomBar) 32.dp else 0.dp
         NavHost(
@@ -603,14 +604,23 @@ internal fun AuthenticatedShell(
             composable(Destinations.SLOTS) {
                 Column {
                     SportsbookScreenHeader("Слоты", onBack = { navController.popBackStack() })
+                    TextButton(onClick = { navController.navigateTo(Destinations.casinoStandard("slots")) }) {
+                        Text("Слоты на сайте")
+                    }
                     CasinoDemoCatalog(onOpen = { navController.navigateTo(Destinations.casinoDemoGame(it)) }, category = "slots")
                 }
             }
             composable(Destinations.LIVE_CASINO) {
                 Column {
                     SportsbookScreenHeader("Лайв казино", onBack = { navController.popBackStack() })
+                    TextButton(onClick = { navController.navigateTo(Destinations.casinoStandard("live")) }) {
+                        Text("Лайв казино на сайте")
+                    }
                     CasinoDemoCatalog(onOpen = { navController.navigateTo(Destinations.casinoDemoGame(it)) }, category = "live")
                 }
+            }
+            composable(Destinations.CASINO_STANDARD) { entry ->
+                GameWebViewScreen("casino-" + entry.arguments?.getString("category").orEmpty()) { navController.popBackStack() }
             }
             composable(Destinations.CASINO_DEMO_GAME) { entry ->
                 GameWebViewScreen(entry.arguments?.getString("gameId").orEmpty()) { navController.popBackStack() }
@@ -690,7 +700,7 @@ internal fun AuthenticatedShell(
             }
         }
     }
-    if (!arcade && !casinoDemo && current != Destinations.GAMES && !searchOpen) {
+    if (!arcade && !casinoWeb && current != Destinations.GAMES && !searchOpen) {
         ReleaseUpdateCard(
             Modifier
                 .align(Alignment.BottomCenter)

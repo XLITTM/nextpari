@@ -19,12 +19,17 @@ object GameWebPolicy {
         "pharaoh" to "/games/pharaoh",
     )
 
+    private val standardCatalogs = mapOf(
+        "casino-slots" to "/casino/real/slots",
+        "casino-live" to "/casino/real/live",
+    )
+    private val standardGamePath = Regex("^/casino/real/sa-[a-f0-9]{32}$")
     private val demoId = Regex("^sa-[a-f0-9]{32}$")
     fun isCasinoDemoId(id: String): Boolean = demoId.matches(id)
     private fun casinoPath(id: String): String? = "/casino/demo/$id".takeIf { isCasinoDemoId(id) }
 
     fun gameUrl(gameCode: String): String? {
-        val path = paths[gameCode] ?: casinoPath(gameCode) ?: return null
+        val path = paths[gameCode] ?: standardCatalogs[gameCode] ?: casinoPath(gameCode) ?: return null
         return ORIGIN + path
     }
 
@@ -38,6 +43,16 @@ object GameWebPolicy {
             return GameFrameDecision.Block
         }
         val path = uri.path?.trimEnd('/').orEmpty().ifBlank { "/" }
+        val standardCatalog = standardCatalogs[gameCode]
+        if (standardCatalog != null) {
+            if (uri.rawQuery != null || uri.rawFragment != null) return GameFrameDecision.Block
+            val rawPath = uri.rawPath.orEmpty()
+            return if (rawPath == standardCatalog || rawPath == "/casino/real" || standardGamePath.matches(rawPath)) {
+                GameFrameDecision.Allow
+            } else {
+                GameFrameDecision.Leave
+            }
+        }
         val casino = casinoPath(gameCode)
         if (casino != null) {
             if (uri.rawQuery != null || uri.rawFragment != null) return GameFrameDecision.Block
