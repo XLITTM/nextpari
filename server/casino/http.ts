@@ -17,23 +17,21 @@ function header(headers: Headers, key: string) {
   return typeof value === 'string' ? value : undefined;
 }
 
-async function authorize(headers: Headers, enforceCasinoGate: boolean) {
+async function authorize(headers: Headers) {
   const cookieHeader = header(headers, 'cookie');
   const parsed = readPlayerCookies(cookieHeader);
   if (!parsed.accessToken && !parsed.refreshToken) throw staffError('JWT_REQUIRED', 401);
   const ports = livePlayerAuthPorts();
   const session = await resolvePlayerSession(ports, cookieHeader, requestIsSecure(headers));
-  if (enforceCasinoGate) {
-    const { id } = await ports.getAuthUser(session.accessToken);
-    const env = loadStaffOnboardingEnv();
-    const { error } = await createServiceRoleClient(env.supabaseUrl, env.supabaseServiceRoleKey)
-      .rpc(PLAYER_EXTERNAL_CASINO_GATE_RPC, { p_player_user_id: id });
-    if (error) {
-      if (error.message.includes(PLAYER_EXTERNAL_CASINO_RESTRICTED)) {
-        throw staffError(PLAYER_EXTERNAL_CASINO_RESTRICTED, 403);
-      }
-      throw staffError('CASINO_DEMO_ACCESS_UNAVAILABLE', 503);
+  const { id } = await ports.getAuthUser(session.accessToken);
+  const env = loadStaffOnboardingEnv();
+  const { error } = await createServiceRoleClient(env.supabaseUrl, env.supabaseServiceRoleKey)
+    .rpc(PLAYER_EXTERNAL_CASINO_GATE_RPC, { p_player_user_id: id });
+  if (error) {
+    if (error.message.includes(PLAYER_EXTERNAL_CASINO_RESTRICTED)) {
+      throw staffError(PLAYER_EXTERNAL_CASINO_RESTRICTED, 403);
     }
+    throw staffError('CASINO_DEMO_ACCESS_UNAVAILABLE', 503);
   }
   return session.cookies;
 }
@@ -51,7 +49,6 @@ export async function casinoDemoRequest(
     }
     const url = new URL(req.url ?? casinoDemoApi, 'http://localhost');
     if (method === 'GET') {
-      cookies = await deps.authorize(req.headers, false);
       return { status: 200, body: { ok: true, ...await deps.provider.list(url.searchParams) }, headers, cookies };
     }
     const origin = header(req.headers, 'origin');
@@ -66,7 +63,7 @@ export async function casinoDemoRequest(
     const body = asRecord(parseJsonPayload(req.body));
     if (typeof body.id !== 'string' || !validCasinoDemoId(body.id) ||
         (body.device !== 'mobile' && body.device !== 'desktop')) throw staffError('BODY_INVALID', 400);
-    cookies = await deps.authorize(req.headers, true);
+    cookies = await deps.authorize(req.headers);
     return { status: 200, body: { ok: true, ...await deps.provider.launch(body.id, body.device, origin) }, headers, cookies };
   } catch (error) {
     const status = error instanceof StaffOnboardingError ? error.httpStatus : 503;

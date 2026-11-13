@@ -87,9 +87,9 @@ test('stops upstream reads during provider rate-limit cooldown', async () => {
 test('blocks cross-origin launches before session or provider calls and checks casino restriction gate', async () => {
   const events: string[] = [];
   const deps = {
-    authorize: async (_headers: unknown, gate: boolean) => { events.push('gate:' + gate); return undefined; },
+    authorize: async (_headers: unknown) => { events.push('gate'); return undefined; },
     provider: {
-      list: async () => { events.push('catalog'); return { games: [], providers: [], categories: [], nextPage: null }; },
+      list: async () => { events.push('catalog'); return { games: [], providers: [], categories: [], total: 0, nextPage: null }; },
       launch: async () => { events.push('launch'); return { title: 'Fixture', url: 'https://launch.example.test/demo' }; },
     },
   };
@@ -100,6 +100,7 @@ test('blocks cross-origin launches before session or provider calls and checks c
   const ok = await casinoDemoRequest({ ...req, headers: { ...req.headers, origin: 'https://nextpari.net' } }, deps);
   assert.equal(ok.status, 200);
   assert.match(ok.headers?.['Cache-Control'] ?? '', /no-store/);
-  assert.deepEqual(events, ['gate:true', 'launch']);
-  assert.equal((await casinoDemoRequest({ method: 'GET', headers: {} })).status, 401);
+  assert.deepEqual(events, ['gate', 'launch']);
+  assert.equal((await casinoDemoRequest({ ...req, headers: { ...req.headers, origin: 'https://nextpari.net' } })).status, 401);
+  assert.equal((await casinoDemoRequest({ method: 'GET', headers: {} }, deps)).status, 200);
 });

@@ -147,6 +147,7 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
         providers: [...new Map(games.map((g) => [g.provider, { id: g.provider, name: g.studio }])).values()]
           .sort((a, b) => a.name.localeCompare(b.name)),
         categories: [...new Set(games.map((g) => g.category))],
+        total: matches.length,
         nextPage: matches.length > page * 24 ? page + 1 : null,
       };
     },

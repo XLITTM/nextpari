@@ -21,6 +21,7 @@ export interface CasinoDemoCatalog {
   games: CasinoDemoGame[];
   providers: { id: string; name: string }[];
   categories: (keyof typeof casinoCategories)[];
+  total: number;
   nextPage: number | null;
 }
 
