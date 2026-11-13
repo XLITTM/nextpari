@@ -190,11 +190,12 @@ export class BetsApiReadOnlyClient {
     ));
   }
 
-  getUpcoming(page = 1, filters?: { day?: string; skipEsports?: boolean }, sportId: EventsSportId = FOOTBALL_SPORT_ID): Promise<FeedResult> {
+  getUpcoming(page = 1, filters?: { day?: string; skipEsports?: boolean; leagueId?: string }, sportId: EventsSportId = FOOTBALL_SPORT_ID): Promise<FeedResult> {
     const safePage = Number.isInteger(page) && page >= 1 && page <= 5 ? page : 1;
     const query: Record<string, string> = { sport_id: sportId, page: String(safePage) };
     if (filters?.skipEsports) query.skip_esports = '1';
     if (filters?.day && /^\d{8}$/.test(filters.day)) query.day = filters.day;
+    if (filters?.leagueId && /^\d{1,12}$/.test(filters.leagueId)) query.league_id = filters.leagueId;
     return this.cached('upcoming', PATHS.upcoming, query, (json) => (
       normalizeFootballList(json, 'upcoming', this.now(), sportId)
     ));
@@ -202,11 +203,13 @@ export class BetsApiReadOnlyClient {
 
   async getPrematchCoverage(): Promise<FeedResult> {
     const collected: NormalizedEvent[] = [];
-    const jobs: Array<{ page: number; day?: string }> = [
-      ...coverageDays(this.now()).map((day) => ({ page: 1, day })),
+    const days = coverageDays(this.now());
+    const jobs: Array<{ page: number; day?: string; leagueId?: string }> = [
+      ...days.map((day) => ({ page: 1, day })),
+      { page: 1, day: days[0], leagueId: '94' },
       { page: 1 },
     ];
-    const overflow: Array<{ page: number; day?: string }> = [];
+    const overflow: Array<{ page: number; day?: string; leagueId?: string }> = [];
     let requests = 0;
     let rateLimited = false;
     let stale = false;
@@ -219,7 +222,7 @@ export class BetsApiReadOnlyClient {
       }
       const job = (jobs.shift() ?? overflow.shift())!;
       requests += 1;
-      const result = await this.getUpcoming(job.page, { day: job.day, skipEsports: true });
+      const result = await this.getUpcoming(job.page, { day: job.day, skipEsports: true, leagueId: job.leagueId });
       if (result.error === 'TOKEN_MISSING') {
         tokenMissing = true;
         break;
@@ -235,6 +238,7 @@ export class BetsApiReadOnlyClient {
       collected.push(...result.feed.events);
       const query: Record<string, string> = { sport_id: FOOTBALL_SPORT_ID, page: String(job.page), skip_esports: '1' };
       if (job.day) query.day = job.day;
+      if (job.leagueId) query.league_id = job.leagueId;
       const pager = this.cache.get(`upcoming:${new URLSearchParams(query).toString()}`)?.pager ?? null;
       if (job.page === 1 && upcomingHasAnotherPage(pager, result.feed.events.length)) {
         overflow.push({ page: 2, day: job.day });

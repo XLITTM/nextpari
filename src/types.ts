@@ -130,6 +130,8 @@ export interface MatchEvent {
     stale: boolean;
   } | null;
   liveScore?: { team1: number; team2: number };
+  period?: 'first_half' | 'second_half' | null;
+  statsAvailability?: 'available' | 'absent';
   markets: { '1': number; x: number; '2': number };
   extraMarkets: number;
   featured?: boolean;

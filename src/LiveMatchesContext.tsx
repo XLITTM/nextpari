@@ -12,6 +12,9 @@ import type { MatchEvent } from './types';
 interface LiveMatchesContextValue {
   liveMatches: MatchEvent[];
   upcomingMatches: MatchEvent[];
+  featuredLive: MatchEvent[];
+  featuredLine: MatchEvent[];
+  scheduleMatches: MatchEvent[];
   loading: boolean;
   refresh: () => Promise<void>;
   ensurePrices: (ids: string[]) => Promise<void>;
@@ -25,6 +28,7 @@ const LiveMatchesContext = createContext<LiveMatchesContextValue | null>(null);
 export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const clearEvents = useSportsStore((s) => s.clearEvents);
   const [matches, setMatches] = useState<MatchEvent[]>(EMPTY_MATCHES);
+  const [groups, setGroups] = useState({ live: [] as string[], line: [] as string[], schedule: [] as string[] });
   const [loading, setLoading] = useState(false);
   const generation = useRef(0);
   const latest = useRef<MatchEvent[]>(EMPTY_MATCHES);
@@ -49,9 +53,14 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
     try {
       const listed = await fetchFootballFeed();
       if (ticket !== generation.current) return;
-      const merged = mergeListedMatches(latest.current, listed);
+      const merged = mergeListedMatches(latest.current, listed.events);
       latest.current = merged;
       setMatches(merged);
+      setGroups({
+        live: listed.featuredLive.map((match) => match.id),
+        line: listed.featuredLine.map((match) => match.id),
+        schedule: listed.schedule.map((match) => match.id),
+      });
       const plan = footballQuoteIds(merged);
       const first = await applyQuotes(plan.primary, ticket);
       const limited = first?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
@@ -84,17 +93,28 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   );
   const liveMatches = matches.filter((match) => match.isLive);
   const upcomingMatches = matches.filter((match) => !match.isLive);
+  const byId = new Map(matches.map((match) => [match.id, match]));
+  const pick = (ids: string[]) => ids.flatMap((id) => {
+    const match = byId.get(id);
+    return match ? [match] : [];
+  });
+  const featuredLive = pick(groups.live);
+  const featuredLine = pick(groups.line);
+  const scheduleMatches = pick(groups.schedule);
 
   const value = useMemo<LiveMatchesContextValue>(
     () => ({
       liveMatches,
       upcomingMatches,
+      featuredLive,
+      featuredLine,
+      scheduleMatches,
       loading,
       refresh,
       ensurePrices,
       findMatch,
     }),
-    [ensurePrices, findMatch, liveMatches, loading, refresh, upcomingMatches],
+    [ensurePrices, featuredLine, featuredLive, findMatch, liveMatches, loading, refresh, scheduleMatches, upcomingMatches],
   );
 
   return <LiveMatchesContext.Provider value={value}>{children}</LiveMatchesContext.Provider>;

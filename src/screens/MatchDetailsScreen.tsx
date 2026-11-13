@@ -114,20 +114,33 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
     }).catch(() => undefined);
   }, [catalogMatch, matchId]);
 
-  const clockNow = useFootballClockNow(catalogMatch?.liveClock);
   const match = useMemo(() => {
     const resolved = resolveDetailsMatch(
       catalogMatch,
       storeState ? matchEventFromStore(storeState) : undefined,
     );
-    if (!resolved || !expanded.length) return resolved;
-    return {
+    if (!resolved || !detail) return resolved && expanded.length ? {
       ...resolved,
       marketGroups: [...(resolved.marketGroups ?? []), ...expanded],
       extraMarkets: (Number(resolved.extraMarkets) || 0) + expanded.length,
       priceState: bet365Stale ? 'stale' as const : resolved.priceState,
+    } : resolved;
+    const merged = {
+      ...resolved,
+      stats: detail.stats ?? resolved.stats,
+      statsAvailability: detail.statsAvailability ?? resolved.statsAvailability,
+      period: detail.period ?? resolved.period,
+      liveClock: detail.liveClock ?? resolved.liveClock,
     };
-  }, [catalogMatch, storeState, expanded, bet365Stale]);
+    if (!expanded.length) return merged;
+    return {
+      ...merged,
+      marketGroups: [...(merged.marketGroups ?? []), ...expanded],
+      extraMarkets: (Number(merged.extraMarkets) || 0) + expanded.length,
+      priceState: bet365Stale ? 'stale' as const : merged.priceState,
+    };
+  }, [catalogMatch, storeState, expanded, bet365Stale, detail]);
+  const clockNow = useFootballClockNow(match?.liveClock ?? catalogMatch?.liveClock);
   const { count: betCount } = useBetSlip();
 
   if (!match) {
@@ -156,7 +169,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
         timeStr={isBetsapiMatch(match) ? undefined : storeState?.event.time_str}
         scoreText={storeState?.score}
         clockRunning={isBetsapiMatch(match) ? false : storeState?.event.period !== 'HT' && storeState?.event.clock_running !== false}
-        period={isBetsapiMatch(match) ? undefined : storeState?.event.period}
+        period={isBetsapiMatch(match) ? (match.period === 'first_half' ? '1' : match.period === 'second_half' ? '2' : undefined) : storeState?.event.period}
         kickoffUnix={isBetsapiMatch(match) ? 0 : Number(storeState?.event.start_time || storeState?.event.time || 0)}
         headerTab={headerTab}
         onHeaderTabChange={setHeaderTab}
@@ -166,6 +179,9 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
       />
 
       <div className="flex-1 overscroll-contain">
+        {isBetsapiMatch(match) && match.statsAvailability === 'absent' && (
+          <p className="px-4 pt-3 text-sm text-gray-500 dark:text-gray-400">Статистика этого матча у провайдера сейчас отсутствует.</p>
+        )}
         {headerTab === 'info' ? (
           isBetsapiMatch(match) ? <BetsapiMarkets match={match} /> : <MarketsGrid eventId={matchId} match={match} />
         ) : (

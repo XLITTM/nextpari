@@ -27,6 +27,11 @@ export interface FootballFeedCard {
   live: boolean;
   score: { home: number; away: number } | null;
   liveClock?: MatchEvent['liveClock'];
+  period?: 'first_half' | 'second_half' | null;
+  insights?: {
+    statistics: Array<{ label: string; home: number; away: number }>;
+    availability: { statistics: 'available' | 'absent' };
+  } | null;
   priceState?: FootballPriceState;
   markets: FootballFeedMarket[];
 }
@@ -162,6 +167,7 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
     startTime: Number.isFinite(kickoff) ? kickoff : 0,
     isLive: card.live,
     liveClock: card.liveClock ?? null,
+    period: card.period ?? null,
     liveStatus: card.liveClock
       ? `${card.liveClock.minute}:${String(card.liveClock.second).padStart(2, '0')}`
       : undefined,
@@ -173,6 +179,8 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
     priceState,
     betsapiQuotes: quotes,
     marketsLocked: !oneXtwo,
+    stats: card.insights?.statistics.map((item) => ({ label: item.label, team1: item.home, team2: item.away })),
+    statsAvailability: card.insights?.availability.statistics,
   };
 }
 
@@ -369,19 +377,44 @@ export function applyFootballQuotes(matches: MatchEvent[], quotes: FootballOddsQ
       live: match.isLive,
       score: match.liveScore ? { home: match.liveScore.team1, away: match.liveScore.team2 } : null,
       liveClock: match.liveClock,
+      period: match.period,
       priceState: quote.priceState,
       markets: quote.markets,
     });
     const priced = quote.priceState === 'stale' ? { ...next, priceState: 'stale' as const } : next;
-    return retainFootballClock(priced, match);
+    return retainFootballClock({
+      ...priced,
+      stats: priced.stats ?? match.stats,
+      statsAvailability: priced.statsAvailability ?? match.statsAvailability,
+      period: priced.period ?? match.period,
+    }, match);
   });
 }
 
-export async function fetchFootballFeed(signal?: AbortSignal): Promise<MatchEvent[]> {
+export interface FootballFeedLists {
+  events: MatchEvent[];
+  featuredLive: MatchEvent[];
+  featuredLine: MatchEvent[];
+  schedule: MatchEvent[];
+}
+
+export async function fetchFootballFeed(signal?: AbortSignal): Promise<FootballFeedLists> {
+  const empty = { events: [], featuredLive: [], featuredLine: [], schedule: [] };
   const response = await fetch('/api/player/sports/football-feed?includeSports=1', { signal, credentials: 'same-origin' });
-  if (!response.ok) return [];
-  const body = await response.json() as { events?: FootballFeedCard[] };
-  return (body.events ?? []).map(footballCardToMatch);
+  if (!response.ok) return empty;
+  const body = await response.json() as {
+    events?: FootballFeedCard[];
+    featuredLive?: FootballFeedCard[];
+    featuredLine?: FootballFeedCard[];
+    schedule?: FootballFeedCard[];
+  };
+  const map = (cards?: FootballFeedCard[]) => (cards ?? []).map(footballCardToMatch);
+  return {
+    events: map(body.events),
+    featuredLive: map(body.featuredLive),
+    featuredLine: map(body.featuredLine),
+    schedule: map(body.schedule),
+  };
 }
 
 export async function fetchFootballQuotes(ids: string[], signal?: AbortSignal): Promise<FootballOddsQuote[]> {

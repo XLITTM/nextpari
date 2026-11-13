@@ -32,6 +32,12 @@ continue to use neutral artwork until reviewed. On web and Android the logos
 keep their transparency and original aspect ratio. Both surfaces use the
 same sport ranking and an authoritative football clock when available.
 
-Automatic Vercel deployment is disabled for the server draft branch only.
+The list response keeps `events` and adds three read-only arrays of the same card shape: `featuredLive`, `featuredLine`, and `schedule`. Featured live contains real matches that are live now. Featured line contains real prematch matches whose kickoff is inside the next 24 hours, ordered by competition tier, then an open price, then kickoff. `schedule` is the same real matches in kickoff order. eSoccer, virtual and simulated leagues stay out of those three arrays. Competition tier uses the verified Events league id `94` for the Premier League and exact full league names for the other mapped competitions. A friendly or youth league does not inherit a top-tier rank from part of its name.
+
+Event detail adds optional `insights` from `/v1/event/view`: numeric home/away pairs for the documented statistics keys, up to 40 provider timeline strings, and provider period scores. Head-to-head and previous-match lists are marked `absent` because this Events view does not supply them. No second statistics provider is connected.
+
+`BETSAPI_MULTISPORT_SPORT_IDS` stays unset until an authorized server read confirms each sport. The server does not enable those sports from this change. No migration is included: the one verified league id already has a code mapping, and new database tables are not applied without owner approval.
+
+Automatic Vercel deployment remains disabled for this branch. Preview protection stays enabled.
 Review the three draft PRs and validate the unified read-only flow before
 making any release or changing production configuration.

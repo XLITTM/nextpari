@@ -156,8 +156,9 @@ function MatchRowCard({
 
 export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favorites, onToggleFavorite }: GameListScreenProps) {
   const [tab, setTab] = useState<'live' | 'line'>(mode);
-  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
-  const matches = tab === 'live' ? liveMatches : upcomingMatches;
+  const { liveMatches, upcomingMatches, scheduleMatches, loading } = useLiveMatches();
+  const chronological = scheduleMatches.length ? scheduleMatches : [...liveMatches, ...upcomingMatches];
+  const matches = tab === 'live' ? chronological.filter((match) => match.isLive) : chronological.filter((match) => !match.isLive);
 
   return (
     <div className="min-h-full bg-gray-200 dark:bg-gray-900 flex flex-col transition-colors">

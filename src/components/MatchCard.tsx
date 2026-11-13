@@ -141,7 +141,11 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
           <div className="flex items-center justify-center gap-1.5 mt-1">
             <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse-live" />
             <span className="text-xs text-red-500 font-semibold">LIVE</span>
-            {liveMinute ? <span className="text-xs text-red-500 font-semibold">{liveMinute}</span> : null}
+            {liveMinute ? (
+              <span className="text-xs text-red-500 font-semibold">
+                {match.period === 'first_half' ? `1-й тайм · ${liveMinute}` : match.period === 'second_half' ? `2-й тайм · ${liveMinute}` : liveMinute}
+              </span>
+            ) : null}
           </div>
         )}
       </div>

@@ -27,7 +27,7 @@ test('normalizes actual sport IDs without merging same event numbers or prioriti
   assert.deepEqual(basketball[0].score, { home: 32, away: 29 });
   assert.equal(basketball[0].liveClock, null);
   const football = normalizeFootballList({ results: [fixture('1', '42', 'UEFA Nations League'), fixture('1', '99', 'Esoccer 6 min')] }, 'inplay');
-  assert.equal(eventTier(basketball[0]), eventTier(football[0]));
+  assert.equal(eventTier(football[0]) < eventTier(basketball[0]), true);
   assert.equal(rankFeaturedFootball([...football, ...basketball]).length, 2);
   assert.equal(rankFeaturedFootball([...football, ...basketball], true).at(-1)?.eventId, '99');
 });

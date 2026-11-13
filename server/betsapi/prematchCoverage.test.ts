@@ -12,6 +12,8 @@ import {
   PREMATCH_REQUEST_BUDGET,
   rankFeaturedFootball,
   readUpcomingPager,
+  selectFeaturedLine,
+  selectFeaturedLive,
 } from './footballCoverage.js';
 import type { NormalizedEvent } from './types.js';
 
@@ -71,9 +73,11 @@ describe('real football prematch coverage', () => {
   });
 
   it('ranks exact top leagues above other football and lower divisions, including live', () => {
-    assert.equal(footballTier({ name: 'England Premier League' }), 0);
-    assert.equal(footballTier({ name: '2. Bundesliga' }), 2);
-    assert.equal(footballTier({ name: 'National Premier League' }), 1);
+    assert.equal(footballTier({ name: 'England Premier League' }), 1);
+    assert.equal(footballTier({ id: '94', name: 'Unlisted league name' }), 1);
+    assert.equal(footballTier({ name: 'England Championship' }), 1);
+    assert.equal(footballTier({ name: '2. Bundesliga' }), 4);
+    assert.equal(footballTier({ name: 'National Premier League' }), 3);
     assert.equal(isSimulatedLeague('Virtual Football League'), true);
     assert.equal(isSimulatedLeague('Virtus Entella'), false);
     const markets = event('10', 'England Premier League', '2026-11-12T15:00:00.000Z', 'live').markets;
@@ -90,9 +94,22 @@ describe('real football prematch coverage', () => {
       liveTop,
       event('26', 'England League One', '2026-11-12T14:00:00.000Z'),
     ]);
-    assert.deepEqual(ranked.map((item) => item.eventId), ['10', '25', '24', '23', '26']);
-    assert.equal(ranked[0]?.markets, markets);
+    assert.deepEqual(ranked.map((item) => item.eventId), ['25', '10', '24', '23', '26']);
+    assert.equal(ranked.find((item) => item.eventId === '10')?.markets, markets);
     assert.equal(ranked.every((item) => item.marketsKnown === false), true);
+    const soon = NOW;
+    const line = selectFeaturedLine([
+      event('31', 'Club Friendlies', new Date(soon + 15 * 60 * 1000).toISOString()),
+      event('32', 'England Premier League', new Date(soon + 8 * 60 * 60 * 1000).toISOString()),
+      event('33', 'England Premier League', new Date(soon + 30 * 60 * 60 * 1000).toISOString()),
+      event('34', 'Esoccer Premier League', new Date(soon + 10 * 60 * 1000).toISOString(), 'live'),
+    ], soon);
+    assert.deepEqual(line.map((item) => item.eventId), ['32', '31']);
+    assert.deepEqual(selectFeaturedLive([
+      event('41', 'Esoccer Battle Volta - 6 mins play', new Date(soon).toISOString(), 'live'),
+      event('42', 'UEFA Champions League', new Date(soon).toISOString(), 'live'),
+      event('43', 'Regional Cup', new Date(soon).toISOString(), 'live'),
+    ]).map((item) => item.eventId), ['42', '43']);
   });
 
   it('does not create a Nations League fixture that the provider did not return', () => {
@@ -130,6 +147,7 @@ describe('real football prematch coverage', () => {
     assert.equal(urls.every((url) => url.searchParams.get('skip_esports') === '1'), true);
     assert.equal(urls.some((url) => url.searchParams.get('day') === '20261112'), true);
     assert.equal(urls.some((url) => url.searchParams.get('day') === '20261117'), true);
+    assert.equal(urls.some((url) => url.searchParams.get('league_id') === '94' && url.searchParams.get('day') === '20261112'), true);
     assert.equal(urls.some((url) => url.searchParams.get('page') === '3'), false);
     assert.equal(coverage.feed?.events.every((event) => !isEsoccerLeague(event.league.name)), true);
     assert.equal(coverage.feed?.events.some((event) => event.league.name === 'UEFA Nations League'), true);

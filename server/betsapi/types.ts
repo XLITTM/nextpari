@@ -35,6 +35,20 @@ export interface NormalizedMarket {
 
 export type FootballPeriod = 'first_half' | 'second_half';
 
+export interface EventInsights {
+  source: 'betsapi';
+  observedAt: string;
+  statistics: Array<{ key: string; label: string; home: number; away: number }>;
+  timeline: Array<{ id: string; text: string }>;
+  periodScores: Array<{ period: string; home: number; away: number }>;
+  availability: {
+    statistics: 'available' | 'absent';
+    timeline: 'available' | 'absent';
+    headToHead: 'absent';
+    previousMatches: 'absent';
+  };
+}
+
 export interface LiveClock {
   minute: number;
   second: number;
@@ -56,6 +70,7 @@ export interface NormalizedEvent {
   score: { home: number; away: number } | null;
   liveClock?: LiveClock | null;
   period?: FootballPeriod | null;
+  insights?: EventInsights | null;
   marketsKnown: boolean;
   markets: NormalizedMarket[];
   updatedAt: string | null;

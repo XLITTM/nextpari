@@ -1,5 +1,6 @@
 import { eventsSports, type EventsSportId } from './sportIds.js';
 import { toDecimalOdds } from '../../src/lib/decimalOdds.js';
+import { readEventInsights } from './eventInsights.js';
 import { footballLiveClock } from './liveClock.js';
 import {
   FOOTBALL_SPORT_ID,
@@ -568,5 +569,7 @@ export function normalizeFootballDetails(
   sportId: EventsSportId = FOOTBALL_SPORT_ID,
 ): NormalizedEvent | null {
   const row = viewRecord(viewPayload);
-  return normalizeSportEvent(row, sportId, oddsPayload ?? undefined, observedAtMs);
+  const event = normalizeSportEvent(row, sportId, oddsPayload ?? undefined, observedAtMs);
+  if (!event || sportId !== FOOTBALL_SPORT_ID) return event;
+  return { ...event, insights: readEventInsights(row, observedAtMs) };
 }

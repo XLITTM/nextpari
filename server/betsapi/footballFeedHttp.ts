@@ -7,9 +7,9 @@ import {
   type EventOddsRead,
   type EventOddsState,
 } from './client.js';
-import { eventTier, rankFeaturedFootball } from './footballCoverage.js';
+import { eventTier, rankFeaturedFootball, selectFeaturedLine, selectFeaturedLive, selectSchedule } from './footballCoverage.js';
 import { publishLiveClock } from './liveClock.js';
-import type { FeedResult, FootballPeriod, LiveClock, NormalizedEvent, NormalizedMarket } from './types.js';
+import type { EventInsights, FeedResult, FootballPeriod, LiveClock, NormalizedEvent, NormalizedMarket } from './types.js';
 
 export const FOOTBALL_FEED_PATH = '/api/player/sports/football-feed';
 const MAX_ODDS_IDS = 8;
@@ -41,6 +41,7 @@ export interface FootballFeedCard {
   score: { home: number; away: number } | null;
   liveClock: LiveClock | null;
   period: FootballPeriod | null;
+  insights?: EventInsights | null;
   priceState: EventOddsState | 'unpriced';
   markets: FootballFeedMarket[];
 }
@@ -96,7 +97,7 @@ function toCard(event: NormalizedEvent, now = Date.now()): FootballFeedCard {
   });
   return {
     id: football ? event.eventId : `betsapi:${event.sportId}:${event.eventId}`,
-    sport: tier === 3 ? 'esports' : event.sport,
+    sport: event.sport === 'esports' || tier === 5 ? 'esports' : event.sport,
     tier,
     logos: {
       competitionId: competition?.canonicalId ?? null,
@@ -112,7 +113,8 @@ function toCard(event: NormalizedEvent, now = Date.now()): FootballFeedCard {
     live: event.status === 'live',
     score: event.score,
     liveClock,
-    period: liveClock && !liveClock.stale && tier !== 3 ? event.period ?? null : null,
+    period: liveClock && !liveClock.stale && tier !== 5 ? event.period ?? null : null,
+    insights: event.insights ?? null,
     priceState: priceStateOf({ ...event, markets }),
     markets: markets.flatMap((market) => {
       const card = marketToCard(market);
@@ -207,12 +209,22 @@ export async function handleFootballFeedRequest(
         sportId, phase: prematch ? 'prematch' : 'live', observed: Boolean(result?.ok && !result.feed?.stale),
         count: result?.feed?.events.length ?? 0, upstreamStatus: result?.upstreamStatus ?? null, error: result?.error ?? null,
       })),
-      events: rankFeaturedFootball([
-        ...(live.feed?.events ?? []),
-        ...(upcoming.feed?.events ?? []),
-        ...additional.flatMap(({ result }) => result?.feed?.events.filter((event) =>
-          event.status !== 'prematch' || Date.parse(event.kickoff ?? '') > Date.now()) ?? []),
-      ], includeSports).map((event) => toCard(event)),
+      ...(() => {
+        const now = Date.now();
+        const pool = [
+          ...(live.feed?.events ?? []),
+          ...(upcoming.feed?.events ?? []),
+          ...additional.flatMap(({ result }) => result?.feed?.events.filter((event) =>
+            event.status !== 'prematch' || Date.parse(event.kickoff ?? '') > now) ?? []),
+        ];
+        const cards = (events: NormalizedEvent[]) => events.map((event) => toCard(event, now));
+        return {
+          events: cards(rankFeaturedFootball(pool, includeSports)),
+          featuredLive: cards(selectFeaturedLive(pool)),
+          featuredLine: cards(selectFeaturedLine(pool, now)),
+          schedule: cards(selectSchedule(pool)),
+        };
+      })(),
     },
   };
 }
