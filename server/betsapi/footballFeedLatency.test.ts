@@ -209,8 +209,44 @@ describe('football feed latency', () => {
     assert.equal(firstEvents.some((event) => event.home === 'Netherlands' && event.away === 'Greece'), false);
     await handleFootballFeedRequest({ method: 'GET', url: '/api/player/sports/football-feed' }, client, client);
     const third = await handleFootballFeedRequest({ method: 'GET', url: '/api/player/sports/football-feed' }, client, client);
-    const events = third.body.events as Array<{ home: string; away: string; league: string }>;
+    const events = third.body.events as Array<{ home: string; away: string; league: string; priceState: string }>;
     assert.equal(events.filter((event) => event.home === 'Netherlands' && event.away === 'Greece').length, 1);
     assert.equal(events.find((event) => event.home === 'Netherlands')?.league, 'UEFA Nations League A');
+  });
+
+  it('prices one visible Nations League fixture with the provider 1X2 and does not invent a price', async () => {
+    let now = 1_000;
+    const paths: string[] = [];
+    const client = new BetsApiReadOnlyClient({
+      env: { BETSAPI_TOKEN: 'unit-test-token' },
+      minGapMs: 12_000,
+      timeoutMs: 8_000,
+      now: () => now,
+      sleep: async (ms) => {
+        now += ms;
+      },
+      fetchImpl: async (input) => {
+        now += 2_000;
+        const url = new URL(String(input));
+        paths.push(url.pathname);
+        if (url.pathname.endsWith('/odds')) {
+          return Response.json({ success: 1, results: { odds: { '1_1': [{ home_od: '1.55', draw_od: '4.50', away_od: '5.25' }] } } });
+        }
+        const live = url.pathname.endsWith('/inplay');
+        return Response.json({
+          success: 1,
+          pager: { page: 1, per_page: 50, total: 1 },
+          results: [row(live ? '555' : '777', 'UEFA Nations League A', live ? 1 : 7_200, live)],
+        });
+      },
+    });
+    await client.readListedFootball(now + LISTED_FEED_DEADLINE_MS);
+    assert.equal(paths.filter((path) => path.endsWith('/odds')).length, 0);
+    const priced = await client.readListedFootball(now + LISTED_FEED_DEADLINE_MS);
+    const event = priced.live.feed?.events.find((item) => item.eventId === '555');
+    const market = event?.markets.find((item) => item.key === '1x2' && item.status === 'open');
+    assert.equal(paths.filter((path) => path.endsWith('/odds')).length, 1);
+    assert.equal(paths.filter((path) => path.endsWith('/upcoming')).length, 1);
+    assert.deepEqual(market?.outcomes.map((outcome) => outcome.price), [1.55, 4.5, 5.25]);
   });
 });

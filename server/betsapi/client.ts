@@ -333,18 +333,23 @@ export class BetsApiReadOnlyClient {
     }
     this.noteMajorLeagues([...(live.feed?.events ?? []), ...this.coverageEvents]);
     const jobs = planCoverageJobs(this.now(), [...this.majorLeagueIds]);
-    const pending = jobs.find((job) => !this.fetchedJobs.has(coverageJobKey(job)));
-    if (pending && this.canSpend(deadlineAt)) {
-      const result = await this.getUpcoming(pending.page, { day: pending.day, skipEsports: true, leagueId: pending.leagueId });
-      if (result.error === 'RATE_LIMITED' || result.feed?.rateLimited) this.coverageRateLimited = true;
-      if (result.ok && result.feed) {
-        this.rememberCoverage(result.feed.events, result.feed.stale);
-        this.noteMajorLeagues(result.feed.events);
-        this.fetchedJobs.add(coverageJobKey(pending));
-      }
-    }
     const visible = [...(live.feed?.events ?? []), ...this.coverageEvents];
-    await this.attachOneMajorPrice(deadlineAt, visible);
+    const priceFirst = this.fetchedJobs.size > 0 && this.nextMajorPriceTarget(visible) !== undefined;
+    if (priceFirst) {
+      await this.attachOneMajorPrice(deadlineAt, visible);
+    } else {
+      const pending = jobs.find((job) => !this.fetchedJobs.has(coverageJobKey(job)));
+      if (pending && this.canSpend(deadlineAt)) {
+        const result = await this.getUpcoming(pending.page, { day: pending.day, skipEsports: true, leagueId: pending.leagueId });
+        if (result.error === 'RATE_LIMITED' || result.feed?.rateLimited) this.coverageRateLimited = true;
+        if (result.ok && result.feed) {
+          this.rememberCoverage(result.feed.events, result.feed.stale);
+          this.noteMajorLeagues(result.feed.events);
+          this.fetchedJobs.add(coverageJobKey(pending));
+        }
+      }
+      await this.attachOneMajorPrice(deadlineAt, [...(live.feed?.events ?? []), ...this.coverageEvents]);
+    }
     await this.persistCoverage(jobs);
     const additional = includeSports
       ? await (this.canSpend(deadlineAt) ? this.getAdditionalSports() : Promise.resolve(this.additionalView()))
@@ -360,13 +365,18 @@ export class BetsApiReadOnlyClient {
     }
   }
 
-  private async attachOneMajorPrice(deadlineAt: number, events: NormalizedEvent[]): Promise<void> {
-    const target = events.find((event) => (
+  private nextMajorPriceTarget(events: readonly NormalizedEvent[]): NormalizedEvent | undefined {
+    return events.find((event) => (
       event.sportId === FOOTBALL_SPORT_ID
       && isPriorityInternationalLeague(event.league.name)
+      && !this.pricedChecks.has(event.eventId)
       && !event.markets.some((market) => market.key === '1x2' && market.status === 'open')
     ));
-    if (!target || this.pricedChecks.has(target.eventId) || !this.canSpend(deadlineAt)) return;
+  }
+
+  private async attachOneMajorPrice(deadlineAt: number, events: NormalizedEvent[]): Promise<void> {
+    const target = this.nextMajorPriceTarget(events);
+    if (!target || !this.canSpend(deadlineAt)) return;
     this.pricedChecks.add(target.eventId);
     const payload = await this.getOddsPayload(target.eventId);
     const priced = marketsFromOddsPayload(payload).filter((market) => market.key === '1x2' && market.status === 'open');
