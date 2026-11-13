@@ -35,7 +35,7 @@ function origins(value: string | undefined): Set<string> {
   }));
 }
 
-export function normalizeCatalog(payload: unknown, artworkOrigins: ReadonlySet<string>): Entry[] {
+export function normalizeCatalog(payload: unknown, artworkOrigins: ReadonlySet<string>, demoOnly = true): Entry[] {
   if (!Array.isArray(payload)) throw staffError('CASINO_DEMO_RESPONSE_INVALID', 502);
   const games = new Map<string, Entry>();
   const conflicting = new Set<string>();
@@ -45,7 +45,7 @@ export function normalizeCatalog(payload: unknown, artworkOrigins: ReadonlySet<s
     const sourceId = typeof row.id_hash === 'string' && row.id_hash.length <= 512 ? row.id_hash : '';
     const title = text(row.name, 250);
     const category = text(row.game_type, 30) as CasinoDemoGame['category'];
-    if (row.play_for_fun_supported !== true || !provider || !sourceId.trim() || !title ||
+    if ((demoOnly && row.play_for_fun_supported !== true) || !provider || !sourceId.trim() || !title ||
         !Object.prototype.hasOwnProperty.call(casinoCategories, category)) continue;
     const id = 'sa-' + createHash('sha256').update(JSON.stringify([provider, sourceId])).digest('hex').slice(0, 32);
     const art = httpsUrl(row.image);
@@ -99,18 +99,21 @@ export async function readBoundedJson(response: Response): Promise<unknown> {
   }
 }
 
-export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fetch = fetch, now = Date.now) {
-  const login = env.SOFTAGGREGATOR_DEMO_LOGIN;
-  const password = env.SOFTAGGREGATOR_DEMO_PASSWORD;
+export function createSoftAggregator(
+  env: NodeJS.ProcessEnv, fetcher: typeof fetch = fetch, now = Date.now, mode: 'demo' | 'standard' = 'demo',
+) {
+  const demo = mode === 'demo';
+  const login = demo ? env.SOFTAGGREGATOR_DEMO_LOGIN : env.SOFTAGGREGATOR_REAL_LOGIN;
+  const password = demo ? env.SOFTAGGREGATOR_DEMO_PASSWORD : env.SOFTAGGREGATOR_REAL_PASSWORD;
   const artworkOrigins = origins(env.SOFTAGGREGATOR_ARTWORK_ORIGINS);
-  const launchOrigins = origins(env.SOFTAGGREGATOR_LAUNCH_ORIGINS);
-  const enabled = env.SOFTAGGREGATOR_DEMO_ENABLED === '1' && Boolean(login && password);
+  const launchOrigins = origins(demo ? env.SOFTAGGREGATOR_LAUNCH_ORIGINS : env.SOFTAGGREGATOR_REAL_LAUNCH_ORIGINS);
+  const enabled = (demo ? env.SOFTAGGREGATOR_DEMO_ENABLED : env.SOFTAGGREGATOR_REAL_CATALOG_ENABLED) === '1' && Boolean(login && password);
   type Snapshot = { expires: number; games: Entry[]; counts?: CatalogCounts };
   let cached: Snapshot | undefined;
   let inflight: Promise<Snapshot> | undefined;
   let cooldown = 0;
 
-  async function call(method: 'getGameList' | 'getGameDemo', payload: Raw = {}): Promise<unknown> {
+  async function call(method: 'getGameList' | 'getGameDemo' | 'getCurrencies' | 'createPlayer' | 'getGame', payload: Raw = {}): Promise<unknown> {
     if (!enabled) throw staffError('CASINO_DEMO_DISABLED', 503);
     if (cooldown > now()) throw staffError('CASINO_DEMO_RATE_LIMITED', 429);
     let result: unknown;
@@ -145,8 +148,8 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
     if (cached && cached.expires > now()) return cached;
     if (!inflight) inflight = call('getGameList')
       .then((response) => {
-        const games = normalizeCatalog(response, artworkOrigins);
-        const counts = env.VERCEL_ENV === 'preview' && Array.isArray(response) ? catalogCounts(response) : undefined;
+        const games = normalizeCatalog(response, artworkOrigins, demo);
+        const counts = demo && env.VERCEL_ENV === 'preview' && Array.isArray(response) ? catalogCounts(response) : undefined;
         cached = { games, counts, expires: now() + catalogTtl };
         return cached;
       })
@@ -162,7 +165,7 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
       const category = (params.get('category') ?? '').slice(0, 30);
       const rawPage = params.get('page') ?? '';
       const page = /^\d{1,5}$/.test(rawPage) ? Math.max(1, Number(rawPage)) : 1;
-      const games = snapshot.games.map(({ game }) => game);
+      const games = snapshot.games.map(({ game }) => demo ? game : { ...game, demo: false });
       const matches = games.filter((game) => (!provider || game.provider === provider) &&
         (!category || game.category === category) &&
         (!term || `${game.title} ${game.studio}`.toLowerCase().includes(term)));
@@ -176,7 +179,30 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
         ...(params.get('diagnostics') === '1' && snapshot.counts ? { diagnostics: snapshot.counts } : {}),
       };
     },
+    async standardGame(id: string) {
+      if (demo) throw staffError('CASINO_STANDARD_DISABLED', 503);
+      const entry = (await catalog()).games.find(({ game }) => game.id === id);
+      if (!entry) throw staffError('CASINO_DEMO_GAME_NOT_FOUND', 404);
+      return entry;
+    },
+    async launchStandard(entry: Entry, player: { username: string; password: string; country: string },
+      device: 'mobile' | 'desktop', returnOrigin: string) {
+      if (demo || !launchOrigins.size) throw staffError('CASINO_STANDARD_DISABLED', 503);
+      const currencies = asRecord(await call('getCurrencies')).currencies;
+      if (!Array.isArray(currencies) || !currencies.includes('USD')) throw staffError('CASINO_STANDARD_CURRENCY_UNAVAILABLE', 503);
+      const credentials = { user_username: player.username, user_password: player.password, currency: 'USD' };
+      await call('createPlayer', credentials);
+      const result = await call('getGame', { ...credentials, gameid: entry.sourceId,
+        lang: 'ru', device, country: player.country, homeurl: returnOrigin + '/casino/real' });
+      const url = httpsUrl(result);
+      if (!url || !launchOrigins.has(url.origin) ||
+          [login, password, player.password].some((secret) => secret && decodeURIComponent(url.href).includes(secret))) {
+        throw staffError('CASINO_DEMO_LAUNCH_INVALID', 502);
+      }
+      return { title: entry.game.title, url: url.href };
+    },
     async launch(id: string, device: 'mobile' | 'desktop', returnOrigin: string) {
+      if (!demo) throw staffError('CASINO_STANDARD_DISABLED', 503);
       const entry = (await catalog()).games.find(({ game }) => game.id === id);
       if (!entry) throw staffError('CASINO_DEMO_GAME_NOT_FOUND', 404);
       if (!launchOrigins.size) throw staffError('CASINO_DEMO_ORIGINS_UNCONFIGURED', 503);

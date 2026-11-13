@@ -326,7 +326,8 @@ export type Screen =
   | { name: 'sports'; mode: 'live' | 'line' | 'cybers' }
   | { name: 'championships'; sport: string; mode: 'live' | 'line' }
   | { name: 'casino-demo' }
-  | { name: 'casino-demo-game'; gameId: string }
+  | { name: 'casino-real'; category?: 'slots' | 'live' }
+  | { name: 'casino-demo-game'; gameId: string; standard?: boolean }
   | { name: 'slots' }
   | { name: 'live-casino' }
   | { name: 'provider-sportsbook' }

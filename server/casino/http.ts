@@ -38,7 +38,8 @@ async function authorize(headers: Headers) {
 
 export async function casinoDemoRequest(
   req: { method?: string; url?: string; headers: Headers; body?: unknown },
-  deps = { authorize, provider: softAggregator },
+  deps: { authorize: typeof authorize; provider: Pick<typeof softAggregator, 'list' | 'launch'> } =
+    { authorize, provider: softAggregator },
 ): Promise<StaffHttpResult> {
   const headers = { ...GAME_NO_STORE_HEADERS, 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff' };
   let cookies: string[] | undefined;

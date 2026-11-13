@@ -6,7 +6,7 @@ const maxBalance = 1_000_000_000;
 export type WalletReply = { error: 0 | 1 | 2; balance: number };
 export const walletError: WalletReply = { error: 2, balance: 0 };
 
-type WalletCall = {
+export type WalletCall = {
   username: string;
   currency: string;
   action: 'balance' | 'debit' | 'credit';
@@ -15,6 +15,8 @@ type WalletCall = {
   amount: number;
   rollback: boolean;
   timestampMs: number;
+  gameId: string;
+  roundId: string;
 };
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -28,14 +30,14 @@ export function isTestIdentity(username: string, currency: string) {
   return /^np_test_[a-f0-9]{24}$/.test(username) && /^[A-Z]{3}$/.test(currency) && currency !== 'TMT';
 }
 
-export async function handleTestWalletCallback(
+export async function handleWalletCallback(
   request: { method?: string; url?: string; signature?: string; sourceIp?: string },
-  config: { salt: string; username: string; currency: string; writesApproved: boolean },
+  config: { salt: string; matchesIdentity: (username: string, currency: string) => boolean; writesApproved: boolean },
   apply: (call: WalletCall) => Promise<WalletReply>,
   now = Date.now,
 ): Promise<WalletReply> {
   if (request.method !== 'GET' || request.sourceIp !== callbackIp || !request.url ||
-      request.url.length > 8192 || !config.salt || !isTestIdentity(config.username, config.currency)) return walletError;
+      request.url.length > 8192 || !config.salt) return walletError;
 
   try {
     const fields = new Map<string, string>();
@@ -60,7 +62,7 @@ export async function handleTestWalletCallback(
     const callId = fields.get('call_id') ?? '';
     const amountText = fields.get('amount') ?? '';
     const rb = fields.get('rb') ?? '0';
-    if (username !== config.username || currency !== config.currency || !callId.trim() || callId.length > 200 ||
+    if (!username || !currency || !config.matchesIdentity(username, currency) || !callId.trim() || callId.length > 200 ||
         (action !== 'balance' && action !== 'debit' && action !== 'credit') ||
         (rb !== '0' && rb !== '1') ||
         (action !== 'balance' && (!config.writesApproved || !/^\d{1,10}$/.test(amountText)))) return walletError;
@@ -71,6 +73,7 @@ export async function handleTestWalletCallback(
     const amount = action === 'debit' && !rollback && fields.get('type') === 'bonus_fs' ? 0 : requested;
     return await apply({
       username, currency, action, amount, rollback, timestampMs, callHash: digest(callId),
+      gameId: fields.get('game_id') ?? '', roundId: fields.get('round_id') ?? '',
       fingerprint: digest(JSON.stringify([
         action, requested, amount, rollback, fields.get('round_id') ?? '', fields.get('game_id') ?? '',
       ])),
@@ -78,6 +81,19 @@ export async function handleTestWalletCallback(
   } catch {
     return walletError;
   }
+}
+
+export function handleTestWalletCallback(
+  request: Parameters<typeof handleWalletCallback>[0],
+  config: { salt: string; username: string; currency: string; writesApproved: boolean },
+  apply: (call: WalletCall) => Promise<WalletReply>,
+  now = Date.now,
+) {
+  return handleWalletCallback(request, {
+    ...config,
+    matchesIdentity: (username, currency) => isTestIdentity(username, currency) &&
+      username === config.username && currency === config.currency,
+  }, apply, now);
 }
 
 // Store the balance and durable idempotency result in a single atomic HSET.

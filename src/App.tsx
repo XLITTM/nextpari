@@ -57,7 +57,7 @@ import { subscribeMatchSoundToast } from './services/matchSoundService';
 import { useToast } from './ToastContext';
 import { AppRoutes, currentStaffPortal } from './routes';
 import { leaguePath } from './lib/leagueRoute';
-import { casinoDemoPath, validCasinoDemoId } from './lib/casinoDemo';
+import { casinoDemoPath, casinoRealPath, validCasinoDemoId } from './lib/casinoDemo';
 import { CasinoDemoBack, CasinoDemoCatalog } from './components/CasinoDemoCatalog';
 import { CasinoDemoGameScreen } from './screens/CasinoDemoGameScreen';
 
@@ -81,6 +81,13 @@ function screenFromPath(): Screen {
   if (path === CRYSTAL_PATH) return { name: 'crystal' };
   if (path === DICE_PATH) return { name: 'dice' };
   if (path === PHARAOH_PATH) return { name: 'pharaoh' };
+  if (path === casinoRealPath || path === casinoRealPath + '/slots' || path === casinoRealPath + '/live') {
+    return { name: 'casino-real', category: path.endsWith('/slots') ? 'slots' : path.endsWith('/live') ? 'live' : undefined };
+  }
+  if (path.startsWith(casinoRealPath + '/')) {
+    const gameId = path.slice(casinoRealPath.length + 1);
+    return validCasinoDemoId(gameId) ? { name: 'casino-demo-game', gameId, standard: true } : { name: 'casino-real' };
+  }
   if (path === casinoDemoPath) return { name: 'casino-demo' };
   if (path.startsWith(casinoDemoPath + '/')) {
     const gameId = path.slice(casinoDemoPath.length + 1);
@@ -97,7 +104,8 @@ function screenFromPath(): Screen {
 
 function pathForScreen(screen: Screen): string {
   if (screen.name === 'casino-demo') return casinoDemoPath;
-  if (screen.name === 'casino-demo-game') return casinoDemoPath + '/' + screen.gameId;
+  if (screen.name === 'casino-real') return casinoRealPath + (screen.category ? '/' + screen.category : '');
+  if (screen.name === 'casino-demo-game') return (screen.standard ? casinoRealPath : casinoDemoPath) + '/' + screen.gameId;
   if (screen.name === 'blackjack') return BLACKJACK_PATH;
   if (screen.name === 'aviator') return AVIATOR_PATH;
   if (screen.name === 'apples') return APPLES_PATH;
@@ -121,7 +129,9 @@ function screensEqual(a: Screen, b: Screen): boolean {
   if (a.name !== b.name) return false;
   switch (a.name) {
     case 'casino-demo-game':
-      return a.gameId === (b as { gameId: string }).gameId;
+      return a.gameId === (b as typeof a).gameId && Boolean(a.standard) === Boolean((b as typeof a).standard);
+    case 'casino-real':
+      return a.category === (b as typeof a).category;
     case 'match':
       return a.matchId === (b as { matchId: string }).matchId;
     case 'bet-details':
@@ -158,7 +168,7 @@ function fallbackScreen(screen: Screen): Screen {
     case 'bet-details':
       return { name: 'history' };
     case 'casino-demo-game':
-      return { name: 'casino-demo' };
+      return screen.standard ? { name: 'casino-real' } : { name: 'casino-demo' };
     case 'wallet':
     case 'promo':
     case 'personal-data':
@@ -525,8 +535,11 @@ function AppContent() {
         );
       case 'casino-demo':
         return <div className="py-2"><CasinoDemoBack onBack={goBack} /><CasinoDemoCatalog onNavigate={setScreen} /></div>;
+      case 'casino-real':
+        return <div className="py-2"><CasinoDemoBack onBack={goBack} /><CasinoDemoCatalog key={screen.category} standard categoryFilter={screen.category} onNavigate={setScreen} /></div>;
       case 'casino-demo-game':
-        return <CasinoDemoGameScreen key={screen.gameId} gameId={screen.gameId} onBack={goBack} />;
+        return <CasinoDemoGameScreen key={pathForScreen(screen)} gameId={screen.gameId} standard={screen.standard}
+          onBack={() => { if (screen.standard) void refreshWallet(); goBack(); }} />;
       case 'slots':
         return <SlotsScreen onBack={goBack} onNavigate={setScreen} />;
       case 'live-casino':

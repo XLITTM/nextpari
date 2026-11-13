@@ -1,3 +1,4 @@
+import { CasinoDemoCatalog } from '../components/CasinoDemoCatalog';
 import type { Screen } from '../types';
 import { ProviderIframeScreen } from './ProviderIframeScreen';
 
@@ -6,13 +7,16 @@ interface SlotsScreenProps {
   onNavigate: (screen: Screen) => void;
 }
 
-export function SlotsScreen({ onBack }: SlotsScreenProps) {
+export function SlotsScreen({ onBack, onNavigate }: SlotsScreenProps) {
   return (
-    <ProviderIframeScreen
-      product="casino"
-      title="Слоты"
-      fallback="Слоты появятся после подключения провайдера"
-      onBack={onBack}
-    />
+    <>
+      <CasinoDemoCatalog standard categoryFilter="slots" hideUnavailable onNavigate={onNavigate} />
+      <ProviderIframeScreen
+        product="casino"
+        title="Слоты"
+        fallback="Слоты появятся после подключения провайдера"
+        onBack={onBack}
+      />
+    </>
   );
 }

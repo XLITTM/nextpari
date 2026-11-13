@@ -104,3 +104,36 @@ test('blocks cross-origin launches before session or provider calls and checks c
   assert.equal((await casinoDemoRequest({ ...req, headers: { ...req.headers, origin: 'https://nextpari.net' } })).status, 401);
   assert.equal((await casinoDemoRequest({ method: 'GET', headers: {} }, deps)).status, 200);
 });
+
+test('standard catalog includes authorized games without demo support and requires USD before launch', async () => {
+  const methods: string[] = [];
+  const standard = createSoftAggregator({
+    SOFTAGGREGATOR_REAL_CATALOG_ENABLED: '1', SOFTAGGREGATOR_REAL_LOGIN: 'standard-login',
+    SOFTAGGREGATOR_REAL_PASSWORD: 'standard-password',
+    SOFTAGGREGATOR_REAL_LAUNCH_ORIGINS: 'https://launch.example.test',
+  }, async (_url, request) => {
+    const body = JSON.parse(String(request?.body));
+    methods.push(body.method);
+    assert.equal(body.api_login, 'standard-login');
+    if (body.method === 'getGameList') return Response.json({ error: 0, response: [
+      { ...demo, play_for_fun_supported: false },
+      { ...demo, id_hash: 'sports', game_type: 'sportsbook' },
+    ] });
+    if (body.method === 'getCurrencies') return Response.json({ error: 0, response: { currencies: ['USD'] } });
+    assert.equal(body.user_username, 'isolated-player');
+    assert.equal(body.currency, 'USD');
+    if (body.method === 'createPlayer') return Response.json({ error: 0 });
+    assert.equal(body.method, 'getGame');
+    assert.equal(body.gameid, demo.id_hash);
+    assert.equal(body.country, 'GB');
+    assert.equal(body.play_for_fun, undefined);
+    return Response.json({ error: 0, response: 'https://launch.example.test/session' });
+  }, Date.now, 'standard');
+  const catalog = await standard.list(new URLSearchParams());
+  assert.equal(catalog.games.length, 1);
+  assert.equal(catalog.games[0].demo, false);
+  const entry = await standard.standardGame(catalog.games[0].id);
+  await standard.launchStandard(entry, { username: 'isolated-player', password: 'isolated-password', country: 'GB' },
+    'mobile', 'https://nextpari.net');
+  assert.deepEqual(methods, ['getGameList', 'getCurrencies', 'createPlayer', 'getGame']);
+});

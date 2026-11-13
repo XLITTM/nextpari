@@ -48,6 +48,7 @@ export function CasinoLanding({ onNavigate }: CasinoLandingProps) {
           </button>
         ))}
       </div>
+      <CasinoDemoCatalog standard hideUnavailable onNavigate={onNavigate} />
       <CasinoDemoCatalog onNavigate={onNavigate} />
     </div>
   );

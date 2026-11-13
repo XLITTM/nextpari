@@ -1,29 +1,36 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Gamepad2, Search } from 'lucide-react';
-import { casinoCategories, casinoDemoApi, type CasinoDemoCatalog as Catalog, type CasinoDemoGame } from '../lib/casinoDemo';
+import { casinoCategories, casinoDemoApi, casinoRealApi, type CasinoDemoCatalog as Catalog, type CasinoDemoGame } from '../lib/casinoDemo';
+import { casinoRateLabel, casinoUsdLabel, type CasinoConversion } from '../lib/casinoConversion';
 import type { Screen } from '../types';
 
 const fieldClass = 'min-w-0 rounded-xl border border-[var(--np-border)] bg-[var(--np-surface)] px-3 py-2 text-sm text-[var(--np-text)]';
 
-export function CasinoDemoCatalog({ onNavigate }: { onNavigate: (screen: Screen) => void }) {
+export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter, hideUnavailable = false }: {
+  onNavigate: (screen: Screen) => void;
+  standard?: boolean;
+  categoryFilter?: 'slots' | 'live';
+  hideUnavailable?: boolean;
+}) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [provider, setProvider] = useState('');
   const [page, setPage] = useState(1);
   const [retry, setRetry] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'disabled'>('loading');
-  const [data, setData] = useState<Catalog | null>(null);
+  const [data, setData] = useState<(Catalog & { conversion?: CasinoConversion; launchEnabled?: boolean }) | null>(null);
   const [games, setGames] = useState<CasinoDemoGame[]>([]);
 
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      const params = new URLSearchParams({ q: query, category, provider, page: String(page) });
-      fetch(casinoDemoApi + '?' + params, { signal: controller.signal, cache: 'no-store' })
+      const params = new URLSearchParams({ q: query, category: categoryFilter ?? category, provider, page: String(page) });
+      fetch((standard ? casinoRealApi : casinoDemoApi) + '?' + params, { signal: controller.signal, cache: 'no-store' })
         .then(async (response) => {
-          const result = await response.json() as Catalog & { error?: string };
+          const result = await response.json() as Catalog & { error?: string; conversion?: CasinoConversion; launchEnabled?: boolean };
           if (controller.signal.aborted) return;
-          if (result.error === 'CASINO_DEMO_DISABLED') {
+          if (result.error === 'CASINO_DEMO_DISABLED' || result.error === 'CASINO_STANDARD_DISABLED' ||
+              (hideUnavailable && !response.ok)) {
             setStatus('disabled');
             return;
           }
@@ -37,7 +44,7 @@ export function CasinoDemoCatalog({ onNavigate }: { onNavigate: (screen: Screen)
         .catch(() => { if (!controller.signal.aborted) setStatus('error'); });
     }, query ? 240 : 0);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [category, page, provider, query, retry]);
+  }, [category, categoryFilter, hideUnavailable, page, provider, query, retry, standard]);
 
   function change(update: () => void) {
     setGames([]);
@@ -46,24 +53,33 @@ export function CasinoDemoCatalog({ onNavigate }: { onNavigate: (screen: Screen)
     update();
   }
 
-  if (status === 'disabled') return null;
+  if (hideUnavailable && (status === 'loading' || status === 'error')) return null;
+  if (status === 'disabled') {
+    return standard && !hideUnavailable ? <p className="px-4 py-2">Игры SoftAggregator временно недоступны.</p> : null;
+  }
   return (
-    <section className="space-y-3 px-4 pb-4 text-[var(--np-text)]" aria-labelledby="casino-demo-title">
+    <section className="space-y-3 px-4 pb-4 text-[var(--np-text)]" aria-labelledby={standard ? 'casino-standard-title' : 'casino-demo-title'}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-extrabold" id="casino-demo-title">Демо-игры</h2>
-        <span className="text-xs font-medium text-[var(--np-text-secondary)]">Без списания средств</span>
+        <h2 className="text-lg font-extrabold" id={standard ? 'casino-standard-title' : 'casino-demo-title'}>{standard ? (categoryFilter === 'live' ? 'Лайв казино' : categoryFilter === 'slots' ? 'Слоты' : 'SoftAggregator') : 'Демо-игры'}</h2>
+        <span className="text-xs font-medium text-[var(--np-text-secondary)]">{standard ? 'Игровая валюта USD' : 'Без списания средств'}</span>
       </div>
+      {standard && data?.conversion && (
+        <div role="status" className="rounded-xl border border-[var(--np-border)] p-3 text-sm">
+          <p>Ваш баланс отображается в USD по курсу NextPari. Кошелёк ведётся в TMT.</p>
+          <p>{casinoRateLabel(data.conversion)} · {casinoUsdLabel(data.conversion.balanceUsdMinor)}</p>
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-3">
         <label className="relative">
           <Search className="pointer-events-none absolute left-3 top-2.5 size-4 text-[var(--np-text-secondary)]" aria-hidden />
           <input aria-label="Поиск игр" value={query} onChange={(event) => change(() => setQuery(event.target.value))}
             maxLength={120} placeholder="Поиск игр" className={fieldClass + ' w-full pl-9'} />
         </label>
-        <select aria-label="Категория" className={fieldClass} value={category}
+        {!categoryFilter && <select aria-label="Категория" className={fieldClass} value={category}
           onChange={(event) => change(() => setCategory(event.target.value))}>
           <option value="">Все категории</option>
           {data?.categories.map((id) => <option key={id} value={id}>{casinoCategories[id]}</option>)}
-        </select>
+        </select>}
         <select aria-label="Студия" className={fieldClass} value={provider}
           onChange={(event) => change(() => setProvider(event.target.value))}>
           <option value="">Все студии</option>
@@ -72,12 +88,12 @@ export function CasinoDemoCatalog({ onNavigate }: { onNavigate: (screen: Screen)
       </div>
       {games.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {games.map((game) => <CasinoDemoTile key={game.id} game={game} onOpen={() => onNavigate({ name: 'casino-demo-game', gameId: game.id })} />)}
+          {games.map((game) => <CasinoDemoTile key={game.id} game={game} disabled={standard && data?.launchEnabled !== true} onOpen={() => onNavigate({ name: 'casino-demo-game', gameId: game.id, standard })} />)}
         </div>
       )}
       <div className="text-sm text-[var(--np-text-secondary)]" role="status">
         {status === 'loading' && 'Загружаем каталог…'}
-        {status === 'ready' && !games.length && 'Демо-игры не найдены'}
+        {status === 'ready' && !games.length && (standard ? 'Игры не найдены' : 'Демо-игры не найдены')}
         {status === 'error' && 'Каталог временно недоступен'}
       </div>
       {status === 'error' && (
@@ -94,10 +110,10 @@ export function CasinoDemoCatalog({ onNavigate }: { onNavigate: (screen: Screen)
   );
 }
 
-function CasinoDemoTile({ game, onOpen }: { game: CasinoDemoGame; onOpen: () => void }) {
+function CasinoDemoTile({ game, disabled, onOpen }: { game: CasinoDemoGame; disabled: boolean; onOpen: () => void }) {
   const [imageError, setImageError] = useState(false);
   return (
-    <button type="button" onClick={onOpen}
+    <button type="button" disabled={disabled} onClick={onOpen}
       className="group overflow-hidden rounded-2xl border border-[var(--np-border)] bg-gradient-to-b from-[var(--np-surface-elevated)] to-[var(--np-surface-soft)] text-left shadow-[0_5px_14px_rgba(3,21,34,0.16)] transition-transform motion-safe:hover:-translate-y-0.5 active:scale-[0.98]">
       <div className="relative grid aspect-[4/3] place-items-center overflow-hidden bg-[var(--np-surface-muted)]">
         {game.image && !imageError ? (
@@ -105,7 +121,7 @@ function CasinoDemoTile({ game, onOpen }: { game: CasinoDemoGame; onOpen: () => 
             className="absolute inset-0 h-full w-full object-contain" onError={() => setImageError(true)} />
         ) : <Gamepad2 className="size-8 text-[var(--np-text-muted)]" aria-hidden />}
         <span className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/15 to-transparent" />
-        <span className="absolute right-2 top-2 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white">Демо</span>
+        <span className="absolute right-2 top-2 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white">{game.demo ? 'Демо' : disabled ? 'Недоступно' : 'USD'}</span>
       </div>
       <div className="px-3 py-2.5">
         <div className="line-clamp-2 text-sm font-bold">{game.title}</div>

@@ -1,4 +1,6 @@
 export const casinoDemoPath = '/casino/demo';
+export const casinoRealPath = '/casino/real';
+export const casinoRealApi = '/api/player/casino/real';
 export const casinoDemoApi = '/api/player/casino/demo';
 
 export const casinoCategories = {
@@ -13,7 +15,7 @@ export interface CasinoDemoGame {
   studio: string;
   category: keyof typeof casinoCategories;
   image: string | null;
-  demo: true;
+  demo: boolean;
   mobile: boolean | null;
 }
 
