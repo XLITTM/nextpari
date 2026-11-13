@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { casinoCategories, casinoDemoPath, type CasinoDemoGame } from '../../src/lib/casinoDemo.js';
 import { StaffOnboardingError, staffError } from '../staff/errors.js';
 
-const endpoint = 'https://api.softaggregator.com/api/v1';
+export const softAggregatorEndpoint = 'https://api.softaggregator.com/api/v1';
 const catalogTtl = 10 * 60_000;
 const maxResponse = 64 * 1024 * 1024;
 type Raw = Record<string, unknown>;
@@ -77,7 +77,7 @@ function catalogCounts(rows: unknown[]): CatalogCounts {
   return counts;
 }
 
-async function readBoundedJson(response: Response): Promise<unknown> {
+export async function readBoundedJson(response: Response): Promise<unknown> {
   if (Number(response.headers.get('content-length')) > maxResponse || !response.body) {
     await response.body?.cancel().catch(() => {});
     throw staffError('CASINO_DEMO_RESPONSE_INVALID', 502);
@@ -115,7 +115,7 @@ export function createSoftAggregator(env: NodeJS.ProcessEnv, fetcher: typeof fet
     if (cooldown > now()) throw staffError('CASINO_DEMO_RATE_LIMITED', 429);
     let result: unknown;
     try {
-      const response = await fetcher(endpoint, {
+      const response = await fetcher(softAggregatorEndpoint, {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
         headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, method, api_login: login, api_password: password }),
