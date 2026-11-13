@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { resolveFootballAlias, resolveFootballProviderId, reviewArchiveAsset } from './footballAliases.js';
+import { classifyFootballName, footballAliasEntities, resolveFootballAlias, resolveFootballProviderId, reviewArchiveAsset } from './footballAliases.js';
 
 describe('canonical football aliases', () => {
   it('resolves every Manchester City spelling to one identity', () => {
@@ -30,5 +30,23 @@ describe('canonical football aliases', () => {
     assert.equal(reviewArchiveAsset({ canonicalId: 'football:eng:arsenal', file: 'arsenal.png', approved: true }), 'published');
     assert.equal(reviewArchiveAsset({ canonicalId: 'football:at:bundesliga', file: 'austria.png', approved: true }), 'awaiting-publication');
     assert.equal(reviewArchiveAsset({ canonicalId: 'football:at:bundesliga', file: 'austria.png', approved: false }), 'rejected');
+  });
+
+  it('loads the prepared catalog without inventing provider ids or logos', () => {
+    const entities = footballAliasEntities();
+    assert.equal(entities.length, 60);
+    assert.equal(entities.filter((entity) => entity.providerIds.length > 0).length, 3);
+    assert.equal(entities.filter((entity) => entity.logo != null).length, 3);
+    const madrid = resolveFootballAlias('Реал');
+    assert.equal(madrid.status === 'resolved' && madrid.entity.id, 'football:esp:real-madrid');
+    assert.equal(madrid.status === 'resolved' && madrid.entity.providerIds.length, 0);
+    assert.equal(madrid.status === 'resolved' && madrid.entity.logo, null);
+    for (const name of ['FC Barcelona', 'Barcelona', 'Barça', 'Барса', 'ФК Барселона']) {
+      const club = resolveFootballAlias(name);
+      assert.equal(club.status === 'resolved' && club.entity.id, 'football:esp:barcelona');
+    }
+    assert.equal(classifyFootballName('A.Madrid (cappo)'), 'esoccer');
+    assert.equal(resolveFootballAlias('A.Madrid (cappo)').status, 'unresolved');
+    assert.equal(classifyFootballName('Манчестер Сити'), 'canonical');
   });
 });
