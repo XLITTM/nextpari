@@ -22,7 +22,7 @@ private const val MAX_SECONDS = 130 * 60 + 59
 
 data class FootballLiveClock private constructor(
     private val elapsedSeconds: Int,
-    private val running: Boolean,
+    internal val running: Boolean,
     private val ageAtReceiptMs: Long,
     private val receiptElapsedMs: Long,
 ) {
@@ -59,9 +59,8 @@ data class FootballLiveClock private constructor(
 }
 
 @Composable
-internal fun footballLiveMinute(match: MatchCardModel): String? {
-    if (!match.isLive) return null
-    if (match.sport != "football") return match.period
+private fun footballLiveMinute(match: MatchCardModel): String? {
+    if (!match.isLive || match.sport != "football") return null
     val clock = match.liveClock ?: return null
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     return key(clock) {
@@ -75,4 +74,21 @@ internal fun footballLiveMinute(match: MatchCardModel): String? {
             }
         }.value
     }
+}
+
+@Composable
+internal fun matchLiveStatus(match: MatchCardModel): String? {
+    if (!match.isLive) return null
+    val time = footballLiveMinute(match)
+    val period = match.period?.trim()?.takeIf { it.isNotEmpty() && !it.equals("LIVE", ignoreCase = true) }
+    if (time == null) return period
+    val minute = time.substringBefore(':').toIntOrNull()
+    val state = period ?: when {
+        match.liveClock?.running == false -> "Пауза"
+        minute != null && minute in 0..44 -> "1-й тайм"
+        // Leave room for first-half stoppage time. The feed does not publish a separate phase.
+        minute != null && minute in 55..89 -> "2-й тайм"
+        else -> null
+    }
+    return listOfNotNull(state, time).distinct().joinToString(" · ")
 }

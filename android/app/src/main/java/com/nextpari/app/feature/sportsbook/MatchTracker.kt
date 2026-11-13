@@ -2,6 +2,7 @@ package com.nextpari.app.feature.sportsbook
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,20 +70,23 @@ fun MatchTracker(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 ScoreTeam(match, home = true, Modifier.weight(1f))
-                Column(Modifier.width(92.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                val scoreShape = RoundedCornerShape(14.dp)
+                Column(
+                    Modifier.width(116.dp).clip(scoreShape).background(Color(0x9A081A16))
+                        .border(1.dp, Color.White.copy(alpha = .16f), scoreShape)
+                        .padding(horizontal = 6.dp, vertical = 7.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
                     Text(
                         if (match.isLive) match.score ?: "—" else "VS", color = Color.White,
                         fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1,
                     )
-                    val minute = footballLiveMinute(match)
-                    val status = if (match.isLive) minute?.let { "LIVE · $it" } ?: "LIVE" else match.kickoffLabel
+                    val status = if (match.isLive) matchLiveStatus(match) else match.kickoffLabel
                     status?.let {
-                        Text(it, color = Color.White, fontSize = 11.sp, textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 4.dp).clip(RoundedCornerShape(6.dp))
-                                .background(Color(0xA5082119)).padding(horizontal = 6.dp, vertical = 3.dp))
-                    }
-                    if (match.isLive && match.sport == "football") match.period?.let {
-                        Text(it, color = Color(0xFFD5E7DD), fontSize = 11.sp, textAlign = TextAlign.Center)
+                        Text(
+                            it, color = Color(0xFFD5E7DD), fontSize = 11.sp, textAlign = TextAlign.Center,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp),
+                        )
                     }
                 }
                 ScoreTeam(match, home = false, Modifier.weight(1f))

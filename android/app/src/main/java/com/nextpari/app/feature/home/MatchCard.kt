@@ -32,7 +32,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -41,8 +44,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.nextpari.app.core.ui.components.LiveBadge
-import com.nextpari.app.core.ui.icons.NextpariIcons
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -52,9 +53,10 @@ import com.nextpari.app.feature.sportsbook.MatchCompetitionArtwork
 import com.nextpari.app.feature.sportsbook.SportsFlag
 import com.nextpari.app.feature.sportsbook.SportsRegions
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
-import com.nextpari.app.feature.sportsbook.footballLiveMinute
+import com.nextpari.app.feature.sportsbook.matchLiveStatus
 
 internal val MatchCardHeight = 168.dp
+private val MatchCardShape = RoundedCornerShape(18.dp)
 private val MatchCardWidth = 320.dp
 
 internal fun carouselCardWidth(available: Dp): Dp =
@@ -72,13 +74,23 @@ fun NextpariMatchCard(
 ) {
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
-    val shape = RoundedCornerShape(16.dp)
+    val shape = MatchCardShape
+    val face = remember(colors, dark) {
+        Brush.verticalGradient(
+            listOf(
+                (if (dark) Color.White.copy(alpha = .045f) else colors.accent.copy(alpha = .035f))
+                    .compositeOver(colors.surface),
+                colors.surface,
+            ),
+        )
+    }
     Column(
         modifier = Modifier
             .then(if (carousel) Modifier.width(carouselWidth) else Modifier.fillMaxWidth())
             .height(MatchCardHeight)
+            .shadow(if (dark) 4.dp else 5.dp, shape, clip = false)
             .clip(shape)
-            .background(colors.surface)
+            .background(face)
             .border(1.dp, colors.border, shape)
             .clickable(onClickLabel = "Открыть матч", onClick = onOpen),
     ) {
@@ -113,9 +125,17 @@ fun NextpariMatchCard(
             TeamSide(model, home = false, modifier = Modifier.weight(1f))
         }
         Box(Modifier.fillMaxWidth().height(21.dp), contentAlignment = Alignment.Center) {
-            if (model.isLive) LiveBadge(period = footballLiveMinute(model))
-            else model.kickoffLabel?.let {
-                Text(it, color = colors.textSecondary, fontSize = 11.sp, maxLines = 1)
+            val status = if (model.isLive) matchLiveStatus(model) else model.kickoffLabel
+            status?.let {
+                Text(
+                    it,
+                    color = if (model.isLive) colors.accentInk else colors.textSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = if (model.isLive) FontWeight.SemiBold else FontWeight.Normal,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 10.dp),
+                )
             }
         }
         Box(Modifier.fillMaxWidth().height(16.dp).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
@@ -160,7 +180,7 @@ internal fun MatchTeamArtwork(
     model: MatchCardModel,
     home: Boolean,
     modifier: Modifier,
-    placeholderTint: Color = NextpariTheme.colors.textMuted,
+    placeholderTint: Color = NextpariTheme.colors.textSecondary,
 ) {
     val name = if (home) model.team1 else model.team2
     val logoRes = (if (home) model.team1LogoRes else model.team2LogoRes) ?: BundledFootballBadges.team(model, name, home)
@@ -170,7 +190,15 @@ internal fun MatchTeamArtwork(
             Image(painterResource(logoRes), contentDescription = null, modifier, contentScale = ContentScale.Fit)
         } else {
             SportsFlag(SportsRegions.nationalTeam(model, name), modifier) {
-                Icon(NextpariIcons.Shield, contentDescription = null, tint = placeholderTint, modifier = modifier)
+                val initial = remember(name) { name.firstOrNull(Char::isLetter)?.uppercaseChar()?.toString() ?: "–" }
+                val shape = RoundedCornerShape(8.dp)
+                Box(
+                    modifier.clip(shape).background(placeholderTint.copy(alpha = .13f))
+                        .border(1.dp, placeholderTint.copy(alpha = .27f), shape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(initial, color = placeholderTint, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
     }
@@ -221,7 +249,7 @@ fun MatchCarousel(
         val cardWidth = carouselCardWidth(maxWidth)
         androidx.compose.foundation.lazy.LazyRow(
             state = listState,
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(matches.size, key = { matches[it].id }) { index ->
@@ -263,12 +291,12 @@ fun MatchSkeletonCarousel(count: Int = 2) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val width = carouselCardWidth(maxWidth)
         androidx.compose.foundation.lazy.LazyRow(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             items(count) {
                 Column(
-                    Modifier.width(width).height(MatchCardHeight).clip(RoundedCornerShape(16.dp)).background(card),
+                    Modifier.width(width).height(MatchCardHeight).clip(MatchCardShape).background(card),
                 ) {
                     Box(Modifier.fillMaxWidth().height(36.dp).background(bar))
                     Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {

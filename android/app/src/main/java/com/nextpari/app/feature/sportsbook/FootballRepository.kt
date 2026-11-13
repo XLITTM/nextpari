@@ -342,6 +342,7 @@ internal data class FootballEventDto(
     val score: FootballScoreDto? = null,
     val markets: List<FootballMarketDto> = emptyList(),
     val priceState: String? = null,
+    val period: String? = null,
     val liveClock: JsonElement? = null,
     val logos: JsonElement? = null,
 ) {
@@ -363,6 +364,7 @@ internal data class FootballEventDto(
             team2 = away,
             isLive = live,
             score = score?.takeIf { it.home >= 0 && it.away >= 0 }?.let { "${it.home} : ${it.away}" },
+            period = period,
             kickoffLabel = kickoffLabel,
             kickoffEpochMs = kickoffTime?.toEpochMilli(),
             marketTitle = "1X2".takeIf { readOnly == null },

@@ -175,6 +175,7 @@ fun HomeScreen(
             }
             else -> {
                 item(key = "sports") { SportsSelector(state, viewModel::selectSport, excludeEsports = true) }
+                if (state.promos.isNotEmpty()) item(key = "promos") { PromoRow(state.promos, onNavigate) }
                 item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, sportsbook::refreshFeed) }
                 val liveBody = HomeFeedVisibility.topLive(football.loading, state.filteredLive.size)
                 if (liveBody != HomeSectionBody.Hidden) {
@@ -217,7 +218,6 @@ fun HomeScreen(
                         )
                     }
                 }
-                if (state.promos.isNotEmpty()) item(key = "promos") { PromoRow(state.promos, onNavigate) }
                 item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
                 if (HomeFeedVisibility.optionalDataOnly(state.esportsLive.size) == HomeSectionBody.Data) {
                     item(key = "esports-live") {
