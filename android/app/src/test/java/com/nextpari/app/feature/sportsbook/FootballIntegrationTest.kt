@@ -329,11 +329,14 @@ class FootballIntegrationTest {
                 .setBodyDelay(400, TimeUnit.MILLISECONDS))
             assertEquals(FootballPriceState.Open, repository.readOdds(listOf("100")).quotes["100"]?.availability)
             server.enqueue(jsonResponse("""{"ok":true,"events":[]}""").setBodyDelay(400, TimeUnit.MILLISECONDS))
+            assertTrue(repository.read().fixtures.isEmpty())
+            server.enqueue(jsonResponse("{}").setHeadersDelay(2, TimeUnit.SECONDS))
+            val other = okhttp3.Request.Builder().url(server.url("/api/player/me")).build()
             try {
-                repository.read()
-                fail("The normal football list must keep the shared read timeout")
+                client.newCall(other).execute().close()
+                fail("Routes other than the football list keep the caller read timeout")
             } catch (_: java.net.SocketTimeoutException) {
-                // Only the oddsFor call has the longer timeout.
+                // The list timeout is route-specific.
             }
         }
     }
@@ -428,6 +431,32 @@ class FootballIntegrationTest {
     }
 
     @Test
+    fun timedOutRefreshKeepsTheLastFixturesAndDoesNotClaimThereAreNoMatches() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val fixture = live.copy(markets = emptyList()).toFixture()!!
+            val repository = RecordingFootballRepository(FootballSnapshot(listOf(fixture)))
+            val vm = SportsbookViewModel(FakeHomeCatalogRepository(), repository, now = { testScheduler.currentTime })
+            vm.setPlayer("player-one")
+            vm.refreshFeed()
+            runCurrent()
+            repository.readFailure = true
+            repository.readError = java.net.SocketTimeoutException("timed out")
+            vm.refreshFeed()
+            runCurrent()
+            assertEquals(listOf("100"), vm.live().map { it.eventId })
+            assertTrue(vm.live().single().outcomes.all { it.locked })
+            assertEquals("Превышено время ожидания", vm.state.value.feed.notice)
+            assertTrue(vm.state.value.feed.retryable)
+            assertFalse(vm.state.value.loading)
+            assertFalse(footballFeedFailed(vm.state.value) && vm.live().isEmpty())
+            vm.setPlayer(null)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun rateLimitPausesRequestsAndExpiredPricesCannotBeSubmitted() = runTest {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         try {
@@ -461,6 +490,7 @@ class FootballIntegrationTest {
 
     private class RecordingFootballRepository(var snapshot: FootballSnapshot) : FootballRepository {
         var readFailure = false
+        var readError: Exception = IOException()
         var result: SportsBetResult = SportsBetResult.Unconfirmed
         val requests = mutableListOf<SportsBetRequest>()
         val reads = mutableListOf<String?>()
@@ -468,7 +498,7 @@ class FootballIntegrationTest {
         var odds: suspend (List<String>) -> FootballOddsBatch = { FootballOddsBatch() }
         override suspend fun read(eventId: String?): FootballSnapshot {
             reads += eventId
-            if (readFailure) throw IOException()
+            if (readFailure) throw readError
             return snapshot
         }
         override suspend fun readOdds(eventIds: List<String>): FootballOddsBatch {

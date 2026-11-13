@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,7 +47,6 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.games.web.GameWebPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -76,85 +74,60 @@ data class CasinoDemoPage(
     val nextPage: Int? = null,
 )
 
-private object CasinoDemoCatalogClient {
+private object CasinoRealCatalogClient {
     private val api by lazy { NetworkModule.playerApi(NetworkModule.okHttpClient()) }
 
     suspend fun list(query: String, category: String, page: Int): CasinoDemoPage {
-        val response = api.casinoDemoCatalog(query, category, page)
+        val response = api.casinoRealCatalog(query, category, page)
         val catalog = response.body()
         if (!response.isSuccessful || catalog?.ok != true) throw IllegalStateException("Casino catalog unavailable")
         return catalog.copy(
-            games = catalog.games.filter { it.demo && it.mobile != false && GameWebPolicy.isCasinoDemoId(it.id) },
+            games = catalog.games.filter { it.mobile != false && GameWebPolicy.isCasinoDemoId(it.id) && it.title.isNotBlank() },
             nextPage = catalog.nextPage?.takeIf { it == page + 1 },
         )
     }
 }
 
 @Composable
-fun CasinoDemoCatalog(onOpen: (String) -> Unit, category: String = "") {
+fun CasinoRealCatalog(category: String, title: String, onOpenCatalog: () -> Unit) {
     val colors = NextpariTheme.colors
-    var query by remember(category) { mutableStateOf("") }
-    var page by remember(category) { mutableStateOf(1) }
     var retry by remember(category) { mutableStateOf(0) }
     var games by remember(category) { mutableStateOf(emptyList<CasinoDemoGame>()) }
-    var nextPage by remember(category) { mutableStateOf<Int?>(null) }
     var loading by remember(category) { mutableStateOf(true) }
     var failed by remember(category) { mutableStateOf(false) }
 
-    LaunchedEffect(query, category, page, retry) {
-        loading = true
+    LaunchedEffect(category, retry) {
+        loading = games.isEmpty()
         failed = false
-        if (query.isNotBlank()) delay(240)
         try {
-            val result = CasinoDemoCatalogClient.list(query.trim(), category, page)
-            games = (if (page == 1) result.games else games + result.games).distinctBy(CasinoDemoGame::id)
-            nextPage = result.nextPage
+            games = CasinoRealCatalogClient.list("", category, 1).games.distinctBy(CasinoDemoGame::id).take(12)
             loading = false
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            failed = true
+            failed = games.isEmpty()
             loading = false
         }
     }
     Column(Modifier.fillMaxWidth().padding(top = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Демо-игры", Modifier.padding(horizontal = 16.dp), color = colors.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        OutlinedTextField(
-            value = query,
-            onValueChange = {
-                if (it.length <= 120) {
-                    query = it
-                    page = 1
-                    games = emptyList()
-                    nextPage = null
-                }
-            },
-            label = { Text("Поиск игр") },
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        )
+        com.nextpari.app.core.ui.components.ProductSectionHeader(title = title, onSeeAll = onOpenCatalog)
         if (games.isNotEmpty()) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(games, key = CasinoDemoGame::id) { game -> CasinoDemoTile(game) { onOpen(game.id) } }
+                items(games, key = CasinoDemoGame::id) { game -> CasinoRealTile(game, onOpenCatalog) }
             }
         }
         when {
             loading -> Text("Загружаем каталог…", Modifier.padding(horizontal = 16.dp), color = colors.textSecondary)
-            failed -> TextButton(onClick = { retry++ }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Повторить загрузку каталога") }
-            games.isEmpty() -> Text("Демо-игры не найдены", Modifier.padding(horizontal = 16.dp), color = colors.textSecondary)
-        }
-        if (!loading && !failed && nextPage != null) {
-            TextButton(onClick = { nextPage?.let { page = it } }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Показать ещё") }
+            failed -> TextButton(onClick = { retry++ }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Повторить") }
         }
     }
 }
 
 @Composable
-private fun CasinoDemoTile(game: CasinoDemoGame, onOpen: () -> Unit) {
+private fun CasinoRealTile(game: CasinoDemoGame, onOpen: () -> Unit) {
     val colors = NextpariTheme.colors
     val shape = RoundedCornerShape(16.dp)
     val image by produceState(game.image?.let(CasinoArtwork::cached), game.image) {
@@ -173,8 +146,6 @@ private fun CasinoDemoTile(game: CasinoDemoGame, onOpen: () -> Unit) {
             } else {
                 Icon(NextpariWebIcons.Dices, contentDescription = null, tint = colors.textMuted)
             }
-            Text("Демо", Modifier.align(Alignment.TopEnd).padding(6.dp).clip(RoundedCornerShape(8.dp))
-                .background(colors.surface).padding(horizontal = 5.dp, vertical = 2.dp), color = colors.text, fontSize = 11.sp)
         }
         Text(game.title, Modifier.padding(start = 9.dp, top = 7.dp, end = 9.dp), color = colors.text,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)

@@ -83,7 +83,7 @@ fun GameListScreen(
         FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
         when {
             football.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
-            matches.isEmpty() -> Text(
+            matches.isEmpty() && !footballFeedFailed(football) -> Text(
                 if (query.isBlank()) "Сейчас матчей нет" else "Матчи не найдены",
                 color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
                 fontSize = 14.sp,

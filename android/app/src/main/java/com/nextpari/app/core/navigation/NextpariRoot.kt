@@ -26,7 +26,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -77,7 +76,6 @@ import com.nextpari.app.feature.auth.RegisterOneClickResultScreen
 import com.nextpari.app.feature.auth.RegisterOneClickScreen
 import com.nextpari.app.feature.auth.RegisterPhoneScreen
 import com.nextpari.app.feature.games.web.GameWebViewScreen
-import com.nextpari.app.feature.casino.CasinoDemoCatalog
 import com.nextpari.app.feature.sportsbook.SportsbookScreenHeader
 import com.nextpari.app.feature.update.ReleaseUpdateCard
 import com.nextpari.app.feature.history.HistoryScreen
@@ -319,7 +317,7 @@ internal fun AuthenticatedShell(
     LaunchedEffect(lifecycle, session.playerPublicId) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { walletsViewModel.refresh() }
     }
-    val casinoWeb = current == Destinations.CASINO_DEMO_GAME || current == Destinations.CASINO_STANDARD
+    val casinoWeb = current == Destinations.CASINO_STANDARD || current == Destinations.SLOTS || current == Destinations.LIVE_CASINO
     var previousWasGame by remember { mutableStateOf(false) }
     LaunchedEffect(current) {
         if (current == null) return@LaunchedEffect
@@ -602,28 +600,15 @@ internal fun AuthenticatedShell(
                 }
             }
             composable(Destinations.SLOTS) {
-                Column {
-                    SportsbookScreenHeader("Слоты", onBack = { navController.popBackStack() })
-                    TextButton(onClick = { navController.navigateTo(Destinations.casinoStandard("slots")) }) {
-                        Text("Слоты на сайте")
-                    }
-                    CasinoDemoCatalog(onOpen = { navController.navigateTo(Destinations.casinoDemoGame(it)) }, category = "slots")
-                }
+                GameWebViewScreen("casino-slots") { navController.popBackStack() }
             }
             composable(Destinations.LIVE_CASINO) {
-                Column {
-                    SportsbookScreenHeader("Лайв казино", onBack = { navController.popBackStack() })
-                    TextButton(onClick = { navController.navigateTo(Destinations.casinoStandard("live")) }) {
-                        Text("Лайв казино на сайте")
-                    }
-                    CasinoDemoCatalog(onOpen = { navController.navigateTo(Destinations.casinoDemoGame(it)) }, category = "live")
-                }
+                GameWebViewScreen("casino-live") { navController.popBackStack() }
             }
             composable(Destinations.CASINO_STANDARD) { entry ->
-                GameWebViewScreen("casino-" + entry.arguments?.getString("category").orEmpty()) { navController.popBackStack() }
-            }
-            composable(Destinations.CASINO_DEMO_GAME) { entry ->
-                GameWebViewScreen(entry.arguments?.getString("gameId").orEmpty()) { navController.popBackStack() }
+                val category = entry.arguments?.getString("category").orEmpty()
+                val code = if (category == "live") "casino-live" else "casino-slots"
+                GameWebViewScreen(code) { navController.popBackStack() }
             }
             placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера", "Спортбук провайдера недоступен: запуск не включён.")
             composable(Destinations.PROMO_DETAILS) {

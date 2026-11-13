@@ -22,6 +22,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.nextpari.app.core.ui.theme.NextpariTheme
 
+fun footballFeedFailed(state: SportsbookUiState): Boolean =
+    state.feed.retryable && !state.feed.notice.isNullOrBlank()
+
 @Composable
 fun FootballFeedControl(loading: Boolean, notice: String?, retryable: Boolean, onRefresh: () -> Unit) {
     if (loading || !retryable || notice.isNullOrBlank()) return

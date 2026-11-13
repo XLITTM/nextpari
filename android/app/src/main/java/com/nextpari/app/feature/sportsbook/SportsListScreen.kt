@@ -81,7 +81,7 @@ fun SportsListScreen(
             )
         }
         FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
-        if (rows.isEmpty()) {
+        if (rows.isEmpty() && !footballFeedFailed(football)) {
             Text(
                 when {
                     football.loading -> "Загрузка событий…"

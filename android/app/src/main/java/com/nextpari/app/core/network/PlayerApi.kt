@@ -12,6 +12,13 @@ import retrofit2.http.Query
 import retrofit2.http.Tag
 
 interface PlayerApi {
+    @GET("api/player/casino/real")
+    suspend fun casinoRealCatalog(
+        @Query("q") query: String,
+        @Query("category") category: String,
+        @Query("page") page: Int,
+    ): Response<com.nextpari.app.feature.casino.CasinoDemoPage>
+
     @GET("api/player/casino/demo")
     suspend fun casinoDemoCatalog(
         @Query("q") query: String,

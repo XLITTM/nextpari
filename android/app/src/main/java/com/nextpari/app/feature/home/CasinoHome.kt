@@ -48,7 +48,7 @@ import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.feature.casino.CasinoDemoCatalog
+import com.nextpari.app.feature.casino.CasinoRealCatalog
 
 @Composable
 fun CasinoHomeContent(
@@ -60,11 +60,11 @@ fun CasinoHomeContent(
     val colors = NextpariTheme.colors
     Column(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
         ProductSectionHeader(title = "Казино")
-        CasinoEntry("Слоты", "Каталог демо-слотов", NextpariWebIcons.Dices, NextpariWebIcons.MenuGreen) {
+        CasinoEntry("Слоты", "Каталог слотов", NextpariWebIcons.Dices, NextpariWebIcons.MenuGreen) {
             onNavigate(Destinations.SLOTS)
         }
         Spacer(Modifier.height(8.dp))
-        CasinoEntry("Лайв казино", "Доступные демо-столы", NextpariSectionIcons.Casino, Color.Unspecified) {
+        CasinoEntry("Лайв казино", "Каталог Live Casino", NextpariSectionIcons.Casino, Color.Unspecified) {
             onNavigate(Destinations.LIVE_CASINO)
         }
         if (features.isNotEmpty()) {
@@ -103,7 +103,8 @@ fun CasinoHomeContent(
                 }
             }
         }
-        CasinoDemoCatalog(onOpen = { onNavigate(Destinations.casinoDemoGame(it)) })
+        CasinoRealCatalog("slots", "Популярные слоты") { onNavigate(Destinations.SLOTS) }
+        CasinoRealCatalog("live", "Популярное Live Casino") { onNavigate(Destinations.LIVE_CASINO) }
     }
 }
 

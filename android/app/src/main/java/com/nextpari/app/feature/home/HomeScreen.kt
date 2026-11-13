@@ -46,7 +46,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nextpari.app.feature.casino.CasinoRealCatalog
 import com.nextpari.app.feature.sportsbook.FootballFeedControl
+import com.nextpari.app.feature.sportsbook.footballFeedFailed
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
 import com.nextpari.app.feature.sportsbook.SportsbookViewModel
 import com.nextpari.app.feature.sportsbook.SportsListCatalog
@@ -151,7 +153,7 @@ fun HomeScreen(
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
                         onToggleFavorite = sportsbook::toggleMatchFavorite,
-                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLive.size),
+                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLive.size, footballFeedFailed(football)),
                         seeAllRoute = Destinations.GAMELIST_LIVE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
@@ -165,7 +167,7 @@ fun HomeScreen(
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
                         onToggleFavorite = sportsbook::toggleMatchFavorite,
-                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLine.size),
+                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLine.size, footballFeedFailed(football)),
                         seeAllRoute = Destinations.GAMELIST_LINE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
@@ -189,7 +191,7 @@ fun HomeScreen(
                 item(key = "sports") { SportsSelector(state, viewModel::selectSport) }
                 if (state.promos.isNotEmpty()) item(key = "promos") { PromoRow(state.promos, onNavigate) }
                 item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, sportsbook::refreshFeed) }
-                val liveBody = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLive.size)
+                val liveBody = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLive.size, footballFeedFailed(football))
                 if (liveBody != HomeSectionBody.Hidden) {
                     item(key = "live") {
                         MatchSection(
@@ -214,7 +216,7 @@ fun HomeScreen(
                         selectedOdds = football.selectedKeys,
                         onOddSelected = sportsbook::toggle,
                         onToggleFavorite = sportsbook::toggleMatchFavorite,
-                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLine.size),
+                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLine.size, footballFeedFailed(football)),
                         seeAllRoute = Destinations.GAMELIST_LINE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
@@ -257,6 +259,12 @@ fun HomeScreen(
                             badge = "Esports",
                         )
                     }
+                }
+                item(key = "popular-slots") {
+                    CasinoRealCatalog("slots", "Популярные слоты") { onNavigate(Destinations.SLOTS) }
+                }
+                item(key = "popular-live-casino") {
+                    CasinoRealCatalog("live", "Популярное Live Casino") { onNavigate(Destinations.LIVE_CASINO) }
                 }
             }
         }

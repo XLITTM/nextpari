@@ -34,10 +34,15 @@ object NetworkModule {
             .addInterceptor { chain ->
                 val request = chain.request()
                 val url = request.url
-                // A quote already started by the server can finish after its 20-second batch budget.
-                val isFootballBatch = url.encodedPath == "/api/player/sports/football-feed" &&
-                    "oddsFor" in url.queryParameterNames
-                val timed = if (isFootballBatch) chain.withReadTimeout(35, TimeUnit.SECONDS) else chain
+                val footballFeed = url.encodedPath == "/api/player/sports/football-feed"
+                val isFootballList = footballFeed && url.queryParameter("eventId").isNullOrBlank() &&
+                    "oddsFor" !in url.queryParameterNames
+                // The list waits for the server's 35-second coverage window. Odds stay on their own budget.
+                val timed = when {
+                    isFootballList -> chain.withReadTimeout(FOOTBALL_LIST_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                    footballFeed && "oddsFor" in url.queryParameterNames -> chain.withReadTimeout(35, TimeUnit.SECONDS)
+                    else -> chain
+                }
                 timed.proceed(request)
             }
         if (cookieJar != null) {
@@ -75,3 +80,5 @@ object NetworkModule {
 
     fun apiClient(): NextpariApiClient = RetrofitNextpariApiClient(NextpariConfig.API_BASE_URL)
 }
+
+internal const val FOOTBALL_LIST_READ_TIMEOUT_SECONDS = 45

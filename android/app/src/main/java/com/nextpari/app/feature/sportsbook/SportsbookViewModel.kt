@@ -129,6 +129,8 @@ class SportsbookViewModel(
         val started = now()
         ui.update { it.copy(loading = true) }
         feedJob = viewModelScope.launch {
+            val job = coroutineContext[Job]
+            try {
             val listed = read(repository, null, ui.value.feed)
             if (!current(run)) return@launch
             ui.update { state ->
@@ -155,6 +157,9 @@ class SportsbookViewModel(
             attemptedAt.keys.retainAll(presentIds)
             scheduleExpiry()
             if (listed.canPrice) scheduleOdds(allowFallback = true)
+            } finally {
+                if (current(run) && feedJob == job) ui.update { it.copy(loading = false) }
+            }
         }
     }
 
