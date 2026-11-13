@@ -1,0 +1,650 @@
+{
+  "schema": "nextpari.football-catalog-snapshot",
+  "revision": "3a2f29ababa317bbc7fa3abf5d6c8c188a9bc0254bf04838f86e88519b02769f",
+  "observedAt": "2026-11-13T16:06:00.000Z",
+  "source": "https://betsapi.com/docs/samples/event_view.json#2654397",
+  "countries": [
+    "ar",
+    "at",
+    "br",
+    "de",
+    "eng",
+    "esp",
+    "fr",
+    "gb",
+    "in",
+    "it",
+    "nl",
+    "pt",
+    "sa"
+  ],
+  "observedCountries": [
+    "gb"
+  ],
+  "competitions": 1,
+  "teams": 2,
+  "verifiedProviderIds": [
+    "17230",
+    "708",
+    "94"
+  ],
+  "verifiedProviderIdsAdded": [],
+  "canonicalEntities": [
+    {
+      "id": "football:eng:manchester-city",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Manchester City",
+      "russianName": "Манчестер Сити",
+      "providerIds": [
+        "708"
+      ],
+      "logo": "/images/sports/football/manchester-city.png",
+      "identityStatus": "verified_provider_id"
+    },
+    {
+      "id": "football:eng:arsenal",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Arsenal",
+      "russianName": "Арсенал",
+      "providerIds": [
+        "17230"
+      ],
+      "logo": "/images/sports/football/arsenal.png",
+      "identityStatus": "verified_provider_id"
+    },
+    {
+      "id": "football:esp:real-madrid",
+      "kind": "team",
+      "country": "esp",
+      "officialName": "Real Madrid",
+      "russianName": "Реал Мадрид",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:esp:barcelona",
+      "kind": "team",
+      "country": "esp",
+      "officialName": "FC Barcelona",
+      "russianName": "Барселона",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:esp:atletico-madrid",
+      "kind": "team",
+      "country": "esp",
+      "officialName": "Atlético de Madrid",
+      "russianName": "Атлетико Мадрид",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:esp:real-sociedad",
+      "kind": "team",
+      "country": "esp",
+      "officialName": "Real Sociedad",
+      "russianName": "Реал Сосьедад",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:esp:sevilla",
+      "kind": "team",
+      "country": "esp",
+      "officialName": "Sevilla FC",
+      "russianName": "Севилья",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:esp:valencia",
+      "kind": "team",
+      "country": "esp",
+      "officialName": "Valencia CF",
+      "russianName": "Валенсия",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:esp:real-betis",
+      "kind": "team",
+      "country": "esp",
+      "officialName": "Real Betis",
+      "russianName": "Бетис",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:liverpool",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Liverpool FC",
+      "russianName": "Ливерпуль",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:manchester-united",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Manchester United",
+      "russianName": "Манчестер Юнайтед",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:chelsea",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Chelsea FC",
+      "russianName": "Челси",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:tottenham",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Tottenham Hotspur",
+      "russianName": "Тоттенхэм",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:newcastle",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Newcastle United",
+      "russianName": "Ньюкасл",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:aston-villa",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Aston Villa",
+      "russianName": "Астон Вилла",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:brighton",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "Brighton & Hove Albion",
+      "russianName": "Брайтон",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:west-ham",
+      "kind": "team",
+      "country": "eng",
+      "officialName": "West Ham United",
+      "russianName": "Вест Хэм",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:de:bayern-munich",
+      "kind": "team",
+      "country": "de",
+      "officialName": "FC Bayern München",
+      "russianName": "Бавария",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:de:borussia-dortmund",
+      "kind": "team",
+      "country": "de",
+      "officialName": "Borussia Dortmund",
+      "russianName": "Боруссия Дортмунд",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:de:bayer-leverkusen",
+      "kind": "team",
+      "country": "de",
+      "officialName": "Bayer 04 Leverkusen",
+      "russianName": "Байер Леверкузен",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:de:rb-leipzig",
+      "kind": "team",
+      "country": "de",
+      "officialName": "RB Leipzig",
+      "russianName": "РБ Лейпциг",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:de:eintracht-frankfurt",
+      "kind": "team",
+      "country": "de",
+      "officialName": "Eintracht Frankfurt",
+      "russianName": "Айнтрахт Франкфурт",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:it:juventus",
+      "kind": "team",
+      "country": "it",
+      "officialName": "Juventus FC",
+      "russianName": "Ювентус",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:it:inter-milan",
+      "kind": "team",
+      "country": "it",
+      "officialName": "FC Internazionale Milano",
+      "russianName": "Интер",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:it:ac-milan",
+      "kind": "team",
+      "country": "it",
+      "officialName": "AC Milan",
+      "russianName": "Милан",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:it:napoli",
+      "kind": "team",
+      "country": "it",
+      "officialName": "SSC Napoli",
+      "russianName": "Наполи",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:it:roma",
+      "kind": "team",
+      "country": "it",
+      "officialName": "AS Roma",
+      "russianName": "Рома",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:it:atalanta",
+      "kind": "team",
+      "country": "it",
+      "officialName": "Atalanta BC",
+      "russianName": "Аталанта",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:fr:psg",
+      "kind": "team",
+      "country": "fr",
+      "officialName": "Paris Saint-Germain",
+      "russianName": "ПСЖ",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:fr:marseille",
+      "kind": "team",
+      "country": "fr",
+      "officialName": "Olympique de Marseille",
+      "russianName": "Марсель",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:fr:monaco",
+      "kind": "team",
+      "country": "fr",
+      "officialName": "AS Monaco",
+      "russianName": "Монако",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:fr:lyon",
+      "kind": "team",
+      "country": "fr",
+      "officialName": "Olympique Lyonnais",
+      "russianName": "Лион",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:nl:ajax",
+      "kind": "team",
+      "country": "nl",
+      "officialName": "AFC Ajax",
+      "russianName": "Аякс",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:nl:psv",
+      "kind": "team",
+      "country": "nl",
+      "officialName": "PSV Eindhoven",
+      "russianName": "ПСВ",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:pt:benfica",
+      "kind": "team",
+      "country": "pt",
+      "officialName": "SL Benfica",
+      "russianName": "Бенфика",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:pt:porto",
+      "kind": "team",
+      "country": "pt",
+      "officialName": "FC Porto",
+      "russianName": "Порту",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:pt:sporting",
+      "kind": "team",
+      "country": "pt",
+      "officialName": "Sporting CP",
+      "russianName": "Спортинг",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:br:flamengo",
+      "kind": "team",
+      "country": "br",
+      "officialName": "CR Flamengo",
+      "russianName": "Фламенго",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:br:palmeiras",
+      "kind": "team",
+      "country": "br",
+      "officialName": "SE Palmeiras",
+      "russianName": "Палмейрас",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:br:sao-paulo",
+      "kind": "team",
+      "country": "br",
+      "officialName": "São Paulo FC",
+      "russianName": "Сан-Паулу",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:br:corinthians",
+      "kind": "team",
+      "country": "br",
+      "officialName": "SC Corinthians Paulista",
+      "russianName": "Коринтианс",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:br:santos",
+      "kind": "team",
+      "country": "br",
+      "officialName": "Santos FC",
+      "russianName": "Сантос",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:ar:boca-juniors",
+      "kind": "team",
+      "country": "ar",
+      "officialName": "Boca Juniors",
+      "russianName": "Бока Хуниорс",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:ar:river-plate",
+      "kind": "team",
+      "country": "ar",
+      "officialName": "River Plate",
+      "russianName": "Ривер Плейт",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:sa:al-hilal",
+      "kind": "team",
+      "country": "sa",
+      "officialName": "Al Hilal",
+      "russianName": "Аль-Хиляль",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:sa:al-nassr",
+      "kind": "team",
+      "country": "sa",
+      "officialName": "Al Nassr",
+      "russianName": "Аль-Наср",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:sa:al-ittihad",
+      "kind": "team",
+      "country": "sa",
+      "officialName": "Al Ittihad",
+      "russianName": "Аль-Иттихад",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:sa:al-ahli",
+      "kind": "team",
+      "country": "sa",
+      "officialName": "Al Ahli Saudi",
+      "russianName": "Аль-Ахли",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:in:mohun-bagan",
+      "kind": "team",
+      "country": "in",
+      "officialName": "Mohun Bagan Super Giant",
+      "russianName": "Мохун Баган",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:in:mumbai-city",
+      "kind": "team",
+      "country": "in",
+      "officialName": "Mumbai City FC",
+      "russianName": "Мумбаи Сити",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:at:rapid-vienna",
+      "kind": "team",
+      "country": "at",
+      "officialName": "SK Rapid Wien",
+      "russianName": "Рапид Вена",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:at:austria-vienna",
+      "kind": "team",
+      "country": "at",
+      "officialName": "FK Austria Wien",
+      "russianName": "Аустрия Вена",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:at:salzburg",
+      "kind": "team",
+      "country": "at",
+      "officialName": "FC Red Bull Salzburg",
+      "russianName": "Ред Булл Зальцбург",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:eng:premier-league",
+      "kind": "competition",
+      "country": "eng",
+      "officialName": "Premier League",
+      "russianName": "Английская Премьер-лига",
+      "providerIds": [
+        "94"
+      ],
+      "logo": "/images/sports/football/premier-league.png",
+      "identityStatus": "verified_provider_id"
+    },
+    {
+      "id": "football:at:bundesliga",
+      "kind": "competition",
+      "country": "at",
+      "officialName": "Austrian Bundesliga",
+      "russianName": "Австрийская Бундеслига",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:de:bundesliga",
+      "kind": "competition",
+      "country": "de",
+      "officialName": "German Bundesliga",
+      "russianName": "Немецкая Бундеслига",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:esp:la-liga",
+      "kind": "competition",
+      "country": "esp",
+      "officialName": "La Liga",
+      "russianName": "Ла Лига",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:br:serie-a",
+      "kind": "competition",
+      "country": "br",
+      "officialName": "Brazilian Serie A",
+      "russianName": "Бразилия. Серия А",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:sa:pro-league",
+      "kind": "competition",
+      "country": "sa",
+      "officialName": "Saudi Pro League",
+      "russianName": "Саудовская Про-лига",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    },
+    {
+      "id": "football:in:indian-super-league",
+      "kind": "competition",
+      "country": "in",
+      "officialName": "Indian Super League",
+      "russianName": "Индийская Суперлига",
+      "providerIds": [],
+      "logo": null,
+      "identityStatus": "curated_placeholder_pending_provider_id"
+    }
+  ],
+  "provisional": [],
+  "esoccer": [],
+  "review": [],
+  "approvedLogos": [
+    "/images/sports/football/arsenal.png",
+    "/images/sports/football/manchester-city.png",
+    "/images/sports/football/premier-league.png"
+  ],
+  "russianAliasCount": 68,
+  "russianAliasesAdded": 0
+}

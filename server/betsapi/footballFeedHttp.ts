@@ -1,3 +1,4 @@
+import { observationsFromEvents, publicFootballCatalog, synchronizeFootballCatalog } from '../sports/catalog/footballDiscovery.js';
 import { ownerFootballLogo } from '../sports/catalog/ownerFootballMedia.js';
 import type { EventsSportId } from './sportIds.js';
 import {
@@ -218,11 +219,20 @@ export async function handleFootballFeedRequest(
             event.status !== 'prematch' || Date.parse(event.kickoff ?? '') > now) ?? []),
         ];
         const cards = (events: NormalizedEvent[]) => events.map((event) => toCard(event, now));
+        const observedAt = new Date(now).toISOString();
+        const identityCatalog = params.get('includeCatalog') === '1'
+          ? publicFootballCatalog(synchronizeFootballCatalog({
+            observations: observationsFromEvents(pool, 'feed', observedAt),
+            observedAt,
+            source: 'betsapi-events-feed',
+          }))
+          : null;
         return {
           events: cards(rankFeaturedFootball(pool, includeSports)),
           featuredLive: cards(selectFeaturedLive(pool)),
           featuredLine: cards(selectFeaturedLine(pool, now)),
           schedule: cards(selectSchedule(pool)),
+          ...(identityCatalog ? { identityCatalog } : {}),
         };
       })(),
     },
