@@ -1,6 +1,6 @@
 {
   "git": {
-    "deploymentEnabled": { "cursor/betsapi-readonly-feed-b001": false }
+    "deploymentEnabled": { "cursor/betsapi-readonly-feed-b001": false, "work/casino-demo-softaggregator-w001": false }
   },
   "functions": {
     "api/player/sports/football-feed.ts": {

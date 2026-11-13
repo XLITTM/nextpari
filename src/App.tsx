@@ -57,6 +57,9 @@ import { subscribeMatchSoundToast } from './services/matchSoundService';
 import { useToast } from './ToastContext';
 import { AppRoutes, currentStaffPortal } from './routes';
 import { leaguePath } from './lib/leagueRoute';
+import { casinoDemoPath, validCasinoDemoId } from './lib/casinoDemo';
+import { CasinoDemoBack, CasinoDemoCatalog } from './components/CasinoDemoCatalog';
+import { CasinoDemoGameScreen } from './screens/CasinoDemoGameScreen';
 
 const GAMES_PATH = '/games';
 const BLACKJACK_PATH = '/games/blackjack';
@@ -78,6 +81,11 @@ function screenFromPath(): Screen {
   if (path === CRYSTAL_PATH) return { name: 'crystal' };
   if (path === DICE_PATH) return { name: 'dice' };
   if (path === PHARAOH_PATH) return { name: 'pharaoh' };
+  if (path === casinoDemoPath) return { name: 'casino-demo' };
+  if (path.startsWith(casinoDemoPath + '/')) {
+    const gameId = path.slice(casinoDemoPath.length + 1);
+    return validCasinoDemoId(gameId) ? { name: 'casino-demo-game', gameId } : { name: 'casino-demo' };
+  }
   if (path === VIP_CASHBACK_PATH) return { name: 'vip-cashback' };
   if (path === GAMES_PATH) return { name: 'games' };
   if (path.startsWith('/league/')) {
@@ -88,6 +96,8 @@ function screenFromPath(): Screen {
 }
 
 function pathForScreen(screen: Screen): string {
+  if (screen.name === 'casino-demo') return casinoDemoPath;
+  if (screen.name === 'casino-demo-game') return casinoDemoPath + '/' + screen.gameId;
   if (screen.name === 'blackjack') return BLACKJACK_PATH;
   if (screen.name === 'aviator') return AVIATOR_PATH;
   if (screen.name === 'apples') return APPLES_PATH;
@@ -110,6 +120,8 @@ type PlayerHistoryState = {
 function screensEqual(a: Screen, b: Screen): boolean {
   if (a.name !== b.name) return false;
   switch (a.name) {
+    case 'casino-demo-game':
+      return a.gameId === (b as { gameId: string }).gameId;
     case 'match':
       return a.matchId === (b as { matchId: string }).matchId;
     case 'bet-details':
@@ -145,6 +157,8 @@ function fallbackScreen(screen: Screen): Screen {
   switch (screen.name) {
     case 'bet-details':
       return { name: 'history' };
+    case 'casino-demo-game':
+      return { name: 'casino-demo' };
     case 'wallet':
     case 'promo':
     case 'personal-data':
@@ -421,6 +435,7 @@ function AppContent() {
     return () => setArcadeSportsPaused(false);
   }, [isArcade]);
   const isGamesHub = screen.name === 'games';
+  const isCasinoDemoGame = screen.name === 'casino-demo-game';
 
   const renderScreen = () => {
     switch (screen.name) {
@@ -508,6 +523,10 @@ function AppContent() {
             onNavigate={setScreen}
           />
         );
+      case 'casino-demo':
+        return <div className="py-2"><CasinoDemoBack onBack={goBack} /><CasinoDemoCatalog onNavigate={setScreen} /></div>;
+      case 'casino-demo-game':
+        return <CasinoDemoGameScreen key={screen.gameId} gameId={screen.gameId} onBack={goBack} />;
       case 'slots':
         return <SlotsScreen onBack={goBack} onNavigate={setScreen} />;
       case 'live-casino':
@@ -610,17 +629,17 @@ function AppContent() {
           {screen.name === 'home' && <MainTabs active={mainTab} onChange={handleMainTab} />}
         </Header>
       )}
-      {!isArcade && isAuthenticated && (
+      {!isArcade && !isCasinoDemoGame && isAuthenticated && (
         <PlayerVerificationNoticeBanner enabled={authReady && isAuthenticated} />
       )}
 
-      <div className={isArcade ? 'h-[100dvh] overflow-hidden' : isGamesHub ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>
+      <div className={isArcade ? 'h-[100dvh] overflow-hidden' : (isGamesHub || isCasinoDemoGame) ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto pb-24'}>
         <ErrorBoundary resetKey={screen.name}>
           {renderScreen()}
         </ErrorBoundary>
       </div>
 
-      {!isArcade && !isGamesHub && (
+      {!isArcade && !isGamesHub && !isCasinoDemoGame && (
         <BottomNav
           active={navActive(screen.name)}
           onChange={setScreen}

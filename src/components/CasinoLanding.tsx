@@ -1,4 +1,5 @@
 import { ChevronRight, Dices } from 'lucide-react';
+import { CasinoDemoCatalog } from './CasinoDemoCatalog';
 import { SectionHeader } from './SectionHeader';
 import { IconCasino } from './SectionIcons';
 import type { Screen } from '../types';
@@ -47,9 +48,7 @@ export function CasinoLanding({ onNavigate }: CasinoLandingProps) {
           </button>
         ))}
       </div>
-      <p className="px-4 pb-2 text-sm text-gray-500 dark:text-gray-400">
-        Казино-провайдеры появятся после подключения
-      </p>
+      <CasinoDemoCatalog onNavigate={onNavigate} />
     </div>
   );
 }
