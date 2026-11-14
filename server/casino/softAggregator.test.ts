@@ -32,12 +32,23 @@ test('production callback can verify a balance while all wallet mutations stay d
     callback: true, pilotLaunch: false, launch: false, approvedWallet: false, newDebits: false,
   });
   assert.deepEqual(standardCasinoGates({ ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1' }), {
-    callback: true, pilotLaunch: false, launch: true, approvedWallet: false, newDebits: false,
+    callback: true, pilotLaunch: false, launch: false, approvedWallet: false, newDebits: false,
   });
   assert.deepEqual(standardCasinoGates({
     ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
     SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '0',
-  }), { callback: true, pilotLaunch: false, launch: true, approvedWallet: true, newDebits: false });
+  }), { callback: true, pilotLaunch: false, launch: false, approvedWallet: true, newDebits: false });
+  const verified = {
+    ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
+  };
+  for (const player of ['first-eligible-player', 'second-eligible-player']) {
+    assert.deepEqual(standardCasinoGates(verified, player), {
+      callback: true, pilotLaunch: false, launch: true, approvedWallet: true, newDebits: true,
+    });
+  }
+  assert.equal(standardCasinoGates({
+    ...verified, SOFTAGGREGATOR_REAL_PILOT_PLAYER: 'first-eligible-player',
+  }, 'second-eligible-player').launch, false);
 });
 
 test('only the designated production pilot can check a launch without a credit assertion or open wallet', () => {
