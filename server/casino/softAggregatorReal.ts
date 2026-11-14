@@ -31,12 +31,12 @@ export function standardCasinoGates(env: NodeJS.ProcessEnv, player?: string) {
     (production || pilot === player) && (!pilot || pilot === player) &&
     env.SOFTAGGREGATOR_REAL_LAUNCH_ENABLED === '1' &&
     (env.SOFTAGGREGATOR_REAL_PLAYER_SECRET?.length ?? 0) >= 32;
-  const launch = mayLaunch && env.SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY === '1';
+  const newDebits = approvedWallet && env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED === '1' &&
+    env.SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY === '1';
+  const launch = mayLaunch && newDebits;
   const pilotLaunch = production && mayLaunch && Boolean(pilot) && pilot === player && !approvedWallet &&
     env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED !== '1';
-  return { callback, launch, pilotLaunch, approvedWallet,
-    newDebits: approvedWallet && env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED === '1' &&
-      env.SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY === '1' };
+  return { callback, launch, pilotLaunch, approvedWallet, newDebits };
 }
 
 function serviceClient() {
@@ -180,6 +180,9 @@ export async function standardWalletVercel(req: IncomingMessage, res: ServerResp
     }, {
       salt: env.SOFTAGGREGATOR_REAL_SALT, writesApproved: gates.approvedWallet,
       matchesIdentity: (username, currency) => currency === 'USD' && providerUsername.test(username),
+      onWriteBlocked: (action, rollback) => {
+        console.info('softaggregator_signed_wallet_write_blocked', { action, rollback });
+      },
     }, async (call): Promise<WalletReply> => {
       const id = providerUsername.exec(call.username)?.[1];
       if (!id) return walletError;
@@ -189,7 +192,12 @@ export async function standardWalletVercel(req: IncomingMessage, res: ServerResp
         p_amount: call.amount, p_rollback: call.rollback, p_game: call.gameId, p_round: call.roundId,
         p_new_debits: gates.newDebits,
       });
-      if (error) return walletError;
+      if (error) {
+        if (call.action !== 'balance') {
+          console.error('softaggregator_wallet_rpc_failed', { action: call.action, rollback: call.rollback });
+        }
+        return walletError;
+      }
       const { error: code, balance } = asRecord(data);
       if (code === 0 && call.action === 'balance' && !gates.approvedWallet) {
         console.info('softaggregator_signed_balance_verified');
