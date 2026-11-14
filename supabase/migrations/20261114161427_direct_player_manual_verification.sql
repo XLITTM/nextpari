@@ -81,5 +81,6 @@ DROP FUNCTION private.complete_player_manual_verification(uuid,uuid,text) RESTRI
 
 -- Security context refreshes last_seen_at and must run in a volatile RPC.
 ALTER FUNCTION public.security_player_personal_data_summary(text) VOLATILE;
+ALTER FUNCTION public.security_player_manual_verification(text) VOLATILE;
 
 COMMIT;
