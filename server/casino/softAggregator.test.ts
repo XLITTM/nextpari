@@ -29,15 +29,37 @@ test('production callback can verify a balance while all wallet mutations stay d
     SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '1',
   };
   assert.deepEqual(standardCasinoGates({ ...settings, SOFTAGGREGATOR_CATALOG_ONLY: '1' }), {
-    callback: true, launch: false, approvedWallet: false, newDebits: false,
+    callback: true, pilotLaunch: false, launch: false, approvedWallet: false, newDebits: false,
   });
   assert.deepEqual(standardCasinoGates({ ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1' }), {
-    callback: true, launch: true, approvedWallet: false, newDebits: false,
+    callback: true, pilotLaunch: false, launch: true, approvedWallet: false, newDebits: false,
   });
   assert.deepEqual(standardCasinoGates({
     ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
     SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '0',
-  }), { callback: true, launch: true, approvedWallet: true, newDebits: false });
+  }), { callback: true, pilotLaunch: false, launch: true, approvedWallet: true, newDebits: false });
+});
+
+test('only the designated production pilot can check a launch without a credit assertion or open wallet', () => {
+  const env = {
+    VERCEL_ENV: 'production',
+    SOFTAGGREGATOR_REAL_CALLBACK_HOST: 'nextpari.net',
+    SOFTAGGREGATOR_REAL_CALLBACK_ENABLED: '1',
+    SOFTAGGREGATOR_REAL_SALT: 'fixture-salt',
+    SOFTAGGREGATOR_REAL_PLAYER_SECRET: 'x'.repeat(32),
+    SOFTAGGREGATOR_REAL_LAUNCH_ENABLED: '1',
+    SOFTAGGREGATOR_REAL_PILOT_PLAYER: 'pilot',
+  };
+  assert.deepEqual(standardCasinoGates(env, 'pilot'), {
+    callback: true, launch: false, pilotLaunch: true, approvedWallet: false, newDebits: false,
+  });
+  assert.equal(standardCasinoGates(env, 'another-player').pilotLaunch, false);
+  assert.equal(standardCasinoGates(env).pilotLaunch, false);
+  assert.equal(standardCasinoGates({ ...env, VERCEL_ENV: 'preview' }, 'pilot').pilotLaunch, false);
+  assert.equal(standardCasinoGates({ ...env, SOFTAGGREGATOR_REAL_LAUNCH_ENABLED: '0' }, 'pilot').pilotLaunch, false);
+  assert.equal(standardCasinoGates({ ...env, SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '1' }, 'pilot').pilotLaunch, false);
+  assert.equal(standardCasinoGates({ ...env, SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
+    SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1' }, 'pilot').pilotLaunch, false);
 });
 
 test('provider identity is stable within an authorized jurisdiction and changes across jurisdictions', () => {
@@ -222,4 +244,36 @@ test('production catalog-only mode limits provider calls to metadata even with l
   await assert.rejects(createSoftAggregator(settings, fetcher, Date.now, 'standard').list(new URLSearchParams()), /CASINO_DEMO_DISABLED/);
   await assert.rejects(createSoftAggregator(settings, fetcher).list(new URLSearchParams()), /CASINO_DEMO_DISABLED/);
   assert.deepEqual(methods, ['getGameList']);
+});
+
+test('pilot calls the real launch contract without allowed origins and keeps the unapproved URL on the server', async () => {
+  const player = { username: 'pilot', password: 'private-player-password', country: 'GB' };
+  const env = {
+    SOFTAGGREGATOR_REAL_CATALOG_ENABLED: '1', SOFTAGGREGATOR_REAL_LOGIN: 'operator-login',
+    SOFTAGGREGATOR_REAL_PASSWORD: 'operator-password',
+  };
+  let gameReply = Response.json({ error: 0, response: 'https://launch.example.test/session?sid=private-session' });
+  const standard = createSoftAggregator(env, async (_url, request) => {
+    const body = JSON.parse(String(request?.body));
+    if (body.method === 'getGameList') return Response.json({ error: 0, response: [demo] });
+    if (body.method === 'getCurrencies') return Response.json({ error: 0, response: { currencies: ['USD'] } });
+    if (body.method === 'createPlayer') return Response.json({ error: 0 }, { status: 201 });
+    assert.equal(body.method, 'getGame');
+    return gameReply;
+  }, Date.now, 'standard');
+  const { games } = await standard.list(new URLSearchParams());
+  const entry = await standard.standardGame(games[0].id);
+  const results: unknown[] = [];
+  const report = (...result: unknown[]) => results.push(result);
+  assert.equal(standard.standardLaunchConfigured, false);
+  await assert.rejects(standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net'), /CASINO_STANDARD_DISABLED/);
+  await assert.rejects(standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net', report), {
+    code: 'CASINO_STANDARD_ORIGIN_UNAPPROVED', payload: { gameHost: 'launch.example.test' },
+  });
+  assert.deepEqual(results.splice(0), [['createPlayer', 201, 0], ['getGame', 200, 0]]);
+
+  gameReply = Response.json({ error: 2, message: 'private upstream details' }, { status: 403 });
+  await assert.rejects(standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net', report),
+    /CASINO_DEMO_UPSTREAM/);
+  assert.deepEqual(results, [['createPlayer', 201, 0], ['getGame', 403, 2]]);
 });
