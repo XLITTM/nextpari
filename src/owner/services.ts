@@ -678,11 +678,15 @@ export async function requestOwnerPlayerManualVerification(params: {
   });
 }
 
-export async function completeOwnerPlayerManualVerification(playerId: string): Promise<void> {
-  await ownerData(`/api/owner/players/${encodeURIComponent(playerId)}/verification-complete`, {
+export async function completeOwnerPlayerManualVerification(playerId: string, reason: string): Promise<{
+  status: 'VERIFIED'; restricted: boolean;
+}> {
+  const result = asRecord(await ownerData(`/api/owner/players/${encodeURIComponent(playerId)}/verification-complete`, {
     method: 'POST',
-    body: JSON.stringify({}),
-  });
+    body: JSON.stringify({ confirmed: true, reason }),
+  }));
+  if (result.status !== 'VERIFIED' || typeof result.restricted !== 'boolean') throw new Error('Не удалось подтвердить верификацию');
+  return { status: result.status, restricted: result.restricted };
 }
 
 export interface OwnerPlayerPersonalDataSummary {
