@@ -92,8 +92,8 @@ export async function standardCasinoVercel(
         if (error.message.includes('SOFTAGGREGATOR_RATE_CHANGED')) throw staffError('CASINO_STANDARD_RATE_CHANGED', 409);
         throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
       }
-      const { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country, eligibilityPolicyApplied } = asRecord(data);
-      if (eligibilityPolicyApplied !== true || typeof usdtTmt !== 'string' || typeof usdtUsd !== 'string' ||
+      const { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country } = asRecord(data);
+      if (typeof usdtTmt !== 'string' || typeof usdtUsd !== 'string' ||
           typeof rateVersion !== 'string' || !/^[a-f0-9]{32}$/.test(rateVersion) ||
           typeof balanceUsdMinor !== 'number' || !Number.isSafeInteger(balanceUsdMinor) || balanceUsdMinor < 0 ||
           typeof country !== 'string' || !/^[A-Z]{2}$/.test(country)) throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
