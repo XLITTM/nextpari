@@ -413,11 +413,15 @@ export async function fetchSecurityPlayerManualVerification(playerId: string): P
   };
 }
 
-export async function completeSecurityPlayerManualVerification(playerId: string): Promise<void> {
-  await securityJson(
-    `/api/security/players/${encodeURIComponent(playerId)}/verification-complete`,
-    { method: 'POST', body: JSON.stringify({}) },
-  );
+export async function completeSecurityPlayerManualVerification(playerId: string, reason: string): Promise<{
+  status: 'VERIFIED'; restricted: boolean;
+}> {
+  const result = asRecord(await securityData(`/api/security/players/${encodeURIComponent(playerId)}/verification-complete`, {
+    method: 'POST',
+    body: JSON.stringify({ confirmed: true, reason }),
+  }));
+  if (result.status !== 'VERIFIED' || typeof result.restricted !== 'boolean') throw new Error('Не удалось подтвердить верификацию');
+  return { status: result.status, restricted: result.restricted };
 }
 
 export interface SecurityPlayerPersonalDataSummary {
