@@ -66,6 +66,7 @@ import {
   type OwnerSecuritySportsSummary,
   type VerticalKpi,
 } from './services';
+import { ManualVerificationAction } from '../shared/staff/ManualVerificationAction';
 import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
 import {
   OWNER_SECURITY_ACCOUNT_LABEL,
@@ -1263,30 +1264,12 @@ function SecurityPanel() {
     }
   };
 
-  const submitVerificationComplete = async () => {
+  const submitVerificationComplete = async (confirmationReason: string) => {
     if (!accountFor) return;
-    setBusyId(accountFor.id);
-    setError('');
-    setNotice('');
-    try {
-      await completeOwnerPlayerManualVerification(accountFor.playerPublicId);
-      const [status, verification] = await Promise.all([
-        fetchOwnerPlayerSecurityRestriction(accountFor.playerPublicId),
-        fetchOwnerPlayerManualVerification(accountFor.playerPublicId),
-      ]);
-      setAccountRestricted(Boolean(status.restricted));
-      setAccountVerificationStatus(verification.status);
-      setNotice(
-        status.restricted
-          ? `Верификация игрока #${accountFor.playerPublicId} пройдена. Ограничение остаётся активным, пока его не снимут отдельно.`
-          : `Верификация игрока #${accountFor.playerPublicId} пройдена.`,
-      );
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось завершить верификацию');
-    } finally {
-      setBusyId('');
-    }
+    const result = await completeOwnerPlayerManualVerification(accountFor.playerPublicId, confirmationReason);
+    setAccountVerificationStatus(result.status);
+    setAccountRestricted(result.restricted);
+    setNotice(`Верификация пройдена для игрока #${accountFor.playerPublicId}.`);
   };
 
   const cards = [
@@ -1560,16 +1543,8 @@ function SecurityPanel() {
                 >
                   Запросить верификацию
                 </button>
-                {accountVerificationStatus === 'VERIFICATION_REQUIRED' ? (
-                  <button
-                    type="button"
-                    disabled={busyId === accountFor.id}
-                    onClick={() => void submitVerificationComplete()}
-                    className="w-full text-sm font-bold px-3 py-2 rounded-xl bg-emerald-700 text-white mb-4 disabled:opacity-40"
-                  >
-                    Верификация пройдена
-                  </button>
-                ) : null}
+                <ManualVerificationAction key={accountFor.playerPublicId} playerId={accountFor.playerPublicId}
+                  disabled={busyId === accountFor.id || accountVerificationStatus === 'VERIFIED'} onConfirm={submitVerificationComplete} />
               </>
             )}
             <div className="flex flex-col gap-2">
@@ -1643,7 +1618,7 @@ function PlayerSecurityModal({ playerId, onClose }: { playerId: string; onClose:
         </div>
         <div className="p-5 overflow-y-auto max-h-[calc(90vh-72px)] space-y-5">
           {error && <p className="text-sm font-semibold text-red-600">{error}</p>}
-          <StaffPlayerPersonalDataCard data={personalData} />
+          <StaffPlayerPersonalDataCard data={personalData} unavailable={dossier !== null && personalData === null} />
           <div>
             <h4 className="text-sm font-extrabold mb-2">Флаги</h4>
             {(dossier?.flags ?? []).length === 0 && <p className="text-sm text-gray-500">Нет флагов</p>}
