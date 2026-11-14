@@ -27,11 +27,14 @@ export function standardCasinoGates(env: NodeJS.ProcessEnv, player?: string) {
     Boolean(env.SOFTAGGREGATOR_REAL_CALLBACK_HOST);
   const approvedWallet = callback && !softAggregatorCatalogOnly(env) &&
     env.SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED === '1' && env.SOFTAGGREGATOR_REAL_WALLET_VERIFIED === '1';
-  const launch = callback && !softAggregatorCatalogOnly(env) &&
+  const mayLaunch = callback && !softAggregatorCatalogOnly(env) &&
     (production || pilot === player) && (!pilot || pilot === player) &&
-    env.SOFTAGGREGATOR_REAL_LAUNCH_ENABLED === '1' && env.SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY === '1' &&
+    env.SOFTAGGREGATOR_REAL_LAUNCH_ENABLED === '1' &&
     (env.SOFTAGGREGATOR_REAL_PLAYER_SECRET?.length ?? 0) >= 32;
-  return { callback, launch, approvedWallet,
+  const launch = mayLaunch && env.SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY === '1';
+  const pilotLaunch = production && mayLaunch && Boolean(pilot) && pilot === player && !approvedWallet &&
+    env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED !== '1';
+  return { callback, launch, pilotLaunch, approvedWallet,
     newDebits: approvedWallet && env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED === '1' &&
       env.SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY === '1' };
 }
@@ -82,7 +85,8 @@ export async function standardCasinoVercel(
     cookies = session.cookies;
     const { id: player } = await ports.getAuthUser(session.accessToken);
     const gates = standardCasinoGates(env, player);
-    const launchEnabled = gates.launch && provider.standardLaunchConfigured;
+    const launchEnabled = (gates.launch && provider.standardLaunchConfigured) ||
+      (gates.pilotLaunch && provider.standardEnabled);
     const origin = sameOrigin(req.headers);
 
     async function quote(args: Record<string, unknown> = {}) {
@@ -136,7 +140,18 @@ export async function standardCasinoVercel(
     const identity = deriveProviderPlayer(env.SOFTAGGREGATOR_REAL_PLAYER_SECRET, player, entry.sourceId, body.rateVersion, current.country);
     const conversion = await quote({ p_session: identity.session, p_game: entry.sourceId, p_rate_version: body.rateVersion });
     if (conversion.country !== current.country) throw staffError('CASINO_STANDARD_INELIGIBLE', 403);
-    const game = await provider.launchStandard(entry, { ...identity, country: conversion.country }, body.device, origin);
+    const report = gates.pilotLaunch ? (method: 'createPlayer' | 'getGame', httpStatus: number | null, providerCode: number | null) => {
+      console.info('softaggregator_pilot_provider_result', { method, httpStatus, providerCode });
+    } : undefined;
+    let game: Awaited<ReturnType<typeof provider.launchStandard>>;
+    try {
+      game = await provider.launchStandard(entry, { ...identity, country: conversion.country }, body.device, origin, report);
+    } catch (error) {
+      if (gates.pilotLaunch && error instanceof StaffOnboardingError && error.code === 'CASINO_STANDARD_ORIGIN_UNAPPROVED') {
+        console.info('softaggregator_pilot_origin_unapproved', { gameHost: error.payload.gameHost });
+      }
+      throw error;
+    }
     if (gates.newDebits) {
       const { error } = await serviceClient().rpc('softaggregator_session', {
         p_player: player, p_session: identity.session, p_game: entry.sourceId,
