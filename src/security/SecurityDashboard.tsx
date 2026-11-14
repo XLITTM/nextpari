@@ -35,6 +35,7 @@ import {
   type SecuritySportsSummary,
   type SecurityActivityRow,
 } from './services';
+import { ManualVerificationAction, manualVerificationLabel } from '../shared/staff/ManualVerificationAction';
 import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
 import { WithdrawalAttributionReviewPanel, createWithdrawalReviewApi, type WithdrawalReviewSummary } from '../shared/staff/WithdrawalAttributionReviewPanel';
 
@@ -517,7 +518,8 @@ function PlayersPanel({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reason, setReason] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<string | null>();
+  const [personalUnavailable, setPersonalUnavailable] = useState(false);
   const [personalData, setPersonalData] = useState<SecurityPlayerPersonalDataSummary | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -532,15 +534,16 @@ function PlayersPanel({
     try {
       const [next, verification, personal] = await Promise.all([
         fetchSecurityDossier(id),
-        fetchSecurityPlayerManualVerification(id).catch(() => ({ status: null, restricted: false })),
+        fetchSecurityPlayerManualVerification(id).catch(() => undefined),
         fetchSecurityPlayerPersonalData(id).catch(() => null),
       ]);
       setDossier(next);
-      setVerificationStatus(verification.status);
+      setVerificationStatus(verification?.status);
       setPersonalData(personal);
+      setPersonalUnavailable(!personal);
     } catch (err) {
       setDossier(null);
-      setVerificationStatus(null);
+      setVerificationStatus(undefined);
       setPersonalData(null);
       setError(err instanceof Error ? err.message : 'Не удалось открыть досье');
     } finally {
@@ -600,18 +603,10 @@ function PlayersPanel({
     }
   };
 
-  const submitVerificationComplete = async () => {
+  const submitVerificationComplete = async (confirmationReason: string) => {
     if (!dossier) return;
-    setBusy(true);
-    setError('');
-    try {
-      await completeSecurityPlayerManualVerification(dossier.playerPublicId);
-      await load(dossier.playerPublicId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось завершить верификацию');
-    } finally {
-      setBusy(false);
-    }
+    const result = await completeSecurityPlayerManualVerification(dossier.playerPublicId, confirmationReason);
+    setVerificationStatus(result.status);
   };
 
   return (
@@ -636,13 +631,7 @@ function PlayersPanel({
             <p className="text-sm text-gray-600 mt-1">Состояние: {ownerSecurityAccountStatusLabel(dossier.restricted)}</p>
             <p className="text-sm text-gray-600">Ограничение: {dossier.restricted ? 'активно' : 'нет'}</p>
             <p className="text-sm text-gray-600">
-              Верификация: {
-                verificationStatus === 'VERIFIED'
-                  ? 'пройдена'
-                  : verificationStatus === 'VERIFICATION_REQUIRED'
-                    ? 'требуется'
-                    : 'не запрошена'
-              }
+              Верификация: {manualVerificationLabel(verificationStatus)}
             </p>
             {verificationStatus === 'VERIFIED' && dossier.restricted ? (
               <p className="text-xs text-amber-800 mt-1">
@@ -665,13 +654,10 @@ function PlayersPanel({
             <button type="button" disabled={busy} onClick={() => void submitVerification()} className="mt-2 text-sm font-bold px-3 py-2 rounded-xl bg-slate-800 text-white">
               Запросить верификацию
             </button>
-            {verificationStatus === 'VERIFICATION_REQUIRED' ? (
-              <button type="button" disabled={busy} onClick={() => void submitVerificationComplete()} className="mt-2 ml-2 text-sm font-bold px-3 py-2 rounded-xl bg-emerald-700 text-white">
-                Верификация пройдена
-              </button>
-            ) : null}
+            <ManualVerificationAction key={dossier.playerPublicId} playerId={dossier.playerPublicId}
+              disabled={busy || loading || verificationStatus === 'VERIFIED'} onConfirm={submitVerificationComplete} />
           </div>
-          <StaffPlayerPersonalDataCard data={personalData} />
+          <StaffPlayerPersonalDataCard data={personalData} unavailable={personalUnavailable} />
           <div className="bg-white rounded-2xl border border-slate-200 p-4">
             <h3 className="font-extrabold mb-2">Флаги риска</h3>
             {dossier.flags.length === 0 && <p className="text-sm text-gray-500">Нет флагов</p>}
