@@ -12,6 +12,9 @@ const catalogTtl = 10 * 60_000;
 const maxResponse = 64 * 1024 * 1024;
 type Raw = Record<string, unknown>;
 type Entry = { game: CasinoDemoGame; sourceId: string };
+type ProviderMethod = 'getGameList' | 'getGameDemo' | 'getCurrencies' | 'createPlayer' | 'getGame';
+type LaunchProviderMethod = Extract<ProviderMethod, 'createPlayer' | 'getGame'>;
+type LaunchProviderReport = (method: LaunchProviderMethod, httpStatus: number | null, providerCode: number | null) => void;
 type CatalogCounts = {
   returned: number; demoTrue: number; demoFalse: number; demoOne: number;
   demoOther: number; demoMissing: number; categories: Record<string, number>;
@@ -129,16 +132,21 @@ export function createSoftAggregator(
   let inflight: Promise<Snapshot> | undefined;
   let cooldown = 0;
 
-  async function call(method: 'getGameList' | 'getGameDemo' | 'getCurrencies' | 'createPlayer' | 'getGame', payload: Raw = {}): Promise<unknown> {
+  async function call(method: ProviderMethod, payload: Raw = {}, report?: LaunchProviderReport): Promise<unknown> {
     if (!enabled || (previewCatalog && method !== 'getGameList')) throw staffError('CASINO_DEMO_DISABLED', 503);
     if (cooldown > now()) throw staffError('CASINO_DEMO_RATE_LIMITED', 429);
     let result: unknown;
+    let httpStatus: number | null = null;
     try {
       const response = await fetcher(softAggregatorEndpoint, {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
         headers: softAggregatorHeaders,
         body: JSON.stringify({ ...payload, method, api_login: login, api_password: password }),
       });
+      httpStatus = response.status;
+      if (!response.ok && report) {
+        result = await readBoundedJson(response).catch(() => null);
+      }
       if (response.status === 429) {
         const retry = response.headers.get('Retry-After') ?? '';
         const seconds = /^\d+$/.test(retry) ? Number(retry) : (Date.parse(retry) - now()) / 1000;
@@ -154,6 +162,11 @@ export function createSoftAggregator(
     } catch (error) {
       if (error instanceof StaffOnboardingError) throw error;
       throw staffError('CASINO_DEMO_UPSTREAM', 502);
+    } finally {
+      if (report && (method === 'createPlayer' || method === 'getGame')) {
+        const code = asRecord(result).error;
+        report(method, httpStatus, typeof code === 'number' && Number.isSafeInteger(code) ? code : null);
+      }
     }
     const row = asRecord(result);
     if (row.error !== 0) throw staffError('CASINO_DEMO_PROVIDER_DENIED', 502);
@@ -174,6 +187,7 @@ export function createSoftAggregator(
   }
 
   return {
+    standardEnabled: mode === 'standard' && enabled,
     standardLaunchConfigured: mode === 'standard' && enabled && launchOrigins.size > 0,
     async list(params: URLSearchParams) {
       const snapshot = await catalog();
@@ -203,18 +217,21 @@ export function createSoftAggregator(
       return entry;
     },
     async launchStandard(entry: Entry, player: { username: string; password: string; country: string },
-      device: 'mobile' | 'desktop', returnOrigin: string) {
-      if (mode !== 'standard' || !launchOrigins.size) throw staffError('CASINO_STANDARD_DISABLED', 503);
+      device: 'mobile' | 'desktop', returnOrigin: string, report?: LaunchProviderReport) {
+      if (mode !== 'standard' || (!report && !launchOrigins.size)) throw staffError('CASINO_STANDARD_DISABLED', 503);
       const currencies = asRecord(await call('getCurrencies')).currencies;
       if (!Array.isArray(currencies) || !currencies.includes('USD')) throw staffError('CASINO_STANDARD_CURRENCY_UNAVAILABLE', 503);
       const credentials = { user_username: player.username, user_password: player.password, currency: 'USD' };
-      await call('createPlayer', credentials);
+      await call('createPlayer', credentials, report);
       const result = await call('getGame', { ...credentials, gameid: entry.sourceId,
-        lang: 'ru', device, country: player.country, homeurl: returnOrigin + '/casino/real' });
+        lang: 'ru', device, country: player.country, homeurl: returnOrigin + '/casino/real' }, report);
       const url = httpsUrl(result);
-      if (!url || !launchOrigins.has(url.origin) ||
-          [login, password, player.password].some((secret) => secret && decodeURIComponent(url.href).includes(secret))) {
+      if (!url || url.origin === returnOrigin || [login, password, player.password].some((secret) =>
+        secret && decodeURIComponent(url.href).toLowerCase().includes(secret.toLowerCase()))) {
         throw staffError('CASINO_DEMO_LAUNCH_INVALID', 502);
+      }
+      if (!launchOrigins.has(url.origin)) {
+        throw staffError('CASINO_STANDARD_ORIGIN_UNAPPROVED', 502, { gameHost: url.hostname });
       }
       return { title: entry.game.title, url: url.href };
     },
