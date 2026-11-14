@@ -442,7 +442,7 @@ describe('owner and security verification request HTTP', () => {
         pathname: `/api/owner/players/${PLAYER_ID}/verification-complete`,
         cookie: `${OWNER_ACCESS_COOKIE}=owner-access; ${OWNER_REFRESH_COOKIE}=owner-refresh`,
         cookieSecure: true,
-        body: {},
+        body: { confirmed: true, reason: 'Documents reviewed in person' },
       },
       {
         sessionPorts: {
@@ -462,7 +462,7 @@ describe('owner and security verification request HTTP', () => {
       },
     );
     assert.equal(owner.status, 200);
-    assert.equal(ownerCalls[0]?.name, 'owner_complete_player_manual_verification');
+    assert.deepEqual(ownerCalls[0], { name: 'owner_complete_player_manual_verification', args: { p_player_id: PLAYER_ID, p_reason: 'Documents reviewed in person', p_confirmed: true } });
     assert.equal(ownerCalls.some((call) => call.name === 'owner_set_player_security_restriction'), false);
 
     const securityCalls: Array<{ name: string; args?: Record<string, unknown> }> = [];
@@ -472,7 +472,7 @@ describe('owner and security verification request HTTP', () => {
         pathname: `/api/security/players/${PLAYER_ID}/verification-complete`,
         cookie: `${SECURITY_ACCESS_COOKIE}=sec-access; ${SECURITY_REFRESH_COOKIE}=sec-refresh`,
         cookieSecure: true,
-        body: {},
+        body: { confirmed: true, reason: 'Documents reviewed in person' },
       },
       {
         sessionPorts: {
@@ -493,7 +493,7 @@ describe('owner and security verification request HTTP', () => {
       },
     );
     assert.equal(security.status, 200);
-    assert.equal(securityCalls[0]?.name, 'security_complete_player_manual_verification');
+    assert.deepEqual(securityCalls[0], { name: 'security_complete_player_manual_verification', args: { p_player_id: PLAYER_ID, p_reason: 'Documents reviewed in person', p_confirmed: true } });
     assert.equal(securityCalls.some((call) => call.name === 'security_set_player_security_restriction'), false);
   });
 });
