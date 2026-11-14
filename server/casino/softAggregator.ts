@@ -188,7 +188,7 @@ export function createSoftAggregator(
 
   return {
     standardEnabled: mode === 'standard' && enabled,
-    standardLaunchConfigured: mode === 'standard' && enabled && launchOrigins.size > 0,
+    standardLaunchConfigured: mode === 'standard' && enabled,
     async list(params: URLSearchParams) {
       const snapshot = await catalog();
       const term = (params.get('q') ?? '').trim().slice(0, 120).toLowerCase();
@@ -218,7 +218,7 @@ export function createSoftAggregator(
     },
     async launchStandard(entry: Entry, player: { username: string; password: string; country: string },
       device: 'mobile' | 'desktop', returnOrigin: string, report?: LaunchProviderReport) {
-      if (mode !== 'standard' || (!report && !launchOrigins.size)) throw staffError('CASINO_STANDARD_DISABLED', 503);
+      if (mode !== 'standard') throw staffError('CASINO_STANDARD_DISABLED', 503);
       const currencies = asRecord(await call('getCurrencies')).currencies;
       if (!Array.isArray(currencies) || !currencies.includes('USD')) throw staffError('CASINO_STANDARD_CURRENCY_UNAVAILABLE', 503);
       const credentials = { user_username: player.username, user_password: player.password, currency: 'USD' };
@@ -229,9 +229,6 @@ export function createSoftAggregator(
       if (!url || url.origin === returnOrigin || [login, password, player.password].some((secret) =>
         secret && decodeURIComponent(url.href).toLowerCase().includes(secret.toLowerCase()))) {
         throw staffError('CASINO_DEMO_LAUNCH_INVALID', 502);
-      }
-      if (!launchOrigins.has(url.origin)) {
-        throw staffError('CASINO_STANDARD_ORIGIN_UNAPPROVED', 502, { gameHost: url.hostname });
       }
       return { title: entry.game.title, url: url.href };
     },

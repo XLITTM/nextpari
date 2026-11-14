@@ -246,7 +246,7 @@ test('production catalog-only mode limits provider calls to metadata even with l
   assert.deepEqual(methods, ['getGameList']);
 });
 
-test('pilot calls the real launch contract without allowed origins and keeps the unapproved URL on the server', async () => {
+test('authenticated getGame HTTPS URLs open without a per-provider origin allowlist', async () => {
   const player = { username: 'pilot', password: 'private-player-password', country: 'GB' };
   const env = {
     SOFTAGGREGATOR_REAL_CATALOG_ENABLED: '1', SOFTAGGREGATOR_REAL_LOGIN: 'operator-login',
@@ -265,11 +265,15 @@ test('pilot calls the real launch contract without allowed origins and keeps the
   const entry = await standard.standardGame(games[0].id);
   const results: unknown[] = [];
   const report = (...result: unknown[]) => results.push(result);
-  assert.equal(standard.standardLaunchConfigured, false);
-  await assert.rejects(standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net'), /CASINO_STANDARD_DISABLED/);
-  await assert.rejects(standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net', report), {
-    code: 'CASINO_STANDARD_ORIGIN_UNAPPROVED', payload: { gameHost: 'launch.example.test' },
-  });
+  assert.equal(standard.standardLaunchConfigured, true);
+  const opened = await standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net', report);
+  assert.equal(opened.url, 'https://launch.example.test/session?sid=private-session');
+  assert.equal(opened.title, demo.name);
+  gameReply = Response.json({ error: 0, response: 'https://cdn.other-provider.test/play' });
+  assert.equal((await standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net')).url,
+    'https://cdn.other-provider.test/play');
+  gameReply = Response.json({ error: 0, response: 'http://launch.example.test/session' });
+  await assert.rejects(standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net'), /CASINO_DEMO_LAUNCH_INVALID/);
   assert.deepEqual(results.splice(0), [['createPlayer', 201, 0], ['getGame', 200, 0]]);
 
   gameReply = Response.json({ error: 2, message: 'private upstream details' }, { status: 403 });
