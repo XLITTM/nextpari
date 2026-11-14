@@ -32,7 +32,12 @@ export function isTestIdentity(username: string, currency: string) {
 
 export async function handleWalletCallback(
   request: { method?: string; url?: string; signature?: string; sourceIp?: string },
-  config: { salt: string; matchesIdentity: (username: string, currency: string) => boolean; writesApproved: boolean },
+  config: {
+    salt: string;
+    matchesIdentity: (username: string, currency: string) => boolean;
+    writesApproved: boolean;
+    onWriteBlocked?: (action: 'debit' | 'credit', rollback: boolean) => void;
+  },
   apply: (call: WalletCall) => Promise<WalletReply>,
   now = Date.now,
 ): Promise<WalletReply> {
@@ -65,17 +70,23 @@ export async function handleWalletCallback(
     if (!username || !currency || !config.matchesIdentity(username, currency) || !callId.trim() || callId.length > 200 ||
         (action !== 'balance' && action !== 'debit' && action !== 'credit') ||
         (rb !== '0' && rb !== '1') ||
-        (action !== 'balance' && (!config.writesApproved || !/^\d{1,10}$/.test(amountText)))) return walletError;
+        (action !== 'balance' && !/^\d{1,10}$/.test(amountText))) return walletError;
 
-    const requested = action === 'balance' ? 0 : Number(amountText);
-    if (requested > maxBalance) return walletError;
+    const amount = action === 'balance' ? 0 : Number(amountText);
+    if (amount > maxBalance) return walletError;
     const rollback = rb === '1';
-    const amount = action === 'debit' && !rollback && fields.get('type') === 'bonus_fs' ? 0 : requested;
+    if (action !== 'balance' && !config.writesApproved) {
+      config.onWriteBlocked?.(action, rollback);
+      return walletError;
+    }
+    // Keep exact retries compatible with fingerprints created before debit amounts
+    // stopped depending on the provider's informational type.
+    const legacyAmount = action === 'debit' && !rollback && fields.get('type') === 'bonus_fs' ? 0 : amount;
     return await apply({
       username, currency, action, amount, rollback, timestampMs, callHash: digest(callId),
       gameId: fields.get('game_id') ?? '', roundId: fields.get('round_id') ?? '',
       fingerprint: digest(JSON.stringify([
-        action, requested, amount, rollback, fields.get('round_id') ?? '', fields.get('game_id') ?? '',
+        action, amount, legacyAmount, rollback, fields.get('round_id') ?? '', fields.get('game_id') ?? '',
       ])),
     });
   } catch {
