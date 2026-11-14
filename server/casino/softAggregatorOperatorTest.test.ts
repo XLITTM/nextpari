@@ -53,6 +53,30 @@ test('only authentic blocked writes emit diagnostics and never reach Wallet Core
   assert.deepEqual(blocked, [['debit', false], ['credit', true]]);
 });
 
+test('pilot wallet accepts debit, credit, standalone credit, rollback and rejects duplicates or insufficient funds', async () => {
+  const seen: { action: string; amount: number; rollback: boolean; callHash: string }[] = [];
+  const wallet = async (call: { action: string; amount: number; rollback: boolean; callHash: string; fingerprint: string }) => {
+    const prior = seen.find((entry) => entry.callHash === call.callHash);
+    if (prior) return prior.amount > 20 ? { error: 1 as const, balance: 20 } : { error: 0 as const, balance: 150 };
+    seen.push({ action: call.action, amount: call.amount, rollback: call.rollback, callHash: call.callHash });
+    if (call.action === 'debit' && !call.rollback && call.amount > 20) return { error: 1 as const, balance: 20 };
+    return { error: 0 as const, balance: 150 };
+  };
+  const debit = signed();
+  assert.deepEqual(await handleTestWalletCallback(debit, config, wallet, () => now), { error: 1, balance: 20 });
+  assert.deepEqual(await handleTestWalletCallback(debit, config, wallet, () => now), { error: 1, balance: 20 });
+  assert.equal(seen.length, 1);
+  assert.deepEqual(await handleTestWalletCallback(signed({ action: 'credit', call_id: 'win-1', round_id: 'round-9' }), config, wallet, () => now),
+    { error: 0, balance: 150 });
+  assert.deepEqual(await handleTestWalletCallback(signed({ action: 'credit', call_id: 'free-win', round_id: 'round-free' }), config, wallet, () => now),
+    { error: 0, balance: 150 });
+  assert.deepEqual(await handleTestWalletCallback(signed({ action: 'credit', rb: '1', call_id: 'refund-1' }), config, wallet, () => now),
+    { error: 0, balance: 150 });
+  assert.deepEqual(seen.map(({ action, rollback }) => [action, rollback]), [
+    ['debit', false], ['credit', false], ['credit', false], ['credit', true],
+  ]);
+});
+
 test('honors rollback direction, standalone credits and the signed amount independently of type', async () => {
   const cases: { fields: Record<string, string>; action: string; amount: number; rollback: boolean }[] = [
     { fields: { action: 'balance' }, action: 'balance', amount: 0, rollback: false },
