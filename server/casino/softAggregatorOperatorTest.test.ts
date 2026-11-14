@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash, createHmac } from 'node:crypto';
 import test from 'node:test';
 import { operatorTestRequest } from './softAggregatorOperatorTest.js';
-import { callbackIp, createTestWalletStore, handleTestWalletCallback, testBranch, testWalletKey, walletError } from './softAggregatorTestWallet.js';
+import { callbackIp, createTestWalletStore, handleTestWalletCallback, handleWalletCallback, testBranch, testWalletKey, walletError } from './softAggregatorTestWallet.js';
 
 const now = 1_800_000_000_000;
 const config = { username: 'np_test_' + 'a'.repeat(24), currency: 'USD', salt: 'unit-test-only', writesApproved: true };
@@ -38,13 +38,29 @@ test('rejects unsigned, changed, stale, future and out-of-scope callbacks before
     { ...config, writesApproved: false }, apply, () => now), { error: 0, balance: 150 });
 });
 
-test('honors rollback direction, standalone credits and zero-charge free spins', async () => {
+test('only authentic blocked writes emit diagnostics and never reach Wallet Core', async () => {
+  const blocked: unknown[] = [];
+  const gate = {
+    salt: config.salt, writesApproved: false,
+    matchesIdentity: (username: string, currency: string) => username === config.username && currency === 'USD',
+    onWriteBlocked: (...details: unknown[]) => blocked.push(details),
+  };
+  const deny = async () => assert.fail('wallet invoked');
+  assert.deepEqual(await handleWalletCallback(signed(), gate, deny, () => now), walletError);
+  assert.deepEqual(await handleWalletCallback(signed({ action: 'credit', rb: '1' }), gate, deny, () => now), walletError);
+  assert.deepEqual(await handleWalletCallback({ ...signed(), signature: undefined }, gate, deny, () => now), walletError);
+  assert.deepEqual(await handleWalletCallback(signed({ currency: 'EUR' }), gate, deny, () => now), walletError);
+  assert.deepEqual(blocked, [['debit', false], ['credit', true]]);
+});
+
+test('honors rollback direction, standalone credits and the signed amount independently of type', async () => {
   const cases: { fields: Record<string, string>; action: string; amount: number; rollback: boolean }[] = [
     { fields: { action: 'balance' }, action: 'balance', amount: 0, rollback: false },
     { fields: { action: 'credit', type: 'future_kind' }, action: 'credit', amount: 100, rollback: false },
     { fields: { action: 'credit', rb: '1' }, action: 'credit', amount: 100, rollback: true },
     { fields: { action: 'debit', rb: '1', type: 'bonus_fs' }, action: 'debit', amount: 100, rollback: true },
-    { fields: { action: 'debit', type: 'bonus_fs' }, action: 'debit', amount: 0, rollback: false },
+    { fields: { action: 'debit', type: 'bonus_fs' }, action: 'debit', amount: 100, rollback: false },
+    { fields: { action: 'debit', amount: '0', type: 'bonus_fs' }, action: 'debit', amount: 0, rollback: false },
   ];
   for (const { fields, action, amount, rollback } of cases) {
     assert.deepEqual(await handleTestWalletCallback(signed(fields), config, async (call) => {
