@@ -3,6 +3,11 @@ import { casinoCategories, casinoDemoPath, type CasinoDemoGame } from '../../src
 import { StaffOnboardingError, staffError } from '../staff/errors.js';
 
 export const softAggregatorEndpoint = 'https://api.softaggregator.com/api/v1';
+export const softAggregatorHeaders = {
+  'Content-Type': 'application/json',
+  Accept: 'application/json',
+  'User-Agent': 'NextPari-Server/1.0',
+} as const;
 const catalogTtl = 10 * 60_000;
 const maxResponse = 64 * 1024 * 1024;
 type Raw = Record<string, unknown>;
@@ -131,7 +136,7 @@ export function createSoftAggregator(
     try {
       const response = await fetcher(softAggregatorEndpoint, {
         method: 'POST', redirect: 'error', signal: AbortSignal.timeout(12_000),
-        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        headers: softAggregatorHeaders,
         body: JSON.stringify({ ...payload, method, api_login: login, api_password: password }),
       });
       if (response.status === 429) {
