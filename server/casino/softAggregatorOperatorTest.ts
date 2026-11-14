@@ -1,6 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { asRecord, readBoundedJson, softAggregatorEndpoint } from './softAggregator.js';
+import { asRecord, readBoundedJson, softAggregatorEndpoint, softAggregatorHeaders } from './softAggregator.js';
 import { isTestIdentity, testBranch } from './softAggregatorTestWallet.js';
 
 type Method = 'getCurrencies' | 'getGameList' | 'createPlayer' | 'getGame';
@@ -72,7 +72,7 @@ export async function operatorTestRequest(
     providerStatus = undefined;
     const response = await fetcher(softAggregatorEndpoint, {
       method: 'POST', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(12_000),
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      headers: softAggregatorHeaders,
       body: JSON.stringify({ ...params, method, api_login: login, api_password: password }),
     });
     providerStatus = response.status;
