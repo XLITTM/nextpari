@@ -683,8 +683,11 @@ async function runControl(
           : String(rec.reasonCode ?? rec.reason_code).trim() || null,
       });
     case 'playerManualVerificationComplete':
+      if (rec.confirmed !== true) throw staffError('VERIFICATION_CONFIRMATION_REQUIRED', 400);
       return rpc.invoke('owner_complete_player_manual_verification', {
         p_player_id: requirePlayerPublicId(decodeURIComponent(action.playerId)),
+        p_reason: requireReason(rec.reason),
+        p_confirmed: true,
       });
     case 'playerPersonalData':
       return rpc.invoke('owner_player_personal_data_summary', {
