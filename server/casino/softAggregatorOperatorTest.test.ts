@@ -119,6 +119,10 @@ test('closes the operator route outside Preview and requires callback configurat
 test('checks currency, uses separate player credentials and launches only the configured game', async () => {
   const methods: string[] = [];
   const provider = async (_url: unknown, init?: RequestInit) => {
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get('content-type'), 'application/json');
+    assert.equal(headers.get('accept'), 'application/json');
+    assert.equal(headers.get('user-agent'), 'NextPari-Server/1.0');
     const body = JSON.parse(String(init?.body));
     methods.push(body.method);
     if (body.method === 'getCurrencies') return Response.json({ error: 0, response: { currencies: ['USD'] } });
