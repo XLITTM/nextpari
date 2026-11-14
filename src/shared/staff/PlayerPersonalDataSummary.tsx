@@ -1,5 +1,5 @@
 export function StaffPlayerPersonalDataCard({
-  data,
+  data, unavailable = false,
 }: {
   data: {
     hasRow: boolean;
@@ -14,11 +14,16 @@ export function StaffPlayerPersonalDataCard({
     documentNumberMasked: string;
     updatedAt: string | null;
   } | null;
+  unavailable?: boolean;
 }) {
   return (
     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-2">
       <p className="text-[11px] uppercase tracking-wider font-bold text-gray-400">Личные данные</p>
-      {!data || !data.hasRow ? (
+      {unavailable ? (
+        <p role="status" className="text-sm text-gray-500">Не удалось загрузить анкету</p>
+      ) : !data ? (
+        <p className="text-sm text-gray-500">Загрузка анкеты…</p>
+      ) : !data.hasRow ? (
         <p className="text-sm text-gray-500">Анкета не заполнялась</p>
       ) : (
         <>
