@@ -6,7 +6,9 @@ import {
   retainIdempotencyKey,
 } from '../shared/staff/financeGate';
 import {
+  completeOwnerPlayerManualVerification,
   fetchOwnerPlayerDossier,
+  fetchOwnerPlayerManualVerification,
   fetchOwnerPlayerPersonalData,
   fetchOwnerPlayers,
   fetchOwnerTreasury,
@@ -19,6 +21,7 @@ import {
   type OwnerPlayerListItem,
   type OwnerPlayerPersonalDataSummary,
 } from './services';
+import { ManualVerificationAction, manualVerificationLabel } from '../shared/staff/ManualVerificationAction';
 import { StaffPlayerPersonalDataCard } from '../shared/staff/PlayerPersonalDataSummary';
 
 type DossierTab =
@@ -263,6 +266,8 @@ function PlayerDossierModal({
   onDebit: (publicId: string) => void;
 }) {
   const [dossier, setDossier] = useState<OwnerPlayerDossier | null>(null);
+  const [verification, setVerification] = useState<{ status: string | null; restricted: boolean }>();
+  const [personalUnavailable, setPersonalUnavailable] = useState(false);
   const [personalData, setPersonalData] = useState<OwnerPlayerPersonalDataSummary | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -273,12 +278,15 @@ function PlayerDossierModal({
     setLoading(true);
     setError('');
     try {
-      const [next, personal] = await Promise.all([
+      const [next, personal, review] = await Promise.all([
         fetchOwnerPlayerDossier(playerId),
         fetchOwnerPlayerPersonalData(playerId).catch(() => null),
+        fetchOwnerPlayerManualVerification(playerId).catch(() => undefined),
       ]);
       setDossier(next);
       setPersonalData(personal);
+      setPersonalUnavailable(!personal);
+      setVerification(review);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось открыть досье');
       setDossier(null);
@@ -364,7 +372,17 @@ function PlayerDossierModal({
         <div className="flex-1 overflow-y-auto p-5">
           {error && <p className="text-sm font-semibold text-red-600 mb-3">{error}</p>}
           {loading && <p className="text-sm text-gray-500">Загрузка досье…</p>}
-          {dossier && <DossierBody tab={tab} dossier={dossier} personalData={personalData} />}
+          {dossier && <DossierBody tab={tab} dossier={dossier} personalData={personalData} personalUnavailable={personalUnavailable} />}
+          {dossier && tab === 'overview' && (
+            <div className="mt-4 space-y-1 text-sm">
+              <p>Верификация: {manualVerificationLabel(verification?.status)}</p>
+              <p>Ограничение службы безопасности: {verification ? (verification.restricted ? 'активно' : 'нет') : 'статус недоступен'}</p>
+              <ManualVerificationAction key={publicId} playerId={publicId} disabled={busy || loading || verification?.status === 'VERIFIED'}
+                onConfirm={async (reason) => {
+                  setVerification(await completeOwnerPlayerManualVerification(publicId, reason));
+                }} />
+            </div>
+          )}
         </div>
 
         <div className="px-5 py-4 border-t border-slate-200 bg-slate-50 flex flex-wrap gap-2">
@@ -408,10 +426,12 @@ function DossierBody({
   tab,
   dossier,
   personalData,
+  personalUnavailable,
 }: {
   tab: DossierTab;
   dossier: OwnerPlayerDossier;
   personalData: OwnerPlayerPersonalDataSummary | null;
+  personalUnavailable: boolean;
 }) {
   if (tab === 'overview') {
     return (
@@ -423,7 +443,7 @@ function DossierBody({
           <InfoCell label="Статус кошелька" value={String(dossier.wallet.status ?? '—')} />
           <InfoCell label="Регистрация" value={formatMaybeDate(dossier.profile.created_at)} />
         </div>
-        <StaffPlayerPersonalDataCard data={personalData} />
+        <StaffPlayerPersonalDataCard data={personalData} unavailable={personalUnavailable} />
       </div>
     );
   }
