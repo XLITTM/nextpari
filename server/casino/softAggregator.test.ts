@@ -146,6 +146,10 @@ test('standard catalog includes authorized games without demo support and requir
     SOFTAGGREGATOR_REAL_PASSWORD: 'standard-password',
     SOFTAGGREGATOR_REAL_LAUNCH_ORIGINS: 'https://launch.example.test',
   }, async (_url, request) => {
+    const headers = new Headers(request?.headers);
+    assert.equal(headers.get('content-type'), 'application/json');
+    assert.equal(headers.get('accept'), 'application/json');
+    assert.equal(headers.get('user-agent'), 'NextPari-Server/1.0');
     const body = JSON.parse(String(request?.body));
     methods.push(body.method);
     assert.equal(body.api_login, 'standard-login');
