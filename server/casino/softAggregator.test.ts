@@ -98,6 +98,9 @@ test('monetary pilot opens debit and credit for one player without marking the w
   assert.deepEqual(pilotCallbackAuthorization(settings, now), {
     writesApproved: true, newDebits: false, onlyPlayer: '000037',
   });
+  assert.equal(pilotMonetaryWindow({
+    ...settings, SOFTAGGREGATOR_REAL_PILOT_MONETARY: '1\n', SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL: until + '\n',
+  }, now), true);
   assert.equal(pilotMonetaryWindow({ ...settings, SOFTAGGREGATOR_REAL_PILOT_MONETARY: '0' }, now), false);
   assert.equal(pilotMonetaryWindow(settings, now + 25 * 60 * 60 * 1000), false);
   assert.equal(pilotMonetaryWindow({

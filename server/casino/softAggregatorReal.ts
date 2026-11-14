@@ -23,8 +23,8 @@ export const pilotMonetaryLossUsdMinor = 500;
 const pilotMonetaryMaxWindowMs = 48 * 60 * 60 * 1000;
 
 export function pilotMonetaryWindow(env: NodeJS.ProcessEnv, now = Date.now()) {
-  const until = Date.parse(env.SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL ?? '');
-  return env.VERCEL_ENV === 'production' && env.SOFTAGGREGATOR_REAL_PILOT_MONETARY === '1' &&
+  const until = Date.parse((env.SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL ?? '').trim());
+  return env.VERCEL_ENV === 'production' && env.SOFTAGGREGATOR_REAL_PILOT_MONETARY?.trim() === '1' &&
     env.SOFTAGGREGATOR_REAL_CALLBACK_ENABLED === '1' && env.SOFTAGGREGATOR_REAL_LAUNCH_ENABLED === '1' &&
     Boolean(env.SOFTAGGREGATOR_REAL_SALT && env.SOFTAGGREGATOR_REAL_CALLBACK_HOST &&
       env.SOFTAGGREGATOR_REAL_PILOT_PLAYER) &&
