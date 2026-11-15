@@ -18,50 +18,29 @@ const headers = {
   'X-Content-Type-Options': 'nosniff',
 };
 const providerUsername = /^np_real_([a-f0-9]{32})$/;
-export const pilotMonetaryStakeUsdMinor = 100;
-export const pilotMonetaryLossUsdMinor = 500;
-const pilotMonetaryMaxWindowMs = 48 * 60 * 60 * 1000;
 
-export function pilotMonetaryWindow(env: NodeJS.ProcessEnv, now = Date.now()) {
-  const until = Date.parse((env.SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL ?? '').trim());
-  return env.VERCEL_ENV === 'production' && env.SOFTAGGREGATOR_REAL_PILOT_MONETARY?.trim() === '1' &&
-    env.SOFTAGGREGATOR_REAL_CALLBACK_ENABLED === '1' && env.SOFTAGGREGATOR_REAL_LAUNCH_ENABLED === '1' &&
-    Boolean(env.SOFTAGGREGATOR_REAL_SALT && env.SOFTAGGREGATOR_REAL_CALLBACK_HOST &&
-      env.SOFTAGGREGATOR_REAL_PILOT_PLAYER) &&
-    (env.SOFTAGGREGATOR_REAL_PLAYER_SECRET?.length ?? 0) >= 32 &&
-    !softAggregatorCatalogOnly(env) && Number.isFinite(until) && until > now &&
-    until <= now + pilotMonetaryMaxWindowMs;
+function enabled(env: NodeJS.ProcessEnv, name: string) {
+  return (env[name] ?? '').trim() === '1';
 }
 
-export function standardCasinoGates(env: NodeJS.ProcessEnv, player?: string, now = Date.now()) {
-  const pilot = env.SOFTAGGREGATOR_REAL_PILOT_PLAYER;
+export function standardCasinoGates(env: NodeJS.ProcessEnv, _player?: string) {
   const production = env.VERCEL_ENV === 'production';
-  const callback = (production || (env.VERCEL_ENV === 'preview' && Boolean(pilot))) &&
-    env.SOFTAGGREGATOR_REAL_CALLBACK_ENABLED === '1' && Boolean(env.SOFTAGGREGATOR_REAL_SALT) &&
-    Boolean(env.SOFTAGGREGATOR_REAL_CALLBACK_HOST);
+  const callback = (production || (env.VERCEL_ENV === 'preview' && Boolean(env.SOFTAGGREGATOR_REAL_PILOT_PLAYER?.trim()))) &&
+    enabled(env, 'SOFTAGGREGATOR_REAL_CALLBACK_ENABLED') && Boolean(env.SOFTAGGREGATOR_REAL_SALT?.trim()) &&
+    Boolean(env.SOFTAGGREGATOR_REAL_CALLBACK_HOST?.trim());
   const approvedWallet = callback && !softAggregatorCatalogOnly(env) &&
-    env.SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED === '1' && env.SOFTAGGREGATOR_REAL_WALLET_VERIFIED === '1';
-  const mayLaunch = callback && !softAggregatorCatalogOnly(env) &&
-    (production || pilot === player) && (!pilot || pilot === player) &&
-    env.SOFTAGGREGATOR_REAL_LAUNCH_ENABLED === '1' &&
-    (env.SOFTAGGREGATOR_REAL_PLAYER_SECRET?.length ?? 0) >= 32;
-  const newDebits = approvedWallet && env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED === '1' &&
-    env.SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY === '1';
-  const launch = mayLaunch && newDebits;
-  const pilotLaunch = production && mayLaunch && Boolean(pilot) && pilot === player && !approvedWallet &&
-    env.SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED !== '1';
-  const monetaryPilot = pilotMonetaryWindow(env, now) && pilot === player;
-  return { callback, launch, pilotLaunch, approvedWallet, newDebits, monetaryPilot };
+    enabled(env, 'SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED') && enabled(env, 'SOFTAGGREGATOR_REAL_WALLET_VERIFIED');
+  const mayLaunch = production && callback && !softAggregatorCatalogOnly(env) &&
+    enabled(env, 'SOFTAGGREGATOR_REAL_LAUNCH_ENABLED') &&
+    (env.SOFTAGGREGATOR_REAL_PLAYER_SECRET?.trim().length ?? 0) >= 32;
+  const newDebits = approvedWallet && enabled(env, 'SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED') &&
+    enabled(env, 'SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY');
+  return { callback, launch: mayLaunch && newDebits, approvedWallet, newDebits };
 }
 
-export function pilotCallbackAuthorization(env: NodeJS.ProcessEnv, now = Date.now()) {
-  const gates = standardCasinoGates(env, env.SOFTAGGREGATOR_REAL_PILOT_PLAYER, now);
-  const monetaryPilot = gates.monetaryPilot;
-  return {
-    writesApproved: gates.approvedWallet || monetaryPilot,
-    newDebits: gates.newDebits && !monetaryPilot,
-    onlyPlayer: monetaryPilot ? env.SOFTAGGREGATOR_REAL_PILOT_PLAYER ?? null : null,
-  };
+export function standardWalletAuthorization(env: NodeJS.ProcessEnv) {
+  const gates = standardCasinoGates(env);
+  return { writesApproved: gates.approvedWallet, newDebits: gates.newDebits };
 }
 
 function serviceClient() {
@@ -110,8 +89,7 @@ export async function standardCasinoVercel(
     cookies = session.cookies;
     const { id: player } = await ports.getAuthUser(session.accessToken);
     const gates = standardCasinoGates(env, player);
-    const launchEnabled = (gates.launch && provider.standardLaunchConfigured) ||
-      ((gates.pilotLaunch || gates.monetaryPilot) && provider.standardEnabled);
+    const launchEnabled = gates.launch && provider.standardEnabled;
     const origin = sameOrigin(req.headers);
 
     async function quote(args: Record<string, unknown> = {}) {
@@ -165,19 +143,8 @@ export async function standardCasinoVercel(
     const identity = deriveProviderPlayer(env.SOFTAGGREGATOR_REAL_PLAYER_SECRET, player, entry.sourceId, body.rateVersion, current.country);
     const conversion = await quote({ p_session: identity.session, p_game: entry.sourceId, p_rate_version: body.rateVersion });
     if (conversion.country !== current.country) throw staffError('CASINO_STANDARD_INELIGIBLE', 403);
-    const report = gates.pilotLaunch ? (method: 'createPlayer' | 'getGame', httpStatus: number | null, providerCode: number | null) => {
-      console.info('softaggregator_pilot_provider_result', { method, httpStatus, providerCode });
-    } : undefined;
-    let game: Awaited<ReturnType<typeof provider.launchStandard>>;
-    try {
-      game = await provider.launchStandard(entry, { ...identity, country: conversion.country }, body.device, origin, report);
-    } catch (error) {
-      if (gates.pilotLaunch && error instanceof StaffOnboardingError && error.code === 'CASINO_STANDARD_ORIGIN_UNAPPROVED') {
-        console.info('softaggregator_pilot_origin_unapproved', { gameHost: error.payload.gameHost });
-      }
-      throw error;
-    }
-    if (gates.newDebits || gates.monetaryPilot) {
+    const game = await provider.launchStandard(entry, { ...identity, country: conversion.country }, body.device, origin);
+    if (gates.newDebits) {
       const { error } = await serviceClient().rpc('softaggregator_session', {
         p_player: player, p_session: identity.session, p_game: entry.sourceId,
         p_rate_version: body.rateVersion, p_confirm_launch: true,
@@ -196,7 +163,7 @@ export async function standardCasinoVercel(
 export async function standardWalletVercel(req: IncomingMessage, res: ServerResponse) {
   const env = process.env;
   const gates = standardCasinoGates(env);
-  const pilotMoney = pilotCallbackAuthorization(env);
+  const wallet = standardWalletAuthorization(env);
   let reply = walletError;
   if (gates.callback && env.SOFTAGGREGATOR_REAL_SALT &&
       value(req.headers, 'host') === env.SOFTAGGREGATOR_REAL_CALLBACK_HOST) {
@@ -204,7 +171,7 @@ export async function standardWalletVercel(req: IncomingMessage, res: ServerResp
       method: req.method, url: req.url, signature: value(req.headers, 'x-signature'),
       sourceIp: value(req.headers, 'x-vercel-forwarded-for'),
     }, {
-      salt: env.SOFTAGGREGATOR_REAL_SALT, writesApproved: pilotMoney.writesApproved,
+      salt: env.SOFTAGGREGATOR_REAL_SALT, writesApproved: wallet.writesApproved,
       matchesIdentity: (username, currency) => currency === 'USD' && providerUsername.test(username),
       onWriteBlocked: (action, rollback) => {
         console.info('softaggregator_signed_wallet_write_blocked', { action, rollback });
@@ -216,8 +183,7 @@ export async function standardWalletVercel(req: IncomingMessage, res: ServerResp
       const { data, error } = await serviceClient().rpc('softaggregator_apply_callback', {
         p_session: session, p_call: call.callHash, p_fingerprint: call.fingerprint, p_action: call.action,
         p_amount: call.amount, p_rollback: call.rollback, p_game: call.gameId, p_round: call.roundId,
-        p_new_debits: pilotMoney.newDebits,
-        ...(pilotMoney.onlyPlayer ? { p_only_player: pilotMoney.onlyPlayer } : {}),
+        p_new_debits: wallet.newDebits,
       });
       if (error) {
         if (call.action !== 'balance') {

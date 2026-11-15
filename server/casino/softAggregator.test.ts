@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { createSoftAggregator, normalizeCatalog } from './softAggregator.js';
 import { casinoDemoRequest } from './http.js';
 import { readFileSync } from 'node:fs';
-import { deriveProviderPlayer, pilotCallbackAuthorization, pilotMonetaryLossUsdMinor, pilotMonetaryStakeUsdMinor, pilotMonetaryWindow, standardCasinoGates } from './softAggregatorReal.js';
+import { deriveProviderPlayer, standardCasinoGates, standardWalletAuthorization } from './softAggregatorReal.js';
 
 const demo = {
   provider: 'verified-studio', provider_name: 'Verified Studio',
@@ -30,104 +30,54 @@ test('production callback can verify a balance while all wallet mutations stay d
     SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '1',
   };
   assert.deepEqual(standardCasinoGates({ ...settings, SOFTAGGREGATOR_CATALOG_ONLY: '1' }), {
-    callback: true, pilotLaunch: false, launch: false, approvedWallet: false, newDebits: false, monetaryPilot: false,
+    callback: true, launch: false, approvedWallet: false, newDebits: false,
   });
   assert.deepEqual(standardCasinoGates({ ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1' }), {
-    callback: true, pilotLaunch: false, launch: false, approvedWallet: false, newDebits: false, monetaryPilot: false,
+    callback: true, launch: false, approvedWallet: false, newDebits: false,
   });
   assert.deepEqual(standardCasinoGates({
     ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
     SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '0',
-  }), { callback: true, pilotLaunch: false, launch: false, approvedWallet: true, newDebits: false, monetaryPilot: false });
+  }), { callback: true, launch: false, approvedWallet: true, newDebits: false });
   const verified = {
     ...settings, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
   };
-  for (const player of ['first-eligible-player', 'second-eligible-player']) {
-    assert.deepEqual(standardCasinoGates(verified, player), {
-      callback: true, pilotLaunch: false, launch: true, approvedWallet: true, newDebits: true, monetaryPilot: false,
-    });
+  for (const player of ['000037', '000010']) {
+    assert.deepEqual(standardCasinoGates({
+      ...verified, SOFTAGGREGATOR_REAL_PILOT_PLAYER: '000037', SOFTAGGREGATOR_REAL_PILOT_MONETARY: '1',
+      SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL: '2099-01-01T00:00:00.000Z',
+    }, player), { callback: true, launch: true, approvedWallet: true, newDebits: true });
   }
   assert.equal(standardCasinoGates({
-    ...verified, SOFTAGGREGATOR_REAL_PILOT_PLAYER: 'first-eligible-player',
-  }, 'second-eligible-player').launch, false);
+    ...verified, SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1\n', SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1\n',
+    SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '1\n', SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY: '1\n',
+  }, '000010').launch, true);
+  assert.equal(standardCasinoGates({ ...verified, SOFTAGGREGATOR_REAL_OPERATOR_CREDIT_READY: '0' }).newDebits, false);
+  assert.deepEqual(standardWalletAuthorization({ ...verified, SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '0' }), {
+    writesApproved: true, newDebits: false,
+  });
+  assert.deepEqual(standardWalletAuthorization(settings), { writesApproved: false, newDebits: false });
 });
 
-test('only the designated production pilot can check a launch without a credit assertion or open wallet', () => {
-  const env = {
-    VERCEL_ENV: 'production',
-    SOFTAGGREGATOR_REAL_CALLBACK_HOST: 'nextpari.net',
-    SOFTAGGREGATOR_REAL_CALLBACK_ENABLED: '1',
-    SOFTAGGREGATOR_REAL_SALT: 'fixture-salt',
-    SOFTAGGREGATOR_REAL_PLAYER_SECRET: 'x'.repeat(32),
-    SOFTAGGREGATOR_REAL_LAUNCH_ENABLED: '1',
-    SOFTAGGREGATOR_REAL_PILOT_PLAYER: 'pilot',
-  };
-  assert.deepEqual(standardCasinoGates(env, 'pilot'), {
-    callback: true, launch: false, pilotLaunch: true, approvedWallet: false, newDebits: false, monetaryPilot: false,
-  });
-  assert.equal(standardCasinoGates(env, 'another-player').pilotLaunch, false);
-  assert.equal(standardCasinoGates(env).pilotLaunch, false);
-  assert.equal(standardCasinoGates({ ...env, VERCEL_ENV: 'preview' }, 'pilot').pilotLaunch, false);
-  assert.equal(standardCasinoGates({ ...env, SOFTAGGREGATOR_REAL_LAUNCH_ENABLED: '0' }, 'pilot').pilotLaunch, false);
-  assert.equal(standardCasinoGates({ ...env, SOFTAGGREGATOR_REAL_NEW_PLAY_ENABLED: '1' }, 'pilot').pilotLaunch, false);
-  assert.equal(standardCasinoGates({ ...env, SOFTAGGREGATOR_REAL_WALLET_VERIFIED: '1',
-    SOFTAGGREGATOR_REAL_CALLBACK_VERIFIED: '1' }, 'pilot').pilotLaunch, false);
-});
-
-test('monetary pilot opens debit and credit for one player without marking the wallet verified', () => {
-  const now = Date.parse('2026-11-15T00:00:00Z');
-  const until = new Date(now + 24 * 60 * 60 * 1000).toISOString();
-  const settings = {
-    VERCEL_ENV: 'production',
-    SOFTAGGREGATOR_REAL_CALLBACK_HOST: 'nextpari.net',
-    SOFTAGGREGATOR_REAL_CALLBACK_ENABLED: '1',
-    SOFTAGGREGATOR_REAL_SALT: 'fixture-salt',
-    SOFTAGGREGATOR_REAL_PLAYER_SECRET: 'x'.repeat(32),
-    SOFTAGGREGATOR_REAL_LAUNCH_ENABLED: '1',
-    SOFTAGGREGATOR_REAL_PILOT_PLAYER: '000037',
-    SOFTAGGREGATOR_REAL_PILOT_MONETARY: '1',
-    SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL: until,
-  };
-  const pilot = standardCasinoGates(settings, '000037', now);
-  assert.equal(pilot.monetaryPilot, true);
-  assert.equal(pilot.pilotLaunch, true);
-  assert.equal(pilot.approvedWallet, false);
-  assert.equal(pilot.newDebits, false);
-  assert.equal(pilot.launch, false);
-  assert.equal(standardCasinoGates(settings, 'another-player', now).monetaryPilot, false);
-  assert.deepEqual(pilotCallbackAuthorization(settings, now), {
-    writesApproved: true, newDebits: false, onlyPlayer: '000037',
-  });
-  assert.equal(pilotMonetaryWindow({
-    ...settings, SOFTAGGREGATOR_REAL_PILOT_MONETARY: '1\n', SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL: until + '\n',
-  }, now), true);
-  assert.equal(pilotMonetaryWindow({ ...settings, SOFTAGGREGATOR_REAL_PILOT_MONETARY: '0' }, now), false);
-  assert.equal(pilotMonetaryWindow(settings, now + 25 * 60 * 60 * 1000), false);
-  assert.equal(pilotMonetaryWindow({
-    ...settings, SOFTAGGREGATOR_REAL_PILOT_MONETARY_UNTIL: new Date(now + 49 * 60 * 60 * 1000).toISOString(),
-  }, now), false);
-  assert.deepEqual(pilotCallbackAuthorization({ ...settings, SOFTAGGREGATOR_REAL_PILOT_MONETARY: '0' }, now), {
-    writesApproved: false, newDebits: false, onlyPlayer: null,
-  });
-});
-
-test('pilot settlement keeps Wallet Core conversion, caps, idempotency and the player binding', () => {
-  const sql = readFileSync(new URL('../../supabase/migrations/20261115020000_softaggregator_pilot_monetary.sql', import.meta.url), 'utf8');
-  assert.equal(pilotMonetaryStakeUsdMinor, 100);
-  assert.equal(pilotMonetaryLossUsdMinor, 500);
-  assert.match(sql, /p_only_player uuid DEFAULT NULL/);
-  assert.match(sql, /p_action <> 'balance' AND v_session\.player_user_id IS DISTINCT FROM p_only_player/);
-  assert.match(sql, /p_new_debits IS DISTINCT FROM true AND NOT v_pilot_bound/);
-  assert.match(sql, /p_amount > 100 OR v_loss \+ p_amount > 500/);
+test('normal settlement keeps conversion, idempotency, refunds and rejects new stakes without credit readiness', () => {
+  const sql = readFileSync(new URL('../../supabase/migrations/20261115033000_softaggregator_general_release.sql', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('./softAggregatorReal.ts', import.meta.url), 'utf8');
+  assert.equal(source.includes('p_only_player'), false);
+  assert.equal(source.includes('PILOT_MONETARY'), false);
+  assert.equal(source.includes('pilotLaunch'), false);
+  assert.match(sql, /p_new_debits IS DISTINCT FROM true/);
+  assert.equal(/p_amount > 100/.test(sql), false);
+  assert.equal(/v_pilot_bound/.test(sql), false);
   assert.match(sql, /v_prior\.fingerprint <> p_fingerprint/);
   assert.match(sql, /p_amount > v_balance/);
   assert.match(sql, /v_original_debit IS NULL/);
   assert.match(sql, /private\.softaggregator_usd_minor\(v_available, v_session\.usdt_tmt, v_session\.usdt_usd\)/);
   assert.match(sql, /private\.apply_wallet_entry\(/);
+  assert.match(sql, /require_player_external_casino_allowed/);
   const usdMinor = (tmt: number, tmtPerUsdt: number, usdPerUsdt: number) =>
     Math.min(9007199254740991, Math.trunc((tmt * 100 * usdPerUsdt) / tmtPerUsdt));
   assert.equal(usdMinor(1000, 18.5, 1), 5405);
-  assert.equal(usdMinor(1000, 20, 1), 5000);
+  assert.equal(usdMinor(969.85, 18.5, 1), 5242);
 });
 
 test('provider identity is stable within an authorized jurisdiction and changes across jurisdictions', () => {
