@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CasinoDemoBack } from '../components/CasinoDemoCatalog';
+import { casinoAvailabilityText } from '../lib/casinoAvailability';
 import { casinoRateLabel, casinoUsdLabel, type CasinoConversion } from '../lib/casinoConversion';
 import { casinoDemoApi, casinoRealApi } from '../lib/casinoDemo';
 
@@ -9,20 +10,23 @@ export function CasinoDemoGameScreen({ gameId, onBack, standard = false }: { gam
   const [launch, setLaunch] = useState<Launch | null>(null);
   const [status, setStatus] = useState<'ready' | 'launching' | 'error'>('ready');
   const [conversion, setConversion] = useState<CasinoConversion | null>(null);
-  const [quoteError, setQuoteError] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const [quoteAttempt, setQuoteAttempt] = useState(0);
   useEffect(() => {
     if (!standard) return;
     const controller = new AbortController();
-    setQuoteError(false);
+    setQuoteError(null);
     setConversion(null);
     fetch(casinoRealApi + '?quote=1', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
-        const data = await response.json() as { conversion?: CasinoConversion; launchEnabled?: boolean };
-        if (!response.ok || !data.conversion || !data.launchEnabled) throw new Error('CASINO_UNAVAILABLE');
+        const data = await response.json() as { conversion?: CasinoConversion; launchEnabled?: boolean; error?: string };
+        if (!response.ok || !data.conversion || !data.launchEnabled) throw new Error(data.error || 'CASINO_STANDARD_UNAVAILABLE');
         if (!controller.signal.aborted) setConversion(data.conversion);
       })
-      .catch(() => { if (!controller.signal.aborted) setQuoteError(true); });
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setQuoteError(error instanceof Error ? error.message : 'CASINO_STANDARD_UNAVAILABLE');
+      });
     return () => controller.abort();
   }, [quoteAttempt, standard]);
   const request = useRef<AbortController | null>(null);
@@ -32,6 +36,7 @@ export function CasinoDemoGameScreen({ gameId, onBack, standard = false }: { gam
     if (request.current || (standard && !conversion)) return;
     const controller = new AbortController();
     request.current = controller;
+    setLaunchError(null);
     setStatus('launching');
     try {
       const response = await fetch(standard ? casinoRealApi : casinoDemoApi, {
@@ -39,18 +44,21 @@ export function CasinoDemoGameScreen({ gameId, onBack, standard = false }: { gam
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: gameId, rateVersion: conversion?.rateVersion, device: window.matchMedia('(pointer: coarse)').matches ? 'mobile' : 'desktop' }),
       });
-      const result = await response.json() as Partial<Launch>;
+      const result = await response.json() as Partial<Launch> & { error?: string };
       if (response.status === 409) {
         setQuoteAttempt((attempt) => attempt + 1);
         setStatus('ready');
         return;
       }
-      if (!response.ok || typeof result.title !== 'string' || typeof result.url !== 'string') throw new Error('LAUNCH_FAILED');
+      if (!response.ok || typeof result.title !== 'string' || typeof result.url !== 'string') throw new Error(result.error || 'LAUNCH_FAILED');
       const url = new URL(result.url);
       if (url.protocol !== 'https:' || url.username || url.password) throw new Error('LAUNCH_FAILED');
       if (!controller.signal.aborted) setLaunch({ title: result.title, url: url.href });
-    } catch {
-      if (!controller.signal.aborted) setStatus('error');
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setLaunchError(error instanceof Error ? error.message : null);
+        setStatus('error');
+      }
     } finally {
       request.current = null;
     }
@@ -71,7 +79,7 @@ export function CasinoDemoGameScreen({ gameId, onBack, standard = false }: { gam
         <div className="grid flex-1 place-content-center justify-items-center gap-3 p-5 text-center">
           <p role="status" className="text-sm text-[var(--np-text-secondary)]">
             {standard
-              ? quoteError ? 'Казино временно недоступно' : status === 'error' ? 'Игра не открылась' :
+              ? quoteError ? casinoAvailabilityText(quoteError) : status === 'error' ? casinoAvailabilityText(launchError, 'Игра не открылась') :
                 'Баланс отображается в USD по курсу NextPari. Кошелёк ведётся в TMT.'
               : status === 'error' ? 'Демо-игра не открылась' : 'Игровые кредиты действуют только в демо-режиме'}
           </p>

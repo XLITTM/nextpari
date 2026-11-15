@@ -11,14 +11,14 @@ All movements use the shared Wallet Core. Provider amounts are integer USD cents
 ## Controlled release
 
 - Use the existing operator credentials for the authorized site. The production callback is `/api/internal/casino/softaggregator/callback`. It requires both signatures documented by SoftAggregator and its fixed source IP.
-- Use the existing site's real login/password, salt, exact callback host, launch-origin allowlist and independent player-identity secret. Variable names have the prefix `SOFTAGGREGATOR_REAL_` and are read by `server/casino/softAggregatorReal.ts` and `server/casino/softAggregator.ts`. Use the verified player's residence country from the existing player record in the provider request.
+- Use the existing site's real login/password, salt, exact callback host, launch-origin allowlist and independent player-identity secret. Variable names have the prefix `SOFTAGGREGATOR_REAL_` and are read by `server/casino/softAggregatorReal.ts` and `server/casino/softAggregator.ts`. Send a stored ISO alpha-2 residence country with `getGame` when the player record has one. Omit `country` when it is absent. The published `getGame` field is optional unless the operator account serves a restricted market.
 - `CALLBACK_ENABLED` admits signed balance reads, including in catalog-only mode. A signed debit, credit or rollback that arrives before the wallet is approved is rejected and logged as `softaggregator_signed_wallet_write_blocked`, without wallet data or a ledger entry.
 - Normal launches require `LAUNCH_ENABLED`, `CALLBACK_VERIFIED`, `WALLET_VERIFIED`, `OPERATOR_CREDIT_READY` and `NEW_PLAY_ENABLED`. Those switches apply to every eligible authenticated player. Production launch does not read `PILOT_PLAYER`, `PILOT_MONETARY`, or `PILOT_MONETARY_UNTIL`. A successful launch confirms the existing two-hour debit window. The SQL callback enforces the player binding, currency, exact game ID and wallet lock. Preview callbacks still require a designated pilot.
 - For an incident, disable `NEW_PLAY_ENABLED` and leave `CALLBACK_VERIFIED` and `WALLET_VERIFIED` set. New stakes stop. Credits and refunds on sessions that already have a debit window continue. The public catalog can be hidden separately with `CATALOG_ENABLED`. Upstream launch errors do not activate a new debit window.
 
 ## Operator verification
 
-The operator verifies the player's identity, age and residence using the existing manual-verification workflow. Launch checks the completed review and reads the country and date of birth from the player's record. Production debits require an active session, a current verified adult account and the independent wallet release switches. SoftAggregator checks the player's country for the selected game.
+Launch and new debits use the same account gate: the profile is not blocked, Security has not restricted external casino, and the TMT wallet is active. A stored date of birth under 18 stops both. Missing personal data and a missing manual-verification row do not. A zero balance can still open a game; the wager itself still requires funds. Credits and refunds on an open debit window do not repeat the new-debit gate.
 
 ## Reconcile a session
 

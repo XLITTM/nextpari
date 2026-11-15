@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { createSoftAggregator, normalizeCatalog } from './softAggregator.js';
 import { casinoDemoRequest } from './http.js';
 import { readFileSync } from 'node:fs';
-import { deriveProviderPlayer, standardCasinoGates, standardWalletAuthorization } from './softAggregatorReal.js';
+import { casinoAvailabilityText } from '../../src/lib/casinoAvailability.js';
+import { deriveProviderPlayer, readStandardQuote, standardCasinoFailure, standardCasinoGates, standardWalletAuthorization } from './softAggregatorReal.js';
 
 const demo = {
   provider: 'verified-studio', provider_name: 'Verified Studio',
@@ -60,7 +61,7 @@ test('production callback can verify a balance while all wallet mutations stay d
 });
 
 test('normal settlement keeps conversion, idempotency, refunds and rejects new stakes without credit readiness', () => {
-  const sql = readFileSync(new URL('../../supabase/migrations/20261115033000_softaggregator_general_release.sql', import.meta.url), 'utf8');
+  const sql = readFileSync(new URL('../../supabase/migrations/20261115070000_softaggregator_account_authorization.sql', import.meta.url), 'utf8');
   const source = readFileSync(new URL('./softAggregatorReal.ts', import.meta.url), 'utf8');
   assert.equal(source.includes('p_only_player'), false);
   assert.equal(source.includes('PILOT_MONETARY'), false);
@@ -74,6 +75,40 @@ test('normal settlement keeps conversion, idempotency, refunds and rejects new s
   assert.match(sql, /private\.softaggregator_usd_minor\(v_available, v_session\.usdt_tmt, v_session\.usdt_usd\)/);
   assert.match(sql, /private\.apply_wallet_entry\(/);
   assert.match(sql, /require_player_external_casino_allowed/);
+  const gate = sql.slice(sql.indexOf('FUNCTION private.softaggregator_player_gate'), sql.indexOf('FUNCTION public.softaggregator_session'));
+  const session = sql.slice(sql.indexOf('FUNCTION public.softaggregator_session'), sql.indexOf('FUNCTION public.softaggregator_apply_callback'));
+  const callback = sql.slice(sql.indexOf('FUNCTION public.softaggregator_apply_callback'));
+  assert.equal(/JOIN private\.player_personal_data/.test(sql), false);
+  assert.equal(/player_manual_verification/.test(sql), false);
+  assert.equal(/status = 'VERIFIED'/.test(sql), false);
+  assert.equal(/v_country IS NULL/.test(gate), false);
+  assert.match(gate, /SOFTAGGREGATOR_PLAYER_BLOCKED/);
+  assert.match(gate, /SOFTAGGREGATOR_PLAYER_UNDERAGE/);
+  assert.match(gate, /d\.date_of_birth > \(CURRENT_DATE - interval '18 years'\)::date/);
+  assert.match(gate, /residence_country_code ~ '\^\[A-Z\]\{2\}\$'/);
+  assert.ok(gate.indexOf('require_player_external_casino_allowed') < gate.indexOf('SOFTAGGREGATOR_PLAYER_BLOCKED'));
+  assert.ok(gate.indexOf('SOFTAGGREGATOR_PLAYER_BLOCKED') < gate.indexOf('SOFTAGGREGATOR_PLAYER_UNDERAGE'));
+  assert.match(session, /v_country := private\.softaggregator_player_gate\(p_player\)/);
+  assert.match(callback, /PERFORM private\.softaggregator_player_gate\(v_session\.player_user_id\)/);
+  assert.match(callback, /v_wallet\.owner_user_id IS DISTINCT FROM v_session\.player_user_id/);
+  assert.match(callback, /v_op := 'CASINO_BET'/);
+  assert.match(callback, /v_op := 'CASINO_WIN'/);
+  assert.match(callback, /v_op := 'CASINO_REFUND'/);
+  assert.match(session, /softaggregator_sessions\.player_user_id = EXCLUDED\.player_user_id/);
+  assert.equal(casinoAvailabilityText('CASINO_ACCOUNT_BLOCKED').includes('заблокирован'), true);
+  assert.equal(casinoAvailabilityText('CASINO_SECURITY_RESTRICTED').includes('безопасности'), true);
+  assert.equal(casinoAvailabilityText('CASINO_KNOWN_UNDERAGE').includes('18'), true);
+  assert.equal(casinoAvailabilityText('CASINO_WALLET_UNAVAILABLE').includes('Кошелёк'), true);
+  assert.equal(casinoAvailabilityText('NOT_A_PLAYER_CODE'), 'Казино временно недоступно.');
+  assert.equal(standardCasinoFailure('SOFTAGGREGATOR_PLAYER_BLOCKED').code, 'CASINO_ACCOUNT_BLOCKED');
+  assert.equal(standardCasinoFailure('SECURITY_CASINO_RESTRICTED').code, 'CASINO_SECURITY_RESTRICTED');
+  assert.equal(standardCasinoFailure('SOFTAGGREGATOR_PLAYER_UNDERAGE').code, 'CASINO_KNOWN_UNDERAGE');
+  assert.equal(standardCasinoFailure('SOFTAGGREGATOR_WALLET_UNAVAILABLE').code, 'CASINO_WALLET_UNAVAILABLE');
+  const quote = { usdtTmt: '18.5', usdtUsd: '1', rateVersion: 'a'.repeat(32), balanceUsdMinor: 0, country: null };
+  assert.deepEqual(readStandardQuote(quote), quote);
+  assert.equal(readStandardQuote({ ...quote, country: 'TM', balanceUsdMinor: 5242 }).country, 'TM');
+  assert.throws(() => readStandardQuote({ ...quote, country: 'tm' }), /CASINO_STANDARD_UNAVAILABLE/);
+  assert.throws(() => readStandardQuote({ ...quote, balanceUsdMinor: -1 }), /CASINO_STANDARD_UNAVAILABLE/);
   const usdMinor = (tmt: number, tmtPerUsdt: number, usdPerUsdt: number) =>
     Math.min(9007199254740991, Math.trunc((tmt * 100 * usdPerUsdt) / tmtPerUsdt));
   assert.equal(usdMinor(1000, 18.5, 1), 5405);
@@ -88,6 +123,9 @@ test('provider identity is stable within an authorized jurisdiction and changes 
   assert.notEqual(moved.session, first.session);
   assert.notEqual(moved.username, first.username);
   assert.notEqual(moved.password, first.password);
+  const absent = deriveProviderPlayer(secret, 'player', 'studio/Game', 'rate-version', '');
+  assert.deepEqual(deriveProviderPlayer(secret, 'player', 'studio/Game', 'rate-version', ''), absent);
+  assert.notEqual(absent.username, first.username);
 });
 
 test('uses exact entitled identities, filters and coalesces concurrent reads', async () => {
@@ -298,4 +336,22 @@ test('authenticated getGame HTTPS URLs open without a per-provider origin allowl
   await assert.rejects(standard.launchStandard(entry, player, 'desktop', 'https://nextpari.net', report),
     /CASINO_DEMO_UPSTREAM/);
   assert.deepEqual(results, [['createPlayer', 201, 0], ['getGame', 403, 2]]);
+
+  const omitted: string[] = [];
+  const withoutCountry = createSoftAggregator(env, async (_url, request) => {
+    const body = JSON.parse(String(request?.body));
+    omitted.push(body.method);
+    if (body.method === 'getGameList') return Response.json({ error: 0, response: [demo] });
+    if (body.method === 'getCurrencies') return Response.json({ error: 0, response: { currencies: ['USD'] } });
+    if (body.method === 'createPlayer') return Response.json({ error: 0 });
+    assert.equal(body.method, 'getGame');
+    assert.equal(Object.hasOwn(body, 'country'), false);
+    assert.equal(body.user_username, 'new-player');
+    return Response.json({ error: 1, message: 'country is required on getGame' });
+  }, Date.now, 'standard');
+  const openEntry = await withoutCountry.standardGame((await withoutCountry.list(new URLSearchParams())).games[0].id);
+  await assert.rejects(withoutCountry.launchStandard(openEntry,
+    { username: 'new-player', password: 'private-player-password', country: null }, 'mobile', 'https://nextpari.net'),
+    /CASINO_COUNTRY_NOT_ON_FILE/);
+  assert.deepEqual(omitted, ['getGameList', 'getCurrencies', 'createPlayer', 'getGame']);
 });

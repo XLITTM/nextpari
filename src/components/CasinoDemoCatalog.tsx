@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Gamepad2, Search } from 'lucide-react';
+import { casinoAvailabilityText } from '../lib/casinoAvailability';
 import { casinoCategories, casinoDemoApi, casinoRealApi, type CasinoDemoCatalog as Catalog, type CasinoDemoGame } from '../lib/casinoDemo';
 import { casinoRateLabel, casinoUsdLabel, fetchCasinoDisplayConversion, type CasinoConversion, type CasinoDisplayConversion } from '../lib/casinoConversion';
 import type { Screen } from '../types';
@@ -21,6 +22,7 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
   const [data, setData] = useState<(Catalog & { conversion?: CasinoConversion; launchEnabled?: boolean; catalogPreview?: boolean }) | null>(null);
   const [displayConversion, setDisplayConversion] = useState<CasinoDisplayConversion | null>(null);
   const [games, setGames] = useState<CasinoDemoGame[]>([]);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -28,7 +30,7 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
       const params = new URLSearchParams({ q: query, category: categoryFilter ?? category, provider, page: String(page) });
       fetch((standard ? casinoRealApi : casinoDemoApi) + '?' + params, { signal: controller.signal, cache: 'no-store' })
         .then(async (response) => {
-          const result = await response.json() as Catalog & { error?: string; conversion?: CasinoConversion; launchEnabled?: boolean; catalogPreview?: boolean };
+          const result = await response.json() as Catalog & { error?: string; conversion?: CasinoConversion; launchEnabled?: boolean; catalogPreview?: boolean; availabilityError?: string };
           if (controller.signal.aborted) return;
           if (result.error === 'CASINO_DEMO_DISABLED' || result.error === 'CASINO_STANDARD_DISABLED' ||
               (hideUnavailable && !response.ok)) {
@@ -36,6 +38,7 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
             return;
           }
           if (!response.ok || !Array.isArray(result.games)) throw new Error('CATALOG_UNAVAILABLE');
+          setAvailabilityError(typeof result.availabilityError === 'string' ? result.availabilityError : null);
           setData(result);
           setGames((previous) => page === 1 ? result.games : [...new Map(
             [...previous, ...result.games].map((game) => [game.id, game]),
@@ -76,9 +79,11 @@ export function CasinoDemoCatalog({ onNavigate, standard = false, categoryFilter
         <h2 className="text-lg font-extrabold" id={standard ? 'casino-standard-title' : 'casino-demo-title'}>{standard ? (categoryFilter === 'live' ? 'Лайв казино' : categoryFilter === 'slots' ? 'Слоты' : 'SoftAggregator') : 'Демо-игры'}</h2>
         <span className="text-xs font-medium text-[var(--np-text-secondary)]">{standard ? 'USD' : 'Без списания средств'}</span>
       </div>
-      {data?.catalogPreview && (
+      {availabilityError ? (
+        <p role="status" className="text-sm text-[var(--np-text-secondary)]">{casinoAvailabilityText(availabilityError)}</p>
+      ) : data?.catalogPreview ? (
         <p role="status" className="text-sm text-[var(--np-text-secondary)]">Запуск игр временно недоступен.</p>
-      )}
+      ) : null}
       {standard && (categoryFilter === 'live' || conversion) && (
         <div role="status" className="rounded-xl border border-[var(--np-border)] p-3 text-sm">
           <p>В игре баланс отображается в USD по курсу NextPari. Кошелёк ведётся в TMT.</p>

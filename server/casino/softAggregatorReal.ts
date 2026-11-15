@@ -59,6 +59,49 @@ function sameOrigin(headers: IncomingMessage['headers']) {
     value(headers, 'origin') === 'https://' + host ? 'https://' + host : null;
 }
 
+const playerFacingCodes = new Set([
+  'CASINO_ACCOUNT_BLOCKED',
+  'CASINO_SECURITY_RESTRICTED',
+  'CASINO_KNOWN_UNDERAGE',
+  'CASINO_WALLET_UNAVAILABLE',
+  'CASINO_STANDARD_RATE_UNAVAILABLE',
+  'CASINO_COUNTRY_NOT_ON_FILE',
+  'CASINO_GAME_COUNTRY_UNAVAILABLE',
+]);
+
+export function standardCasinoFailure(message: string) {
+  const failures: [string, string, number][] = [
+    ['SECURITY_CASINO_RESTRICTED', 'CASINO_SECURITY_RESTRICTED', 403],
+    ['SOFTAGGREGATOR_PLAYER_BLOCKED', 'CASINO_ACCOUNT_BLOCKED', 403],
+    ['SOFTAGGREGATOR_PLAYER_UNDERAGE', 'CASINO_KNOWN_UNDERAGE', 403],
+    ['SOFTAGGREGATOR_PLAYER_MISSING', 'CASINO_WALLET_UNAVAILABLE', 403],
+    ['SOFTAGGREGATOR_WALLET_UNAVAILABLE', 'CASINO_WALLET_UNAVAILABLE', 403],
+    ['SOFTAGGREGATOR_RATE_UNAVAILABLE', 'CASINO_STANDARD_RATE_UNAVAILABLE', 503],
+    ['SOFTAGGREGATOR_RATE_CHANGED', 'CASINO_STANDARD_RATE_CHANGED', 409],
+    ['CASINO_COUNTRY_NOT_ON_FILE', 'CASINO_COUNTRY_NOT_ON_FILE', 502],
+    ['CASINO_GAME_COUNTRY_UNAVAILABLE', 'CASINO_GAME_COUNTRY_UNAVAILABLE', 502],
+  ];
+  const match = failures.find(([needle]) => message.includes(needle));
+  return match ? staffError(match[1], match[2]) : staffError('CASINO_STANDARD_UNAVAILABLE', 503);
+}
+
+export function casinoAvailabilityCode(error: unknown) {
+  return error instanceof StaffOnboardingError && playerFacingCodes.has(error.code) ? error.code : null;
+}
+
+export function readStandardQuote(data: unknown) {
+  const row = asRecord(data);
+  const { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor } = row;
+  const country = row.country === null ? null : row.country;
+  if (typeof usdtTmt !== 'string' || typeof usdtUsd !== 'string' ||
+      typeof rateVersion !== 'string' || !/^[a-f0-9]{32}$/.test(rateVersion) ||
+      typeof balanceUsdMinor !== 'number' || !Number.isSafeInteger(balanceUsdMinor) || balanceUsdMinor < 0 ||
+      !(country === null || (typeof country === 'string' && /^[A-Z]{2}$/.test(country)))) {
+    throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
+  }
+  return { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country };
+}
+
 export function deriveProviderPlayer(secret: string, player: string, game: string, version: string, country: string) {
   const id = createHmac('sha256', secret).update(JSON.stringify([player, game, version, country])).digest('hex').slice(0, 32);
   const session = [id.slice(0, 8), id.slice(8, 12), id.slice(12, 16), id.slice(16, 20), id.slice(20)].join('-');
@@ -94,17 +137,8 @@ export async function standardCasinoVercel(
 
     async function quote(args: Record<string, unknown> = {}) {
       const { data, error } = await serviceClient().rpc('softaggregator_session', { p_player: player, ...args });
-      if (error) {
-        if (/PLAYER_INELIGIBLE|SECURITY_CASINO_RESTRICTED/.test(error.message)) throw staffError('CASINO_STANDARD_INELIGIBLE', 403);
-        if (error.message.includes('SOFTAGGREGATOR_RATE_CHANGED')) throw staffError('CASINO_STANDARD_RATE_CHANGED', 409);
-        throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
-      }
-      const { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country } = asRecord(data);
-      if (typeof usdtTmt !== 'string' || typeof usdtUsd !== 'string' ||
-          typeof rateVersion !== 'string' || !/^[a-f0-9]{32}$/.test(rateVersion) ||
-          typeof balanceUsdMinor !== 'number' || !Number.isSafeInteger(balanceUsdMinor) || balanceUsdMinor < 0 ||
-          typeof country !== 'string' || !/^[A-Z]{2}$/.test(country)) throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
-      return { usdtTmt, usdtUsd, rateVersion, balanceUsdMinor, country };
+      if (error) throw standardCasinoFailure(error.message);
+      return readStandardQuote(data);
     }
 
     if (req.method === 'GET') {
@@ -120,9 +154,18 @@ export async function standardCasinoVercel(
         const { country: _country, ...conversion } = await quote();
         writeStaffJson(res, { status: 200, headers, cookies, body: { ok: true, launchEnabled, conversion, ...catalog } });
       } catch (error) {
-        if (!(error instanceof StaffOnboardingError)) throw error;
-        writeStaffJson(res, { status: 200, headers, cookies,
-          body: { ok: true, launchEnabled: false, catalogPreview: true, ...catalog } });
+        const availabilityError = casinoAvailabilityCode(error);
+        if (availabilityError) {
+          writeStaffJson(res, { status: 200, headers, cookies,
+            body: { ok: true, launchEnabled: false, availabilityError, ...catalog } });
+          return;
+        }
+        if (error instanceof StaffOnboardingError && error.code === 'CASINO_STANDARD_DISABLED') {
+          writeStaffJson(res, { status: 200, headers, cookies,
+            body: { ok: true, launchEnabled: false, catalogPreview: true, ...catalog } });
+          return;
+        }
+        throw error;
       }
       return;
     }
@@ -140,17 +183,16 @@ export async function standardCasinoVercel(
     const current = await quote();
     if (current.rateVersion !== body.rateVersion) throw staffError('CASINO_STANDARD_RATE_CHANGED', 409);
     const entry = await provider.standardGame(body.id);
-    const identity = deriveProviderPlayer(env.SOFTAGGREGATOR_REAL_PLAYER_SECRET, player, entry.sourceId, body.rateVersion, current.country);
+    const identity = deriveProviderPlayer(env.SOFTAGGREGATOR_REAL_PLAYER_SECRET, player, entry.sourceId, body.rateVersion, current.country ?? '');
     const conversion = await quote({ p_session: identity.session, p_game: entry.sourceId, p_rate_version: body.rateVersion });
-    if (conversion.country !== current.country) throw staffError('CASINO_STANDARD_INELIGIBLE', 403);
+    if (conversion.country !== current.country) throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
     const game = await provider.launchStandard(entry, { ...identity, country: conversion.country }, body.device, origin);
     if (gates.newDebits) {
       const { error } = await serviceClient().rpc('softaggregator_session', {
         p_player: player, p_session: identity.session, p_game: entry.sourceId,
         p_rate_version: body.rateVersion, p_confirm_launch: true,
       });
-      if (error?.message.includes('SOFTAGGREGATOR_RATE_CHANGED')) throw staffError('CASINO_STANDARD_RATE_CHANGED', 409);
-      if (error) throw staffError('CASINO_STANDARD_UNAVAILABLE', 503);
+      if (error) throw standardCasinoFailure(error.message);
     }
     writeStaffJson(res, { status: 200, headers, cookies, body: { ok: true, ...game } });
   } catch (error) {

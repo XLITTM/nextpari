@@ -169,7 +169,12 @@ export function createSoftAggregator(
       }
     }
     const row = asRecord(result);
-    if (row.error !== 0) throw staffError('CASINO_DEMO_PROVIDER_DENIED', 502);
+    if (row.error !== 0) {
+      const message = typeof row.message === 'string' ? row.message : '';
+      if (message === 'country is required on getGame') throw staffError('CASINO_COUNTRY_NOT_ON_FILE', 502);
+      if (message === 'Game not available in your country') throw staffError('CASINO_GAME_COUNTRY_UNAVAILABLE', 502);
+      throw staffError('CASINO_DEMO_PROVIDER_DENIED', 502);
+    }
     return row.response;
   }
 
@@ -216,7 +221,7 @@ export function createSoftAggregator(
       if (!entry) throw staffError('CASINO_DEMO_GAME_NOT_FOUND', 404);
       return entry;
     },
-    async launchStandard(entry: Entry, player: { username: string; password: string; country: string },
+    async launchStandard(entry: Entry, player: { username: string; password: string; country: string | null },
       device: 'mobile' | 'desktop', returnOrigin: string, report?: LaunchProviderReport) {
       if (mode !== 'standard') throw staffError('CASINO_STANDARD_DISABLED', 503);
       const currencies = asRecord(await call('getCurrencies')).currencies;
@@ -224,7 +229,8 @@ export function createSoftAggregator(
       const credentials = { user_username: player.username, user_password: player.password, currency: 'USD' };
       await call('createPlayer', credentials, report);
       const result = await call('getGame', { ...credentials, gameid: entry.sourceId,
-        lang: 'ru', device, country: player.country, homeurl: returnOrigin + '/casino/real' }, report);
+        lang: 'ru', device, homeurl: returnOrigin + '/casino/real',
+        ...(player.country ? { country: player.country } : {}) }, report);
       const url = httpsUrl(result);
       if (!url || url.origin === returnOrigin || [login, password, player.password].some((secret) =>
         secret && decodeURIComponent(url.href).toLowerCase().includes(secret.toLowerCase()))) {
