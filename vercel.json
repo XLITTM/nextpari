@@ -1,6 +1,6 @@
 {
   "git": {
-    "deploymentEnabled": { "cursor/betsapi-readonly-feed-b001": false }
+    "deploymentEnabled": { "cursor/betsapi-readonly-feed-b001": true }
   },
   "functions": {
     "api/player/sports/football-feed.ts": {
