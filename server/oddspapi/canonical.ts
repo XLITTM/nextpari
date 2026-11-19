@@ -200,6 +200,15 @@ export function presentV5Quotes(
   return { accepted, rejected };
 }
 
+function participantLabel(fixture: Record<string, unknown>, index: number): string | null {
+  const direct = text(fixture[index === 0 ? 'participant1Name' : 'participant2Name']);
+  if (direct) return direct;
+  const participants = fixture.participants;
+  if (!Array.isArray(participants)) return null;
+  const participant = record(participants[index]);
+  return text(participant.name) || text(participant.participantName) || null;
+}
+
 export function canonicalFixtureView(value: unknown) {
   const summary = summarizeV5Fixture(value);
   if (!summary) return null;
@@ -209,8 +218,9 @@ export function canonicalFixtureView(value: unknown) {
     canonicalEventId: canonicalEventId(summary.fixtureId),
     canonicalSportId: summary.sportId === null ? null : canonicalSportId(summary.sportId),
     sportKey: summary.sportId === null ? null : sportKeyFor(summary.sportId),
-    participant1Name: text(fixture.participant1Name) || null,
-    participant2Name: text(fixture.participant2Name) || null,
-    startTime: text(fixture.startTime) || null,
+    participant1Name: participantLabel(fixture, 0),
+    participant2Name: participantLabel(fixture, 1),
+    tournamentName: text(record(fixture.tournament).tournamentName) || text(fixture.tournamentName) || null,
+    startTime: text(fixture.startTime) || text(fixture.startTimeUtc) || null,
   };
 }

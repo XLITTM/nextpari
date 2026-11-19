@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolveSportsQuoteProvider, SportsProviderUnsupportedError } from '../sports/quoteProvider.js';
 import { canonicalEventId, indexV5Markets, presentV5Quotes, sevenSportCategories } from './canonical.js';
-import { handleOddsPapiV5PreviewRequest } from './previewHttp.js';
+import { handleOddsPapiV5DemoRequest, handleOddsPapiV5PreviewRequest } from './previewHttp.js';
 import { OddsPapiV5TrialReader } from './v5TrialClient.js';
 import { V5_STREAM_WORKER_DEPENDENCY } from './v5WebSocket.js';
 
@@ -95,6 +95,26 @@ describe('oddspapi v5 canonical preview', () => {
     assert.equal(result.body.betsAccepted, false);
     assert.equal(JSON.stringify(result.body).includes('server-side-test-key'), false);
     assert.equal(JSON.stringify(result.body).includes(V5_STREAM_WORKER_DEPENDENCY), false);
+  });
+
+  it('serves the preview demo without a browser key and stays closed in production', async () => {
+    const production = await handleOddsPapiV5DemoRequest({
+      method: 'GET',
+      url: '/api/internal/oddspapi-v5-demo?view=sports',
+    }, { ...env, VERCEL_ENV: 'production' });
+    assert.equal(production.status, 404);
+    const demo = await handleOddsPapiV5DemoRequest({
+      method: 'GET',
+      url: '/api/internal/oddspapi-v5-demo?view=sports',
+    }, env);
+    assert.equal(demo.status, 200);
+    assert.equal(demo.body.demo, true);
+    assert.equal(demo.body.readOnly, true);
+    assert.equal(demo.body.betsAccepted, false);
+    assert.equal(demo.body.walletEnabled, false);
+    assert.equal((demo.body.sports as unknown[]).length, 10);
+    assert.equal(JSON.stringify(demo.body).includes('server-side-test-key'), false);
+    assert.equal(JSON.stringify(demo.body).includes('preview-key'), false);
   });
 
   it('does not register the trial provider for bet placement', () => {

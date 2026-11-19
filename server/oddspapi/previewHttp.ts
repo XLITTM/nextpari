@@ -46,6 +46,14 @@ function keysEqual(provided: string, expected: string): boolean {
   return timingSafeEqual(left, right);
 }
 
+/** Browser demo is preview-only. Production and local public servers stay closed. */
+export function isOddsPapiV5DemoEnabled(env: NodeJS.ProcessEnv): boolean {
+  if (String(env.VERCEL_ENV ?? '').trim() !== 'preview') return false;
+  if (String(env.ODDSPAPI_V5_READONLY_PREVIEW ?? '').trim() !== '1') return false;
+  if (String(env.ODDSPAPI_V5_API_KEY ?? '').trim().length < 20) return false;
+  return true;
+}
+
 export function isOddsPapiV5PreviewEnabled(env: NodeJS.ProcessEnv): boolean {
   if (String(env.VERCEL_ENV ?? '').trim() === 'production') return false;
   if (String(env.ODDSPAPI_V5_READONLY_PREVIEW ?? '').trim() !== '1') return false;
@@ -182,4 +190,39 @@ export async function handleOddsPapiV5PreviewRequest(
   }
 
   return notFound();
+}
+
+/**
+ * Same read-only feed as the key-gated preview, for the protected Vercel Preview UI.
+ * The browser never receives the provider key or the preview key.
+ */
+export async function handleOddsPapiV5DemoRequest(
+  input: OddsPapiPreviewRequest,
+  env: NodeJS.ProcessEnv = process.env,
+  reader?: OddsPapiV5TrialReader,
+  now = Date.now(),
+): Promise<OddsPapiPreviewResponse> {
+  if (String(input.method ?? 'GET').toUpperCase() !== 'GET') return notFound();
+  if (!isOddsPapiV5DemoEnabled(env)) return notFound();
+  const params = queryFrom(input);
+  const response = await handleOddsPapiV5PreviewRequest(
+    {
+      method: 'GET',
+      url: `${ODDSPAPI_V5_PREVIEW_PATH}?${params.toString()}`,
+      headers: { [ODDSPAPI_V5_PREVIEW_HEADER]: String(env.ODDSPAPI_V5_PREVIEW_KEY ?? '') },
+    },
+    { ...env, VERCEL_ENV: 'preview' },
+    reader,
+    now,
+  );
+  return {
+    ...response,
+    body: {
+      ...response.body,
+      demo: true,
+      readOnly: true,
+      betsAccepted: false,
+      walletEnabled: false,
+    },
+  };
 }

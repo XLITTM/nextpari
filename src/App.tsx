@@ -8,6 +8,8 @@ import { BetSlipProvider, useBetSlip } from './BetSlipContext';
 import { ToastProvider } from './ToastContext';
 import { QuickBetProvider } from './QuickBetContext';
 import { QuickBetSheet } from './components/QuickBetSheet';
+import { isOddsPapiDemoEntry } from './lib/oddspapiDemo';
+import { OddsPapiDemoScreen } from './screens/OddsPapiDemoScreen';
 import { ThemeProvider } from './ThemeContext';
 import { ProfileProvider, useProfile } from './ProfileContext';
 import { WalletProvider, useWallet, formatPlayerMoney } from './WalletContext';
@@ -656,6 +658,16 @@ export default function App() {
   // /#/manager    → менеджер (логин), /#/manager/dashboard → кабинет
   // /#/security   → служба безопасности
   // /#/backoffice → владелец / Superadmin
+  if (isOddsPapiDemoEntry(window.location.hash)) {
+    return (
+      <ThemeProvider>
+        <ErrorBoundary>
+          <OddsPapiDemoScreen />
+        </ErrorBoundary>
+      </ThemeProvider>
+    );
+  }
+
   if (portal) {
     return (
       <ErrorBoundary>

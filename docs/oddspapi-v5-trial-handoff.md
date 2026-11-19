@@ -26,6 +26,7 @@ The V5 API key was retrieved securely from the one-time link and saved only as a
 
 - Canonical ids use the `oddspapi-v5` namespace in `server/oddspapi/canonical.ts`. Event, market, and selection ids come from provider ids. Display names are not identity.
 - `GET /api/internal/oddspapi-v5-preview` is closed in production. Preview requires `ODDSPAPI_V5_READONLY_PREVIEW=1` and header `x-oddspapi-v5-preview-key`. Responses set `betsAccepted: false` and `websocket: not-running`.
+- The protected Preview UI entry is `/#/oddspapi-demo`. It calls `GET /api/internal/oddspapi-v5-demo`, which stays closed unless `VERCEL_ENV=preview`. The browser does not receive the provider key. Card prices are locked, and wallet providers are not mounted.
 - `resolveSportsQuoteProvider('oddspapi-v5')` stays unsupported, so this provider cannot place a bet.
 - The durable WebSocket worker is still a dependency. `V5_STREAM_WORKER_DEPENDENCY` records that stop. REST is the only runtime path here.
 
