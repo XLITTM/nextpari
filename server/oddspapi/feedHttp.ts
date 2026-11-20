@@ -26,13 +26,30 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item:T)=>Promise<R
   await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{ for (;;) {const i=index++; if(i>=items.length)return; output[i]=await fn(items[i]);} }));
   return output;
 }
+export function v5MarketFamily(m: V5MarketDefinition): string {
+  const blob = `${m.marketType} ${m.marketName}`.toLowerCase();
+  if (/player|goalscorer|scorer|anytime/.test(blob)) return 'players';
+  if (/corner/.test(blob)) return 'corners';
+  if (/card|booking/.test(blob)) return 'cards';
+  if (/team total|individual total|home total|away total/.test(blob)) return 'team-totals';
+  if (/double.?chance/.test(blob)) return 'double-chance';
+  if (/both.?teams|btts/.test(blob)) return 'btts';
+  if (/correct.?score/.test(blob)) return 'correct-score';
+  if (/european/.test(blob) && /handicap/.test(blob)) return 'european-handicap';
+  if (/asian|spread|handicap/.test(blob)) return 'asian-handicap';
+  if (/total/.test(blob)) return 'totals';
+  if (/^(1x2|moneyline|winner)$/.test(m.marketType)) return 'main';
+  return 'other';
+}
 function groupCategory(m: V5MarketDefinition): MarketCategory {
-  if(m.period==='p1')return '1st-half';
-  if(m.period==='p2')return '2nd-half';
-  if(/corner/i.test(m.marketName))return 'corners';
-  if(/card/i.test(m.marketName))return 'cards';
-  if(/total/i.test(m.marketType))return 'totals';
-  if(/handicap|spread/i.test(m.marketType))return 'handicaps';
+  const family = v5MarketFamily(m);
+  if (family === 'players') return 'players';
+  if (family === 'corners') return 'corners';
+  if (family === 'cards') return 'cards';
+  if (m.period === 'p1') return '1st-half';
+  if (m.period === 'p2') return '2nd-half';
+  if (family === 'totals' || family === 'team-totals') return 'totals';
+  if (family === 'asian-handicap' || family === 'european-handicap') return 'handicaps';
   return 'main';
 }
 function displayMarketName(m: V5MarketDefinition): string {
@@ -56,7 +73,7 @@ export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV
   const groups=new Map<number,MarketGroup>();
   for(const quote of quotes) {
     const market=catalog!.byId.get(quote.marketId)!;
-    const group=groups.get(quote.marketId)||{id:`${V5_EVENT_PREFIX}${id}:market:${quote.marketId}`,name:displayMarketName(market),category:groupCategory(market),outcomes:[],bookmakerId:'1xbet',externalPeriodId:market.period,externalMarketId:String(quote.marketId)};
+    const group=groups.get(quote.marketId)||{id:`${V5_EVENT_PREFIX}${id}:market:${quote.marketId}`,name:displayMarketName(market),category:groupCategory(market),marketFamily:v5MarketFamily(market),outcomes:[],bookmakerId:'1xbet',externalPeriodId:market.period,externalMarketId:String(quote.marketId)};
     group.outcomes.push({label:outcomeLabel(quote.outcomeName),odds:quote.price,locked:true,sourceSelectionId:quote.sourceSelectionId,updatedAt:new Date(now).toISOString()});
     groups.set(quote.marketId,group);
   }

@@ -2,18 +2,24 @@ import { useEffect, useState, type MouseEvent } from 'react';
 import { useBetSlip } from '@/BetSlipContext';
 import { useOddInteraction } from '@/hooks/useOddInteraction';
 import { oddsFlashButtonClass, oddsFlashTextClass, useOddsFlash } from '@/hooks/useOddsFlash';
+import { OddsPapiMarketBoard } from '@/components/OddsPapiMarketBoard';
 import { betsapiDetailLines, betsapiDetailTabs, type BetsapiDetailLine } from '@/lib/footballFeed';
 import { clickableCardSelection } from '@/lib/sportsSelection';
 import type { BetSelection, MatchEvent } from '@/types';
 
 export function BetsapiMarkets({ match }: { match: MatchEvent }) {
+  if (match.feedTag === 'oddspapi-v5') return <OddsPapiMarketBoard match={match} />;
+  return <BetsapiMarketLines match={match} />;
+}
+
+function BetsapiMarketLines({ match }: { match: MatchEvent }) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
   const lines = betsapiDetailLines(match, now);
-  const readOnly = match.feedTag === 'oddspapi-v5' || match.id.startsWith('betsapi:') || match.sport === 'esports';
+  const readOnly = match.id.startsWith('betsapi:') || match.sport === 'esports';
   const tabs = betsapiDetailTabs(lines);
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('all');
   const activeTab = tabs.some((item) => item.id === tab) ? tab : 'all';
@@ -21,7 +27,6 @@ export function BetsapiMarkets({ match }: { match: MatchEvent }) {
 
   return (
     <div className="relative z-10 -mt-4 space-y-2 rounded-t-3xl bg-[#F5F5F5] dark:bg-gray-900 px-2 pb-24 pt-3 shadow-[0_-8px_20px_rgba(0,0,0,0.12)]">
-      {match.feedTag === 'oddspapi-v5' && <p className="px-2 py-1 text-sm text-gray-600 dark:text-gray-300">Приём ставок временно закрыт</p>}
       {tabs.length > 1 && (
         <div className="flex gap-1 overflow-x-auto px-1">
           {tabs.map((item) => (

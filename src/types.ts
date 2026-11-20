@@ -86,6 +86,8 @@ export interface MarketGroup {
   name: string;
   outcomes: MarketOutcome[];
   category?: MarketCategory;
+  /** OddsPapi display family. Absent markets are not invented to fill a family. */
+  marketFamily?: string;
   layout?: MarketLayout;
   bookmakerId?: string | null;
   externalPeriodId?: string | null;

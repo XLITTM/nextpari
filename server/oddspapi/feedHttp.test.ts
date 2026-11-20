@@ -17,6 +17,7 @@ test('keeps provider ids and exact lines and locks every displayed outcome',()=>
   assert.equal(card.id,'oddspapi-v5:'+fixtureId);
   assert.equal(card.markets[0].outcomes.length,3);
   assert.equal(card.displayGroups.length,2);
+  assert.equal(card.displayGroups[0].marketFamily,'totals');
   assert.match(card.displayGroups[0].name,/2\.5/);
   assert.match(card.displayGroups[1].name,/3\.5/);
   assert.ok(card.displayGroups.every(g=>g.outcomes.every(o=>o.locked)));
