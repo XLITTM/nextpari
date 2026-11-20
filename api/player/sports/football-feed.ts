@@ -1,4 +1,5 @@
 import { FOOTBALL_FEED_PATH, handleFootballFeedRequest } from '../../../server/betsapi/footballFeedHttp.js';
+import { handleV5SportsFeed } from '../../../server/oddspapi/feedHttp.js';
 
 export default async function handler(
   req: { method?: string; url?: string },
@@ -8,7 +9,7 @@ export default async function handler(
     json: (body: unknown) => unknown;
   },
 ): Promise<void> {
-  const result = await handleFootballFeedRequest({
+  const result = await (String(process.env.ODDSPAPI_V5_READONLY_FEED ?? '').trim() === '1' ? handleV5SportsFeed : handleFootballFeedRequest)({
     method: req.method,
     url: req.url ?? FOOTBALL_FEED_PATH,
   });
