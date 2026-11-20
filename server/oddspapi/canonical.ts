@@ -179,10 +179,15 @@ export function presentV5Quotes(
   catalog: { byId: Map<number, V5MarketDefinition>; ambiguous: Set<number> },
   now = Date.now(),
   options: { freshReadOnlySnapshot?: boolean } = {},
-): { accepted: V5CanonicalQuote[]; rejected: number } {
+): { accepted: V5CanonicalQuote[]; rejected: number; reasons: Record<string, number> } {
   const summary = summarizeV5Fixture(fixture);
   const active = extractActiveV5Quotes(fixture);
-  if (!summary) return { accepted: [], rejected: active.length };
+  const reasons: Record<string, number> = {};
+  const bump = (reason: string) => { reasons[reason] = (reasons[reason] ?? 0) + 1; };
+  if (!summary) {
+    if (active.length) reasons['fixture-summary'] = active.length;
+    return { accepted: [], rejected: active.length, reasons };
+  }
   const accepted: V5CanonicalQuote[] = [];
   let rejected = 0;
   const seenNames = new Map<number, Set<string>>();
@@ -192,20 +197,20 @@ export function presentV5Quotes(
     const at = changedAtMs(quote.changedAt);
     const freshFor = summary.live ? LIVE_FRESH_MS : PREMATCH_FRESH_MS;
     const names = seenNames.get(quote.marketId) ?? new Set<string>();
-    const duplicateSide = outcomeName !== '' && names.has(outcomeName.toLowerCase());
+    const playerId = quote.sourceSelectionId.split(':')[3] ?? '0';
+    const duplicateSide = playerId === '0' && outcomeName !== '' && names.has(outcomeName.toLowerCase());
     const oriented = !market || !needsOrientation(market) || ORIENTED.test(outcomeName.trim());
-    const safe = market
-      && !catalog.ambiguous.has(quote.marketId)
-      && outcomeName
-      && oriented
-      && !duplicateSide
-      && at !== null
-      // An unchanged price can be old while a newly read, explicitly non-stale
-      // bookmaker snapshot remains current. This exception is display-only.
-      && (now - at <= freshFor || options.freshReadOnlySnapshot === true)
-      && now - at >= -60_000;
-    if (!safe || !market) {
+    const fresh = at !== null && (now - at <= freshFor || options.freshReadOnlySnapshot === true) && now - at >= -60_000;
+    let reason = '';
+    if (!market) reason = 'no-market';
+    else if (catalog.ambiguous.has(quote.marketId)) reason = 'ambiguous-market';
+    else if (!outcomeName) reason = 'unnamed-outcome';
+    else if (!oriented) reason = 'unoriented-outcome';
+    else if (duplicateSide) reason = 'duplicate-outcome-name';
+    else if (!fresh) reason = 'outside-freshness-window';
+    if (reason || !market) {
       rejected += 1;
+      bump(reason || 'no-market');
       continue;
     }
     names.add(outcomeName.toLowerCase());
@@ -226,7 +231,7 @@ export function presentV5Quotes(
       line: quote.sourceSelectionId.split(':')[3] ?? '',
     });
   }
-  return { accepted, rejected };
+  return { accepted, rejected, reasons };
 }
 
 function positiveInt(value: unknown): number | null {

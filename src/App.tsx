@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AuthScreen } from './screens/AuthScreen';
+import { MarketSemanticsCheck } from './screens/MarketSemanticsCheck';
 import { Header } from './components/Header';
 import { MainTabs } from './components/MainTabs';
 import { BottomNav } from './components/BottomNav';
@@ -60,6 +61,12 @@ import { leaguePath } from './lib/leagueRoute';
 import { casinoDemoPath, casinoRealPath, validCasinoDemoId } from './lib/casinoDemo';
 import { CasinoDemoBack, CasinoDemoCatalog } from './components/CasinoDemoCatalog';
 import { CasinoDemoGameScreen } from './screens/CasinoDemoGameScreen';
+
+const showMarketCheck = import.meta.env.DEV && (
+  window.location.pathname === '/dev/markets'
+  || new URLSearchParams(window.location.search).get('markets') === '1'
+  || window.location.hash.includes('markets')
+);
 
 const GAMES_PATH = '/games';
 const BLACKJACK_PATH = '/games/blackjack';
@@ -619,6 +626,10 @@ function AppContent() {
         return null;
     }
   };
+
+  if (showMarketCheck) {
+    return <MarketSemanticsCheck />;
+  }
 
   if (!authReady) {
     return (

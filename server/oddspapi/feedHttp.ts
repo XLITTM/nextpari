@@ -1,11 +1,17 @@
 import type { FootballFeedCard, FootballFeedMarket } from '../betsapi/footballFeedHttp.js';
 import type { MarketCategory, MarketGroup } from '../../src/types.js';
 import { indexV5Markets, isFullTimeMainMarket, presentV5Quotes, type V5MarketDefinition } from './canonical.js';
+import { isLadderType, marketTypeOf, outcomeLabelFor, subtypeLabel } from '../../src/lib/marketTaxonomy.js';
 import { clearV5RequestSchedule, scheduledRead, V5_DOCUMENTED_LIMITS, V5_REQUEST_GAPS } from './requestSchedule.js';
 import { OddsPapiV5TrialReader, V5_SPORT_IDS, type JsonRecord, type V5Result } from './v5TrialClient.js';
 
 export const V5_EVENT_PREFIX = 'oddspapi-v5:';
-type Card = FootballFeedCard & { provider: 'oddspapi-v5'; displayGroups: MarketGroup[]; observedAt: string };
+type Card = FootballFeedCard & {
+  provider: 'oddspapi-v5';
+  displayGroups: MarketGroup[];
+  observedAt: string;
+  priceAudit: { rawBookmakerPrices: number; acceptedQuotes: number; displayedPrices: number; rejectedQuotes: number; rejectionReasons: Record<string, number> };
+};
 const SPORTS: Record<number, Card['sport']> = {10:'football',11:'basketball',12:'tennis',15:'hockey',16:'esports',17:'esports',18:'esports',23:'volleyball',25:'table-tennis',61:'esports'};
 export function clearV5FeedCache(): void { clearV5RequestSchedule(); }
 function record(value: unknown): JsonRecord { return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {}; }
@@ -27,39 +33,25 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item:T)=>Promise<R
   return output;
 }
 export function v5MarketFamily(m: V5MarketDefinition): string {
-  const blob = `${m.marketType} ${m.marketName}`.toLowerCase();
-  if (/player|goalscorer|scorer|anytime/.test(blob)) return 'players';
-  if (/corner/.test(blob)) return 'corners';
-  if (/card|booking/.test(blob)) return 'cards';
-  if (/team total|individual total|home total|away total/.test(blob)) return 'team-totals';
-  if (/double.?chance/.test(blob)) return 'double-chance';
-  if (/both.?teams|btts/.test(blob)) return 'btts';
-  if (/correct.?score/.test(blob)) return 'correct-score';
-  if (/european/.test(blob) && /handicap/.test(blob)) return 'european-handicap';
-  if (/asian|spread|handicap/.test(blob)) return 'asian-handicap';
-  if (/total/.test(blob)) return 'totals';
-  if (/^(1x2|moneyline|winner)$/.test(m.marketType)) return 'main';
-  return 'other';
+  return marketTypeOf(m);
 }
 function groupCategory(m: V5MarketDefinition): MarketCategory {
-  const family = v5MarketFamily(m);
-  if (family === 'players') return 'players';
-  if (family === 'corners') return 'corners';
-  if (family === 'cards') return 'cards';
+  const type = marketTypeOf(m);
+  if (type.startsWith('players-') || type.startsWith('playertotals-')) return 'players';
+  if (type.endsWith('-corners') || type.includes('-corners-')) return 'corners';
+  if (type.endsWith('-bookings') || type.includes('-cards')) return 'cards';
   if (m.period === 'p1') return '1st-half';
   if (m.period === 'p2') return '2nd-half';
-  if (family === 'totals' || family === 'team-totals') return 'totals';
-  if (family === 'asian-handicap' || family === 'european-handicap') return 'handicaps';
+  if (isLadderType(type) && !type.startsWith('spreads')) return 'totals';
+  if (type.startsWith('spreads')) return 'handicaps';
   return 'main';
 }
 function displayMarketName(m: V5MarketDefinition): string {
-  const translated: Record<string,string> = {'1x2':'Исход',moneyline:'Победитель',bothteamsscore:'Обе забьют',totals:'Тотал',handicap:'Фора',doublechance:'Двойной шанс',correctscore:'Точный счёт'};
-  const base = translated[m.marketType] || m.marketName;
-  const period = m.period==='p1'?'1-й период':m.period==='p2'?'2-й период':m.period && !['fulltime','result'].includes(m.period)?m.period:'';
-  const line = /total|handicap|spread/.test(m.marketType) && m.handicap!==null ? String(m.handicap) : '';
-  return [period,base,line].filter(Boolean).join(' · ');
+  const type = marketTypeOf(m);
+  const base = subtypeLabel({ marketType: type, marketName: m.marketName, period: m.period, handicap: m.handicap });
+  const line = isLadderType(type) && m.handicap !== null ? String(m.handicap) : '';
+  return [base, line].filter(Boolean).join(' · ');
 }
-function outcomeLabel(value:string): string { return ({'1':'П1',X:'X','2':'П2',Over:'ТБ',Under:'ТМ',Yes:'Да',No:'Нет'} as Record<string,string>)[value] || value; }
 
 export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV5Markets> | null, now = Date.now(), options?: { snapshotStale?: boolean }): Card | null {
   const id=name(f.fixtureId); const sportId=record(f.sport).sportId;
@@ -69,12 +61,14 @@ export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV
   if(!home||!away)return null;
   const bookmaker=record(record(f.bookmakers)['1xbet']);
   const safe=bookmaker.hasOdds===true && bookmaker.staleOdds===false && bookmaker.suspended===false && bookmaker.participantsRotated===false;
-  const quotes=safe&&catalog?presentV5Quotes(f,catalog,now,{freshReadOnlySnapshot:true}).accepted.filter(q=>q.sourceSelectionId.endsWith(':0')):[];
+  const rawBookmakerPrices=Object.keys(record(record(f.odds)['1xbet'])).length;
+  const presentation=safe&&catalog?presentV5Quotes(f,catalog,now,{freshReadOnlySnapshot:true}):{accepted:[],rejected:0,reasons:rawBookmakerPrices?{'bookmaker-unsafe':rawBookmakerPrices}:{}};
+  const quotes=presentation.accepted;
   const groups=new Map<number,MarketGroup>();
   for(const quote of quotes) {
     const market=catalog!.byId.get(quote.marketId)!;
     const group=groups.get(quote.marketId)||{id:`${V5_EVENT_PREFIX}${id}:market:${quote.marketId}`,name:displayMarketName(market),category:groupCategory(market),marketFamily:v5MarketFamily(market),outcomes:[],bookmakerId:'1xbet',externalPeriodId:market.period,externalMarketId:String(quote.marketId)};
-    group.outcomes.push({label:outcomeLabel(quote.outcomeName),odds:quote.price,locked:true,sourceSelectionId:quote.sourceSelectionId,updatedAt:new Date(now).toISOString()});
+    group.outcomes.push({label:outcomeLabelFor(marketTypeOf(market),quote.outcomeName),odds:quote.price,locked:true,sourceSelectionId:quote.sourceSelectionId,outcomeId:String(quote.outcomeId),updatedAt:new Date(now).toISOString()});
     groups.set(quote.marketId,group);
   }
   const mainIds=[...groups.keys()].filter(id=>isFullTimeMainMarket(catalog!.byId.get(id)!));
@@ -94,7 +88,14 @@ export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV
     score:typeof score.participant1Score==='number'&&typeof score.participant2Score==='number'?{home:score.participant1Score,away:score.participant2Score}:null,
     liveClock,period:sportId===10&&clock.currentPeriod==='p1'?'first_half':sportId===10&&clock.currentPeriod==='p2'?'second_half':null,
     priceState:bookmaker.suspended===true?'suspended':bookmaker.staleOdds!==false?'stale':groups.size?'open':safe?'unpriced':'unavailable',markets,
-    displayGroups:[...groups.values()].filter(g=>g!==main).sort((a,b)=>Number(a.externalMarketId)-Number(b.externalMarketId)),observedAt:new Date(now).toISOString(),
+    displayGroups:[...groups.values()].sort((a,b)=>Number(a.externalMarketId)-Number(b.externalMarketId)),observedAt:new Date(now).toISOString(),
+    priceAudit:{
+      rawBookmakerPrices,
+      acceptedQuotes:quotes.length,
+      displayedPrices:[...groups.values()].reduce((sum,group)=>sum+group.outcomes.length,0),
+      rejectedQuotes:presentation.rejected,
+      rejectionReasons:presentation.reasons,
+    },
   };
   if (options?.snapshotStale && card.priceState === 'open') card.priceState = 'stale';
   return card;

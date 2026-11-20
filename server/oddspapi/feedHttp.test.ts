@@ -16,10 +16,13 @@ test('keeps provider ids and exact lines and locks every displayed outcome',()=>
   const card=v5FixtureToCard(fixture(),catalog,now)!;
   assert.equal(card.id,'oddspapi-v5:'+fixtureId);
   assert.equal(card.markets[0].outcomes.length,3);
-  assert.equal(card.displayGroups.length,2);
-  assert.equal(card.displayGroups[0].marketFamily,'totals');
-  assert.match(card.displayGroups[0].name,/2\.5/);
-  assert.match(card.displayGroups[1].name,/3\.5/);
+  assert.equal(card.displayGroups.filter((group)=>group.marketFamily==='1x2').length,1);
+  assert.equal(card.displayGroups.find((group)=>group.marketFamily==='1x2')?.outcomes[0]?.label,'П1');
+  const totals=card.displayGroups.filter((group)=>group.marketFamily==='totals');
+  assert.equal(totals.length,2);
+  assert.match(totals[0].name,/2\.5/);
+  assert.equal(totals[0].outcomes[0]?.label,'Больше');
+  assert.match(totals[1].name,/3\.5/);
   assert.ok(card.displayGroups.every(g=>g.outcomes.every(o=>o.locked)));
 });
 test('hides suspended, stale, unknown, or rotated bookmaker prices',()=>{
@@ -93,6 +96,26 @@ test('a provider 429 keeps the cached board instead of returning an empty sports
   assert.equal((second.body as { rateLimited?: boolean }).rateLimited, true);
   assert.equal(liveCalls, 1);
   assert.equal(todayCalls, 1);
+});
+test('keeps distinct player prices and numeric exact-goal labels in the same snapshot',()=>{
+  const row=fixture();
+  const odds=row.odds as { '1xbet': Record<string, unknown> };
+  odds['1xbet'][`${fixtureId}:1xbet:501:0`]={bookmaker:'1xbet',outcomeId:501,marketId:501,price:4.2,active:true,changedAt:now};
+  odds['1xbet'][`${fixtureId}:1xbet:801:44`]={bookmaker:'1xbet',outcomeId:801,marketId:801,price:1.8,active:true,changedAt:now};
+  odds['1xbet'][`${fixtureId}:1xbet:801:55`]={bookmaker:'1xbet',outcomeId:801,marketId:801,price:2.2,active:true,changedAt:now};
+  const extra=indexV5Markets([...markets,
+    {marketId:501,marketName:'Exact Goals',marketType:'exactscore',period:'fulltime',handicap:0,outcomes:[{outcomeId:501,outcomeName:'1'}]},
+    {marketId:801,marketName:'Player To Score',marketType:'players-toscore',period:'fulltime',handicap:0,outcomes:[{outcomeId:801,outcomeName:'Yes'}]},
+  ]);
+  const card=v5FixtureToCard(row,extra,now)!;
+  const exact=card.displayGroups.find((group)=>group.marketFamily==='exactscore');
+  const players=card.displayGroups.find((group)=>group.marketFamily==='players-toscore');
+  assert.deepEqual(exact?.outcomes.map((outcome)=>outcome.label),['1']);
+  assert.deepEqual(players?.outcomes.map((outcome)=>outcome.sourceSelectionId),[`${fixtureId}:1xbet:801:44`,`${fixtureId}:1xbet:801:55`]);
+  assert.equal(card.priceAudit.rawBookmakerPrices,10);
+  assert.equal(card.priceAudit.acceptedQuotes,10);
+  assert.equal(card.priceAudit.displayedPrices,10);
+  assert.deepEqual(card.priceAudit.rejectionReasons,{});
 });
 test('the deployed place endpoint refuses before session or wallet access',async()=>{
   const old=process.env.ODDSPAPI_V5_READONLY_FEED;

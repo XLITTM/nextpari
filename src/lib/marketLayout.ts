@@ -1,38 +1,5 @@
 import type { MarketGroup, SportId } from '../types';
-
-export const MARKET_FAMILY_ORDER = [
-  'main',
-  'double-chance',
-  'btts',
-  'correct-score',
-  'totals',
-  'asian-handicap',
-  'european-handicap',
-  'team-totals',
-  'corners',
-  'cards',
-  'players',
-  'other',
-] as const;
-
-export type MarketFamilyId = (typeof MARKET_FAMILY_ORDER)[number];
-
-const FAMILY_LABELS: Record<MarketFamilyId, string> = {
-  main: 'Исход',
-  'double-chance': 'Двойной шанс',
-  btts: 'Обе забьют',
-  'correct-score': 'Точный счёт',
-  totals: 'Тотал',
-  'asian-handicap': 'Фора',
-  'european-handicap': 'Европейская фора',
-  'team-totals': 'Индивидуальный тотал',
-  corners: 'Угловые',
-  cards: 'Карточки',
-  players: 'Игроки',
-  other: 'Другие рынки',
-};
-
-const POPULAR = new Set<MarketFamilyId>(['main', 'double-chance', 'btts', 'correct-score']);
+import { isPlayerType, marketPriority, selectionPlayerId } from './marketTaxonomy';
 
 export interface LayoutOutcome {
   label: string;
@@ -44,7 +11,7 @@ export interface LayoutOutcome {
 
 export interface LayoutLine {
   id: string;
-  family: MarketFamilyId;
+  family: string;
   period: boolean;
   periodId: string | null;
   title: string;
@@ -54,17 +21,10 @@ export interface LayoutLine {
 
 export interface MarketAccordion {
   id: string;
-  family: MarketFamilyId;
+  family: string;
+  periodId: string | null;
   title: string;
   lines: LayoutLine[];
-}
-
-export function marketFamilyLabel(family: MarketFamilyId): string {
-  return FAMILY_LABELS[family];
-}
-
-export function knownMarketFamily(value: string | undefined): MarketFamilyId {
-  return MARKET_FAMILY_ORDER.includes(value as MarketFamilyId) ? value as MarketFamilyId : 'other';
 }
 
 export function isPeriodMarket(periodId: string | null | undefined): boolean {
@@ -95,6 +55,7 @@ export function periodCaption(periodId: string | null, sport: SportId): string {
     if (sport === 'esports') return '2-я карта';
     return '2-я партия';
   }
+  if (!isPeriodMarket(period)) return '';
   return periodId ?? '';
 }
 
@@ -107,34 +68,53 @@ export function periodTabLabel(sport: SportId): string {
   return 'Периоды';
 }
 
+function subtypeTitle(name: string): string {
+  return name.split('·')[0]?.trim() || name;
+}
+
 function lineSort(left: LayoutLine, right: LayoutLine): number {
   const a = Number(left.line);
   const b = Number(right.line);
   if (Number.isFinite(a) && Number.isFinite(b) && a !== b) return a - b;
-  return left.title.localeCompare(right.title, 'ru');
+  return left.line.localeCompare(right.line, 'ru') || left.id.localeCompare(right.id);
 }
 
-export function layoutLinesFromGroups(groups: readonly MarketGroup[], sport: SportId): LayoutLine[] {
+function toOutcomes(group: MarketGroup, outcomes: MarketGroup['outcomes']): LayoutOutcome[] {
+  return outcomes.map((outcome) => ({
+    label: outcome.label,
+    odds: outcome.odds,
+    locked: outcome.locked,
+    sourceSelectionId: outcome.sourceSelectionId ?? null,
+    externalMarketId: group.externalMarketId,
+  }));
+}
+
+export function layoutLinesFromGroups(groups: readonly MarketGroup[], _sport: SportId): LayoutLine[] {
   return groups.flatMap((group) => {
     const outcomes = group.outcomes.filter((outcome) => outcome.odds > 1 || outcome.locked);
     if (!outcomes.length) return [];
-    const family = knownMarketFamily(group.marketFamily);
-    return [{
-      id: group.id,
+    const family = group.marketFamily || `market:${group.externalMarketId ?? group.id}`;
+    const shared = {
       family,
       period: isPeriodMarket(group.externalPeriodId),
       periodId: group.externalPeriodId ?? null,
       title: group.name,
-      line: lineCaption(group.name),
-      outcomes: outcomes.map((outcome) => ({
-        label: outcome.label,
-        odds: outcome.odds,
-        locked: outcome.locked,
-        sourceSelectionId: outcome.sourceSelectionId ?? null,
-        externalMarketId: group.externalMarketId,
-      })),
-    }];
-  }).sort((left, right) => MARKET_FAMILY_ORDER.indexOf(left.family) - MARKET_FAMILY_ORDER.indexOf(right.family) || lineSort(left, right));
+    };
+    if (!isPlayerType(family)) {
+      return [{ id: group.id, ...shared, line: lineCaption(group.name), outcomes: toOutcomes(group, outcomes) }];
+    }
+    const byPlayer = new Map<string, MarketGroup['outcomes']>();
+    for (const outcome of outcomes) {
+      const playerId = selectionPlayerId(outcome.sourceSelectionId ?? '');
+      byPlayer.set(playerId, [...(byPlayer.get(playerId) ?? []), outcome]);
+    }
+    return [...byPlayer.entries()].map(([playerId, rows]) => ({
+      id: `${group.id}:player:${playerId}`,
+      ...shared,
+      line: playerId === '0' ? lineCaption(group.name) : playerId,
+      outcomes: toOutcomes(group, rows),
+    }));
+  });
 }
 
 export interface MarketTab {
@@ -142,67 +122,81 @@ export interface MarketTab {
   label: string;
 }
 
+function isCornerType(type: string): boolean {
+  return type === '1x2-corners' || type.endsWith('-corners') || type.includes('-corners-');
+}
+
+function isCardType(type: string): boolean {
+  return type.endsWith('-bookings') || type.includes('-bookings-') || type.includes('-cards');
+}
+
+function isTotalType(type: string): boolean {
+  return type === 'totals' || type === 'teamtotals-team1' || type === 'teamtotals-team2';
+}
+
+function isHandicapType(type: string): boolean {
+  return type === 'spreads' || type === 'spreads-european';
+}
+
 export function marketTabs(lines: readonly LayoutLine[], sport: SportId): MarketTab[] {
-  const present = new Set(lines.map((line) => line.family));
   const tabs: MarketTab[] = [{ id: 'all', label: 'Все' }];
-  if ([...present].some((family) => POPULAR.has(family) && lines.some((line) => line.family === family && !line.period))) {
-    tabs.push({ id: 'popular', label: 'Популярное' });
-  }
-  if (lines.some((line) => line.family === 'totals' && !line.period)) tabs.push({ id: 'totals', label: 'Тоталы' });
-  if (lines.some((line) => (line.family === 'asian-handicap' || line.family === 'european-handicap') && !line.period)) {
-    tabs.push({ id: 'handicaps', label: 'Форы' });
-  }
-  if (lines.some((line) => line.family === 'team-totals')) tabs.push({ id: 'team-totals', label: 'Инд. тоталы' });
-  if (lines.some((line) => line.family === 'corners')) tabs.push({ id: 'corners', label: 'Угловые' });
-  if (lines.some((line) => line.family === 'cards')) tabs.push({ id: 'cards', label: 'Карточки' });
+  if (lines.some((line) => line.family === '1x2' && !line.period)) tabs.push({ id: '1x2', label: 'Исход' });
+  if (lines.some((line) => isTotalType(line.family) && !line.period)) tabs.push({ id: 'totals', label: 'Тоталы' });
+  if (lines.some((line) => isHandicapType(line.family) && !line.period)) tabs.push({ id: 'handicaps', label: 'Форы' });
+  if (lines.some((line) => isCornerType(line.family))) tabs.push({ id: 'corners', label: 'Угловые' });
+  if (lines.some((line) => isCardType(line.family))) tabs.push({ id: 'cards', label: 'Карточки' });
   if (lines.some((line) => line.period)) tabs.push({ id: 'periods', label: periodTabLabel(sport) });
-  if (lines.some((line) => line.family === 'players')) tabs.push({ id: 'players', label: 'Игроки' });
-  if (lines.some((line) => line.family === 'other')) tabs.push({ id: 'other', label: 'Другие' });
+  if (lines.some((line) => isPlayerType(line.family))) tabs.push({ id: 'players', label: 'Игроки' });
   return tabs;
 }
 
 function matchesTab(line: LayoutLine, tab: string): boolean {
   if (tab === 'all') return true;
-  if (tab === 'popular') return POPULAR.has(line.family) && !line.period;
-  if (tab === 'totals') return line.family === 'totals' && !line.period;
-  if (tab === 'handicaps') return (line.family === 'asian-handicap' || line.family === 'european-handicap') && !line.period;
-  if (tab === 'team-totals') return line.family === 'team-totals';
+  if (tab === '1x2') return line.family === '1x2' && !line.period;
+  if (tab === 'totals') return isTotalType(line.family) && !line.period;
+  if (tab === 'handicaps') return isHandicapType(line.family) && !line.period;
+  if (tab === 'corners') return isCornerType(line.family);
+  if (tab === 'cards') return isCardType(line.family);
   if (tab === 'periods') return line.period;
-  return line.family === tab;
+  if (tab === 'players') return isPlayerType(line.family);
+  return false;
 }
 
 function matchesQuery(line: LayoutLine, query: string, sport: SportId): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  const haystack = [
-    marketFamilyLabel(line.family),
-    line.title,
-    line.line,
-    periodCaption(line.periodId, sport),
-    ...line.outcomes.map((outcome) => outcome.label),
-  ].join(' ').toLowerCase();
+  const haystack = [line.title, line.line, periodCaption(line.periodId, sport), ...line.outcomes.map((outcome) => outcome.label)].join(' ').toLowerCase();
   return haystack.includes(needle);
+}
+
+function periodRank(periodId: string | null): number {
+  if (!isPeriodMarket(periodId)) return 0;
+  if (periodId === 'p1') return 1;
+  if (periodId === 'p2') return 2;
+  return 3;
 }
 
 export function marketAccordions(lines: readonly LayoutLine[], tab: string, query: string, sport: SportId): MarketAccordion[] {
   const visible = lines.filter((line) => matchesTab(line, tab) && matchesQuery(line, query, sport));
   const buckets = new Map<string, LayoutLine[]>();
   for (const line of visible) {
-    const period = line.period ? periodCaption(line.periodId, sport) : '';
-    const key = `${line.family}|${period}`;
+    const key = `${line.family}|${line.periodId ?? 'match'}`;
     buckets.set(key, [...(buckets.get(key) ?? []), line]);
   }
   return [...buckets.entries()]
     .map(([key, grouped]) => {
-      const [family, period] = key.split('|');
-      const familyId = knownMarketFamily(family);
-      const base = marketFamilyLabel(familyId);
+      const periodId = grouped[0]?.periodId ?? null;
+      const period = periodCaption(periodId, sport);
+      const base = subtypeTitle(grouped[0]?.title ?? key);
       return {
         id: key,
-        family: familyId,
+        family: grouped[0]?.family ?? key,
+        periodId,
         title: period ? `${base} · ${period}` : base,
         lines: grouped.sort(lineSort),
       };
     })
-    .sort((left, right) => left.title.localeCompare(right.title, 'ru') || MARKET_FAMILY_ORDER.indexOf(left.family) - MARKET_FAMILY_ORDER.indexOf(right.family));
+    .sort((left, right) => periodRank(left.periodId) - periodRank(right.periodId)
+      || marketPriority(left.family, sport) - marketPriority(right.family, sport)
+      || Number(left.lines[0]?.outcomes[0]?.externalMarketId ?? 0) - Number(right.lines[0]?.outcomes[0]?.externalMarketId ?? 0));
 }
