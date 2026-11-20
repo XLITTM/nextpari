@@ -142,11 +142,11 @@ function isCardType(type: string): boolean {
 }
 
 function isTotalType(type: string): boolean {
-  return type === 'totals' || type === 'teamtotals-team1' || type === 'teamtotals-team2';
+  return type === 'totals' || type === 'totals-points' || type === 'teamtotals-team1' || type === 'teamtotals-team2';
 }
 
 function isHandicapType(type: string): boolean {
-  return type === 'spreads' || type === 'spreads-european';
+  return type === 'spreads' || type === 'spreads-european' || type === 'spreads-points';
 }
 
 export function marketTabs(lines: readonly LayoutLine[], sport: SportId): MarketTab[] {
