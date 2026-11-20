@@ -103,6 +103,7 @@ export function clickableCardSelection(
   marketName: string,
   odds: number,
 ): { selection: BetSelection; locked: boolean } {
+  if (match.feedTag === 'oddspapi-v5') return { selection: buildCardSelection(match, outcomeLabelText, odds, marketName), locked: true };
   const betsapi = betsapiSelection(match, outcomeLabelText, odds, marketName);
   if (betsapi) return betsapi;
   return clickableCardSelectionFromMarkets(
