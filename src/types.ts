@@ -138,7 +138,7 @@ export interface MatchEvent {
   marketGroups?: MarketGroup[];
   marketsLocked?: boolean;
   marketsEstimated?: boolean;
-  feedTag?: 'lsports' | 'betsapi';
+  feedTag?: 'lsports' | 'betsapi' | 'oddspapi-v5';
   priceState?: 'unpriced' | 'open' | 'suspended' | 'unavailable' | 'unrecognized' | 'rate_limited' | 'stale' | 'upstream' | 'deferred';
   betsapiQuotes?: Record<string, {
     provider: 'betsapi';
