@@ -161,6 +161,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
                 label={o.key}
                 odds={o.odds}
                 locked={o.locked || clickable.locked}
+                displayOnly={match.feedTag === 'oddspapi-v5'}
                 isActive={isSelectionActive(match.id, o.key, clickable.selection.market)}
               />
             );
@@ -177,12 +178,14 @@ function MatchOddButton({
   odds,
   isActive,
   locked = false,
+  displayOnly = false,
 }: {
   selection: BetSelection;
   label: string;
   odds: number;
   isActive: boolean;
   locked?: boolean;
+  displayOnly?: boolean;
 }) {
   const handlers = useOddInteraction(selection);
   const flash = useOddsFlash(odds);
@@ -211,7 +214,7 @@ function MatchOddButton({
       >
         {label}
       </span>
-      {locked || odds <= 1 ? (
+      {(locked && !displayOnly) || odds <= 1 ? (
         <Lock className="w-3.5 h-3.5 text-gray-400" strokeWidth={2.4} />
       ) : (
         <OddsFlashValue
