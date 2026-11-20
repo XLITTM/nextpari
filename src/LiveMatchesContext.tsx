@@ -44,7 +44,7 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
 
   const ensurePrices = useCallback(async (ids: string[]) => {
     const ticket = generation.current;
-    await applyQuotes(ids.filter((id) => /^\d{1,20}$/.test(id)).slice(0, 8), ticket);
+    await applyQuotes(ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id)).slice(0, 8), ticket);
   }, [applyQuotes]);
 
   const refresh = useCallback(async () => {
@@ -85,7 +85,7 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
 
   const archive = useRef(new Map<string, MatchEvent>());
   for (const match of matches) {
-    if (match.feedTag === 'betsapi') archive.current.set(match.id, match);
+    if (match.feedTag === 'betsapi' || match.feedTag === 'oddspapi-v5') archive.current.set(match.id, match);
   }
   const findMatch = useCallback(
     (id: string) => matches.find((match) => match.id === id) ?? archive.current.get(id),
