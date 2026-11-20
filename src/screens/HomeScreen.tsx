@@ -28,7 +28,7 @@ export function HomeScreen({
   onToggleFavorite,
 }: HomeScreenProps) {
   const [selectedSport, setSelectedSport] = useState<SportId>('all');
-  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
+  const { liveMatches, upcomingMatches, featuredLive, featuredLine, scheduleMatches, loading } = useLiveMatches();
   const sportFilter = mainTab === 'sport' && selectedSport === 'esports' ? 'all' : selectedSport;
 
   const filteredLive = useMemo(() => {
@@ -47,6 +47,14 @@ export function HomeScreen({
     const sportsOnly = upcomingMatches.filter((match) => match.sport !== 'esports');
     return sportFilter === 'all' ? sportsOnly : sportsOnly.filter((match) => match.sport === sportFilter);
   }, [upcomingMatches, sportFilter]);
+  const popularLive = featuredLive.length ? featuredLive : filteredLive;
+  const popularLine = featuredLine.length ? featuredLine : filteredUpcoming;
+  const sportPopularLive = featuredLive.length
+    ? featuredLive.filter((match) => match.sport !== 'esports' && (sportFilter === 'all' || match.sport === sportFilter))
+    : sportLiveMatches;
+  const sportPopularLine = featuredLine.length
+    ? featuredLine.filter((match) => match.sport !== 'esports' && (sportFilter === 'all' || match.sport === sportFilter))
+    : sportUpcomingMatches;
   const esportsLiveMatches = liveMatches.filter((match) => match.sport === 'esports');
   const esportsUpcomingMatches = upcomingMatches.filter((match) => match.sport === 'esports');
 
@@ -125,8 +133,8 @@ export function HomeScreen({
               onFilterClick={() => onOpenGameList('live')}
               onSeeAll={() => onOpenGameList('live')}
             />
-            {sportLiveMatches.length > 0 ? (
-              renderCards(sportLiveMatches)
+            {sportPopularLive.length > 0 ? (
+              renderCards(sportPopularLive)
             ) : loading ? (
               <SkeletonLoader count={2} variant="carousel" />
             ) : (
@@ -140,8 +148,8 @@ export function HomeScreen({
               onFilterClick={() => onOpenGameList('line')}
               onSeeAll={() => onOpenGameList('line')}
             />
-            {sportUpcomingMatches.length > 0 ? (
-              renderCards(sportUpcomingMatches)
+            {sportPopularLine.length > 0 ? (
+              renderCards(sportPopularLine)
             ) : loading ? (
               <SkeletonLoader count={2} variant="carousel" />
             ) : (
@@ -171,8 +179,8 @@ export function HomeScreen({
               onFilterClick={() => onOpenGameList('live')}
               onSeeAll={() => onOpenGameList('live')}
             />
-            {filteredLive.length > 0 ? (
-              renderCards(filteredLive)
+            {popularLive.length > 0 ? (
+              renderCards(popularLive)
             ) : (
               <SkeletonLoader count={2} variant="carousel" />
             )}
@@ -186,8 +194,8 @@ export function HomeScreen({
             onFilterClick={() => onOpenGameList('line')}
             onSeeAll={() => onOpenGameList('line')}
           />
-          {filteredUpcoming.length > 0 ? (
-            renderCards(filteredUpcoming)
+          {popularLine.length > 0 ? (
+            renderCards(popularLine)
           ) : loading ? (
             <SkeletonLoader count={2} variant="carousel" />
           ) : (

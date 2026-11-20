@@ -81,15 +81,24 @@ export async function handleSportsSettleRequest(
       return { status: 400, body: { ok: false, error: 'SETTLEMENT_PROVIDER_MISMATCH' } };
     }
     const parsed = parseSportsSettlementNotice(row, batchProvider);
-    if (!parsed.ok) {
+    if ('error' in parsed) {
       return { status: 400, body: { ok: false, error: parsed.error } };
     }
     notices.push(parsed.notice);
   }
   const batch = uniformSettlementProvider(notices, batchProvider);
-  if (!batch.ok) {
+  if ('error' in batch) {
     return { status: 400, body: { ok: false, error: batch.error } };
   }
+  return applySportsSettlementNotices(notices, env, log, rpc);
+}
+
+export async function applySportsSettlementNotices(
+  notices: SportsSettlementNotice[],
+  _env: NodeJS.ProcessEnv = process.env,
+  log: StaffLog = staffHttpLog,
+  rpc?: (items: unknown[]) => Promise<unknown>,
+): Promise<{ status: number; body: Record<string, unknown> }> {
   const items = notices.map(settlementNoticeToRpcItem);
   console.log(`[sports] settlement-received items=${items.length}`);
   try {

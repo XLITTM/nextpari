@@ -19,13 +19,7 @@ function sleep(ms) {
 
 export function getBetsApiGatewayToken() {
   const env = globalThis.process?.env ?? {};
-  return (
-    env.BETSAPI_KEY ||
-    env.BETSAPI_TOKEN ||
-    env.VITE_BETSAPI_KEY ||
-    env.VITE_BETSAPI_TOKEN ||
-    ''
-  );
+  return env.BETSAPI_KEY || env.BETSAPI_TOKEN || '';
 }
 
 function cacheKey(path, search) {

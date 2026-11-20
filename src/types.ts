@@ -9,6 +9,19 @@ export type SportId =
   | 'table-tennis'
   | 'badminton'
   | 'baseball'
+  | 'handball'
+  | 'darts'
+  | 'american-football'
+  | 'rugby'
+  | 'rugby-league'
+  | 'aussie-rules'
+  | 'floorball'
+  | 'squash'
+  | 'horse-racing'
+  | 'greyhounds'
+  | 'bowls'
+  | 'boxing'
+  | 'gaelic-sports'
   | 'polo'
   | 'cricket'
   | 'beach-volleyball'
@@ -33,6 +46,20 @@ export interface Sport {
 export interface MarketOutcome {
   label: string;
   odds: number;
+  provider?: 'betsapi';
+  feedType?: 'inplay' | 'prematch';
+  fixtureId?: string;
+  marketId?: string;
+  marketKey?: string;
+  line?: string;
+  outcomeId?: string;
+  updatedAt?: string;
+  matchLabel?: string;
+  bookmakerId?: string | null;
+  externalPeriodId?: string | null;
+  externalMarketId?: string;
+  sourceSelectionId?: string | null;
+  locked?: boolean;
 }
 
 export type MarketCategory =
@@ -60,6 +87,9 @@ export interface MarketGroup {
   outcomes: MarketOutcome[];
   category?: MarketCategory;
   layout?: MarketLayout;
+  bookmakerId?: string | null;
+  externalPeriodId?: string | null;
+  externalMarketId?: string;
 }
 
 export interface MatchStat {
@@ -84,19 +114,46 @@ export interface MatchEvent {
   team2: string;
   team1Color: string;
   team2Color: string;
+  competitionLogo?: string;
+  sportsTier?: number;
+  observedMainAt?: string;
   team1Logo?: string;
   team2Logo?: string;
   startTime: number;
   isLive: boolean;
   liveStatus?: string;
+  liveClock?: {
+    minute: number;
+    second: number;
+    running: boolean;
+    observedAt: string;
+    stale: boolean;
+  } | null;
   liveScore?: { team1: number; team2: number };
+  period?: 'first_half' | 'second_half' | null;
+  statsAvailability?: 'available' | 'absent';
   markets: { '1': number; x: number; '2': number };
   extraMarkets: number;
   featured?: boolean;
   marketGroups?: MarketGroup[];
   marketsLocked?: boolean;
   marketsEstimated?: boolean;
-  feedTag?: 'lsports';
+  feedTag?: 'lsports' | 'betsapi';
+  priceState?: 'unpriced' | 'open' | 'suspended' | 'unavailable' | 'unrecognized' | 'rate_limited' | 'stale' | 'upstream' | 'deferred';
+  betsapiQuotes?: Record<string, {
+    provider: 'betsapi';
+    feedType: 'inplay' | 'prematch';
+    fixtureId: string;
+    marketId: string;
+    marketKey: string;
+    line: string;
+    outcomeId: string;
+    updatedAt?: string;
+    bookmakerId?: string | null;
+    externalPeriodId?: string | null;
+    externalMarketId?: string;
+    sourceSelectionId?: string | null;
+  }>;
   stats?: MatchStat[];
   h2h?: H2HGame[];
   stadium?: { name: string; city: string; capacity: string };
@@ -160,6 +217,10 @@ export interface BetSelection {
   line?: string;
   outcomeId?: string;
   providerLastUpdate?: string;
+  bookmakerId?: string | null;
+  externalPeriodId?: string | null;
+  externalMarketId?: string;
+  sourceSelectionId?: string | null;
   marketStatus?: string;
   betStatus?: string;
   betStatusId?: string;

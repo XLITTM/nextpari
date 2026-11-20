@@ -3,6 +3,8 @@ import { SectionHeader } from './SectionHeader';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useFavoritesStore } from '../stores/favoritesStore';
 import { toLeagueId } from '../lib/leagueRoute';
+import { sportsRegion } from '../lib/sportsRegion';
+import { TeamLogo } from './TeamLogo';
 
 function colorFromName(name: string): string {
   let hash = 0;
@@ -24,20 +26,22 @@ export function ChampionshipsList({ onOpenLeague, excludeEsports = false }: Cham
     ? liveMatches.filter((match) => match.sport !== 'esports')
     : liveMatches;
   const fromLive = Object.values(
-    sourceMatches.reduce<Record<string, { name: string; country: string; count: number; color: string }>>((acc, match) => {
-      const key = `${match.country}|${match.league}`;
+    sourceMatches.reduce<Record<string, { name: string; country: string; count: number; color: string; logo?: string; competitionId?: string }>>((acc, match) => {
+      const key = `${match.sport}|${match.leagueId ?? toLeagueId(match.country, match.league)}`;
       const prev = acc[key] ?? {
         name: match.league,
         country: match.country,
         count: 0,
         color: colorFromName(match.league),
+        logo: match.competitionLogo,
+        competitionId: match.leagueId,
       };
+      if (prev.logo !== match.competitionLogo || prev.competitionId !== match.leagueId) prev.logo = undefined;
       prev.count += 1;
       acc[key] = prev;
       return acc;
     }, {}),
   )
-    .sort((a, b) => b.count - a.count)
     .slice(0, 8);
 
   const leagues = fromLive;
@@ -67,17 +71,15 @@ export function ChampionshipsList({ onOpenLeague, excludeEsports = false }: Cham
             className="flex items-center gap-3 bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm p-3 active:scale-[0.99] transition-transform cursor-pointer"
           >
             <div className="relative shrink-0">
-              <div
-                className="w-9 h-9 rounded-full flex items-center justify-center"
-                style={{ backgroundColor: ch.color + '30' }}
-              >
-                <div className="w-5 h-5 rounded-full" style={{ backgroundColor: ch.color }} />
-              </div>
+              {ch.logo ? <TeamLogo teamName={ch.name} logo={ch.logo} size="md" /> :
+                <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: ch.color + '30' }}>
+                  <div className="w-5 h-5 rounded-full" style={{ backgroundColor: ch.color }} />
+                </div>}
               <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white dark:border-gray-800 animate-pulse-live" />
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-extrabold text-gray-900 dark:text-white truncate">{ch.name}</p>
-              <p className="text-xs text-gray-600 dark:text-gray-300 truncate font-semibold">{ch.country}</p>
+              <p className="text-xs text-gray-600 dark:text-gray-300 truncate font-semibold">{sportsRegion(ch.country)}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span className="text-sm font-bold text-brand-600 tabular-nums">{ch.count}</span>

@@ -1,12 +1,23 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import {
+  applyFootballQuotes,
+  fetchFootballFeed,
+  fetchFootballQuotes,
+  footballQuoteIds,
+  mergeListedMatches,
+} from './lib/footballFeed';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
 interface LiveMatchesContextValue {
   liveMatches: MatchEvent[];
   upcomingMatches: MatchEvent[];
+  featuredLive: MatchEvent[];
+  featuredLine: MatchEvent[];
+  scheduleMatches: MatchEvent[];
   loading: boolean;
   refresh: () => Promise<void>;
+  ensurePrices: (ids: string[]) => Promise<void>;
   findMatch: (id: string) => MatchEvent | undefined;
 }
 
@@ -16,23 +27,94 @@ const LiveMatchesContext = createContext<LiveMatchesContextValue | null>(null);
 
 export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const clearEvents = useSportsStore((s) => s.clearEvents);
+  const [matches, setMatches] = useState<MatchEvent[]>(EMPTY_MATCHES);
+  const [groups, setGroups] = useState({ live: [] as string[], line: [] as string[], schedule: [] as string[] });
+  const [loading, setLoading] = useState(false);
+  const generation = useRef(0);
+  const latest = useRef<MatchEvent[]>(EMPTY_MATCHES);
+
+  const applyQuotes = useCallback(async (ids: string[], ticket: number) => {
+    if (!ids.length || ticket !== generation.current) return;
+    const quotes = await fetchFootballQuotes(ids);
+    if (ticket !== generation.current) return;
+    latest.current = applyFootballQuotes(latest.current, quotes);
+    setMatches(latest.current);
+    return quotes;
+  }, []);
+
+  const ensurePrices = useCallback(async (ids: string[]) => {
+    const ticket = generation.current;
+    await applyQuotes(ids.filter((id) => /^\d{1,20}$/.test(id)).slice(0, 8), ticket);
+  }, [applyQuotes]);
+
+  const refresh = useCallback(async () => {
+    const ticket = ++generation.current;
+    setLoading(true);
+    try {
+      const listed = await fetchFootballFeed();
+      if (ticket !== generation.current) return;
+      const merged = mergeListedMatches(latest.current, listed.events);
+      latest.current = merged;
+      setMatches(merged);
+      setGroups({
+        live: listed.featuredLive.map((match) => match.id),
+        line: listed.featuredLine.map((match) => match.id),
+        schedule: listed.schedule.map((match) => match.id),
+      });
+      const plan = footballQuoteIds(merged);
+      const first = await applyQuotes(plan.primary, ticket);
+      const limited = first?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
+      if (!limited) await applyQuotes(plan.secondary, ticket);
+    } catch {
+      if (ticket === generation.current) {
+        setMatches((current) => current);
+      }
+    } finally {
+      if (ticket === generation.current) setLoading(false);
+    }
+  }, [applyQuotes]);
 
   useEffect(() => {
     clearEvents();
-  }, [clearEvents]);
+    void refresh();
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [clearEvents, refresh]);
 
-  const refresh = useCallback(async () => {}, []);
-  const findMatch = useCallback((_id: string) => undefined, []);
+  const archive = useRef(new Map<string, MatchEvent>());
+  for (const match of matches) {
+    if (match.feedTag === 'betsapi') archive.current.set(match.id, match);
+  }
+  const findMatch = useCallback(
+    (id: string) => matches.find((match) => match.id === id) ?? archive.current.get(id),
+    [matches],
+  );
+  const liveMatches = matches.filter((match) => match.isLive);
+  const upcomingMatches = matches.filter((match) => !match.isLive);
+  const byId = new Map(matches.map((match) => [match.id, match]));
+  const pick = (ids: string[]) => ids.flatMap((id) => {
+    const match = byId.get(id);
+    return match ? [match] : [];
+  });
+  const featuredLive = pick(groups.live);
+  const featuredLine = pick(groups.line);
+  const scheduleMatches = pick(groups.schedule);
 
   const value = useMemo<LiveMatchesContextValue>(
     () => ({
-      liveMatches: EMPTY_MATCHES,
-      upcomingMatches: EMPTY_MATCHES,
-      loading: false,
+      liveMatches,
+      upcomingMatches,
+      featuredLive,
+      featuredLine,
+      scheduleMatches,
+      loading,
       refresh,
+      ensurePrices,
       findMatch,
     }),
-    [refresh, findMatch],
+    [ensurePrices, featuredLine, featuredLive, findMatch, liveMatches, loading, refresh, scheduleMatches, upcomingMatches],
   );
 
   return <LiveMatchesContext.Provider value={value}>{children}</LiveMatchesContext.Provider>;

@@ -1,4 +1,4 @@
-import type { BetSelection, MarketGroup, MatchEvent } from '../types';
+import type { BetSelection, MarketGroup, MarketOutcome, MatchEvent } from '../types';
 import { inferSelection } from './liveMarketCheck';
 
 export function isTwoWaySport(sport: string): boolean {
@@ -37,7 +37,7 @@ export function extraMarketRows(
   const pick = (test: (group: MarketGroup) => boolean, limit = 2) => {
     const group = groups.find(test);
     if (!group) return null;
-    const outcomes = group.outcomes.filter((row) => row.odds > 0).slice(0, limit);
+    const outcomes = group.outcomes.filter((row) => row.odds > 0).slice(0, limit).map(withBetsapiSelection);
     return outcomes.length ? { name: group.name, outcomes } : null;
   };
   const totals = groups
@@ -45,13 +45,43 @@ export function extraMarketRows(
     .slice(0, 3)
     .map((group) => ({
       name: group.name,
-      outcomes: group.outcomes.filter((row) => row.odds > 0).slice(0, 2),
+      outcomes: group.outcomes.filter((row) => row.odds > 0).slice(0, 2).map(withBetsapiSelection),
     }))
     .filter((row) => row.outcomes.length);
   const handicap = pick((group) => group.category === 'handicaps' || /фора|handicap/i.test(group.name));
   const dc = pick((group) => /двойной шанс|double chance/i.test(group.name), 3);
   const btts = pick((group) => /обе забьют|btts|both teams to score/i.test(group.name));
   return [...totals, handicap, dc, btts].filter((row): row is NonNullable<typeof row> => Boolean(row));
+}
+
+function withBetsapiSelection(outcome: MarketOutcome & { selection?: BetSelection }): ExtraCardOutcome {
+  if (outcome.selection?.provider === 'betsapi' && outcome.selection.outcomeId) return outcome;
+  if (outcome.provider !== 'betsapi' || !outcome.fixtureId || !outcome.outcomeId || !outcome.marketKey) {
+    return outcome;
+  }
+  return {
+    ...outcome,
+    selection: {
+      id: `${outcome.fixtureId}-${outcome.marketKey}-${outcome.line ?? ''}-${outcome.outcomeId}`,
+      matchId: outcome.fixtureId,
+      matchLabel: outcome.matchLabel || outcome.label,
+      market: outcome.marketKey,
+      outcome: outcome.label,
+      odds: outcome.odds,
+      provider: 'betsapi',
+      feedType: outcome.feedType,
+      fixtureId: outcome.fixtureId,
+      marketId: outcome.marketId,
+      marketKey: outcome.marketKey,
+      line: outcome.line ?? '',
+      outcomeId: outcome.outcomeId,
+      providerLastUpdate: outcome.updatedAt,
+      bookmakerId: outcome.bookmakerId,
+      externalPeriodId: outcome.externalPeriodId,
+      externalMarketId: outcome.externalMarketId,
+      sourceSelectionId: outcome.sourceSelectionId,
+    },
+  };
 }
 
 export function buildCardSelection(
