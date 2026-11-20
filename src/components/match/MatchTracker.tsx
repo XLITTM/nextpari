@@ -183,8 +183,9 @@ export function MatchTracker({
   const minSwipeDistance = 50;
   const isFavorite = useFavoritesStore((s) => s.isMatchFavorite(match.id));
   const toggleMatchFavorite = useFavoritesStore((s) => s.toggleMatchFavorite);
-  const slides = match.feedTag === 'betsapi' ? 1 : SLIDE_COUNT;
-  const { data: apiExtras } = useMatchWidgetExtras(match.id, match.feedTag !== 'betsapi');
+  const providerFeed = match.feedTag === 'betsapi' || match.feedTag === 'oddspapi-v5';
+  const slides = providerFeed ? 1 : SLIDE_COUNT;
+  const { data: apiExtras } = useMatchWidgetExtras(match.id, !providerFeed);
 
   const fromSs = String(scoreText || '').match(/^(\d+)\s*[-:]\s*(\d+)/);
   const score1 = fromSs ? fromSs[1] : match.liveScore?.team1 ?? '—';
@@ -194,7 +195,7 @@ export function MatchTracker({
   const { elapsed, running, known } = useTickingClock(
     match.isLive,
     apiClock,
-    match.feedTag === 'betsapi' ? undefined : match.liveStatus,
+    providerFeed ? undefined : match.liveStatus,
     clockRunning && period !== 'HT',
     period,
     kickoffUnix,
