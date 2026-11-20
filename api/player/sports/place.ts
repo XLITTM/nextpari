@@ -13,5 +13,11 @@ export default async function handler(
     json: (body: unknown) => unknown;
   },
 ): Promise<void> {
+  if (String(process.env.ODDSPAPI_V5_READONLY_FEED ?? '').trim() === '1') {
+    res.status(503);
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: false, error: 'SPORTSBOOK_EMERGENCY_STOP' });
+    return;
+  }
   await handleVercelPlayerSports(req, res, PLAYER_SPORTS_PLACE_PATH);
 }
