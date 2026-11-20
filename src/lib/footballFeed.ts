@@ -15,6 +15,9 @@ export interface FootballFeedMarket {
 }
 
 export interface FootballFeedCard {
+  provider?: 'oddspapi-v5';
+  displayGroups?: MarketGroup[];
+  observedAt?: string;
   id: string;
   sport?: MatchEvent['sport'];
   tier?: number;
@@ -37,6 +40,9 @@ export interface FootballFeedCard {
 }
 
 export interface FootballOddsQuote {
+  provider?: 'oddspapi-v5';
+  displayGroups?: MarketGroup[];
+  observedAt?: string;
   id: string;
   priceState: FootballPriceState;
   stale?: boolean;
@@ -173,19 +179,19 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
       : undefined,
     liveScore: card.score ? { team1: card.score.home, team2: card.score.away } : undefined,
     markets: { '1': price('home'), x: price('draw'), '2': price('away') },
-    extraMarkets: groups.length,
-    marketGroups: groups,
-    feedTag: 'betsapi',
+    extraMarkets: card.provider === 'oddspapi-v5' ? (card.displayGroups?.length ?? 0) + (oneXtwo ? 1 : 0) : groups.length,
+    marketGroups: card.provider === 'oddspapi-v5' ? card.displayGroups ?? [] : groups,
+    feedTag: card.provider === 'oddspapi-v5' ? 'oddspapi-v5' : 'betsapi',
     priceState,
     betsapiQuotes: quotes,
-    marketsLocked: !oneXtwo,
+    marketsLocked: card.provider === 'oddspapi-v5' || !oneXtwo,
     stats: card.insights?.statistics.map((item) => ({ label: item.label, team1: item.home, team2: item.away })),
     statsAvailability: card.insights?.availability.statistics,
   };
 }
 
 export function isBetsapiMatch(match: Pick<MatchEvent, 'feedTag' | 'betsapiQuotes'> | undefined): boolean {
-  return match?.feedTag === 'betsapi' || Boolean(match?.betsapiQuotes && Object.keys(match.betsapiQuotes).length > 0);
+  return match?.feedTag === 'betsapi' || match?.feedTag === 'oddspapi-v5' || Boolean(match?.betsapiQuotes && Object.keys(match.betsapiQuotes).length > 0);
 }
 
 export function resolveDetailsMatch(catalog?: MatchEvent, stored?: MatchEvent): MatchEvent | undefined {
@@ -219,7 +225,7 @@ export function isFreshSportsPrice(updatedAt: string | undefined, live: boolean,
 
 export function betsapiDetailLines(match: MatchEvent, now = Date.now()): BetsapiDetailLine[] {
   const lines: BetsapiDetailLine[] = [];
-  const readOnly = match.id.startsWith('betsapi:') || match.sport === 'esports';
+  const readOnly = match.feedTag === 'oddspapi-v5' || match.id.startsWith('betsapi:') || match.sport === 'esports';
   const main = [
     { label: 'П1', odds: match.markets['1'] },
     { label: 'X', odds: match.markets.x },
@@ -317,7 +323,7 @@ export function footballPriceNote(state: MatchEvent['priceState'], hasPrices: bo
 const RETRY_STATES = new Set<MatchEvent['priceState']>(['unpriced', 'deferred', 'rate_limited', 'upstream', 'stale', undefined]);
 
 export function footballQuoteIds(matches: MatchEvent[]): { primary: string[]; secondary: string[] } {
-  const needs = (match: MatchEvent) => match.feedTag === 'betsapi' && !match.id.startsWith('betsapi:') && match.sport !== 'esports' && RETRY_STATES.has(match.priceState);
+  const needs = (match: MatchEvent) => (match.feedTag === 'oddspapi-v5' || match.feedTag === 'betsapi' && !match.id.startsWith('betsapi:') && match.sport !== 'esports') && RETRY_STATES.has(match.priceState);
   const live = matches.filter((match) => match.isLive && needs(match)).map((match) => match.id);
   const prematch = matches.filter((match) => !match.isLive && needs(match)).map((match) => match.id);
   const primary = [...live.slice(0, 6), ...prematch].slice(0, 8);
@@ -365,6 +371,9 @@ export function applyFootballQuotes(matches: MatchEvent[], quotes: FootballOddsQ
       return { ...match, priceState: quote.priceState };
     }
     const next = footballCardToMatch({
+      provider: quote.provider,
+      displayGroups: quote.displayGroups,
+      observedAt: quote.observedAt,
       id: match.id,
       sport: match.sport,
       tier: match.sportsTier,
@@ -418,7 +427,7 @@ export async function fetchFootballFeed(signal?: AbortSignal): Promise<FootballF
 }
 
 export async function fetchFootballQuotes(ids: string[], signal?: AbortSignal): Promise<FootballOddsQuote[]> {
-  const unique = ids.filter((id) => /^\d{1,20}$/.test(id)).slice(0, 8);
+  const unique = ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id)).slice(0, 8);
   if (!unique.length) return [];
   const response = await fetch(`/api/player/sports/football-feed?oddsFor=${unique.map(encodeURIComponent).join(',')}`, {
     signal,
@@ -430,7 +439,7 @@ export async function fetchFootballQuotes(ids: string[], signal?: AbortSignal): 
 }
 
 export async function fetchFootballEvent(eventId: string, signal?: AbortSignal): Promise<MatchEvent | null> {
-  if (!/^(?:betsapi:\d{1,3}:)?\d{1,20}$/.test(eventId)) return null;
+  if (!/^(?:(?:betsapi:\d{1,3}:)?\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(eventId)) return null;
   const response = await fetch(`/api/player/sports/football-feed?eventId=${encodeURIComponent(eventId)}`, {
     signal,
     credentials: 'same-origin',
