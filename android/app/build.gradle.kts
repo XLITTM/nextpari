@@ -18,7 +18,7 @@ android {
         // Each published release increments versionCode by 1 and never reuses it.
         versionName = "0.2.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true
 
         buildConfigField("String", "API_BASE_URL", "\"https://nextpari.net/\"")
