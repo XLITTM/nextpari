@@ -424,6 +424,11 @@ internal fun AuthenticatedShell(
                 com.nextpari.app.feature.favorites.FavoritesScreen(
                     sportsbook = sportsbookViewModel,
                     onOpenMatch = { navController.navigateTo(Destinations.match(it)) },
+                    onOpenLeague = { id ->
+                        sportsbookViewModel.rememberMode(if(sportsbookViewModel.leagueMatches(id,"live").isEmpty())"line" else "live")
+                        navController.navigateTo(Destinations.league(id))
+                    },
+                    onOpenSport = { navController.navigateTo(Destinations.championships(it,"live")) },
                 )
             }
             composable(
