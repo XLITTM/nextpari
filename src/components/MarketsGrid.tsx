@@ -313,7 +313,7 @@ export function MarketsGrid({ eventId, match }: { eventId: string; match: MatchE
     });
   };
 
-  if (match.feedTag === 'betsapi' || (match.betsapiQuotes && Object.keys(match.betsapiQuotes).length > 0)) {
+  if (match.feedTag === 'betsapi' || match.feedTag === 'oddspapi-v5' || (match.betsapiQuotes && Object.keys(match.betsapiQuotes).length > 0)) {
     return <BetsapiMarkets match={match} />;
   }
 
