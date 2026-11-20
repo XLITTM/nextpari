@@ -55,6 +55,17 @@ export function periodCaption(periodId: string | null, sport: SportId): string {
     if (sport === 'esports') return '2-я карта';
     return '2-я партия';
   }
+  if (period === 'p3') {
+    if (sport === 'basketball') return '3-я четверть';
+    if (sport === 'hockey') return '3-й период';
+    if (sport === 'esports') return '3-я карта';
+    return '3-я партия';
+  }
+  if (period === 'p4') {
+    if (sport === 'basketball') return '4-я четверть';
+    if (sport === 'esports') return '4-я карта';
+    return '4-я партия';
+  }
   if (!isPeriodMarket(period)) return '';
   return periodId ?? '';
 }

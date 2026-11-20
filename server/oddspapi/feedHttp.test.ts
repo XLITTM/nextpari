@@ -97,6 +97,11 @@ test('a provider 429 keeps the cached board instead of returning an empty sports
   assert.equal(liveCalls, 1);
   assert.equal(todayCalls, 1);
 });
+test('names a missing market catalog separately from an unsafe bookmaker',()=>{
+  const card=v5FixtureToCard(fixture(),null,now)!;
+  assert.equal(card.displayGroups.length,0);
+  assert.equal(card.priceAudit.rejectionReasons['market-catalog-unavailable'],7);
+});
 test('keeps distinct player prices and numeric exact-goal labels in the same snapshot',()=>{
   const row=fixture();
   const odds=row.odds as { '1xbet': Record<string, unknown> };

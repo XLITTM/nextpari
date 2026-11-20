@@ -62,7 +62,7 @@ export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV
   const bookmaker=record(record(f.bookmakers)['1xbet']);
   const safe=bookmaker.hasOdds===true && bookmaker.staleOdds===false && bookmaker.suspended===false && bookmaker.participantsRotated===false;
   const rawBookmakerPrices=Object.keys(record(record(f.odds)['1xbet'])).length;
-  const presentation=safe&&catalog?presentV5Quotes(f,catalog,now,{freshReadOnlySnapshot:true}):{accepted:[],rejected:0,reasons:rawBookmakerPrices?{'bookmaker-unsafe':rawBookmakerPrices}:{}};
+  const presentation=safe&&catalog?presentV5Quotes(f,catalog,now,{freshReadOnlySnapshot:true}):{accepted:[],rejected:0,reasons:rawBookmakerPrices?{ [safe ? 'market-catalog-unavailable' : 'bookmaker-unsafe']: rawBookmakerPrices }:{}};
   const quotes=presentation.accepted;
   const groups=new Map<number,MarketGroup>();
   for(const quote of quotes) {

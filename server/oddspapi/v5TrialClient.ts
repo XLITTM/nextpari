@@ -153,7 +153,7 @@ export class OddsPapiV5TrialReader {
     this.timeoutMs = Math.min(20_000, Math.max(1_000, options.timeoutMs ?? 9_000));
   }
 
-  private async get<T>(endpoint: string, query: Record<string, string>): Promise<V5Result<T>> {
+  private async get<T>(endpoint: string, query: Record<string, string>, limits?: { timeoutMs?: number; maxBytes?: number }): Promise<V5Result<T>> {
     const key = String(this.env.ODDSPAPI_V5_API_KEY ?? '').trim();
     if (!key) return { ok: false, status: null, error: 'NOT_CONFIGURED', data: null };
     if (!/^[a-z/]+$/.test(endpoint)) return { ok: false, status: null, error: 'INVALID_RESPONSE', data: null };
@@ -165,7 +165,7 @@ export class OddsPapiV5TrialReader {
       const response = await this.fetchImpl(url, {
         method: 'GET',
         headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal: AbortSignal.timeout(limits?.timeoutMs ?? this.timeoutMs),
         cache: 'no-store',
       });
       if (!response.ok) {
@@ -178,11 +178,12 @@ export class OddsPapiV5TrialReader {
           retryAfterMs: response.status === 429 ? retryAfterMs(response, errorText) : null,
         };
       }
-      if (Number(response.headers.get('content-length')) > 2_000_000) {
+      const maxBytes = limits?.maxBytes ?? 2_000_000;
+      if (Number(response.headers.get('content-length')) > maxBytes) {
         return { ok: false, status: response.status, error: 'INVALID_RESPONSE', data: null };
       }
       const body = await response.text();
-      if (body.length > 2_000_000) return { ok: false, status: response.status, error: 'INVALID_RESPONSE', data: null };
+      if (body.length > maxBytes) return { ok: false, status: response.status, error: 'INVALID_RESPONSE', data: null };
       let value: unknown;
       try { value = JSON.parse(body); }
       catch { return { ok: false, status: response.status, error: 'INVALID_RESPONSE', data: null }; }
@@ -199,7 +200,7 @@ export class OddsPapiV5TrialReader {
   sports(): Promise<V5Result<JsonRecord[]>> { return this.get('sports', {}); }
   markets(sportId: number): Promise<V5Result<JsonRecord[]>> {
     if (!validSportId(sportId)) return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
-    return this.get('markets', { sportId: String(sportId) });
+    return this.get('markets', { sportId: String(sportId) }, { timeoutMs: 20_000, maxBytes: 8_000_000 });
   }
   today(sportId: number): Promise<V5Result<JsonRecord[]>> {
     if (!validSportId(sportId)) return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
