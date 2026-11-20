@@ -185,4 +185,96 @@ export class OddsPapiV5TrialReader {
     if (!sourceFixtureId(id)) return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
     return this.get('fixtures/odds', { fixtureId: id, bookmakers: V5_BOOKMAKER });
   }
+  participants(ids: readonly number[]): Promise<V5Result<JsonRecord[]>> {
+    const unique = [...new Set(ids.filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, 40);
+    if (unique.length === 0) return Promise.resolve({ ok: true, status: 200, error: null, data: [] });
+    return this.get('participants', { participantIds: unique.join(',') });
+  }
+  tournaments(ids: readonly number[]): Promise<V5Result<JsonRecord[]>> {
+    const unique = [...new Set(ids.filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, 40);
+    if (unique.length === 0) return Promise.resolve({ ok: true, status: 200, error: null, data: [] });
+    return this.get('tournaments', { tournamentIds: unique.join(',') });
+  }
+}
+
+const CATALOG_TTL_MS = 10 * 60 * 1000;
+const catalogCache = new Map<string, { at: number; value: { name: string; sportId: number | null } | null }>();
+
+export function clearV5CatalogCache(): void {
+  catalogCache.clear();
+}
+
+function catalogRows(value: unknown): JsonRecord[] {
+  if (Array.isArray(value)) return value.filter((item) => item !== null && typeof item === 'object') as JsonRecord[];
+  const body = record(value);
+  for (const key of ['participants', 'tournaments', 'data']) {
+    if (Array.isArray(body[key])) return body[key].filter((item) => item !== null && typeof item === 'object') as JsonRecord[];
+  }
+  return [];
+}
+
+function rememberCatalog(kind: 'participant' | 'tournament', id: number, value: { name: string; sportId: number | null } | null, now: number): void {
+  catalogCache.set(`${kind}:${id}`, { at: now, value });
+}
+
+async function resolveCatalog(
+  kind: 'participant' | 'tournament',
+  ids: readonly number[],
+  load: (missing: number[]) => Promise<V5Result<JsonRecord[]>>,
+  read: (row: JsonRecord) => { id: number; name: string; sportId: number | null } | null,
+  now = Date.now(),
+): Promise<Map<number, { name: string; sportId: number | null } | null>> {
+  const out = new Map<number, { name: string; sportId: number | null } | null>();
+  const missing: number[] = [];
+  for (const id of [...new Set(ids)]) {
+    if (!Number.isSafeInteger(id) || id <= 0) continue;
+    const hit = catalogCache.get(`${kind}:${id}`);
+    if (hit && now - hit.at < CATALOG_TTL_MS) out.set(id, hit.value);
+    else missing.push(id);
+  }
+  for (let index = 0; index < missing.length; index += 40) {
+    const chunk = missing.slice(index, index + 40);
+    const result = await load(chunk);
+    if (!result.ok || !result.data) continue;
+    const found = new Map<number, { name: string; sportId: number | null } | null>();
+    for (const row of catalogRows(result.data)) {
+      const parsed = read(row);
+      if (!parsed || !chunk.includes(parsed.id)) continue;
+      const previous = found.get(parsed.id);
+      if (previous && previous.name !== parsed.name) found.set(parsed.id, null);
+      else if (!previous) found.set(parsed.id, { name: parsed.name, sportId: parsed.sportId });
+    }
+    for (const id of chunk) {
+      const value = found.get(id) ?? null;
+      rememberCatalog(kind, id, value, now);
+      out.set(id, value);
+    }
+  }
+  return out;
+}
+
+export async function cachedParticipants(
+  reader: Pick<OddsPapiV5TrialReader, 'participants'>,
+  ids: readonly number[],
+  now = Date.now(),
+): Promise<Map<number, { name: string; sportId: number | null } | null>> {
+  return resolveCatalog('participant', ids, (missing) => reader.participants(missing), (row) => {
+    const id = row.participantId;
+    const name = typeof row.name === 'string' ? row.name.trim() : '';
+    if (typeof id !== 'number' || !Number.isSafeInteger(id) || !name) return null;
+    return { id, name, sportId: typeof row.sportId === 'number' ? row.sportId : null };
+  }, now);
+}
+
+export async function cachedTournaments(
+  reader: Pick<OddsPapiV5TrialReader, 'tournaments'>,
+  ids: readonly number[],
+  now = Date.now(),
+): Promise<Map<number, { name: string; sportId: number | null } | null>> {
+  return resolveCatalog('tournament', ids, (missing) => reader.tournaments(missing), (row) => {
+    const id = row.tournamentId;
+    const name = typeof row.tournamentName === 'string' ? row.tournamentName.trim() : '';
+    if (typeof id !== 'number' || !Number.isSafeInteger(id) || !name) return null;
+    return { id, name, sportId: typeof row.sportId === 'number' ? row.sportId : null };
+  }, now);
 }

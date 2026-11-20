@@ -39,9 +39,33 @@ export interface V5CanonicalQuote extends V5ActiveQuote {
   canonicalSportId: string;
   sportKey: string | null;
   marketName: string;
+  marketType: string;
   outcomeName: string;
   period: string;
   handicap: number | null;
+  line: string;
+}
+
+export const DEMO_FIXTURE_LIMIT = 40;
+export const DEMO_CARD_PRICE_LIMIT = 12;
+
+export interface V5FixtureDisplay {
+  fixtureId: string;
+  canonicalEventId: string;
+  sportId: number | null;
+  canonicalSportId: string | null;
+  sportKey: string | null;
+  live: boolean;
+  hasOdds: boolean;
+  staleOdds: boolean;
+  suspended: boolean;
+  participant1Id: number | null;
+  participant2Id: number | null;
+  participant1Name: string | null;
+  participant2Name: string | null;
+  tournamentId: number | null;
+  tournamentName: string | null;
+  startTimeMs: number | null;
 }
 
 function record(value: unknown): Record<string, unknown> {
@@ -192,35 +216,131 @@ export function presentV5Quotes(
       canonicalSportId: sportId === null ? `${ODDSPAPI_V5_NAMESPACE}:sport:unknown` : canonicalSportId(sportId),
       sportKey: sportId === null ? null : sportKeyFor(sportId),
       marketName: market.marketName,
+      marketType: market.marketType,
       outcomeName,
       period: market.period,
       handicap: market.handicap,
+      line: quote.sourceSelectionId.split(':')[3] ?? '',
     });
   }
   return { accepted, rejected };
 }
 
-function participantLabel(fixture: Record<string, unknown>, index: number): string | null {
-  const direct = text(fixture[index === 0 ? 'participant1Name' : 'participant2Name']);
-  if (direct) return direct;
-  const participants = fixture.participants;
-  if (!Array.isArray(participants)) return null;
-  const participant = record(participants[index]);
-  return text(participant.name) || text(participant.participantName) || null;
+function positiveInt(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
-export function canonicalFixtureView(value: unknown) {
+/** OddsPapi V5 startTime is Unix seconds. Anything else stays unknown. */
+export function unixSecondsToMs(value: unknown): number | null {
+  const seconds = typeof value === 'number' ? value : typeof value === 'string' && /^\d{10}$/.test(value) ? Number(value) : Number.NaN;
+  if (!Number.isFinite(seconds) || seconds < 1_000_000_000 || seconds > 10_000_000_000) return null;
+  return seconds * 1000;
+}
+
+export function fixtureDisplay(value: unknown): V5FixtureDisplay | null {
   const summary = summarizeV5Fixture(value);
   if (!summary) return null;
   const fixture = record(value);
+  const participants = record(fixture.participants);
+  const tournament = record(fixture.tournament);
+  const tournamentId = positiveInt(tournament.tournamentId);
   return {
     ...summary,
     canonicalEventId: canonicalEventId(summary.fixtureId),
     canonicalSportId: summary.sportId === null ? null : canonicalSportId(summary.sportId),
     sportKey: summary.sportId === null ? null : sportKeyFor(summary.sportId),
-    participant1Name: participantLabel(fixture, 0),
-    participant2Name: participantLabel(fixture, 1),
-    tournamentName: text(record(fixture.tournament).tournamentName) || text(fixture.tournamentName) || null,
-    startTime: text(fixture.startTime) || text(fixture.startTimeUtc) || null,
+    participant1Id: positiveInt(participants.participant1Id),
+    participant2Id: positiveInt(participants.participant2Id),
+    participant1Name: null,
+    participant2Name: null,
+    tournamentId,
+    tournamentName: tournamentId === null ? null : text(tournament.tournamentName) || null,
+    startTimeMs: unixSecondsToMs(fixture.startTime),
   };
+}
+
+export function canonicalFixtureView(value: unknown): V5FixtureDisplay | null {
+  return fixtureDisplay(value);
+}
+
+function catalogName(
+  id: number | null,
+  sportId: number | null,
+  catalog: Map<number, { name: string; sportId: number | null } | null>,
+): string | null {
+  if (id === null) return null;
+  const row = catalog.get(id);
+  if (!row?.name) return null;
+  if (row.sportId !== null && sportId !== null && row.sportId !== sportId) return null;
+  return row.name;
+}
+
+export function applyCatalogNames(
+  fixture: V5FixtureDisplay,
+  participants: Map<number, { name: string; sportId: number | null } | null>,
+  tournaments: Map<number, { name: string; sportId: number | null } | null>,
+): V5FixtureDisplay {
+  const tournament = catalogName(fixture.tournamentId, null, tournaments);
+  return {
+    ...fixture,
+    participant1Name: catalogName(fixture.participant1Id, fixture.sportId, participants),
+    participant2Name: catalogName(fixture.participant2Id, fixture.sportId, participants),
+    tournamentName: tournament ?? fixture.tournamentName,
+  };
+}
+
+function outcomeSide(name: string): '1' | 'x' | '2' | null {
+  const value = name.trim().toLowerCase();
+  if (value === '1' || value === 'home') return '1';
+  if (value === 'x' || value === 'draw') return 'x';
+  if (value === '2' || value === 'away') return '2';
+  return null;
+}
+
+function periodSpecific(value: string): boolean {
+  return /half|quarter|period|set|map|inning|1st|2nd|first|second|\bp[1-9]\b/.test(value);
+}
+
+export function isFullTimeMainMarket(market: V5MarketDefinition): boolean {
+  const type = market.marketType.trim().toLowerCase();
+  const period = market.period.trim().toLowerCase();
+  if (periodSpecific(type) || periodSpecific(period)) return false;
+  if (market.handicap !== null && market.handicap !== 0) return false;
+  const sides = [...market.outcomes.values()].map(outcomeSide).filter((side) => side !== null);
+  if (new Set(sides).size < 2) return false;
+  const fullPeriod = period === '' || /^(ft|fulltime|full-time|full time|match|regular|result)$/.test(period);
+  const mainType = /^(1x2|moneyline|match winner|winner)$/.test(type);
+  return fullPeriod && mainType;
+}
+
+export interface V5CardPrices {
+  fixtureId: string;
+  canonicalEventId: string;
+  available: boolean;
+  prices: { '1': number | null; x: number | null; '2': number | null };
+}
+
+export function cardPricesForFixture(
+  fixture: unknown,
+  catalog: { byId: Map<number, V5MarketDefinition>; ambiguous: Set<number> },
+  now = Date.now(),
+): V5CardPrices | null {
+  const display = fixtureDisplay(fixture);
+  if (!display) return null;
+  const empty = { '1': null, x: null, '2': null } as V5CardPrices['prices'];
+  const presented = presentV5Quotes(fixture, catalog, now);
+  const rows = presented.accepted.filter((quote) => {
+    const market = catalog.byId.get(quote.marketId);
+    return market ? isFullTimeMainMarket(market) : false;
+  });
+  const marketIds = new Set(rows.map((quote) => quote.marketId));
+  if (marketIds.size !== 1) return { fixtureId: display.fixtureId, canonicalEventId: display.canonicalEventId, available: false, prices: empty };
+  const prices = { ...empty };
+  for (const quote of rows) {
+    const side = outcomeSide(quote.outcomeName);
+    if (!side || prices[side] !== null) return { fixtureId: display.fixtureId, canonicalEventId: display.canonicalEventId, available: false, prices: empty };
+    prices[side] = quote.price;
+  }
+  const available = prices['1'] !== null && prices['2'] !== null;
+  return { fixtureId: display.fixtureId, canonicalEventId: display.canonicalEventId, available, prices: available ? prices : empty };
 }

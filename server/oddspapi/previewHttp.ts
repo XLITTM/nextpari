@@ -1,12 +1,18 @@
 import { timingSafeEqual } from 'node:crypto';
 import {
+  applyCatalogNames,
   canonicalFixtureView,
+  cardPricesForFixture,
+  DEMO_CARD_PRICE_LIMIT,
+  DEMO_FIXTURE_LIMIT,
+  fixtureDisplay,
   indexV5Markets,
   isV5SportId,
   presentV5Quotes,
   sevenSportCategories,
+  type V5MarketDefinition,
 } from './canonical.js';
-import { OddsPapiV5TrialReader, type V5ReaderOptions } from './v5TrialClient.js';
+import { cachedParticipants, cachedTournaments, OddsPapiV5TrialReader, type V5ReaderOptions } from './v5TrialClient.js';
 
 export const ODDSPAPI_V5_PREVIEW_PATH = '/api/internal/oddspapi-v5-preview';
 export const ODDSPAPI_V5_PREVIEW_HEADER = 'x-oddspapi-v5-preview-key';
@@ -88,6 +94,18 @@ function sportIdFrom(params: URLSearchParams): number | null {
   return Number.isInteger(sportId) && isV5SportId(sportId) ? sportId : null;
 }
 
+const marketCache = new Map<number, { at: number; catalog: { byId: Map<number, V5MarketDefinition>; ambiguous: Set<number> } }>();
+
+async function marketCatalog(client: OddsPapiV5TrialReader, sportId: number, now: number) {
+  const hit = marketCache.get(sportId);
+  if (hit && now - hit.at < 10 * 60 * 1000) return hit.catalog;
+  const markets = await client.markets(sportId);
+  if (!markets.ok || !markets.data) return null;
+  const catalog = indexV5Markets(markets.data);
+  marketCache.set(sportId, { at: now, catalog });
+  return catalog;
+}
+
 function statusFor(error: string | null, ok: boolean): number {
   if (ok) return 200;
   if (error === 'NOT_CONFIGURED') return 503;
@@ -145,7 +163,16 @@ export async function handleOddsPapiV5PreviewRequest(
       };
     }
     const rows = Array.isArray(result.data) ? result.data : [];
-    const fixtures = rows.map(canonicalFixtureView).filter((item) => item !== null).slice(0, 40);
+    const parsed = rows.map(fixtureDisplay).filter((item) => item !== null);
+    const shown = parsed.slice(0, DEMO_FIXTURE_LIMIT);
+    const participantIds = shown.flatMap((item) => [item.participant1Id, item.participant2Id]).filter((id): id is number => id !== null);
+    const tournamentIds = shown.flatMap((item) => item.tournamentId !== null && !item.tournamentName ? [item.tournamentId] : []);
+    const [participants, tournaments] = await Promise.all([
+      cachedParticipants(client, participantIds, now),
+      cachedTournaments(client, tournamentIds, now),
+    ]);
+    const fixtures = shown.map((item) => applyCatalogNames(item, participants, tournaments));
+    const lineOpen = (item: { hasOdds: boolean; staleOdds: boolean; suspended: boolean }) => item.hasOdds && !item.staleOdds && !item.suspended;
     return {
       status: 200,
       headers: PRIVATE_HEADERS,
@@ -154,10 +181,44 @@ export async function handleOddsPapiV5PreviewRequest(
         ...base,
         sportId,
         phase: view,
-        fixtureCount: fixtures.length,
-        withOdds: fixtures.filter((item) => item.hasOdds && !item.staleOdds && !item.suspended).length,
+        upstreamFixtureCount: parsed.length,
+        shownFixtureCount: fixtures.length,
+        displayLimit: DEMO_FIXTURE_LIMIT,
+        fixtureCount: parsed.length,
+        upstreamWithOdds: parsed.filter(lineOpen).length,
+        shownWithOdds: fixtures.filter(lineOpen).length,
+        withOdds: parsed.filter(lineOpen).length,
         fixtures,
       },
+    };
+  }
+
+  if (view === 'cards') {
+    const fixtureIds = [...new Set((params.get('fixtureIds') ?? '').split(',').map((item) => item.trim()))].slice(0, DEMO_CARD_PRICE_LIMIT);
+    if (fixtureIds.length === 0) return notFound();
+    const loaded = await Promise.all(fixtureIds.map(async (fixtureId) => {
+      const result = await client.fixtureOdds(fixtureId);
+      return { fixtureId, result };
+    }));
+    const cards = [];
+    for (const item of loaded) {
+      if (!item.result.ok || !item.result.data) {
+        cards.push({ fixtureId: item.fixtureId, available: false, prices: { '1': null, x: null, '2': null } });
+        continue;
+      }
+      const sportId = fixtureDisplay(item.result.data)?.sportId ?? null;
+      if (sportId === null || !isV5SportId(sportId)) {
+        cards.push({ fixtureId: item.fixtureId, available: false, prices: { '1': null, x: null, '2': null } });
+        continue;
+      }
+      const catalog = await marketCatalog(client, sportId, now);
+      const priced = catalog ? cardPricesForFixture(item.result.data, catalog, now) : null;
+      cards.push(priced ?? { fixtureId: item.fixtureId, available: false, prices: { '1': null, x: null, '2': null } });
+    }
+    return {
+      status: 200,
+      headers: PRIVATE_HEADERS,
+      body: { ok: true, ...base, requested: fixtureIds.length, priceLookupLimit: DEMO_CARD_PRICE_LIMIT, cards },
     };
   }
 

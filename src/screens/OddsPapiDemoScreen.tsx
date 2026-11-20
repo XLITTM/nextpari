@@ -1,10 +1,7 @@
 import { useEffect, useState } from 'react';
-import { BetSlipProvider } from '../BetSlipContext';
-import { MatchCard } from '../components/MatchCard';
 import { SportIcon } from '../components/SportIcon';
-import { QuickBetProvider } from '../QuickBetContext';
 import { oddspapiDemoUrl } from '../lib/oddspapiDemo';
-import type { MatchEvent, SportId } from '../types';
+import type { SportId } from '../types';
 
 interface DemoSport {
   sportId: number;
@@ -23,16 +20,25 @@ interface DemoFixture {
   participant1Name: string | null;
   participant2Name: string | null;
   tournamentName: string | null;
-  startTime: string | null;
+  startTimeMs: number | null;
 }
 
 interface DemoQuote {
   canonicalMarketId: string;
   canonicalSelectionId: string;
   marketName: string;
+  marketType: string;
   outcomeName: string;
   period: string;
+  handicap: number | null;
+  line: string;
   price: number;
+}
+
+interface CardPrices {
+  fixtureId: string;
+  available: boolean;
+  prices: { '1': number | null; x: number | null; '2': number | null };
 }
 
 const LABELS: Record<string, string> = {
@@ -57,23 +63,18 @@ function iconSport(sportKey: string | null): SportId {
   return 'all';
 }
 
-function toCard(fixture: DemoFixture): MatchEvent {
-  const start = Date.parse(fixture.startTime ?? '');
-  return {
-    id: fixture.canonicalEventId,
-    sport: iconSport(fixture.sportKey),
-    league: fixture.tournamentName || '1xBet',
-    country: '',
-    team1: fixture.participant1Name || 'Участник 1',
-    team2: fixture.participant2Name || 'Участник 2',
-    team1Color: '#14532d',
-    team2Color: '#1e3a8a',
-    startTime: Number.isFinite(start) ? start : Date.now(),
-    isLive: fixture.live,
-    markets: { '1': 0, x: 0, '2': 0 },
-    extraMarkets: 0,
-    marketsLocked: true,
-  };
+function clockLabel(startTimeMs: number | null): string {
+  if (startTimeMs === null) return 'Время недоступно';
+  return new Date(startTimeMs).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+function PriceCell({ label, price }: { label: string; price: number | null }) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white px-2.5 py-1.5 dark:border-gray-600 dark:bg-[#0f172a]">
+      <span className="text-xs font-bold text-gray-900 dark:text-white">{label}</span>
+      <span className="text-sm font-extrabold text-gray-900 dark:text-white">{price ?? '—'}</span>
+    </div>
+  );
 }
 
 async function readDemo(query: Record<string, string>): Promise<{ status: number; body: Record<string, unknown> }> {
@@ -88,7 +89,8 @@ export function OddsPapiDemoScreen() {
   const [sportId, setSportId] = useState(10);
   const [phase, setPhase] = useState<'live' | 'today'>('live');
   const [fixtures, setFixtures] = useState<DemoFixture[]>([]);
-  const [counts, setCounts] = useState({ fixtureCount: 0, withOdds: 0 });
+  const [counts, setCounts] = useState({ upstream: 0, shown: 0, withOdds: 0, limit: 40 });
+  const [prices, setPrices] = useState<Record<string, CardPrices>>({});
   const [selected, setSelected] = useState<DemoFixture | null>(null);
   const [quotes, setQuotes] = useState<DemoQuote[]>([]);
   const [rejected, setRejected] = useState(0);
@@ -124,8 +126,10 @@ export function OddsPapiDemoScreen() {
       const rows = Array.isArray(result.body.fixtures) ? result.body.fixtures as DemoFixture[] : [];
       setFixtures(rows);
       setCounts({
-        fixtureCount: Number(result.body.fixtureCount ?? rows.length),
-        withOdds: Number(result.body.withOdds ?? 0),
+        upstream: Number(result.body.upstreamFixtureCount ?? result.body.fixtureCount ?? rows.length),
+        shown: Number(result.body.shownFixtureCount ?? rows.length),
+        withOdds: Number(result.body.upstreamWithOdds ?? result.body.withOdds ?? 0),
+        limit: Number(result.body.displayLimit ?? 40),
       });
       setMessage(result.status === 200 ? '' : 'События сейчас недоступны.');
     }).catch(() => {
@@ -135,6 +139,30 @@ export function OddsPapiDemoScreen() {
       cancelled = true;
     };
   }, [closed, phase, sportId, sports.length]);
+
+  useEffect(() => {
+    const ids = fixtures
+      .filter((fixture) => fixture.hasOdds && !fixture.staleOdds && !fixture.suspended)
+      .slice(0, 12)
+      .map((fixture) => fixture.fixtureId);
+    if (ids.length === 0) {
+      setPrices({});
+      return;
+    }
+    let cancelled = false;
+    readDemo({ view: 'cards', fixtureIds: ids.join(',') }).then((result) => {
+      if (cancelled) return;
+      const next: Record<string, CardPrices> = {};
+      const cards = Array.isArray(result.body.cards) ? result.body.cards as CardPrices[] : [];
+      for (const card of cards) next[card.fixtureId] = card;
+      setPrices(next);
+    }).catch(() => {
+      if (!cancelled) setPrices({});
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fixtures]);
 
   useEffect(() => {
     if (!selected || selected.staleOdds || selected.suspended || !selected.hasOdds) {
@@ -162,14 +190,13 @@ export function OddsPapiDemoScreen() {
 
   const markets = new Map<string, DemoQuote[]>();
   for (const quote of quotes) {
-    const rows = markets.get(quote.canonicalMarketId) ?? [];
+    const key = `${quote.period}|${quote.marketType}|${quote.canonicalMarketId}|${quote.handicap ?? ''}|${quote.line}`;
+    const rows = markets.get(key) ?? [];
     rows.push(quote);
-    markets.set(quote.canonicalMarketId, rows);
+    markets.set(key, rows);
   }
 
   return (
-    <BetSlipProvider>
-      <QuickBetProvider>
         <div className="relative mx-auto flex h-screen max-w-[720px] flex-col overflow-hidden bg-[#f0f2f5] dark:bg-gray-900">
           <div className="border-b border-amber-300 bg-amber-100 px-4 py-3 text-amber-950">
             <p className="text-sm font-extrabold">ДЕМО / ТОЛЬКО ПРОСМОТР</p>
@@ -202,7 +229,8 @@ export function OddsPapiDemoScreen() {
               </button>
             ))}
             <p className="self-center text-xs font-semibold text-gray-600">
-              {counts.fixtureCount} событий · {counts.withOdds} с активной линией
+              показано {counts.shown} из {counts.upstream} · с линией {counts.withOdds}
+              {counts.upstream > counts.limit ? ` · лимит экрана ${counts.limit}` : ''}
             </p>
           </div>
           <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3 pb-16">
@@ -217,7 +245,13 @@ export function OddsPapiDemoScreen() {
                 ) : null}
                 {[...markets.entries()].map(([marketId, rows]) => (
                   <div key={marketId} className="mt-3">
-                    <p className="text-sm font-extrabold text-gray-900">{rows[0]?.marketName}{rows[0]?.period ? ` · ${rows[0].period}` : ''}</p>
+                    <p className="text-sm font-extrabold text-gray-900">
+              {rows[0]?.marketName}
+              {rows[0]?.period ? ` · ${rows[0].period}` : ''}
+              {rows[0]?.marketType ? ` · ${rows[0].marketType}` : ''}
+              {rows[0]?.line ? ` · линия ${rows[0].line}` : ''}
+              {rows[0]?.handicap !== null && rows[0]?.handicap !== undefined ? ` · ${rows[0].handicap}` : ''}
+            </p>
                     <div className="mt-1 grid grid-cols-2 gap-2">
                       {rows.map((row) => (
                         <div key={row.canonicalSelectionId} className="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2">
@@ -232,13 +266,34 @@ export function OddsPapiDemoScreen() {
                   <p className="mt-3 text-sm font-semibold text-gray-600">Отклонено котировок: {rejected}. Неоднозначные, старые и приостановленные рынки скрыты.</p>
                 ) : null}
               </section>
-            ) : fixtures.map((fixture) => (
-              <MatchCard
-                key={fixture.canonicalEventId}
-                match={toCard(fixture)}
-                onOpenMatch={() => setSelected(fixture)}
-              />
-            ))}
+            ) : fixtures.map((fixture) => {
+              const card = prices[fixture.fixtureId];
+              const priced = card?.available ? card.prices : null;
+              return (
+                <div
+                  key={fixture.canonicalEventId}
+                  className="flex h-[144px] w-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-gray-200 bg-gray-50 shadow-sm dark:border-gray-700 dark:bg-[#1e293b]"
+                  onClick={() => setSelected(fixture)}
+                >
+                  <div className="flex items-center gap-1.5 border-b border-gray-200 px-3 py-1.5 text-xs dark:border-gray-700">
+                    <SportIcon sport={iconSport(fixture.sportKey)} className="h-6 w-6 shrink-0 text-[#4ade80]" />
+                    <span className="truncate font-bold text-gray-900 dark:text-white">{fixture.tournamentName ?? 'Турнир недоступен'}</span>
+                  </div>
+                  <div className="flex flex-1 items-center gap-3 px-3">
+                    <span className="flex-1 truncate text-right text-sm font-extrabold text-gray-900 dark:text-white">{fixture.participant1Name ?? 'Название недоступно'}</span>
+                    <span className="shrink-0 text-center text-xs font-bold text-gray-700 dark:text-gray-200">
+                      {fixture.live ? 'LIVE' : clockLabel(fixture.startTimeMs)}
+                    </span>
+                    <span className="flex-1 truncate text-sm font-extrabold text-gray-900 dark:text-white">{fixture.participant2Name ?? 'Название недоступно'}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5 px-3 pb-2">
+                    <PriceCell label="П1" price={priced?.['1'] ?? null} />
+                    <PriceCell label="X" price={priced?.x ?? null} />
+                    <PriceCell label="П2" price={priced?.['2'] ?? null} />
+                  </div>
+                </div>
+              );
+            })}
           </div>
           <button
             type="button"
@@ -251,7 +306,5 @@ export function OddsPapiDemoScreen() {
             Обычный вход
           </button>
         </div>
-      </QuickBetProvider>
-    </BetSlipProvider>
   );
 }

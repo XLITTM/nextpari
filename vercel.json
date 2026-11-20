@@ -8,6 +8,9 @@
     },
     "api/internal/sports/betsapi-settle.ts": {
       "maxDuration": 60
+    },
+    "api/internal/oddspapi-v5-demo.ts": {
+      "maxDuration": 30
     }
   },
   "crons": [

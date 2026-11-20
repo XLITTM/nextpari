@@ -18,9 +18,13 @@ describe('oddspapi preview demo entry', () => {
     const screen = readFileSync(join(root, 'src/screens/OddsPapiDemoScreen.tsx'), 'utf8');
     const app = readFileSync(join(root, 'src/App.tsx'), 'utf8');
     assert.equal(screen.includes('WalletProvider'), false);
+    assert.equal(screen.includes('BetSlipProvider'), false);
     assert.equal(screen.includes('supabase'), false);
     assert.equal(screen.includes('sportsPlace'), false);
-    assert.equal(screen.includes("markets: { '1': 0, x: 0, '2': 0 }"), true);
+    assert.equal(screen.includes('Название недоступно'), true);
+    assert.equal(screen.includes('Время недоступно'), true);
+    assert.equal(screen.includes('MatchCard'), false);
+    assert.equal(screen.includes('function PriceCell'), true);
     assert.equal(app.includes('isOddsPapiDemoEntry(window.location.hash)'), true);
     assert.equal(app.includes('<AuthScreen'), true);
   });

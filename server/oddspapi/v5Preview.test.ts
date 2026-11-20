@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { resolveSportsQuoteProvider, SportsProviderUnsupportedError } from '../sports/quoteProvider.js';
-import { canonicalEventId, indexV5Markets, presentV5Quotes, sevenSportCategories } from './canonical.js';
+import { applyCatalogNames, canonicalEventId, cardPricesForFixture, fixtureDisplay, indexV5Markets, presentV5Quotes, sevenSportCategories, unixSecondsToMs } from './canonical.js';
 import { handleOddsPapiV5DemoRequest, handleOddsPapiV5PreviewRequest } from './previewHttp.js';
-import { OddsPapiV5TrialReader } from './v5TrialClient.js';
+import { clearV5CatalogCache, OddsPapiV5TrialReader } from './v5TrialClient.js';
 import { V5_STREAM_WORKER_DEPENDENCY } from './v5WebSocket.js';
 
 const FIXTURE = 'id1000032566887160';
@@ -115,6 +115,92 @@ describe('oddspapi v5 canonical preview', () => {
     assert.equal((demo.body.sports as unknown[]).length, 10);
     assert.equal(JSON.stringify(demo.body).includes('server-side-test-key'), false);
     assert.equal(JSON.stringify(demo.body).includes('preview-key'), false);
+  });
+
+  it('resolves catalog names and unix-second kickoff without inventing a clock', async () => {
+    clearV5CatalogCache();
+    const listed = {
+      fixtureId: FIXTURE,
+      sport: { sportId: 10 },
+      status: { live: false },
+      bookmakers: { '1xbet': { hasOdds: true, staleOdds: false, suspended: false } },
+      participants: { participant1Id: 2999, participant2Id: 3010, participant1Name: 'Embedded Name' },
+      tournament: { tournamentId: 238, tournamentName: 'Liga Portugal' },
+      startTime: 1792437300,
+    };
+    assert.equal(unixSecondsToMs(1792437300), 1792437300000);
+    assert.equal(unixSecondsToMs('not-a-time'), null);
+    const bare = fixtureDisplay(listed);
+    assert.equal(bare?.participant1Name, null);
+    assert.equal(bare?.startTimeMs, 1792437300000);
+    const participants = new Map([[2999, { name: 'SC Braga', sportId: 10 }], [3010, { name: 'Gil Vicente', sportId: 11 }]]);
+    const named = applyCatalogNames(bare!, participants, new Map());
+    assert.equal(named.participant1Name, 'SC Braga');
+    assert.equal(named.participant2Name, null);
+    assert.equal(named.tournamentName, 'Liga Portugal');
+    const reader = {
+      async today() {
+        return { ok: true, status: 200, error: null, data: [listed, { ...listed, fixtureId: 'id1000032566887161' }] };
+      },
+      async participants() {
+        return { ok: true, status: 200, error: null, data: [{ participantId: 2999, sportId: 10, name: 'SC Braga' }, { participantId: 3010, sportId: 10, name: 'Gil Vicente' }] };
+      },
+      async tournaments() {
+        return { ok: true, status: 200, error: null, data: [] };
+      },
+    };
+    const result = await handleOddsPapiV5PreviewRequest({
+      method: 'GET',
+      url: '/api/internal/oddspapi-v5-preview?view=today&sportId=10',
+      headers: { 'x-oddspapi-v5-preview-key': 'preview-key' },
+    }, env, reader as unknown as OddsPapiV5TrialReader, Date.parse('2026-11-20T00:01:00.000Z'));
+    const fixtures = result.body.fixtures as Array<Record<string, unknown>>;
+    assert.equal(result.body.upstreamFixtureCount, 2);
+    assert.equal(result.body.shownFixtureCount, 2);
+    assert.equal(fixtures[0].participant1Name, 'SC Braga');
+    assert.equal(fixtures[0].participant2Name, 'Gil Vicente');
+    assert.equal(fixtures[0].startTimeMs, 1792437300000);
+    assert.equal(JSON.stringify(result.body).includes('Embedded Name'), false);
+  });
+
+  it('shows only one fresh full-time 1x2 and hides period prices', () => {
+    const half = {
+      marketId: 202,
+      marketName: '1st half',
+      marketType: '1x2',
+      period: '1st half',
+      handicap: 0,
+      outcomes: [{ outcomeId: 201, outcomeName: '1' }, { outcomeId: 202, outcomeName: 'X' }, { outcomeId: 203, outcomeName: '2' }],
+    };
+    const full = { ...markets[0], period: 'fulltime' };
+    const catalog = indexV5Markets([full, half]);
+    const selection = (marketId: number, outcomeId: number, price: number) => ({
+      bookmaker: '1xbet', outcomeId, marketId, price, active: true, changedAt: '2026-11-20T00:00:00.000Z',
+    });
+    const payload = fixture({
+      odds: { '1xbet': {
+        [`${FIXTURE}:1xbet:101:0`]: selection(101, 101, 1.9),
+        [`${FIXTURE}:1xbet:102:0`]: selection(101, 102, 3.4),
+        [`${FIXTURE}:1xbet:103:0`]: selection(101, 103, 4.1),
+        [`${FIXTURE}:1xbet:201:0`]: selection(202, 201, 2.2),
+      } },
+    });
+    const card = cardPricesForFixture(payload, catalog, Date.parse('2026-11-20T00:01:00.000Z'));
+    assert.deepEqual(card?.prices, { '1': 1.9, x: 3.4, '2': 4.1 });
+    const stale = fixture({ bookmakers: { '1xbet': { hasOdds: true, staleOdds: true, suspended: false } } });
+    assert.equal(cardPricesForFixture(stale, catalog, Date.parse('2026-11-20T00:01:00.000Z'))?.available, false);
+    const ambiguous = indexV5Markets([full, { ...full, marketId: 303, marketName: 'Second full time' }]);
+    const doubled = fixture({
+      odds: { '1xbet': {
+        [`${FIXTURE}:1xbet:101:0`]: selection(101, 101, 1.9),
+        [`${FIXTURE}:1xbet:102:0`]: selection(101, 102, 3.4),
+        [`${FIXTURE}:1xbet:103:0`]: selection(101, 103, 4.1),
+        [`${FIXTURE}:1xbet:101:1`]: selection(303, 101, 1.5),
+        [`${FIXTURE}:1xbet:102:1`]: selection(303, 102, 3.1),
+        [`${FIXTURE}:1xbet:103:1`]: selection(303, 103, 5.0),
+      } },
+    });
+    assert.equal(cardPricesForFixture(doubled, ambiguous, Date.parse('2026-11-20T00:01:00.000Z'))?.available, false);
   });
 
   it('does not register the trial provider for bet placement', () => {
