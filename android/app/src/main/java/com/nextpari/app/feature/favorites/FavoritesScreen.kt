@@ -21,7 +21,8 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.sportsbook.SportsbookViewModel
 
 @Composable
-fun FavoritesScreen(sportsbook: SportsbookViewModel, onOpenMatch: (String) -> Unit) {
+fun FavoritesScreen(sportsbook: SportsbookViewModel, onOpenMatch: (String) -> Unit,
+    onOpenLeague: (String) -> Unit = {}, onOpenSport: (String) -> Unit = {}) {
     val favorites by AppGraph.sportsFavorites.favorites.collectAsStateWithLifecycle()
     val sports by sportsbook.state.collectAsStateWithLifecycle()
     val matches = (sportsbook.live() + sportsbook.line()).filter { it.id in sports.favoriteMatchIds }.distinctBy { it.id }
@@ -51,10 +52,13 @@ fun FavoritesScreen(sportsbook: SportsbookViewModel, onOpenMatch: (String) -> Un
                 Text("Сохранённые матчи сейчас вне ленты", color = colors.textMuted, modifier = Modifier.padding(top = 12.dp))
             }
             favorites.sportIds.forEach { id ->
-                Text(id, color = colors.text, modifier = Modifier.padding(top = 12.dp))
+                TextButton(onClick={onOpenSport(id)}) { Text(com.nextpari.app.feature.sportsbook.SportsListCatalog.sportName(id),color=colors.text) }
             }
             favorites.leagueIds.forEach { id ->
-                Text(id, color = colors.text, modifier = Modifier.padding(top = 12.dp))
+                val active = (sportsbook.leagueMatches(id,"live")+sportsbook.leagueMatches(id,"line")).firstOrNull()
+                TextButton(onClick={onOpenLeague(id)},enabled=active!=null) {
+                    Text(active?.league ?: if(id.startsWith("canonical:")||id.startsWith("source:")||id.startsWith("display|"))"Турнир сейчас вне ленты" else id,color=colors.text)
+                }
             }
         }
     }
