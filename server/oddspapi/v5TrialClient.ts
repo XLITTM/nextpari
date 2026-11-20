@@ -28,6 +28,8 @@ export interface V5Result<T> {
   status: number | null;
   error: V5ClientError | null;
   data: T | null;
+  /** Provider Retry-After or retryAfterSec. Never includes response text. */
+  retryAfterMs?: number | null;
 }
 export interface V5ActiveQuote {
   source: 'oddspapi-v5';
@@ -48,6 +50,25 @@ export interface V5FixtureSummary {
   suspended: boolean;
 }
 export type JsonRecord = Record<string, unknown>;
+
+function retryAfterMs(response: Response, body: string): number | null {
+  const header = response.headers.get('retry-after') ?? '';
+  const seconds = Number(header);
+  if (header && Number.isFinite(seconds) && seconds >= 0) return Math.round(seconds * 1000);
+  if (header) {
+    const dated = Date.parse(header);
+    if (Number.isFinite(dated)) return Math.max(0, dated - Date.now());
+  }
+  try {
+    const parsed = JSON.parse(body) as { retryAfterSec?: unknown };
+    if (typeof parsed.retryAfterSec === 'number' && Number.isFinite(parsed.retryAfterSec) && parsed.retryAfterSec >= 0) {
+      return Math.round(parsed.retryAfterSec * 1000);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 function record(value: unknown): JsonRecord {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -148,7 +169,14 @@ export class OddsPapiV5TrialReader {
         cache: 'no-store',
       });
       if (!response.ok) {
-        return { ok: false, status: response.status, error: response.status === 429 ? 'RATE_LIMITED' : 'UPSTREAM', data: null };
+        const errorText = response.status === 429 ? (await response.text()).slice(0, 400) : '';
+        return {
+          ok: false,
+          status: response.status,
+          error: response.status === 429 ? 'RATE_LIMITED' : 'UPSTREAM',
+          data: null,
+          retryAfterMs: response.status === 429 ? retryAfterMs(response, errorText) : null,
+        };
       }
       if (Number(response.headers.get('content-length')) > 2_000_000) {
         return { ok: false, status: response.status, error: 'INVALID_RESPONSE', data: null };

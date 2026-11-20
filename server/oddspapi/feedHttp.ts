@@ -1,31 +1,25 @@
 import type { FootballFeedCard, FootballFeedMarket } from '../betsapi/footballFeedHttp.js';
 import type { MarketCategory, MarketGroup } from '../../src/types.js';
 import { indexV5Markets, isFullTimeMainMarket, presentV5Quotes, type V5MarketDefinition } from './canonical.js';
+import { clearV5RequestSchedule, scheduledRead, V5_DOCUMENTED_LIMITS, V5_REQUEST_GAPS } from './requestSchedule.js';
 import { OddsPapiV5TrialReader, V5_SPORT_IDS, type JsonRecord, type V5Result } from './v5TrialClient.js';
 
 export const V5_EVENT_PREFIX = 'oddspapi-v5:';
 type Card = FootballFeedCard & { provider: 'oddspapi-v5'; displayGroups: MarketGroup[]; observedAt: string };
 const SPORTS: Record<number, Card['sport']> = {10:'football',11:'basketball',12:'tennis',15:'hockey',16:'esports',17:'esports',18:'esports',23:'volleyball',25:'table-tennis',61:'esports'};
-const cache = new Map<string, { until: number; promise: Promise<unknown> }>();
-let blockedUntil = 0;
-export function clearV5FeedCache(): void { cache.clear(); blockedUntil = 0; }
+export function clearV5FeedCache(): void { clearV5RequestSchedule(); }
 function record(value: unknown): JsonRecord { return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {}; }
 function rows(value: unknown): JsonRecord[] { return Array.isArray(value) ? value.map(record) : []; }
 function name(value: unknown): string { return typeof value === 'string' ? value.trim() : ''; }
 function sourceId(id: string): string | null { return /^oddspapi-v5:id\d{8,32}$/.test(id) ? id.slice(V5_EVENT_PREFIX.length) : null; }
-async function cached<T>(key: string, ttl: number, load: () => Promise<V5Result<T>>): Promise<V5Result<T>> {
-  const now = Date.now();
-  if (blockedUntil > now) return {ok:false,status:429,error:'RATE_LIMITED',data:null};
-  const hit = cache.get(key);
-  if (hit && hit.until > now) return hit.promise as Promise<V5Result<T>>;
-  const promise = load().then(result => {
-    if (result.status === 429) blockedUntil = Date.now()+60_000;
-    if (!result.ok) cache.delete(key);
-    return result;
-  });
-  cache.set(key,{until:now+ttl,promise});
-  if (cache.size > 1000) for (const [id,entry] of cache) if(entry.until < now) cache.delete(id);
-  return promise;
+function keepMsFor(key: string): number {
+  if (key.startsWith('odds:')) return 10 * 60_000;
+  if (key.startsWith('live:')) return 15 * 60_000;
+  if (key.startsWith('markets:')) return 6 * 60 * 60_000;
+  return 30 * 60_000;
+}
+async function cached<T>(key: string, freshMs: number, load: () => Promise<V5Result<T>>) {
+  return scheduledRead(key, freshMs, keepMsFor(key), load);
 }
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item:T)=>Promise<R>): Promise<R[]> {
   const output = new Array<R>(items.length); let index=0;
@@ -50,7 +44,7 @@ function displayMarketName(m: V5MarketDefinition): string {
 }
 function outcomeLabel(value:string): string { return ({'1':'П1',X:'X','2':'П2',Over:'ТБ',Under:'ТМ',Yes:'Да',No:'Нет'} as Record<string,string>)[value] || value; }
 
-export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV5Markets> | null, now = Date.now()): Card | null {
+export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV5Markets> | null, now = Date.now(), options?: { snapshotStale?: boolean }): Card | null {
   const id=name(f.fixtureId); const sportId=record(f.sport).sportId;
   if(!/^id\d{8,32}$/.test(id)||typeof sportId!=='number'||!SPORTS[sportId])return null;
   const participants=record(f.participants); const tournament=record(f.tournament); const status=record(f.status);
@@ -76,7 +70,7 @@ export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV
   const live=status.live===true;
   const liveClock=live&&sportId===10&&time&&Number(time[2])<60&&Number.isFinite(at)?{minute:Number(time[1]),second:Number(time[2]),running:clock.stopped===false,observedAt:new Date(at).toISOString(),stale:now-at>90_000||at>now+60_000}:null;
   const kickoff=Number(f.startTime)*1000;
-  return {
+  const card: Card = {
     id:V5_EVENT_PREFIX+id,provider:'oddspapi-v5',sport:SPORTS[sportId],tier:sportId===10?1:3,
     logos:{competitionId:null,competition:null,home:null,away:null},league:name(tournament.tournamentName),country:name(tournament.categoryName),home,away,
     kickoff:Number.isFinite(kickoff)&&kickoff>1e12?new Date(kickoff).toISOString():null,live,
@@ -85,6 +79,8 @@ export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV
     priceState:bookmaker.suspended===true?'suspended':bookmaker.staleOdds!==false?'stale':groups.size?'open':safe?'unpriced':'unavailable',markets,
     displayGroups:[...groups.values()].filter(g=>g!==main).sort((a,b)=>Number(a.externalMarketId)-Number(b.externalMarketId)),observedAt:new Date(now).toISOString(),
   };
+  if (options?.snapshotStale && card.priceState === 'open') card.priceState = 'stale';
+  return card;
 }
 
 export async function handleV5SportsFeed(input:{method?:string;url?:string}, env:NodeJS.ProcessEnv=process.env, reader=new OddsPapiV5TrialReader({env,timeoutMs:6_000})) {
@@ -99,7 +95,7 @@ export async function handleV5SportsFeed(input:{method?:string;url?:string}, env
     if(r.data.fixtureId!==id)return {card:null,result:r};
     const sportId=record(r.data.sport).sportId;
     const cat=typeof sportId==='number'&&SPORTS[sportId]?await catalog(sportId):null;
-    return {card:v5FixtureToCard(r.data,cat),result:r};
+    return {card:v5FixtureToCard(r.data,cat,Date.now(),{snapshotStale:r.snapshotStale}),result:r};
   }
   if(params.has('eventId')) {
     const id=sourceId(params.get('eventId')||''); if(!id)return {status:404,body:{...base,ok:false,error:'NOT_FOUND',events:[]}};
@@ -112,18 +108,20 @@ export async function handleV5SportsFeed(input:{method?:string;url?:string}, env
     return {status:200,body:{...base,ok:true,quotes}};
   }
   const sportIds=params.get('includeSports')==='1'?Object.values(V5_SPORT_IDS):[10];
-  const listings=await mapLimit(sportIds,5,async sportId=>{
-    const [live,today]=await Promise.all([cached(`live:${sportId}`,30_000,()=>reader.live(sportId)),cached(`today:${sportId}`,120_000,()=>reader.today(sportId))]);
+  const listings=await mapLimit(sportIds,1,async sportId=>{
+    const [live,today]=await Promise.all([cached(`live:${sportId}`,45_000,()=>reader.live(sportId)),cached(`today:${sportId}`,180_000,()=>reader.today(sportId))]);
     const now=Date.now();const all=[...rows(live.data),...rows(today.data)];const unique=new Map<string,JsonRecord>();
     for(const f of all)if(record(f.sport).sportId===sportId&&name(f.fixtureId)&&!unique.has(name(f.fixtureId))&&(record(f.status).live===true||Number(f.startTime)*1000>now))unique.set(name(f.fixtureId),f);
     const fixtures=[...unique.values()].sort((a,b)=>Number(record(b.status).live===true)-Number(record(a.status).live===true)||Number(a.startTime)-Number(b.startTime));
     const selected=[...fixtures.filter(f=>record(f.status).live===true).slice(0,16),...fixtures.filter(f=>record(f.status).live!==true).slice(0,24)];
-    return {sportId,fixtures:selected,ok:live.ok||today.ok,error:live.error||today.error};
+    const limited=(!live.ok&&live.error==='RATE_LIMITED')||(!today.ok&&today.error==='RATE_LIMITED')||live.snapshotStale||today.snapshotStale;
+    return {sportId,fixtures:selected,ok:live.ok||today.ok,error:live.ok||today.ok?null:live.error||today.error,stale:live.snapshotStale||today.snapshotStale,rateLimited:limited};
   });
   const raw=listings.flatMap(s=>s.fixtures);
   const targets=listings.flatMap(s=>[s.fixtures.find(f=>record(f.status).live===true&&record(record(f.bookmakers)['1xbet']).suspended===false),s.fixtures.find(f=>record(f.status).live!==true&&record(record(f.bookmakers)['1xbet']).suspended===false)].filter((f):f is JsonRecord=>Boolean(f)));
-  const priced=await mapLimit(targets,5,async f=>(await detail(name(f.fixtureId))).card);
+  const priced=await mapLimit(targets,1,async f=>(await detail(name(f.fixtureId))).card);
   const byId=new Map(priced.filter((c):c is Card=>Boolean(c)).map(c=>[c.id,c]));
   const events=raw.map(f=>byId.get(V5_EVENT_PREFIX+name(f.fixtureId))||v5FixtureToCard(f,null)).filter((c):c is Card=>Boolean(c)).sort((a,b)=>Number(b.markets.length>0)-Number(a.markets.length>0)||a.tier-b.tier||Number(b.live)-Number(a.live));
-  return {status:listings.some(s=>s.ok)?200:503,body:{...base,ok:listings.some(s=>s.ok),error:listings.every(s=>!s.ok)?listings[0]?.error:null,events,featuredLive:events.filter(c=>c.live).slice(0,16),featuredLine:events.filter(c=>!c.live).slice(0,24),schedule:events.filter(c=>!c.live),coverage:listings.map(({sportId,ok,error,fixtures})=>({sportId,ok,error,count:fixtures.length}))}};
+  const anyOk=listings.some(s=>s.ok);
+  return {status:anyOk?200:503,body:{...base,ok:anyOk,error:anyOk?null:listings[0]?.error??null,rateLimited:listings.some(s=>s.rateLimited),stale:listings.some(s=>s.stale),providerLimits:V5_DOCUMENTED_LIMITS,requestGapMs:V5_REQUEST_GAPS,events,featuredLive:events.filter(c=>c.live).slice(0,16),featuredLine:events.filter(c=>!c.live).slice(0,24),schedule:events.filter(c=>!c.live),coverage:listings.map(({sportId,ok,error,fixtures,stale,rateLimited})=>({sportId,ok,error,stale,rateLimited,count:fixtures.length}))}};
 }

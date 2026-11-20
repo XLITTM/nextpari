@@ -90,6 +90,15 @@ test('handles rate-limit failures without logging credentials', async () => {
   const result = await client.live(10);
   assert.deepEqual({ ok: result.ok, status: result.status, error: result.error, data: result.data },
     { ok: false, status: 429, error: 'RATE_LIMITED', data: null });
+  assert.equal(result.retryAfterMs, null);
+  const waited = new OddsPapiV5TrialReader({
+    env: { ODDSPAPI_V5_API_KEY: 'secret-example-value' },
+    fetchImpl: async () => new Response(JSON.stringify({ retryAfterSec: 2, message: 'rate limit exceeded' }), {
+      status: 429,
+      headers: { 'retry-after': '2' },
+    }),
+  });
+  assert.equal((await waited.today(10)).retryAfterMs, 2_000);
 });
 
 test('websocket login requests channels explicitly to avoid login_failed', () => {

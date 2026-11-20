@@ -63,6 +63,36 @@ test('serves real-shaped lists, details and quote batches with betting closed',a
   assert.equal(batch.status,200);assert.equal(batch.body.betsAccepted,false);
   assert.equal(calls.filter(p=>p.endsWith('/odds')).length,1,'shares the fresh request cache');
 });
+test('a provider 429 keeps the cached board instead of returning an empty sportsbook', async () => {
+  let liveCalls = 0;
+  let todayCalls = 0;
+  const row = fixture();
+  const reader = {
+    async live() {
+      liveCalls += 1;
+      return { ok: true, status: 200, error: null, data: [row] };
+    },
+    async today() {
+      todayCalls += 1;
+      return { ok: false, status: 429, error: 'RATE_LIMITED', data: null, retryAfterMs: 5_000 };
+    },
+    async markets() {
+      return { ok: true, status: 200, error: null, data: markets };
+    },
+    async fixtureOdds() {
+      return { ok: true, status: 200, error: null, data: row };
+    },
+  } as unknown as OddsPapiV5TrialReader;
+  const env = { ODDSPAPI_V5_API_KEY: 'unit-test-only' };
+  const first = await handleV5SportsFeed({ url: '/' }, env, reader);
+  const second = await handleV5SportsFeed({ url: '/' }, env, reader);
+  assert.equal(first.status, 200);
+  assert.equal(second.status, 200);
+  assert.equal((second.body as { events?: unknown[]; rateLimited?: boolean }).events?.length, 1);
+  assert.equal((second.body as { rateLimited?: boolean }).rateLimited, true);
+  assert.equal(liveCalls, 1);
+  assert.equal(todayCalls, 1);
+});
 test('the deployed place endpoint refuses before session or wallet access',async()=>{
   const old=process.env.ODDSPAPI_V5_READONLY_FEED;
   process.env.ODDSPAPI_V5_READONLY_FEED='1';
