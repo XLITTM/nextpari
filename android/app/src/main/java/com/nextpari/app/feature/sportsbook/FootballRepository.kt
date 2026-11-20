@@ -25,7 +25,7 @@ import kotlinx.serialization.json.jsonObject
 internal const val FOOTBALL_BATCH_SIZE = 8
 internal val footballEventId = Regex("[0-9]{1,20}")
 internal val additionalSportEventId = Regex("betsapi:([0-9]{1,3}):([0-9]{1,20})")
-internal fun isSportsFeedEventId(id: String) = footballEventId.matches(id) || additionalSportEventId.matches(id)
+internal fun isSportsFeedEventId(id: String) = footballEventId.matches(id) || additionalSportEventId.matches(id) || oddsPapiEventId.matches(id)
 private val exactLine = Regex("[+-]?\\d+(?:\\.\\d+)?(?:,[+-]?\\d+(?:\\.\\d+)?)?")
 private val kickoffFormat = DateTimeFormatter.ofPattern("dd.MM HH:mm")
 
@@ -89,6 +89,7 @@ data class FootballOddsQuote(
     val priceState: String,
     val stale: Boolean = false,
     val markets: List<FootballMarketDto> = emptyList(),
+    val displayGroups: List<OddsPapiGroupDto> = emptyList(),
 ) {
     val availability: FootballPriceState get() = FootballPriceState.fromWire(priceState, stale)
 }
@@ -107,7 +108,8 @@ data class FootballFixture(
             priceNote = state.notice,
         ),
         markets = markets.map { group ->
-            group.copy(outcomes = group.outcomes.map { it.copy(odds = null, locked = true, selection = null) })
+            group.copy(outcomes = group.outcomes.map { it.copy(odds = null, locked = true, selection = null) },
+                rows = group.rows.map { row -> row.copy(outcomes = row.outcomes.map { it.copy(odds = null, locked = true, selection = null) }) })
         },
         priceState = state,
         validUntil = 0,
@@ -129,14 +131,15 @@ data class FootballFixture(
 
     internal fun marketDeadline(fallback: Long): Long = markets.asSequence()
         .flatMap { it.outcomes.asSequence() }
-        .filter { it.selection != null }
+        .filter { it.odds != null }
         .mapNotNull(MarketOutcome::observedUntil)
         .minOrNull()?.coerceAtMost(fallback) ?: fallback
 
     fun withQuote(quote: FootballOddsQuote?, fallback: FootballPriceState, order: Long, until: Long): FootballFixture {
         val exactQuote = quote?.takeIf { it.id == match.eventId }
         val availability = exactQuote?.availability ?: fallback
-        val priced = withMarkets(exactQuote?.markets.orEmpty(), availability)
+        val priced = if (oddsPapiEventId.matches(match.eventId)) withOddsPapiMarkets(exactQuote?.markets.orEmpty(), exactQuote?.displayGroups.orEmpty(), availability)
+            else withMarkets(exactQuote?.markets.orEmpty(), availability)
         return priced.copy(
             quoteOrder = order,
             fullMarkets = exactQuote != null && availability == FootballPriceState.Open,
@@ -211,7 +214,7 @@ class RemoteFootballRepository(
     }
 
     override suspend fun readOdds(eventIds: List<String>): FootballOddsBatch {
-        val ids = eventIds.asSequence().filter(footballEventId::matches).distinct().take(FOOTBALL_BATCH_SIZE).toList()
+        val ids = eventIds.asSequence().filter { footballEventId.matches(it) || oddsPapiEventId.matches(it) }.distinct().take(FOOTBALL_BATCH_SIZE).toList()
         if (ids.isEmpty()) return FootballOddsBatch()
         val response = api.footballOdds(ids.joinToString(","))
         if (response.code() == 429) return FootballOddsBatch(fallback = FootballPriceState.RateLimited)
@@ -225,11 +228,13 @@ class RemoteFootballRepository(
         return FootballOddsBatch(byId.mapNotNull { (id, rows) ->
             rows.singleOrNull()?.let { quote -> id to quote.copy(
                 markets = quote.markets.map { it.checkedAt(receipt, elapsed) },
+                displayGroups = quote.displayGroups.map { it.checkedAt(receipt, elapsed) },
             ) }
         }.toMap())
     }
 
     override suspend fun place(request: SportsBetRequest): SportsBetResult {
+        if (request.selections.any { oddsPapiEventId.matches(it.fixtureId) || it.provider == "oddspapi-v5" }) return SportsBetResult.Rejected("SPORTS_BET_DISABLED")
         return try {
             val response = api.placeSportsBet(json.encodeToJsonElement(request).jsonObject)
             if (response.code() >= 500) return SportsBetResult.Unconfirmed
@@ -347,6 +352,7 @@ data class FootballMarketDto(
     val externalPeriodId: String? = null,
     val externalMarketId: String? = null,
     val updatedAt: String? = null,
+    val name: String = "",
 ) {
     @kotlinx.serialization.Transient
     internal var observation: MarketObservation? = null
@@ -396,11 +402,23 @@ internal data class FootballEventDto(
     val liveClock: JsonElement? = null,
     val logos: JsonElement? = null,
     val insights: JsonElement? = null,
+    val provider: String? = null,
+    val displayGroups: List<OddsPapiGroupDto> = emptyList(),
+    val canonicalCompetitionId: String? = null,
+    val competitionId: String? = null,
+    val providerCompetitionId: JsonPrimitive? = null,
+    val tournamentId: JsonPrimitive? = null,
+    val homeParticipantId: String? = null,
+    val awayParticipantId: String? = null,
+    val discipline: String? = null,
+    val providerSportId: Int? = null,
 ) {
     fun toFixture(
         receiptEpochMs: Long = 0, receiptElapsedMs: Long = 0, allowClock: Boolean = true, checkMarketAge: Boolean = false,
     ): FootballFixture? {
         if (!isSportsFeedEventId(id) || home.isBlank() || away.isBlank()) return null
+        val v5 = oddsPapiEventId.matches(id)
+        if (v5 && (provider != null && provider != "oddspapi-v5" || !sport.matches(Regex("[a-z][a-z0-9-]{0,63}")))) return null
         val readOnly = additionalSportEventId.matchEntire(id)
         val expectedSport = readOnly?.groupValues?.get(1)?.let(providerSports::get)
         if (readOnly != null && (expectedSport == null || (expectedSport != sport && !(sport == "esports" && tier in setOf(3, 5))))) return null
@@ -412,7 +430,7 @@ internal data class FootballEventDto(
         val badges = FootballBadges.fromCatalog(logos)
         val match = MatchCardModel(
             id = id,
-            sport = if (FeaturedSports.isVirtualFootball(league)) "esports" else sport,
+            sport = if (!v5 && FeaturedSports.isVirtualFootball(league)) "esports" else sport,
             serverTier = tier,
             insights = if (allowClock && sport == "football" && !FeaturedSports.isVirtualFootball(league)) {
                 MatchInsights.fromWire(insights, receiptEpochMs, receiptElapsedMs)
@@ -433,9 +451,19 @@ internal data class FootballEventDto(
             competitionBadge = badges?.competition,
             competitionId = badges?.competitionId,
             hasLogoCatalog = badges != null,
+            provider = if(v5)"oddspapi-v5" else "betsapi",
+            providerCompetitionId = providerCompetitionId?.content ?: tournamentId?.content,
+            homeParticipantId = homeParticipantId,
+            awayParticipantId = awayParticipantId,
+            discipline = discipline ?: if(sport=="esports") mapOf(16 to "dota2",17 to "cs2",18 to "lol",61 to "valorant")[providerSportId] else null,
+            readOnly = v5 || readOnly != null,
         )
+        val resolvedCompetitionId = canonicalCompetitionId ?: competitionId ?: badges?.competitionId
+        val identifiedMatch = match.copy(competitionId = resolvedCompetitionId,
+            competitionBadge = match.competitionBadge?.takeIf { it.canonicalId == resolvedCompetitionId })
         val availability = FootballPriceState.fromWire(priceState ?: if (markets.any { it.status == "open" }) "open" else "unpriced")
-        val fixture = FootballFixture(match, emptyList())
+        val fixture = FootballFixture(identifiedMatch, emptyList())
+        if(v5) return fixture.withOddsPapiMarkets(markets, displayGroups, availability, receiptEpochMs, receiptElapsedMs, checkMarketAge)
         return if (readOnly == null) {
             val rows = if (checkMarketAge) markets.map { it.checkedAt(receiptEpochMs, receiptElapsedMs) } else markets
             fixture.withMarkets(rows, availability)
