@@ -88,7 +88,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
     void ensurePrices([matchId]);
   }, [catalogMatch, ensurePrices, matchId]);
 
-  const providerMatch = Boolean(listed && isBetsapiMatch(listed)) || /^(?:betsapi:\d{1,3}:)?\d{1,20}$/.test(matchId);
+  const providerMatch = Boolean(listed && isBetsapiMatch(listed)) || /^(?:(?:betsapi:\d{1,3}:)?\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(matchId);
   useEffect(() => {
     if (!providerMatch) return;
     const controller = new AbortController();
@@ -104,7 +104,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
   }, [matchId, providerMatch]);
 
   useEffect(() => {
-    if (!isBetsapiMatch(catalogMatch) || catalogMatch?.sport !== 'football' || requestedBet365.current === matchId) return;
+    if (!isBetsapiMatch(catalogMatch) || catalogMatch?.feedTag === 'oddspapi-v5' || catalogMatch?.sport !== 'football' || requestedBet365.current === matchId) return;
     requestedBet365.current = matchId;
     const live = Boolean(catalogMatch?.isLive);
     void fetchBet365Expanded(matchId, live).then((result) => {
@@ -127,6 +127,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
     } : resolved;
     const merged = {
       ...resolved,
+      ...(detail.feedTag === 'oddspapi-v5' ? detail : {}),
       stats: detail.stats ?? resolved.stats,
       statsAvailability: detail.statsAvailability ?? resolved.statsAvailability,
       period: detail.period ?? resolved.period,
