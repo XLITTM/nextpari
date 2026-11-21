@@ -328,7 +328,11 @@ internal fun FootballFixture.withOddsPapiMarkets(
         }.filter { it.label.isNotBlank() }
         if(outcomes.isEmpty())null else SourceLine(dto,spec,line,outcomes)
     }.groupBy { listOf(it.dto.bookmakerId,it.dto.externalPeriodId,it.dto.externalMarketId,it.line) }
-        .values.mapNotNull { copies -> copies.firstOrNull()?.takeIf { copies.map { it.outcomes to it.presentation }.distinct().size==1 } }
+        .values.mapNotNull { copies -> copies.firstOrNull()?.takeIf {
+            // Primary and display views express an open parent as "open" or omitted.
+            // Preserve the raw status, while comparing equivalent effective states.
+            copies.map { line -> line.outcomes.map { out -> out.copy(sourceStatus=out.sourceStatus?.takeUnless { status -> status=="open" }) } to line.presentation }.distinct().size==1
+        } }
     val grouped=lines.groupBy { listOf(it.dto.bookmakerId,it.dto.externalPeriodId,it.presentation.family,it.presentation.semantic) }
         .map { (identity, entries) ->
             val first=entries.first();val spec=first.presentation
