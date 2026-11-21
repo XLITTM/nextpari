@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import com.nextpari.app.R
 import com.nextpari.app.feature.home.MatchCardModel
 import java.io.IOException
 import java.util.concurrent.TimeUnit
@@ -121,42 +120,9 @@ internal object BundledFootballBadges {
     // PR #93 starter catalog: Premier League (BetsAPI 94), Arsenal (17230), Manchester City (708).
     const val PREMIER_LEAGUE_ID = "football:eng:premier-league"
 
-    private fun exact(value: String) = value.trim().replace(Regex("\\s+"), " ").lowercase(java.util.Locale.ROOT)
+    fun competition(match: MatchCardModel): Int? = FootballLogoRegistry.competition(match)
 
-    fun competition(match: MatchCardModel): Int? {
-        if (match.sport != "football") return null
-        val canonical = match.competitionId ?: match.competitionBadge?.canonicalId
-        if (canonical != null) return R.drawable.badge_premier_league.takeIf { canonical == PREMIER_LEAGUE_ID }
-        val england = SportsRegions.code(match.country) == "eng" || exact(match.country) == "england"
-        return R.drawable.badge_premier_league.takeIf { england && exact(match.league) == "premier league" }
-    }
-
-    fun team(match: MatchCardModel, name: String, home: Boolean? = null): Int? {
-        if(match.sport!="football") return null
-        val participant = if(home==true) match.homeParticipantId else if(home==false) match.awayParticipantId else null
-        if (participant != null) return when(participant) {
-            "football:eng:arsenal" -> R.drawable.badge_arsenal
-            "football:eng:manchester-city" -> R.drawable.badge_manchester_city
-            else -> null
-        }
-        if (match.hasLogoCatalog) {
-            val url = when (home) {
-                true -> match.homeBadgeUrl
-                false -> match.awayBadgeUrl
-                null -> null
-            }
-            return when (url) {
-                "https://nextpari.net/images/sports/football/arsenal.png" -> R.drawable.badge_arsenal
-                "https://nextpari.net/images/sports/football/manchester-city.png" -> R.drawable.badge_manchester_city
-                else -> null
-            }
-        }
-        return when (exact(name)) {
-            "arsenal" -> R.drawable.badge_arsenal
-            "manchester city" -> R.drawable.badge_manchester_city
-            else -> null
-        }
-    }
+    fun team(match: MatchCardModel, name: String, home: Boolean? = null): Int? = FootballLogoRegistry.team(match, name, home)
 }
 
 @Composable
@@ -167,12 +133,12 @@ internal fun CompetitionArtwork(
     modifier: Modifier,
     placeholder: @Composable () -> Unit = {},
 ) {
+    if (badgeRes != null) {
+        Image(painterResource(badgeRes), contentDescription = null, modifier = modifier, contentScale = ContentScale.Fit)
+        return
+    }
     FootballBadge(url, modifier) {
-        if (badgeRes != null) {
-            Image(painterResource(badgeRes), contentDescription = null, modifier = modifier, contentScale = ContentScale.Fit)
-        } else {
-            SportsFlag(SportsRegions.code(country), modifier, placeholder)
-        }
+        SportsFlag(SportsRegions.code(country), modifier, placeholder)
     }
 }
 

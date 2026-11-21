@@ -189,12 +189,13 @@ internal fun MatchTeamArtwork(
 ) {
     val name = if (home) model.team1 else model.team2
     val logoRes = (if (home) model.team1LogoRes else model.team2LogoRes) ?: BundledFootballBadges.team(model, name, home)
+    if (logoRes != null) {
+        Image(painterResource(logoRes), contentDescription = null, modifier, contentScale = ContentScale.Fit)
+        return
+    }
     val badgeUrl = if (home) model.homeBadgeUrl else model.awayBadgeUrl
     FootballBadge(badgeUrl, modifier) {
-        if (logoRes != null) {
-            Image(painterResource(logoRes), contentDescription = null, modifier, contentScale = ContentScale.Fit)
-        } else {
-            SportsFlag(SportsRegions.nationalTeam(model, name), modifier) {
+        SportsFlag(SportsRegions.nationalTeam(model, name), modifier) {
                 val initial = remember(name) { name.firstOrNull(Char::isLetter)?.uppercaseChar()?.toString() ?: "–" }
                 val shape = RoundedCornerShape(8.dp)
                 Box(
@@ -206,7 +207,6 @@ internal fun MatchTeamArtwork(
                 }
             }
         }
-    }
 }
 
 @Composable

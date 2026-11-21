@@ -1,5 +1,6 @@
 package com.nextpari.app.feature.sportsbook
 
+import com.nextpari.app.R
 import java.time.Instant
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -57,15 +58,19 @@ class AdditionalSportsFeedTest {
     }
 
     @Test
-    fun missingCatalogBadgeDoesNotFallBackToATeamName() {
+    fun emptyRemoteLogoFieldsStillResolveVerifiedLocalBadges() {
         val football = FootballEventDto(
             id = "7", home = "Arsenal", away = "Manchester City", league = "England Premier League",
             country = "GB", live = true,
             logos = Json.parseToJsonElement("""{"competitionId":"football:eng:premier-league","home":null,"away":null}"""),
         ).toFixture(time, 5_000)!!.match
         assertTrue(football.hasLogoCatalog)
-        assertNull(BundledFootballBadges.team(football, football.team1, home = true))
-        assertNull(BundledFootballBadges.team(football, football.team2, home = false))
+        assertNull(football.homeBadgeUrl)
+        assertNull(football.awayBadgeUrl)
+        assertEquals(R.drawable.badge_premier_league, BundledFootballBadges.competition(football))
+        assertEquals(R.drawable.badge_arsenal, BundledFootballBadges.team(football, football.team1, home = true))
+        assertEquals(R.drawable.badge_manchester_city, BundledFootballBadges.team(football, football.team2, home = false))
+        assertNull(BundledFootballBadges.team(football.copy(homeParticipantId = "football:eng:arsenal-women"), "Arsenal", home = true))
     }
 
 }
