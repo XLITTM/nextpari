@@ -125,15 +125,18 @@ internal object BundledFootballBadges {
         val canonical = match.competitionId ?: match.competitionBadge?.canonicalId
         if (canonical != null) return canonical == PREMIER_LEAGUE_ID
         if (match.hasLogoCatalog) return false
-        val name = match.league.trim()
-        val country = SportsRegions.code(match.country)
-        return (country == "eng" && name.equals("Premier League", ignoreCase = true)) ||
-            (country in setOf("eng", "gb") && name.equals("England Premier League", ignoreCase = true))
+        return false
+
     }
 
     fun competition(match: MatchCardModel): Int? = R.drawable.badge_premier_league.takeIf { isPremierLeague(match) }
 
     fun team(match: MatchCardModel, name: String, home: Boolean? = null): Int? {
+        if(match.sport!="football") return null
+        when(if(home==true)match.homeParticipantId else if(home==false)match.awayParticipantId else null) {
+            "football:eng:arsenal" -> return R.drawable.badge_arsenal
+            "football:eng:manchester-city" -> return R.drawable.badge_manchester_city
+        }
         if (match.hasLogoCatalog) {
             val url = when (home) {
                 true -> match.homeBadgeUrl
@@ -146,12 +149,8 @@ internal object BundledFootballBadges {
                 else -> null
             }
         }
-        if (!isPremierLeague(match)) return null
-        return when {
-            name.trim().equals("Arsenal", ignoreCase = true) -> R.drawable.badge_arsenal
-            name.trim().equals("Manchester City", ignoreCase = true) -> R.drawable.badge_manchester_city
-            else -> null
-        }
+        return null
+
     }
 }
 
