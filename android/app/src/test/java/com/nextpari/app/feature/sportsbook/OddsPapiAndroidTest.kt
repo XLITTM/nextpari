@@ -4,6 +4,12 @@ import com.nextpari.app.core.network.NetworkModule
 import com.nextpari.app.feature.home.MatchCardModel
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
 import okhttp3.mockwebserver.MockResponse
@@ -37,6 +43,45 @@ class OddsPapiAndroidTest {
         assertEquals(3,f.markets.size)
         assertTrue(f.markets.all{g->g.outcomes.map{it.bookmakerId}.distinct().size==1&&g.outcomes.map{it.periodId}.distinct().size==1})
     }
+    @Test fun matchingPrimaryAndDisplayViewsRetainOneResultButConflictingPricesDoNot() {
+        val primary=FootballMarketDto("1x2","","open",listOf(
+            FootballOutcomeDto("home",2.1,"id1000000872478708:1xbet:101:0"),
+            FootballOutcomeDto("draw",3.2,"id1000000872478708:1xbet:102:0"),
+            FootballOutcomeDto("away",4.3,"id1000000872478708:1xbet:103:0")),
+            bookmakerId="1xbet",externalPeriodId="fulltime",externalMarketId="101",updatedAt=at)
+        val display=OddsPapiGroupDto(name="Исход",marketFamily="1x2",bookmakerId="1xbet",externalPeriodId="fulltime",externalMarketId="101",
+            outcomes=primary.outcomes.map { OddsPapiOutcomeDto(mapOf("home" to "П1","draw" to "X","away" to "П2").getValue(it.key),JsonPrimitive(it.price),it.sourceSelectionId,at) })
+        val source=event(groups=listOf(display)).copy(markets=listOf(primary))
+        val mapped=source.toFixture(epoch,1000,checkMarketAge=true)!!
+        assertEquals("result",mapped.markets.single().family)
+        assertEquals(listOf("2.10","3.20","4.30"),mapped.markets.single().outcomes.map { it.odds })
+        assertEquals(3,mapped.match.outcomes.size)
+        val conflict=display.copy(outcomes=display.outcomes.mapIndexed { i,o -> if(i==0)o.copy(odds=JsonPrimitive(99)) else o })
+        assertTrue(source.copy(displayGroups=listOf(conflict)).toFixture(epoch,1000,checkMarketAge=true)!!.markets.isEmpty())
+    }
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun prematchScheduleNeverFiltersTheLiveCompetitionPool() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val live=event(groups=emptyList()).toFixture()!!
+            val line=event(groups=emptyList()).copy(id="oddspapi-v5:id1000000872478709",live=false).toFixture()!!
+            val other=event("tennis",emptyList()).copy(id="oddspapi-v5:id1000000872478710",live=false).toFixture()!!
+            val esports=event("esports",emptyList()).copy(id="oddspapi-v5:id1000000872478711",live=false).toFixture()!!
+            val snapshot=FootballSnapshot(listOf(live,line,other,esports),schedule=listOf(line.match.eventId,esports.match.eventId))
+            val repo=object:FootballRepository {
+                override suspend fun read(eventId:String?)=snapshot
+                override suspend fun readOdds(eventIds:List<String>)=FootballOddsBatch()
+                override suspend fun place(request:SportsBetRequest)=SportsBetResult.Rejected("SPORTS_BET_DISABLED")
+            }
+            val vm=SportsbookViewModel(com.nextpari.app.feature.home.FakeHomeCatalogRepository(),repo,now={testScheduler.currentTime})
+            try {
+                vm.setPlayer("native-read");vm.refreshFeed();runCurrent()
+                assertEquals(listOf(live.match.eventId),vm.pool("live").map { it.eventId })
+                assertEquals(1,vm.championships("football","live").sumOf { it.count })
+                assertEquals(listOf(line.match.eventId,esports.match.eventId),vm.pool("line").map { it.eventId })
+            } finally { vm.setPlayer(null);runCurrent() }
+        } finally { Dispatchers.resetMain() }
+    }
     @Test fun allSevenSportsHaveSpecificPeriodNamesAndNoFootballOnlyTabs() {
         val words=mapOf("football" to "тайм","basketball" to "четверть","tennis" to "сет","hockey" to "период","volleyball" to "сет","table-tennis" to "партия","esports" to "карта")
         for((sport,word)in words) {
@@ -58,6 +103,27 @@ class OddsPapiAndroidTest {
     @Test fun contradictorySourceLinesAreNotDisplayedTwice() {
         val original=group();val conflict=original.copy(outcomes=original.outcomes.map{it.copy(odds=JsonPrimitive(9.0))})
         assertTrue(event(groups=listOf(original,conflict)).toFixture(epoch,1_000,checkMarketAge=true)!!.markets.isEmpty())
+    }
+    @Test fun missingOrEmptyRefreshKeepsMarketIdentityAndClosesEveryCachedPrice() {
+        val observed=event(groups=listOf(group(),group("3.5","1012"))).toFixture(epoch,1_000,checkMarketAge=true)!!
+        assertTrue(observed.markets.flatMap { it.outcomes }.any { it.odds!=null })
+        val variants=listOf(
+            observed.withQuote(null,FootballPriceState.RateLimited,2,9_000),
+            observed.withQuote(FootballOddsQuote(fixture,"suspended"),FootballPriceState.Upstream,3,9_000),
+            observed.withQuote(FootballOddsQuote(fixture,"open"),FootballPriceState.Upstream,4,9_000),
+        )
+        for(closed in variants) {
+            assertEquals(observed.markets.map { it.key },closed.markets.map { it.key })
+            assertEquals(observed.markets.flatMap { it.outcomes }.map { it.sourceSelectionId },closed.markets.flatMap { it.outcomes }.map { it.sourceSelectionId })
+            assertEquals(listOf("2.5","3.5"),closed.markets.single().rows.map { it.line })
+            assertTrue(closed.markets.flatMap { it.outcomes }.all { it.odds==null && it.locked && it.selection==null })
+            assertTrue(closed.markets.flatMap { it.rows }.flatMap { it.outcomes }.all { it.odds==null })
+            assertEquals(0L,closed.validUntil)
+            assertFalse(closed.priceState==FootballPriceState.Open)
+        }
+        val refreshed=variants.first().withQuote(FootballOddsQuote(fixture,"open",displayGroups=listOf(group().checkedAt(epoch,5_000))),FootballPriceState.Upstream,5,20_000)
+        assertTrue(refreshed.markets.flatMap { it.outcomes }.any { it.odds!=null })
+        assertTrue(refreshed.markets.flatMap { it.outcomes }.all { it.selection==null && it.locked })
     }
     @Test fun hockeyRegulationAndOvertimeStaySeparateAndUnknownMarketsRemainOther() {
         val regulation=group(period="fulltime",name="1X2").copy(marketFamily="main")
