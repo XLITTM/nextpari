@@ -99,7 +99,7 @@ fun HomeChampionshipsAccordion(
                     expanded = if (expanded == group.country) "" else group.country
                 },
                 onLeague = { league ->
-                    onNavigate(Destinations.league(LeagueIds.toLeagueId(league.country, league.name)))
+                    onNavigate(Destinations.league(league.id))
                 },
                 onFavorite = { name ->
                     favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleLeague(name) }
@@ -185,13 +185,13 @@ private fun HomeCountryCard(
                         )
                         CountPill(league.count)
                         Box(
-                            Modifier.size(32.dp).clickable { onFavorite(league.name) },
+                            Modifier.size(32.dp).clickable { onFavorite(league.id) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (league.name in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
+                                if (league.id in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
                                 contentDescription = "Добавить чемпионат в избранное",
-                                tint = if (league.name in favorites) Color(0xFF16A34A) else colors.textSecondary,
+                                tint = if (league.id in favorites) Color(0xFF16A34A) else colors.textSecondary,
                                 modifier = Modifier.size(18.dp),
                             )
                         }
