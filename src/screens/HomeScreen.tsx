@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { SportsScroll } from '../components/SportsScroll';
 import { PromoScroll } from '../components/PromoScroll';
 import { MatchCard } from '../components/MatchCard';
@@ -29,7 +29,8 @@ export function HomeScreen({
   onToggleFavorite,
 }: HomeScreenProps) {
   const [selectedSport, setSelectedSport] = useState<SportId>('all');
-  const { liveMatches, upcomingMatches, featuredLive, featuredLine, loading } = useLiveMatches();
+  const { liveMatches, upcomingMatches, featuredLive, featuredLine, loading, ensurePrices } = useLiveMatches();
+  const onVisible = useCallback((id: string) => { void ensurePrices([id]); }, [ensurePrices]);
   const sportFilter = mainTab === 'sport' && selectedSport === 'esports' ? 'all' : selectedSport;
 
   const filteredLive = useMemo(() => {
@@ -89,6 +90,7 @@ export function HomeScreen({
           carousel
           isFavorite={favorites.includes(match.id)}
           onToggleFavorite={() => onToggleFavorite(match.id)}
+          onVisible={onVisible}
         />
       ))}
     </div>

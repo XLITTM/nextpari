@@ -243,6 +243,60 @@ test('uses a full-match basketball winner when 1X2 and moneyline both exist', ()
   assert.equal(card.markets[0]?.externalMarketId, '201');
 });
 
+test('does not promote first-half prices onto the full-match card', () => {
+  const half = fixture({
+    odds: {
+      '1xbet': {
+        [`${fixtureId}:1xbet:201:0`]: { bookmaker: '1xbet', outcomeId: 201, marketId: 201, price: 1.9, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:202:0`]: { bookmaker: '1xbet', outcomeId: 202, marketId: 201, price: 3.4, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:203:0`]: { bookmaker: '1xbet', outcomeId: 203, marketId: 201, price: 4.1, active: true, changedAt: now },
+      },
+    },
+  });
+  const halfCatalog = indexV5Markets([
+    { marketId: 201, marketName: '1st Half Result', marketType: '1x2', period: 'p1', handicap: 0, outcomes: [{ outcomeId: 201, outcomeName: '1' }, { outcomeId: 202, outcomeName: 'X' }, { outcomeId: 203, outcomeName: '2' }] },
+  ]);
+  const card = v5FixtureToCard(half, halfCatalog, now, { listCard: true, hydrated: true })!;
+  assert.deepEqual(card.markets, []);
+  assert.equal(card.priceState, 'unavailable');
+});
+
+test('oddsFor classifies a successful empty main-odds miss as unavailable', async () => {
+  const missingId = 'id1000002067015999';
+  const reader = {
+    async mainOdds(ids: readonly string[]) {
+      return { ok: true, status: 200, error: null, data: ids.includes(fixtureId) ? [fixture()] : [] };
+    },
+    async markets() {
+      return { ok: true, status: 200, error: null, data: markets };
+    },
+  } as unknown as OddsPapiV5TrialReader;
+  const batch = await handleV5SportsFeed({
+    url: `/?oddsFor=oddspapi-v5:${fixtureId},oddspapi-v5:${missingId}`,
+  }, { ODDSPAPI_V5_API_KEY: 'unit-test-only' }, reader);
+  const quotes = (batch.body as { quotes?: Array<{ id: string; priceState: string; markets: unknown[] }> }).quotes ?? [];
+  assert.equal(quotes.find((quote) => quote.id === `oddspapi-v5:${fixtureId}`)?.priceState, 'open');
+  assert.ok((quotes.find((quote) => quote.id === `oddspapi-v5:${fixtureId}`)?.markets.length ?? 0) > 0);
+  assert.equal(quotes.find((quote) => quote.id === `oddspapi-v5:${missingId}`)?.priceState, 'unavailable');
+});
+
+test('oddsFor keeps a 429 retryable instead of an empty priced miss', async () => {
+  const reader = {
+    async mainOdds() {
+      return { ok: false, status: 429, error: 'RATE_LIMITED', data: null, retryAfterMs: 5_000 };
+    },
+    async markets() {
+      return { ok: true, status: 200, error: null, data: markets };
+    },
+  } as unknown as OddsPapiV5TrialReader;
+  const batch = await handleV5SportsFeed({
+    url: `/?oddsFor=oddspapi-v5:${fixtureId}`,
+  }, { ODDSPAPI_V5_API_KEY: 'unit-test-only' }, reader);
+  const quotes = (batch.body as { quotes?: Array<{ priceState: string; markets: unknown[] }> }).quotes ?? [];
+  assert.equal(quotes[0]?.priceState, 'rate_limited');
+  assert.deepEqual(quotes[0]?.markets, []);
+});
+
 test('the deployed place endpoint refuses before session or wallet access',async()=>{
   const old=process.env.ODDSPAPI_V5_READONLY_FEED;
   process.env.ODDSPAPI_V5_READONLY_FEED='1';

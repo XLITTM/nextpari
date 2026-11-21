@@ -27,6 +27,20 @@ test('queues every unpriced live fixture instead of 16 live / 8 quote slots',()=
   assert.equal(new Set(plan.primary).size,20);
 });
 
+test('does not let live fixtures monopolize the quote queue',()=>{
+  const matches=Array.from({length:20},(_,index)=>footballCardToMatch({
+    ...card,
+    id:`oddspapi-v5:id1000002067016${String(index).padStart(3,'0')}`,
+    live:index<10,
+    priceState:'unpriced',
+    markets:[],
+    displayGroups:[],
+  }));
+  const plan=footballQuoteIds(matches, new Set(), 8);
+  assert.equal(plan.primary.filter((id)=>matches.find((match)=>match.id===id)?.isLive).length,4);
+  assert.equal(plan.primary.filter((id)=>matches.find((match)=>match.id===id)?.isLive===false).length,4);
+});
+
 test('a detail price refresh retains provider identity and generic market groups',()=>{
   const match=footballCardToMatch({...card,markets:[],displayGroups:[]});
   const [next]=applyFootballQuotes([match],[{...card,markets:card.markets}]);

@@ -3,9 +3,13 @@ import {
   applyFootballQuotes,
   fetchFootballFeed,
   fetchFootballQuotes,
-  footballQuoteIds,
   mergeListedMatches,
 } from './lib/footballFeed';
+import {
+  hasDisplayedMainPrices,
+  OddsHydrationQueue,
+  type HydrationMatch,
+} from './lib/oddsHydration';
 import { useSportsStore } from './stores/sportsStore';
 import type { MatchEvent } from './types';
 
@@ -22,41 +26,98 @@ interface LiveMatchesContextValue {
 }
 
 const EMPTY_MATCHES: MatchEvent[] = [];
+const EVENT_ID = /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/;
 
 const LiveMatchesContext = createContext<LiveMatchesContextValue | null>(null);
+
+function hydrationRows(matches: readonly MatchEvent[]): HydrationMatch[] {
+  return matches.map((match) => ({
+    id: match.id,
+    isLive: match.isLive,
+    priceState: match.priceState,
+    hasPrices: hasDisplayedMainPrices(match),
+  }));
+}
 
 export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const clearEvents = useSportsStore((s) => s.clearEvents);
   const [matches, setMatches] = useState<MatchEvent[]>(EMPTY_MATCHES);
   const [groups, setGroups] = useState({ live: [] as string[], line: [] as string[], schedule: [] as string[] });
   const [loading, setLoading] = useState(false);
-  const generation = useRef(0);
+  const refreshSeq = useRef(0);
   const latest = useRef<MatchEvent[]>(EMPTY_MATCHES);
-  const attempted = useRef(new Set<string>());
+  const queue = useRef(new OddsHydrationQueue());
+  const pumping = useRef(false);
+  const pauseUntil = useRef(0);
+  const retryTimer = useRef<number>(0);
 
-  const applyQuotes = useCallback(async (ids: string[], ticket: number) => {
-    const unique = ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id) && !attempted.current.has(id));
-    if (!unique.length || ticket !== generation.current) return;
-    for (const id of unique) attempted.current.add(id);
-    const quotes = await fetchFootballQuotes(unique);
-    if (ticket !== generation.current) return;
-    latest.current = applyFootballQuotes(latest.current, quotes);
-    setMatches(latest.current);
-    return quotes;
+  const pump = useCallback(async () => {
+    if (pumping.current) return;
+    pumping.current = true;
+    window.clearTimeout(retryTimer.current);
+    try {
+      for (;;) {
+        const wait = pauseUntil.current - Date.now();
+        if (wait > 0) {
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, wait);
+          });
+        }
+        const rows = hydrationRows(latest.current);
+        queue.current.syncCatalog(rows);
+        const batch = queue.current.takeBatch(rows);
+        if (!batch.length) {
+          const retryAt = queue.current.nextRetryAt();
+          if (retryAt !== null) {
+            retryTimer.current = window.setTimeout(() => {
+              void pump();
+            }, Math.max(250, retryAt - Date.now()));
+          }
+          return;
+        }
+        queue.current.markInFlight(batch);
+        const result = await fetchFootballQuotes(batch);
+        if (!result.ok) {
+          queue.current.markFailed(batch);
+          pauseUntil.current = Date.now() + 2_000;
+          continue;
+        }
+        latest.current = applyFootballQuotes(latest.current, result.quotes);
+        setMatches(latest.current);
+        const seen = new Set(result.quotes.map((quote) => quote.id));
+        const byId = new Map(latest.current.map((match) => [match.id, match]));
+        let limited = false;
+        for (const quote of result.quotes) {
+          const match = byId.get(quote.id);
+          queue.current.applyQuote(quote.id, {
+            priceState: quote.priceState,
+            hasPrices: match ? hasDisplayedMainPrices(match) : false,
+          });
+          if (quote.priceState === 'rate_limited' || quote.priceState === 'deferred') limited = true;
+        }
+        queue.current.markFailed(batch.filter((id) => !seen.has(id)));
+        if (limited) {
+          pauseUntil.current = Date.now() + 2_000;
+        }
+      }
+    } finally {
+      pumping.current = false;
+    }
   }, []);
 
   const ensurePrices = useCallback(async (ids: string[]) => {
-    const ticket = generation.current;
-    await applyQuotes(ids, ticket);
-  }, [applyQuotes]);
+    const valid = ids.filter((id) => EVENT_ID.test(id));
+    if (!valid.length) return;
+    queue.current.markVisible(valid);
+    void pump();
+  }, [pump]);
 
   const refresh = useCallback(async () => {
-    const ticket = ++generation.current;
-    attempted.current = new Set();
+    const ticket = ++refreshSeq.current;
     setLoading(true);
     try {
       const listed = await fetchFootballFeed();
-      if (ticket !== generation.current) return;
+      if (ticket !== refreshSeq.current) return;
       const merged = mergeListedMatches(latest.current, listed.events);
       latest.current = merged;
       setMatches(merged);
@@ -65,32 +126,20 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
         line: listed.featuredLine.map((match) => match.id),
         schedule: listed.schedule.map((match) => match.id),
       });
-      const hydrateRest = async () => {
-        for (;;) {
-          if (ticket !== generation.current) return;
-          const plan = footballQuoteIds(latest.current, attempted.current);
-          if (!plan.primary.length) return;
-          const batch = await applyQuotes(plan.primary, ticket);
-          const limited = batch?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
-          if (limited) return;
-          if (!batch?.length) return;
-        }
-      };
-      const plan = footballQuoteIds(merged, attempted.current);
-      const first = await applyQuotes(plan.primary, ticket);
-      const limited = first?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
-      if (!limited) {
-        if (plan.secondary.length) await applyQuotes(plan.secondary, ticket);
-        void hydrateRest();
-      }
+      queue.current.setFeatured([
+        ...listed.featuredLive.map((match) => match.id),
+        ...listed.featuredLine.map((match) => match.id),
+      ]);
+      queue.current.syncCatalog(hydrationRows(merged));
+      void pump();
     } catch {
-      if (ticket === generation.current) {
+      if (ticket === refreshSeq.current) {
         setMatches((current) => current);
       }
     } finally {
-      if (ticket === generation.current) setLoading(false);
+      if (ticket === refreshSeq.current) setLoading(false);
     }
-  }, [applyQuotes]);
+  }, [pump]);
 
   useEffect(() => {
     clearEvents();
@@ -98,7 +147,10 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
     const timer = window.setInterval(() => {
       void refresh();
     }, 60_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(retryTimer.current);
+    };
   }, [clearEvents, refresh]);
 
   const archive = useRef(new Map<string, MatchEvent>());

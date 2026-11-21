@@ -128,7 +128,7 @@ export function v5FixtureToCard(
   f: JsonRecord,
   catalog: ReturnType<typeof indexV5Markets> | null,
   now = Date.now(),
-  options?: { snapshotStale?: boolean; listCard?: boolean },
+  options?: { snapshotStale?: boolean; listCard?: boolean; hydrated?: boolean },
 ): Card | null {
   const id = fixtureIdOf(f);
   const sportId = sportIdOf(f);
@@ -226,9 +226,13 @@ export function v5FixtureToCard(
       ? 'suspended'
       : bookmaker.staleOdds !== false
         ? 'stale'
-        : groups.size
+        : markets.length
           ? 'open'
-          : safe ? 'unpriced' : 'unavailable',
+          : !catalog && safe
+            ? 'unpriced'
+            : options?.hydrated
+              ? 'unavailable'
+              : safe ? 'unpriced' : 'unavailable',
     markets,
     displayGroups,
     observedAt: new Date(now).toISOString(),
@@ -331,24 +335,39 @@ async function readPrematch(
 async function hydrateMainOdds(
   reader: OddsPapiV5TrialReader,
   ids: string[],
-): Promise<{ byId: Map<string, JsonRecord>; stale: boolean; rateLimited: boolean }> {
+): Promise<{
+  byId: Map<string, JsonRecord>;
+  stale: boolean;
+  rateLimited: boolean;
+  failed: boolean;
+  confirmedEmpty: Set<string>;
+}> {
   const byId = new Map<string, JsonRecord>();
+  const confirmedEmpty = new Set<string>();
   let stale = false;
   let rateLimited = false;
-  if (!ids.length) return { byId, stale, rateLimited };
-  if (typeof reader.mainOdds !== 'function') return { byId, stale, rateLimited };
+  let failed = false;
+  if (!ids.length) return { byId, stale, rateLimited, failed, confirmedEmpty };
+  if (typeof reader.mainOdds !== 'function') return { byId, stale, rateLimited, failed: true, confirmedEmpty };
   for (let index = 0; index < ids.length; index += MAIN_ODDS_CHUNK) {
     const chunk = ids.slice(index, index + MAIN_ODDS_CHUNK);
     const key = `odds:main:${chunk.slice().sort().join(',')}`;
     const result = await cached(key, 15_000, () => reader.mainOdds(chunk));
     if (result.snapshotStale) stale = true;
-    if (!result.ok && result.error === 'RATE_LIMITED') rateLimited = true;
+    if (!result.ok) {
+      failed = true;
+      if (result.error === 'RATE_LIMITED') rateLimited = true;
+      continue;
+    }
     for (const row of rows(result.data)) {
       const id = fixtureIdOf(row);
       if (FIXTURE_ID.test(id)) byId.set(id, row);
     }
+    for (const id of chunk) {
+      if (!byId.has(id)) confirmedEmpty.add(id);
+    }
   }
-  return { byId, stale, rateLimited };
+  return { byId, stale, rateLimited, failed, confirmedEmpty };
 }
 
 function serverHydrationIds(fixtures: JsonRecord[]): string[] {
@@ -401,11 +420,18 @@ export async function handleV5SportsFeed(
     const quotes = await mapLimit(ids, 4, async (id) => {
       const priced = hydrated.byId.get(id);
       if (!priced) {
-        return { id: V5_EVENT_PREFIX + id, priceState: hydrated.rateLimited ? 'rate_limited' : 'upstream', stale: true, markets: [] };
+        const priceState = hydrated.confirmedEmpty.has(id)
+          ? 'unavailable'
+          : hydrated.rateLimited ? 'rate_limited' : 'upstream';
+        return { id: V5_EVENT_PREFIX + id, priceState, stale: priceState !== 'unavailable', markets: [] };
       }
       const sportId = sportIdOf(priced);
       const cat = sportId !== null ? await catalog(sportId) : null;
-      const card = v5FixtureToCard(priced, cat, Date.now(), { snapshotStale: hydrated.stale, listCard: true });
+      const card = v5FixtureToCard(priced, cat, Date.now(), {
+        snapshotStale: hydrated.stale,
+        listCard: true,
+        hydrated: true,
+      });
       return card
         ? { ...card, stale: card.priceState === 'stale' }
         : { id: V5_EVENT_PREFIX + id, priceState: 'upstream', stale: true, markets: [] };
@@ -459,6 +485,7 @@ export async function handleV5SportsFeed(
     const card = v5FixtureToCard(merged, sportId !== null ? catalogs.get(sportId) ?? null : null, now, {
       snapshotStale: hydrated.stale,
       listCard: true,
+      hydrated: hydrated.byId.has(id),
     });
     if (!card) {
       bump(dropped, 'normalization');

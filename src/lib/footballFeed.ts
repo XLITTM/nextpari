@@ -1,4 +1,5 @@
 import { approvedFootballLogo, verifiedPublishedLogo } from './sportsRegion';
+import { OddsHydrationQueue } from './oddsHydration';
 import type { BetSelection, MarketGroup, MatchEvent } from '../types';
 
 export type FootballPriceState = NonNullable<MatchEvent['priceState']>;
@@ -340,13 +341,22 @@ export function footballQuoteIds(
   const needs = (match: MatchEvent) =>
     (match.feedTag === 'oddspapi-v5' || (match.feedTag === 'betsapi' && !match.id.startsWith('betsapi:') && match.sport !== 'esports'))
     && RETRY_STATES.has(match.priceState)
-    && !attempted.has(match.id);
-  const live = matches.filter((match) => match.isLive && needs(match)).map((match) => match.id);
-  const prematch = matches.filter((match) => !match.isLive && needs(match)).map((match) => match.id);
-  const queued = [...live, ...prematch];
+    && !attempted.has(match.id)
+    && !(match.markets['1'] > 1 && match.markets['2'] > 1);
+  const candidates = matches.filter(needs);
+  const queue = new OddsHydrationQueue();
+  const rows = candidates.map((match) => ({
+    id: match.id,
+    isLive: match.isLive,
+    priceState: match.priceState,
+    hasPrices: false,
+  }));
+  queue.syncCatalog(rows);
+  const primary = queue.takeBatch(rows, batch);
+  const remaining = rows.filter((row) => !primary.includes(row.id));
   return {
-    primary: queued.slice(0, batch),
-    secondary: queued.slice(batch, batch * 2),
+    primary,
+    secondary: queue.takeBatch(remaining, batch),
   };
 }
 
@@ -445,16 +455,23 @@ export async function fetchFootballFeed(signal?: AbortSignal): Promise<FootballF
   };
 }
 
-export async function fetchFootballQuotes(ids: string[], signal?: AbortSignal): Promise<FootballOddsQuote[]> {
+export async function fetchFootballQuotes(
+  ids: string[],
+  signal?: AbortSignal,
+): Promise<{ ok: boolean; quotes: FootballOddsQuote[] }> {
   const unique = ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id)).slice(0, CATALOG_ODDS_BATCH);
-  if (!unique.length) return [];
-  const response = await fetch(`/api/player/sports/football-feed?oddsFor=${unique.map(encodeURIComponent).join(',')}`, {
-    signal,
-    credentials: 'same-origin',
-  });
-  if (!response.ok) return [];
-  const body = await response.json() as { quotes?: FootballOddsQuote[] };
-  return body.quotes ?? [];
+  if (!unique.length) return { ok: true, quotes: [] };
+  try {
+    const response = await fetch(`/api/player/sports/football-feed?oddsFor=${unique.map(encodeURIComponent).join(',')}`, {
+      signal,
+      credentials: 'same-origin',
+    });
+    if (!response.ok) return { ok: false, quotes: [] };
+    const body = await response.json() as { quotes?: FootballOddsQuote[] };
+    return { ok: true, quotes: body.quotes ?? [] };
+  } catch {
+    return { ok: false, quotes: [] };
+  }
 }
 
 export async function fetchFootballEvent(eventId: string, signal?: AbortSignal): Promise<MatchEvent | null> {

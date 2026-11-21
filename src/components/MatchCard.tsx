@@ -168,7 +168,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
         <div className={`grid gap-1.5 ${outcomeButtons.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {outcomeButtons.map((o) => {
             const clickable = clickableCardSelection(match, o.key, '1X2', o.odds);
-            const loading = (match.priceState === 'unpriced' || match.priceState === 'deferred') && !(o.odds > 1);
+            const loading = (match.priceState === 'unpriced' || match.priceState === 'deferred' || match.priceState === 'rate_limited' || match.priceState === 'upstream') && !(o.odds > 1);
             return (
               <MatchOddButton
                 key={o.key}
