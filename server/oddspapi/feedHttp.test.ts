@@ -297,6 +297,88 @@ test('oddsFor keeps a 429 retryable instead of an empty priced miss', async () =
   assert.deepEqual(quotes[0]?.markets, []);
 });
 
+test('classifies a football board by provider market type and keeps every quote', () => {
+  const specs = [
+    { marketId: 1, marketName: 'Full Time Result', marketType: '1x2', period: 'fulltime', handicap: 0, outcomes: [{ outcomeId: 11, outcomeName: '1' }, { outcomeId: 12, outcomeName: 'X' }, { outcomeId: 13, outcomeName: '2' }] },
+    { marketId: 2, marketName: 'Total', marketType: 'totals', period: 'fulltime', handicap: 2.5, outcomes: [{ outcomeId: 21, outcomeName: 'Over' }, { outcomeId: 22, outcomeName: 'Under' }] },
+    { marketId: 3, marketName: 'Total', marketType: 'totals', period: 'fulltime', handicap: 2.25, outcomes: [{ outcomeId: 31, outcomeName: 'Over' }, { outcomeId: 32, outcomeName: 'Under' }] },
+    { marketId: 4, marketName: 'Total', marketType: 'totals', period: 'fulltime', handicap: 2.75, outcomes: [{ outcomeId: 41, outcomeName: 'Over' }, { outcomeId: 42, outcomeName: 'Under' }] },
+    { marketId: 5, marketName: 'Asian Handicap', marketType: 'spreads', period: 'fulltime', handicap: -0.25, outcomes: [{ outcomeId: 51, outcomeName: '1' }, { outcomeId: 52, outcomeName: '2' }] },
+    { marketId: 6, marketName: 'Asian Handicap', marketType: 'spreads', period: 'fulltime', handicap: 0.75, outcomes: [{ outcomeId: 61, outcomeName: '1' }, { outcomeId: 62, outcomeName: '2' }] },
+    { marketId: 7, marketName: 'Asian Handicap', marketType: 'spreads', period: 'fulltime', handicap: -1, outcomes: [{ outcomeId: 71, outcomeName: '1' }, { outcomeId: 72, outcomeName: '2' }] },
+    { marketId: 8, marketName: 'European Handicap', marketType: 'spreads-european', period: 'fulltime', handicap: -1, outcomes: [{ outcomeId: 81, outcomeName: '1' }, { outcomeId: 82, outcomeName: 'X' }, { outcomeId: 83, outcomeName: '2' }] },
+    { marketId: 9, marketName: 'Corners Total', marketType: 'totals-corners', period: 'fulltime', handicap: 9.5, outcomes: [{ outcomeId: 91, outcomeName: 'Over' }, { outcomeId: 92, outcomeName: 'Under' }] },
+    { marketId: 10, marketName: 'Corners Total', marketType: 'totals-corners', period: 'fulltime', handicap: 9.25, outcomes: [{ outcomeId: 101, outcomeName: 'Over' }, { outcomeId: 102, outcomeName: 'Under' }] },
+    { marketId: 11, marketName: 'Corners Handicap', marketType: 'spreads-corners', period: 'fulltime', handicap: -0.75, outcomes: [{ outcomeId: 111, outcomeName: '1' }, { outcomeId: 112, outcomeName: '2' }] },
+    { marketId: 12, marketName: 'Bookings Total', marketType: 'totals-bookings', period: 'fulltime', handicap: 4.5, outcomes: [{ outcomeId: 121, outcomeName: 'Over' }, { outcomeId: 122, outcomeName: 'Under' }] },
+    { marketId: 13, marketName: 'First Half Total', marketType: 'totals', period: 'p1', handicap: 1.25, outcomes: [{ outcomeId: 131, outcomeName: 'Over' }, { outcomeId: 132, outcomeName: 'Under' }] },
+    { marketId: 14, marketName: 'Team 1 Total', marketType: 'teamtotals-team1', period: 'fulltime', handicap: 1.25, outcomes: [{ outcomeId: 141, outcomeName: 'Over' }, { outcomeId: 142, outcomeName: 'Under' }] },
+    { marketId: 15, marketName: 'Correct Score', marketType: 'correctscore', period: 'fulltime', handicap: null, outcomes: [{ outcomeId: 151, outcomeName: '1:0' }] },
+  ];
+  const odds: Record<string, unknown> = {};
+  for (const market of specs) {
+    for (const outcome of market.outcomes) {
+      odds[`${fixtureId}:1xbet:${outcome.outcomeId}:0`] = {
+        bookmaker: '1xbet', outcomeId: outcome.outcomeId, marketId: market.marketId, price: 1.83, active: true, changedAt: now,
+      };
+    }
+  }
+  const card = v5FixtureToCard({
+    fixtureId,
+    sport: { sportId: 10 },
+    participants: { participant1Id: 1, participant2Id: 2, participant1Name: 'Home', participant2Name: 'Away' },
+    tournament: { tournamentName: 'League', categoryName: 'Country' },
+    status: { live: true },
+    startTime: Math.floor(now / 1000),
+    bookmakers: { '1xbet': { hasOdds: true, staleOdds: false, suspended: false, participantsRotated: false } },
+    odds: { '1xbet': odds },
+  }, indexV5Markets(specs), now)!;
+  const expected = specs.reduce((sum, market) => sum + market.outcomes.length, 0);
+  assert.equal(card.displayGroups.length, specs.length);
+  assert.equal(card.displayGroups.reduce((sum, group) => sum + group.outcomes.length, 0), expected);
+  assert.ok(card.displayGroups.every((group) => group.outcomes.every((outcome) => outcome.odds === 1.83 && outcome.locked)));
+  const group = (marketId: number) => card.displayGroups.find((item) => item.externalMarketId === String(marketId))!;
+  assert.equal(group(2).category, 'totals');
+  assert.equal(group(3).category, 'asian-totals');
+  assert.match(group(3).name, /Азиатский тотал · 2\.25/);
+  assert.equal(group(4).category, 'asian-totals');
+  assert.equal(group(5).category, 'asian-handicap');
+  assert.equal(group(6).category, 'asian-handicap');
+  assert.equal(group(7).category, 'asian-handicap');
+  assert.match(group(7).name, /-1/);
+  assert.equal(group(8).category, 'european-handicap');
+  assert.equal(group(9).category, 'corners');
+  assert.match(group(9).name, /Угловые: тотал · 9\.5/);
+  assert.match(group(10).name, /Угловые: азиатский тотал · 9\.25/);
+  assert.match(group(11).name, /Угловые: азиатская фора · -0\.75/);
+  assert.equal(group(12).category, 'cards');
+  assert.equal(group(13).category, '1st-half');
+  assert.equal(group(13).externalPeriodId, 'p1');
+  assert.match(group(13).name, /Азиатский тотал · 1\.25/);
+  assert.equal(group(14).category, 'team-totals');
+  assert.match(group(14).name, /Азиатский тотал команды 1 · 1\.25/);
+  assert.notEqual(group(2).id, group(3).id);
+  assert.deepEqual(group(2).outcomes.map((outcome) => outcome.outcomeId), ['21', '22']);
+  assert.equal(group(15).externalMarketId, '15');
+});
+
+test('basketball spreads stay on the generic handicap category', () => {
+  const specs = [{ marketId: 5, marketName: 'Spread', marketType: 'spreads', period: 'fulltime', handicap: -1.5, outcomes: [{ outcomeId: 51, outcomeName: '1' }, { outcomeId: 52, outcomeName: '2' }] }];
+  const card = v5FixtureToCard({
+    fixtureId,
+    sport: { sportId: 11 },
+    participants: { participant1Id: 1, participant2Id: 2, participant1Name: 'Home', participant2Name: 'Away' },
+    tournament: { tournamentName: 'League', categoryName: 'Country' },
+    status: { live: false },
+    startTime: Math.floor(now / 1000) + 3600,
+    bookmakers: { '1xbet': { hasOdds: true, staleOdds: false, suspended: false, participantsRotated: false } },
+    odds: { '1xbet': { [`${fixtureId}:1xbet:51:0`]: { bookmaker: '1xbet', outcomeId: 51, marketId: 5, price: 1.9, active: true, changedAt: now }, [`${fixtureId}:1xbet:52:0`]: { bookmaker: '1xbet', outcomeId: 52, marketId: 5, price: 1.9, active: true, changedAt: now } } },
+  }, indexV5Markets(specs), now)!;
+  assert.equal(card.sport, 'basketball');
+  assert.equal(card.displayGroups[0]?.category, 'handicaps');
+  assert.equal(card.displayGroups[0]?.outcomes.length, 2);
+});
+
 test('the deployed place endpoint refuses before session or wallet access',async()=>{
   const old=process.env.ODDSPAPI_V5_READONLY_FEED;
   process.env.ODDSPAPI_V5_READONLY_FEED='1';

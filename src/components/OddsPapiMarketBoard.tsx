@@ -10,7 +10,7 @@ export function OddsPapiMarketBoard({ match }: { match: MatchEvent }) {
   );
   const tabs = marketTabs(lines, match.sport);
   const [mode, setMode] = useState<'all' | 'players' | 'popular'>('all');
-  const [tab, setTab] = useState(tabs[0]?.id ?? 'main');
+  const [tab, setTab] = useState('all');
   const [query, setQuery] = useState('');
   const [sheet, setSheet] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
@@ -84,7 +84,7 @@ export function OddsPapiMarketBoard({ match }: { match: MatchEvent }) {
           </summary>
           <div className="space-y-2 px-2 pb-2">
             {accordion.lines.map((line) => (
-              <div key={line.id} className="grid grid-cols-[4.5rem_1fr] items-center gap-1.5" data-market-id={line.outcomes[0]?.externalMarketId ?? ''}>
+              <div key={line.id} className="grid grid-cols-[4.5rem_1fr] items-center gap-1.5" data-market-id={line.outcomes[0]?.externalMarketId ?? ''} data-period-id={line.periodId ?? ''}>
                 <span className="text-xs font-semibold text-gray-500">{line.line || line.title}</span>
                 <div className={`grid gap-1.5 ${line.outcomes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
                   {line.outcomes.map((outcome) => (

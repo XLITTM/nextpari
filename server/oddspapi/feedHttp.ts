@@ -8,7 +8,7 @@ import {
   type V5MarketDefinition,
 } from './canonical.js';
 import { competitionRank, takeDiverse } from '../../src/lib/competitionCatalog.js';
-import { isLadderType, marketTypeOf, outcomeLabelFor, subtypeLabel } from '../../src/lib/marketTaxonomy.js';
+import { isLadderType, marketTypeOf, outcomeLabelFor, placeFootballMarket, subtypeLabel } from '../../src/lib/marketTaxonomy.js';
 import { clearV5RequestSchedule, scheduledRead, V5_DOCUMENTED_LIMITS, V5_REQUEST_GAPS } from './requestSchedule.js';
 import { OddsPapiV5TrialReader, V5_SPORT_IDS, type JsonRecord, type V5Result } from './v5TrialClient.js';
 
@@ -102,7 +102,27 @@ export function prematchHorizonDays(env: NodeJS.ProcessEnv = process.env): numbe
 export function v5MarketFamily(m: V5MarketDefinition): string {
   return marketTypeOf(m);
 }
-function groupCategory(m: V5MarketDefinition): MarketCategory {
+function footballGroupCategory(m: V5MarketDefinition): MarketCategory {
+  const placed = placeFootballMarket(m);
+  if (placed.tab === 'periods') {
+    if (m.period === 'p1') return '1st-half';
+    if (m.period === 'p2') return '2nd-half';
+    return 'periods';
+  }
+  switch (placed.tab) {
+    case 'totals': return 'totals';
+    case 'asian-totals': return 'asian-totals';
+    case 'european-handicap': return 'european-handicap';
+    case 'asian-handicap': return 'asian-handicap';
+    case 'corners': return 'corners';
+    case 'cards': return 'cards';
+    case 'team-totals': return 'team-totals';
+    case 'players': return 'players';
+    default: return 'main';
+  }
+}
+function groupCategory(m: V5MarketDefinition, sportId: number): MarketCategory {
+  if (sportId === 10) return footballGroupCategory(m);
   const type = marketTypeOf(m);
   if (type.startsWith('players-') || type.startsWith('playertotals-')) return 'players';
   if (type.endsWith('-corners') || type.includes('-corners-')) return 'corners';
@@ -113,9 +133,11 @@ function groupCategory(m: V5MarketDefinition): MarketCategory {
   if (type.startsWith('spreads')) return 'handicaps';
   return 'main';
 }
-function displayMarketName(m: V5MarketDefinition): string {
+function displayMarketName(m: V5MarketDefinition, sportId: number): string {
   const type = marketTypeOf(m);
-  const base = subtypeLabel({ marketType: type, marketName: m.marketName, period: m.period, handicap: m.handicap });
+  const base = sportId === 10
+    ? placeFootballMarket(m).label
+    : subtypeLabel({ marketType: type, marketName: m.marketName, period: m.period, handicap: m.handicap });
   const line = isLadderType(type) && m.handicap !== null ? String(m.handicap) : '';
   return [base, line].filter(Boolean).join(' · ');
 }
@@ -150,13 +172,14 @@ export function v5FixtureToCard(
     const market = catalog!.byId.get(quote.marketId)!;
     const group = groups.get(quote.marketId) || {
       id: `${V5_EVENT_PREFIX}${id}:market:${quote.marketId}`,
-      name: displayMarketName(market),
-      category: groupCategory(market),
+      name: displayMarketName(market, sportId),
+      category: groupCategory(market, sportId),
       marketFamily: v5MarketFamily(market),
       outcomes: [],
       bookmakerId: '1xbet',
       externalPeriodId: market.period,
       externalMarketId: String(quote.marketId),
+      handicap: market.handicap,
     };
     group.outcomes.push({
       label: outcomeLabelFor(marketTypeOf(market), quote.outcomeName),

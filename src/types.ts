@@ -75,7 +75,12 @@ export type MarketCategory =
   | 'statistics'
   | 'throw-ins'
   | 'totals'
+  | 'asian-totals'
   | 'handicaps'
+  | 'european-handicap'
+  | 'asian-handicap'
+  | 'team-totals'
+  | 'periods'
   | 'combo'
   | 'intervals';
 
@@ -92,6 +97,8 @@ export interface MarketGroup {
   bookmakerId?: string | null;
   externalPeriodId?: string | null;
   externalMarketId?: string;
+  /** Provider line. Absent when the market has no handicap. */
+  handicap?: number | null;
 }
 
 export interface MatchStat {

@@ -212,17 +212,48 @@ export function resolveDetailsMatch(catalog?: MatchEvent, stored?: MatchEvent): 
 export interface BetsapiDetailLine {
   id: string;
   title: string;
-  tab: 'main' | 'totals' | 'handicaps' | 'halves' | 'other';
+  tab: 'main' | 'totals' | 'asian-totals' | 'handicaps' | 'european-handicap' | 'asian-handicap' | 'corners' | 'cards' | 'team-totals' | 'halves' | 'other';
   outcomes: Array<{ label: string; odds: number; locked?: boolean; selection?: BetSelection }>;
 }
 
 function detailTab(group: { category?: string; name: string }): BetsapiDetailLine['tab'] | null {
-  if (group.category === '1st-half' || group.category === '2nd-half') return 'halves';
-  if (group.category === 'handicaps') return 'handicaps';
-  if (group.category === 'totals') return 'totals';
-  if (group.category === 'main' && group.name.replace(/^.*·\s*/, '') === 'Исход') return 'main';
-  if (group.category === 'handicaps' || /фора/i.test(group.name)) return 'handicaps';
-  if (group.category === 'totals' || /тотал/i.test(group.name)) return 'totals';
+  switch (group.category) {
+    case '1st-half':
+    case '2nd-half':
+    case 'periods':
+      return 'halves';
+    case 'asian-totals':
+      return 'asian-totals';
+    case 'european-handicap':
+      return 'european-handicap';
+    case 'asian-handicap':
+      return 'asian-handicap';
+    case 'handicaps':
+      return 'handicaps';
+    case 'totals':
+      return 'totals';
+    case 'corners':
+      return 'corners';
+    case 'cards':
+      return 'cards';
+    case 'team-totals':
+      return 'team-totals';
+    case 'main':
+      return group.name.replace(/^.*·\s*/, '') === 'Исход' ? 'main' : 'other';
+    case 'players':
+    case 'fouls':
+    case 'shots':
+    case 'offsides':
+    case 'statistics':
+    case 'throw-ins':
+    case 'combo':
+    case 'intervals':
+      return 'other';
+    default:
+      break;
+  }
+  if (/фора/i.test(group.name)) return 'handicaps';
+  if (/тотал/i.test(group.name)) return 'totals';
   if (group.category) return 'other';
   return null;
 }
@@ -296,7 +327,13 @@ export function betsapiDetailTabs(lines: BetsapiDetailLine[]): Array<{ id: 'all'
   const tabs: Array<{ id: 'all' | BetsapiDetailLine['tab']; label: string }> = [{ id: 'all', label: 'Все' }];
   if (lines.some((line) => line.tab === 'main')) tabs.push({ id: 'main', label: '1X2' });
   if (lines.some((line) => line.tab === 'totals')) tabs.push({ id: 'totals', label: 'Тоталы' });
+  if (lines.some((line) => line.tab === 'asian-totals')) tabs.push({ id: 'asian-totals', label: 'Азиатские тоталы' });
   if (lines.some((line) => line.tab === 'handicaps')) tabs.push({ id: 'handicaps', label: 'Форы' });
+  if (lines.some((line) => line.tab === 'european-handicap')) tabs.push({ id: 'european-handicap', label: 'Европейская фора' });
+  if (lines.some((line) => line.tab === 'asian-handicap')) tabs.push({ id: 'asian-handicap', label: 'Азиатская фора' });
+  if (lines.some((line) => line.tab === 'corners')) tabs.push({ id: 'corners', label: 'Угловые' });
+  if (lines.some((line) => line.tab === 'cards')) tabs.push({ id: 'cards', label: 'Карточки' });
+  if (lines.some((line) => line.tab === 'team-totals')) tabs.push({ id: 'team-totals', label: 'Тоталы команд' });
   if (lines.some((line) => line.tab === 'halves')) tabs.push({ id: 'halves', label: 'Таймы' });
   if (lines.some((line) => line.tab === 'other')) tabs.push({ id: 'other', label: 'Другие' });
   return tabs;

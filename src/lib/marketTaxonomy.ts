@@ -152,6 +152,101 @@ export function isPlayerType(marketType: string): boolean {
   return marketType.startsWith('players-') || marketType.startsWith('playertotals-');
 }
 
+const FULL_TIME_PERIOD = /^(ft|fulltime|full-time|full time|match|regular|result)$/i;
+const MAIN_OUTCOMES = new Set(['1x2', 'moneyline', 'doublechance', 'bothteamsscore', 'drawnobet']);
+
+export interface FootballPlacement {
+  tab: string;
+  bucket: string;
+  label: string;
+}
+
+/** .25 and .75 are quarter-lines. 0, 0.5 and 1 are not, including negative lines. */
+export function isQuarterLine(value: number | null | undefined): boolean {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return false;
+  const fraction = Math.round(Math.abs(value) * 100) % 100;
+  return fraction === 25 || fraction === 75;
+}
+
+export function isFullTimePeriod(period: string | null | undefined): boolean {
+  const value = (period ?? '').trim();
+  return value === '' || FULL_TIME_PERIOD.test(value);
+}
+
+function isCornerMarket(type: string): boolean {
+  return type.includes('corner');
+}
+
+function isCardMarket(type: string): boolean {
+  return type.includes('booking') || type.includes('card');
+}
+
+function teamSide(type: string): string {
+  if (type.endsWith('team2')) return 'team2';
+  if (type.endsWith('team1')) return 'team1';
+  return '';
+}
+
+/**
+ * Football sections follow the provider market type. Quarter-lines move goal
+ * totals and team totals into an Asian bucket. Handicap type is never inferred
+ * from the line: `spreads` stays Asian at 0, 0.5 and 1.
+ */
+export function placeFootballMarket(market: {
+  marketType: string;
+  period?: string | null;
+  handicap?: number | null;
+  marketName?: string;
+}): FootballPlacement {
+  const type = marketTypeOf(market);
+  const quarter = isQuarterLine(market.handicap);
+  const providerLabel = SUBTYPE_LABELS[type] ?? market.marketName ?? type;
+  const side = teamSide(type);
+  let placed: FootballPlacement;
+
+  if (isPlayerType(type)) {
+    placed = { tab: 'players', bucket: `players:${type}`, label: providerLabel };
+  } else if (isCornerMarket(type)) {
+    const ladder = type.startsWith('totals') || type.startsWith('spreads') || type.startsWith('teamtotals');
+    const asian = quarter && ladder;
+    const label = !asian
+      ? providerLabel
+      : type.startsWith('spreads')
+        ? 'Угловые: азиатская фора'
+        : providerLabel.replace('тотал', 'азиатский тотал');
+    placed = { tab: 'corners', bucket: `${asian ? 'corners-asian' : 'corners'}:${type}`, label };
+  } else if (isCardMarket(type)) {
+    placed = { tab: 'cards', bucket: `cards:${type}`, label: providerLabel };
+  } else if (type.startsWith('teamtotals-team')) {
+    placed = {
+      tab: 'team-totals',
+      bucket: `${quarter ? 'team-totals-asian' : 'team-totals'}:${side || type}`,
+      label: quarter
+        ? (side === 'team2' ? 'Азиатский тотал команды 2' : 'Азиатский тотал команды 1')
+        : providerLabel,
+    };
+  } else if (type === 'spreads-european') {
+    placed = { tab: 'european-handicap', bucket: 'european-handicap', label: 'Европейская фора' };
+  } else if (type === 'spreads' || type.startsWith('spreads-')) {
+    placed = { tab: 'asian-handicap', bucket: `asian-handicap:${type}`, label: type === 'spreads' ? 'Азиатская фора' : providerLabel };
+  } else if (type === 'totals' || type.startsWith('totals-')) {
+    placed = quarter
+      ? { tab: 'asian-totals', bucket: `asian-totals:${type}`, label: type === 'totals' ? 'Азиатский тотал' : providerLabel }
+      : { tab: 'totals', bucket: `totals:${type}`, label: providerLabel };
+  } else if (MAIN_OUTCOMES.has(type)) {
+    placed = { tab: 'main', bucket: `main:${type}`, label: providerLabel };
+  } else {
+    placed = { tab: 'other', bucket: `other:${type}`, label: providerLabel };
+  }
+
+  if (isFullTimePeriod(market.period)) return placed;
+  const period = market.period ?? 'period';
+  if (placed.tab === 'corners' || placed.tab === 'cards' || placed.tab === 'team-totals' || placed.tab === 'players') {
+    return { ...placed, bucket: `${placed.bucket}:${period}` };
+  }
+  return { tab: 'periods', bucket: `period:${period}:${placed.bucket}`, label: placed.label };
+}
+
 export function outcomeLabelFor(marketType: string, outcomeName: string): string {
   const type = marketType.trim().toLowerCase();
   const name = outcomeName.trim();

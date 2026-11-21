@@ -1,5 +1,5 @@
 import type { MarketGroup, SportId } from '../types';
-import { isPlayerType, marketPriority, selectionPlayerId } from './marketTaxonomy';
+import { isLadderType, isPlayerType, marketPriority, placeFootballMarket, selectionPlayerId, type FootballPlacement } from './marketTaxonomy';
 
 export interface LayoutOutcome {
   label: string;
@@ -7,6 +7,7 @@ export interface LayoutOutcome {
   locked?: boolean;
   sourceSelectionId?: string | null;
   externalMarketId?: string;
+  externalPeriodId?: string | null;
 }
 
 export interface LayoutLine {
@@ -97,6 +98,7 @@ function toOutcomes(group: MarketGroup, outcomes: MarketGroup['outcomes']): Layo
     locked: outcome.locked,
     sourceSelectionId: outcome.sourceSelectionId ?? null,
     externalMarketId: group.externalMarketId,
+    externalPeriodId: group.externalPeriodId ?? null,
   }));
 }
 
@@ -112,7 +114,10 @@ export function layoutLinesFromGroups(groups: readonly MarketGroup[], _sport: Sp
       title: group.name,
     };
     if (!isPlayerType(family)) {
-      return [{ id: group.id, ...shared, line: lineCaption(group.name), outcomes: toOutcomes(group, outcomes) }];
+      const line = isLadderType(family) && typeof group.handicap === 'number'
+        ? String(group.handicap)
+        : lineCaption(group.name);
+      return [{ id: group.id, ...shared, line, outcomes: toOutcomes(group, outcomes) }];
     }
     const byPlayer = new Map<string, MarketGroup['outcomes']>();
     for (const outcome of outcomes) {
@@ -157,7 +162,48 @@ function marketCategory(line: LayoutLine, sport: SportId): { id: string; label: 
 
 const CATEGORY_ORDER = ['main', 'p1', 'p2', 'corners', 'quick', 'cards', 'shots', 'offsides', 'fouls', 'players'];
 
+const FOOTBALL_TABS: ReadonlyArray<readonly [string, string]> = [
+  ['all', 'Все'],
+  ['main', 'Основные'],
+  ['totals', 'Тоталы'],
+  ['asian-totals', 'Азиатские тоталы'],
+  ['european-handicap', 'Европейская фора'],
+  ['asian-handicap', 'Азиатская фора'],
+  ['corners', 'Угловые'],
+  ['cards', 'Карточки'],
+  ['team-totals', 'Тоталы команд'],
+  ['periods', 'Таймы'],
+  ['other', 'Другие'],
+  ['players', 'Статистика игроков'],
+];
+
+const POPULAR_FAMILIES = new Set([
+  '1x2', 'doublechance', 'bothteamsscore', 'totals', 'spreads', 'spreads-european',
+  'teamtotals-team1', 'teamtotals-team2', 'correctscore', 'exactscore',
+]);
+
+function lineHandicap(line: LayoutLine): number | null {
+  if (!isLadderType(line.family) || !line.line) return null;
+  const value = Number(line.line.replace(',', '.'));
+  return Number.isFinite(value) ? value : null;
+}
+
+function footballPlacement(line: LayoutLine): FootballPlacement {
+  return placeFootballMarket({
+    marketType: line.family,
+    period: line.periodId,
+    handicap: lineHandicap(line),
+    marketName: line.title,
+  });
+}
+
 export function marketTabs(lines: readonly LayoutLine[], sport: SportId): MarketTab[] {
+  if (sport === 'football') {
+    const present = new Set(lines.map((line) => footballPlacement(line).tab));
+    return FOOTBALL_TABS
+      .filter(([id]) => id === 'all' ? present.size > 0 : present.has(id))
+      .map(([id, label]) => ({ id, label }));
+  }
   const present = new Map<string, string>();
   for (const line of lines) {
     const category = marketCategory(line, sport);
@@ -167,12 +213,11 @@ export function marketTabs(lines: readonly LayoutLine[], sport: SportId): Market
 }
 
 function matchesTab(line: LayoutLine, tab: string, sport: SportId): boolean {
-  if (tab === 'all' || tab === 'popular') {
-    if (tab === 'popular') {
-      return marketCategory(line, sport).id === 'main' && ['1x2', 'doublechance', 'bothteamsscore', 'totals', 'spreads', 'spreads-european', 'teamtotals-team1', 'teamtotals-team2', 'correctscore', 'exactscore'].includes(line.family);
-    }
-    return true;
+  if (tab === 'all') return true;
+  if (tab === 'popular') {
+    return !isPeriodMarket(line.periodId) && POPULAR_FAMILIES.has(line.family);
   }
+  if (sport === 'football') return footballPlacement(line).tab === tab;
   return marketCategory(line, sport).id === tab;
 }
 
@@ -194,14 +239,18 @@ export function marketAccordions(lines: readonly LayoutLine[], tab: string, quer
   const visible = lines.filter((line) => matchesTab(line, tab, sport) && matchesQuery(line, query, sport));
   const buckets = new Map<string, LayoutLine[]>();
   for (const line of visible) {
-    const key = `${line.family}|${line.periodId ?? 'match'}`;
+    const placed = sport === 'football' ? footballPlacement(line) : null;
+    const key = placed
+      ? `${placed.bucket}|${line.periodId ?? 'match'}`
+      : `${line.family}|${line.periodId ?? 'match'}`;
     buckets.set(key, [...(buckets.get(key) ?? []), line]);
   }
   return [...buckets.entries()]
     .map(([key, grouped]) => {
       const periodId = grouped[0]?.periodId ?? null;
       const period = periodCaption(periodId, sport);
-      const base = subtypeTitle(grouped[0]?.title ?? key);
+      const placed = sport === 'football' && grouped[0] ? footballPlacement(grouped[0]) : null;
+      const base = placed ? placed.label : subtypeTitle(grouped[0]?.title ?? key);
       return {
         id: key,
         family: grouped[0]?.family ?? key,
