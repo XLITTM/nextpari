@@ -25,22 +25,22 @@ class RemoteWalletRepository(
     private val hasSession: () -> Boolean = { false },
 ) : WalletRepository {
     override fun snapshot(): WalletSnapshot {
-        val me = store.me()
-        if (me == null) {
+        val wallet = store.verifiedWallet()
+        if (wallet == null) {
             return WalletSnapshot(
                 displayBalance = WalletCatalog.UNAVAILABLE_BALANCE,
                 currency = WalletCatalog.CURRENCY,
             )
         }
         return WalletSnapshot(
-            displayBalance = formatServerBalance(me.wallet.balance),
-            currency = me.wallet.currency,
+            displayBalance = formatServerBalance(wallet.balance),
+            currency = wallet.currency,
         )
     }
 
     override fun publicId(): String = store.me()?.playerPublicId.orEmpty()
 
-    override fun availableAmount(): Double? = store.me()?.wallet?.balance
+    override fun availableAmount(): Double? = store.verifiedWallet()?.balance
 
     override fun profileComplete(): Boolean {
         val profile = store.me()?.profile ?: return false

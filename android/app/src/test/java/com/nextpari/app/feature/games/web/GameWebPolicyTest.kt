@@ -53,6 +53,38 @@ class GameWebPolicyTest {
     }
 
     @Test
+    fun demoGameUsesOnlyTheExactNextPariDocument() {
+        val gameId = "sa-0123456789abcdef0123456789abcdef"
+        val route = "https://nextpari.net/casino/demo/$gameId"
+        assertThat(GameWebPolicy.gameUrl(gameId)).isEqualTo(route)
+        assertThat(GameWebPolicy.gameUrl("sa-not-a-game")).isNull()
+        assertThat(GameWebPolicy.decideMainFrame(route, gameId)).isEqualTo(GameFrameDecision.Allow)
+        assertThat(GameWebPolicy.decideMainFrame("https://nextpari.net/casino/demo", gameId)).isEqualTo(GameFrameDecision.Leave)
+        assertThat(GameWebPolicy.decideMainFrame(route.replace("sa-0", "sa-%30"), gameId)).isEqualTo(GameFrameDecision.Leave)
+        assertThat(GameWebPolicy.decideMainFrame(route, "dice")).isEqualTo(GameFrameDecision.Leave)
+        listOf(
+            "$route?anything=1",
+            "$route#section",
+            route.replace("nextpari.net", "nextpari.net:444"),
+            route.replace("nextpari.net", "other.example"),
+        ).forEach { url ->
+            assertThat(GameWebPolicy.decideMainFrame(url, gameId)).isEqualTo(GameFrameDecision.Block)
+        }
+    }
+
+    @Test
+    fun standardCasinoUsesSameOriginCatalogAndGameRoutes() {
+        val game = "https://nextpari.net/casino/real/sa-0123456789abcdef0123456789abcdef"
+        assertThat(GameWebPolicy.gameUrl("casino-slots")).isEqualTo("https://nextpari.net/casino/real/slots")
+        assertThat(GameWebPolicy.gameUrl("casino-live")).isEqualTo("https://nextpari.net/casino/real/live")
+        assertThat(GameWebPolicy.decideMainFrame(game, "casino-live")).isEqualTo(GameFrameDecision.Allow)
+        assertThat(GameWebPolicy.decideMainFrame("$game?extra=1", "casino-live")).isEqualTo(GameFrameDecision.Block)
+        assertThat(GameWebPolicy.decideMainFrame(game.replace("nextpari.net", "example.org"), "casino-live"))
+            .isEqualTo(GameFrameDecision.Block)
+        assertThat(GameWebPolicy.decideMainFrame("https://nextpari.net/games", "casino-live")).isEqualTo(GameFrameDecision.Leave)
+    }
+
+    @Test
     fun handoffCopiesOnlySecureHttpOnlyCookiesForTheSamePlayer() = runTest {
         val store = RecordingCookieStore()
         WebSessionBridge.install(store)

@@ -5,18 +5,15 @@ import com.nextpari.app.core.network.NetworkError
 import com.nextpari.app.core.network.PlayerApi
 import com.nextpari.app.core.network.userMessage
 import java.io.IOException
-import com.nextpari.app.core.player.MappedWalletRow
+import com.nextpari.app.core.network.session.WalletResponseScope
+import com.nextpari.app.core.player.WalletRead
 import com.nextpari.app.core.player.PlayerJsonMapper
 import com.nextpari.app.core.player.PlayerStateStore
 import com.nextpari.app.core.player.bool
-import com.nextpari.app.core.player.mappedWalletsToRows
-import com.nextpari.app.core.player.num
-import com.nextpari.app.core.player.str
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -33,6 +30,7 @@ class RemoteWalletsRepository(
     private val api: PlayerApi,
     private val json: Json,
     private val hasSession: () -> Boolean,
+    private val onUnauthorized: (WalletRead) -> Unit = {},
 ) : WalletsRepository {
     private val gate = Mutex()
 
@@ -101,56 +99,28 @@ class RemoteWalletsRepository(
     }
 
     private suspend fun reloadAuthoritative(): Result<Unit> {
+        val read = store.beginWalletRead()
+        val playerId = read.playerId ?: return Result.failure(IllegalStateException(WalletsCatalog.SESSION_UNAVAILABLE))
         val response = try {
-            api.wallets()
+            api.wallets(WalletResponseScope { store.isCurrentWalletRead(read) })
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
             return callFailure(error)
         }
-        val body = response.jsonBody(json)
+        if (!store.isCurrentSession(read)) return Result.failure(IllegalStateException(WalletsCatalog.SESSION_EXPIRED))
+        if (!store.isCurrentWalletRead(read)) return Result.success(Unit)
         if (response.code() == 401 || response.code() == 403) {
+            onUnauthorized(read)
             return Result.failure(IllegalStateException(WalletsCatalog.SESSION_EXPIRED))
         }
-        if (!response.isSuccessful || body == null) {
+        val validated = response.body()?.takeIf { response.isSuccessful }
+            ?.let { PlayerJsonMapper.walletsFromBody(it, playerId) }
+            ?: return Result.failure(IllegalStateException(WalletsCatalog.REFRESH_FAILED))
+        if (!store.applyWalletRead(read, validated) && store.isCurrentWalletRead(read)) {
             return Result.failure(IllegalStateException(WalletsCatalog.REFRESH_FAILED))
         }
-        val validated = validatedRows(body)
-            ?: return Result.failure(IllegalStateException(WalletsCatalog.REFRESH_FAILED))
-        val active = validated.firstOrNull { it.isActive }
-        store.applyAuthoritativeWallets(
-            rows = mappedWalletsToRows(validated),
-            activeBalance = active?.availableBalance,
-            activeCurrency = active?.let { WalletsCatalog.displayCurrency(it.currency) },
-        )
         return Result.success(Unit)
-    }
-
-    private fun validatedRows(body: JsonObject): List<MappedWalletRow>? {
-        if (body.bool("ok") != true) return null
-        val rows = body["wallets"] as? JsonArray ?: return null
-        val parsed = ArrayList<MappedWalletRow>(rows.size)
-        val seen = HashSet<String>()
-        for (element in rows) {
-            val raw = element as? JsonObject ?: return null
-            val walletId = raw.str("walletId", "wallet_id")
-            if (walletId.isBlank() || !seen.add(walletId)) return null
-            val currencyRaw = raw.str("currency")
-            if (WalletsCatalog.storageCurrency(currencyRaw) == null) return null
-            if (raw["isActive"] == null && raw["is_active"] == null) return null
-            val available = raw.num("availableBalance", "available_balance") ?: return null
-            val locked = raw.num("lockedBalance", "locked_balance") ?: return null
-            if (!available.isFinite() || available < 0.0 || !locked.isFinite() || locked < 0.0) return null
-            parsed += MappedWalletRow(
-                walletId = walletId,
-                currency = currencyRaw,
-                availableBalance = available,
-                lockedBalance = locked,
-                isActive = raw.bool("isActive") == true || raw.bool("is_active") == true,
-                displayNameRu = raw.str("displayNameRu", "display_name_ru"),
-            )
-        }
-        return parsed
     }
 
     private fun callFailure(error: Throwable): Result<Unit> {

@@ -15,14 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Star
-import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
@@ -54,11 +50,13 @@ fun SportsListScreen(
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
     var tab by rememberSaveable { mutableStateOf(initialMode) }
-    val rows = viewModel.sportRows(tab)
+    val football = viewModel.state.collectAsStateWithLifecycle().value
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val rows = viewModel.sportRows(tab).filter { it.name.contains(query.trim(), ignoreCase = true) }
     val storedFavorites by com.nextpari.app.core.AppGraph.sportsFavorites.favorites.collectAsStateWithLifecycle()
     val favoriteScope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) { com.nextpari.app.core.AppGraph.sportsFavorites.load() }
-    var actionNotice by rememberSaveable { mutableStateOf("") }
     val favorites = storedFavorites.sportIds
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF3F4F6))) {
@@ -67,10 +65,14 @@ fun SportsListScreen(
                 title = "Виды спорта",
                 onBack = onBack,
                 actions = listOf(NextpariWebIcons.Search to "Поиск"),
-                onAction = { actionNotice = sportsActionMessage(it) },
+                onAction = {
+                    searching = !searching
+                    if (!searching) query = ""
+                },
             )
-            if (actionNotice.isNotBlank()) {
-                Text(actionNotice, color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280), fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            if (searching) {
+                OutlinedTextField(query, { query = it }, singleLine = true, label = { Text("Поиск по видам спорта") },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp))
             }
             SportsbookSegmentedTabs(
                 tabs = listOf("live" to "LIVE", "line" to "Линия", "cybers" to "Киберы"),
@@ -78,7 +80,19 @@ fun SportsListScreen(
                 onChange = { tab = it },
             )
         }
-        LazyColumn(Modifier.fillMaxSize().padding(top = 8.dp).background(if (dark) Color(0xFF1E293B) else Color.White)) {
+        FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
+        if (rows.isEmpty() && !footballFeedFailed(football)) {
+            Text(
+                when {
+                    football.loading -> "Загрузка событий…"
+                    query.isNotBlank() -> "Виды спорта не найдены"
+                    else -> "Сейчас событий нет"
+                },
+                color = colors.textSecondary, fontSize = 14.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            )
+        }
+        LazyColumn(Modifier.weight(1f).padding(top = 8.dp).background(if (dark) Color(0xFF1E293B) else Color.White)) {
             itemsIndexed(rows, key = { _, row -> row.id }) { index, row ->
                 Row(
                     Modifier
@@ -109,8 +123,8 @@ fun SportsListScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Icon(
-                            if (row.id in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
-                            contentDescription = "Добавить вид спорта в избранное",
+                            NextpariWebIcons.Star,
+                            contentDescription = if (row.id in favorites) "Убрать из избранного" else "Добавить в избранное",
                             tint = if (row.id in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
                             modifier = Modifier.size(16.dp),
                         )

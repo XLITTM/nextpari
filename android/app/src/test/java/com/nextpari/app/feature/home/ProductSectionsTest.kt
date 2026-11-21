@@ -16,7 +16,7 @@ class ProductSectionsTest {
             "esports-live",
             "esports-line",
         ).inOrder()
-        assertThat(HomeSectionOrder.sport).containsExactly("sports", "live", "line", "champs").inOrder()
+        assertThat(HomeSectionOrder.sport).containsExactly("sports", "promos", "live", "line", "champs").inOrder()
         assertThat(HomeSectionOrder.esports).containsExactly(
             "esports-disciplines",
             "esports-live",

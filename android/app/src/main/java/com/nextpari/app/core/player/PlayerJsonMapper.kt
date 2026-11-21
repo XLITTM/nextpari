@@ -1,6 +1,7 @@
 package com.nextpari.app.core.player
 
 import com.nextpari.app.core.network.NetworkError
+import com.nextpari.app.feature.wallets.WalletsCatalog
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -15,15 +16,17 @@ object PlayerJsonMapper {
         if (body.bool("authenticated") != true) return null
         val player = body.obj("player") ?: return null
         val wallet = body.obj("wallet") ?: return null
-        val balance = wallet.num("balance") ?: return null
+        val balance = wallet.num("balance")?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+        val playerId = parsePublicPlayerId(player.str("publicId")).takeIf { it.isNotEmpty() } ?: return null
+        val currency = WalletsCatalog.storageCurrency(wallet.str("currency")) ?: return null
         val email = sanitizePublicEmail(player.str("email"))
         val profile = body.obj("profile") ?: JsonObject(emptyMap())
         return PlayerMeSnapshot(
-            playerPublicId = parsePublicPlayerId(player.str("publicId")),
+            playerPublicId = playerId,
             email = email,
             wallet = PlayerWalletSnapshot(
                 balance = balance,
-                currency = displayPlayerCurrency(wallet.str("currency").ifBlank { "TMT" }),
+                currency = displayPlayerCurrency(currency),
                 status = wallet.str("status").ifBlank { "active" },
                 migrationState = wallet.optionalStr("migrationState"),
             ),
@@ -45,20 +48,29 @@ object PlayerJsonMapper {
         )
     }
 
-    fun walletsFromBody(body: JsonObject): List<MappedWalletRow>? {
+    fun walletsFromBody(body: JsonObject, playerId: String): List<MappedWalletRow>? {
         if (body.bool("ok") != true) return null
-        val rows = body["wallets"] as? JsonArray ?: return emptyList()
-        return rows.map { element ->
-            val raw = element as? JsonObject ?: JsonObject(emptyMap())
-            MappedWalletRow(
-                walletId = raw.str("walletId", "wallet_id"),
-                currency = displayPlayerCurrency(raw.str("currency")),
-                availableBalance = raw.num("availableBalance", "available_balance") ?: 0.0,
-                lockedBalance = raw.num("lockedBalance", "locked_balance") ?: 0.0,
-                isActive = raw.bool("isActive") == true || raw.bool("is_active") == true,
-                displayNameRu = raw.str("displayNameRu", "display_name_ru"),
-            )
+        val owner = body.optionalStr("playerPublicId") ?: body.obj("player")?.optionalStr("publicId")
+        if (owner != null && parsePublicPlayerId(owner) != playerId) return null
+        val rows = body["wallets"] as? JsonArray ?: return null
+        val ids = HashSet<String>()
+        val currencies = HashSet<String>()
+        val mapped = rows.map { element ->
+            val row = element as? JsonObject ?: return null
+            val id = row.str("walletId", "wallet_id")
+            val currency = WalletsCatalog.storageCurrency(row.str("currency")) ?: return null
+            if (id.isBlank() || !ids.add(id) || !currencies.add(currency)) return null
+            val active = row.bool("isActive") ?: row.bool("is_active") ?: return null
+            val available = row.num("availableBalance", "available_balance")?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+            val locked = row.num("lockedBalance", "locked_balance")?.takeIf { it.isFinite() && it >= 0.0 } ?: return null
+            MappedWalletRow(id, currency, available, locked, active, row.str("displayNameRu", "display_name_ru"))
         }
+        val active = mapped.filter { it.isActive }
+        val pointer = body["activeWalletId"] ?: body["active_wallet_id"]
+        val activeId = body.optionalStr("activeWalletId") ?: body.optionalStr("active_wallet_id")
+        if (active.size > 1 || (mapped.isNotEmpty() && active.isEmpty() && pointer != JsonNull)) return null
+        if (pointer != null && activeId != active.singleOrNull()?.walletId) return null
+        return mapped
     }
 
     fun errorCode(body: JsonObject?): String = body?.str("error").orEmpty()

@@ -155,8 +155,8 @@ class GamePlayViewModelTest {
             spec = GameSpecs.dice,
             games = games,
             readWallet = { wallet },
-            applyBalance = { amount, walletId ->
-                if (wallet.walletId != walletId) return@GamePlayViewModel false
+            applyBalance = { amount, expected ->
+                if (wallet.walletId != expected.walletId) return@GamePlayViewModel false
                 wallet = wallet.copy(amount = amount)
                 applied += amount
                 true

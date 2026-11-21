@@ -9,9 +9,10 @@ object HomeFeedVisibility {
         else -> HomeSectionBody.Hidden
     }
 
-    fun alwaysVisibleSection(loading: Boolean, count: Int): HomeSectionBody = when {
+    fun alwaysVisibleSection(loading: Boolean, count: Int, failed: Boolean = false): HomeSectionBody = when {
         count > 0 -> HomeSectionBody.Data
         loading -> HomeSectionBody.Skeleton
+        failed -> HomeSectionBody.Hidden
         else -> HomeSectionBody.EmptyText
     }
 

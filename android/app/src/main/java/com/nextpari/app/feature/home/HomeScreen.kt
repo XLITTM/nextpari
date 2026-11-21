@@ -2,16 +2,18 @@ package com.nextpari.app.feature.home
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,10 +24,10 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -34,6 +36,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +46,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nextpari.app.feature.casino.CasinoRealCatalog
+import com.nextpari.app.feature.sportsbook.FootballFeedControl
+import com.nextpari.app.feature.sportsbook.footballFeedFailed
+import com.nextpari.app.feature.sportsbook.SportsBetSelection
+import com.nextpari.app.feature.sportsbook.SportsbookViewModel
+import com.nextpari.app.feature.sportsbook.SportsListCatalog
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
@@ -50,6 +59,7 @@ import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
+import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.core.ui.theme.TabActiveGold
 
@@ -57,9 +67,21 @@ import com.nextpari.app.core.ui.theme.TabActiveGold
 fun HomeScreen(
     viewModel: HomeViewModel,
     onNavigate: (String) -> Unit,
+    sportsbook: SportsbookViewModel = androidx.lifecycle.viewmodel.compose.viewModel(factory = SportsbookViewModel.Factory),
 ) {
-    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val home by viewModel.uiState.collectAsStateWithLifecycle()
+    val football = sportsbook.state.collectAsStateWithLifecycle().value
+    val live = sportsbook.live()
+    val line = sportsbook.line()
+    val availableSports = SportsListCatalog.selector(live, line)
+    val selectedSport = home.selectedSportId.takeIf { id -> availableSports.any { it.id == id } } ?: "all"
+    val state = home.copy(sports = availableSports, selectedSportId = selectedSport, liveMatches = live, lineMatches = line,
+        esportsLive = live.filter { it.sport == "esports" },
+        esportsLine = line.filter { it.sport == "esports" })
     val colors = NextpariTheme.colors
+    val now = System.currentTimeMillis()
+    val popularLive = sportsbook.featured(true, state.filteredLive, now)
+    val popularLine = sportsbook.featured(false, state.filteredLine, now)
     val topListState = rememberLazyListState()
     val sportListState = rememberLazyListState()
     val esportsListState = rememberLazyListState()
@@ -69,6 +91,9 @@ fun HomeScreen(
         "esports" -> esportsListState
         "casino" -> casinoListState
         else -> topListState
+    }
+    val visibleSections by remember(listState) {
+        derivedStateOf { listState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() }
     }
     Box(Modifier.fillMaxSize().background(colors.bg)) {
         key(state.mainTabId) {
@@ -117,12 +142,18 @@ fun HomeScreen(
                 }
             }
             "sport" -> {
-                item(key = "sports") { SportsSelector(state, viewModel::selectSport, excludeEsports = true) }
+                item(key = "sports") { SportsSelector(state, viewModel::selectSport) }
+                if (state.promos.isNotEmpty()) item(key = "promos") { PromoRow(state.promos, onNavigate) }
+                item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, sportsbook::refreshFeed) }
                 item(key = "live") {
                     MatchSection(
                         title = "Популярное LIVE",
-                        matches = state.filteredLive,
-                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.filteredLive.size),
+                        matches = popularLive,
+                        onViewport = if ("live" in visibleSections) sportsbook::visibleMatches else null,
+                        selectedOdds = football.selectedKeys,
+                        onOddSelected = sportsbook::toggle,
+                        onToggleFavorite = sportsbook::toggleMatchFavorite,
+                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLive.size, footballFeedFailed(football)),
                         seeAllRoute = Destinations.GAMELIST_LIVE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
@@ -131,19 +162,26 @@ fun HomeScreen(
                 item(key = "line") {
                     MatchSection(
                         title = "Популярное Линия",
-                        matches = state.filteredLine,
-                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.filteredLine.size),
+                        matches = popularLine,
+                        onViewport = if ("line" in visibleSections) sportsbook::visibleMatches else null,
+                        selectedOdds = football.selectedKeys,
+                        onOddSelected = sportsbook::toggle,
+                        onToggleFavorite = sportsbook::toggleMatchFavorite,
+                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLine.size, footballFeedFailed(football)),
                         seeAllRoute = Destinations.GAMELIST_LINE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeChampionships.groups(state.liveMatches, excludeEsports = true).isNotEmpty()) {
+                if (HomeChampionships.groups(state.filteredLive, excludeEsports = true).isNotEmpty()) {
                     item(key = "champs") {
                         HomeChampionshipsAccordion(
-                            live = state.liveMatches,
+                            live = state.filteredLive,
                             sportId = state.selectedSportId,
-                            onNavigate = onNavigate,
+                            onNavigate = { route ->
+                                if (route.startsWith("league/")) sportsbook.rememberMode("live")
+                                onNavigate(route)
+                            },
                             excludeEsports = true,
                         )
                     }
@@ -151,13 +189,18 @@ fun HomeScreen(
             }
             else -> {
                 item(key = "sports") { SportsSelector(state, viewModel::selectSport) }
-                item(key = "promos") { PromoRow(state.promos, onNavigate) }
-                val liveBody = HomeFeedVisibility.topLive(state.loading, state.filteredLive.size)
+                if (state.promos.isNotEmpty()) item(key = "promos") { PromoRow(state.promos, onNavigate) }
+                item(key = "football-refresh") { FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, sportsbook::refreshFeed) }
+                val liveBody = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLive.size, footballFeedFailed(football))
                 if (liveBody != HomeSectionBody.Hidden) {
                     item(key = "live") {
                         MatchSection(
                             title = "Популярное LIVE",
-                            matches = state.filteredLive,
+                            matches = popularLive,
+                            onViewport = if ("live" in visibleSections) sportsbook::visibleMatches else null,
+                            selectedOdds = football.selectedKeys,
+                            onOddSelected = sportsbook::toggle,
+                            onToggleFavorite = sportsbook::toggleMatchFavorite,
                             body = liveBody,
                             seeAllRoute = Destinations.GAMELIST_LIVE,
                             onNavigate = onNavigate,
@@ -168,20 +211,27 @@ fun HomeScreen(
                 item(key = "line") {
                     MatchSection(
                         title = "Популярное Линия",
-                        matches = state.filteredLine,
-                        body = HomeFeedVisibility.alwaysVisibleSection(state.loading, state.filteredLine.size),
+                        matches = popularLine,
+                        onViewport = if ("line" in visibleSections) sportsbook::visibleMatches else null,
+                        selectedOdds = football.selectedKeys,
+                        onOddSelected = sportsbook::toggle,
+                        onToggleFavorite = sportsbook::toggleMatchFavorite,
+                        body = HomeFeedVisibility.alwaysVisibleSection(football.loading, popularLine.size, footballFeedFailed(football)),
                         seeAllRoute = Destinations.GAMELIST_LINE,
                         onNavigate = onNavigate,
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeChampionships.groups(state.liveMatches, excludeEsports = false).isNotEmpty()) {
+                if (HomeChampionships.groups(state.filteredLive, excludeEsports = true).isNotEmpty()) {
                     item(key = "champs") {
                         HomeChampionshipsAccordion(
-                            live = state.liveMatches,
+                            live = state.filteredLive,
                             sportId = state.selectedSportId,
-                            onNavigate = onNavigate,
-                            excludeEsports = false,
+                            onNavigate = { route ->
+                                if (route.startsWith("league/")) sportsbook.rememberMode("live")
+                                onNavigate(route)
+                            },
+                            excludeEsports = true,
                         )
                     }
                 }
@@ -210,6 +260,12 @@ fun HomeScreen(
                         )
                     }
                 }
+                item(key = "popular-slots") {
+                    CasinoRealCatalog("slots", "Популярные слоты") { onNavigate(Destinations.SLOTS) }
+                }
+                item(key = "popular-live-casino") {
+                    CasinoRealCatalog("live", "Популярное Live Casino") { onNavigate(Destinations.LIVE_CASINO) }
+                }
             }
         }
         }
@@ -221,15 +277,13 @@ fun HomeScreen(
 private fun SportsSelector(
     state: HomeUiState,
     onSport: (String) -> Unit,
-    excludeEsports: Boolean = false,
 ) {
     val colors = NextpariTheme.colors
-    val sports = if (excludeEsports) state.sports.filter { it.id != "esports" } else state.sports
     LazyRow(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(sports, key = { it.id }) { sport ->
+        items(state.sports, key = { it.id }) { sport ->
             val active = sport.id == state.selectedSportId
             Column(
                 modifier = Modifier
@@ -268,39 +322,63 @@ private fun SportsSelector(
 @Composable
 private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
     val colors = NextpariTheme.colors
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        items(promos, key = { it.route }) { promo ->
-            Column(
-                modifier = Modifier
-                    .width(110.dp)
-                    .vipNeonFrame(chrome = VipNeonChrome.PressOnly)
-                    .clickable { onNavigate(promo.route) },
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Image(
-                    painter = painterResource(promo.imageRes),
-                    contentDescription = promo.title,
-                    modifier = Modifier
-                        .width(110.dp)
-                        .height(60.dp)
-                        .clip(RoundedCornerShape(16.dp)),
-                    contentScale = ContentScale.Crop,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    promo.title,
-                    color = colors.textSecondary,
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.width(110.dp).heightIn(min = 28.dp),
-                )
+    val dark = colors.bg == NextpariColors.Dark.bg
+    val shape = RoundedCornerShape(16.dp)
+    val face = remember(colors) {
+        Brush.verticalGradient(listOf(colors.surfaceElevated, colors.surfaceSoft))
+    }
+    val rim = remember(colors, dark) {
+        Brush.verticalGradient(
+            listOf(
+                colors.accent.copy(alpha = if (dark) .44f else .24f).compositeOver(colors.border),
+                colors.border,
+            ),
+        )
+    }
+    val reflection = remember(dark) {
+        Brush.verticalGradient(0f to Color.White.copy(alpha = if (dark) .15f else .18f), .37f to Color.Transparent)
+    }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val cardWidth = (maxWidth * .42f).coerceIn(110.dp, 168.dp)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            items(promos, key = { it.route }) { promo ->
+                Column(
+                    modifier = Modifier.width(cardWidth)
+                        .vipNeonFrame(shape = shape, chrome = VipNeonChrome.PressOnly)
+                        .shadow(5.dp, shape, clip = false, spotColor = if (dark) colors.accent else colors.text)
+                        .clip(shape).background(face).border(1.dp, rim, shape)
+                        .clickable(onClickLabel = promo.title) { onNavigate(promo.route) }
+                        .padding(3.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        Modifier.fillMaxWidth().aspectRatio(1.36f)
+                            .clip(RoundedCornerShape(13.dp)).background(colors.surfaceMuted),
+                    ) {
+                        Image(
+                            painter = painterResource(promo.imageRes),
+                            contentDescription = null,
+                            modifier = Modifier.matchParentSize(),
+                            contentScale = ContentScale.Fit,
+                        )
+                        Box(Modifier.matchParentSize().background(reflection))
+                    }
+                    Text(
+                        promo.title,
+                        color = colors.text,
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        minLines = 2,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 3.dp, vertical = 3.dp),
+                    )
+                }
             }
         }
     }
@@ -315,11 +393,16 @@ private fun MatchSection(
     onNavigate: (String) -> Unit,
     badge: String? = null,
     filterLabel: String? = null,
+    selectedOdds: Set<String> = emptySet(),
+    onOddSelected: ((SportsBetSelection) -> Unit)? = null,
+    onViewport: ((Any, List<String>) -> Unit)? = null,
+    onToggleFavorite: ((String) -> Unit)? = null,
 ) {
     val colors = NextpariTheme.colors
-    Column(Modifier.padding(top = 16.dp)) {
+    Column(Modifier.padding(top = 4.dp)) {
         ProductSectionHeader(
             title = title,
+            verticalPadding = 4.dp,
             badge = badge,
             filterLabel = filterLabel,
             onFilter = filterLabel?.let { { onNavigate(seeAllRoute) } },
@@ -329,12 +412,12 @@ private fun MatchSection(
             HomeSectionBody.Hidden -> Unit
             HomeSectionBody.Skeleton -> MatchSkeletonCarousel()
             HomeSectionBody.EmptyText -> Text(
-                "Матчи появятся скоро",
+                SportsListCatalog.EMPTY_MATCHES,
                 color = colors.textMuted,
                 fontSize = 14.sp,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
             )
-            HomeSectionBody.Data -> MatchCarousel(matches) { match ->
+            HomeSectionBody.Data -> MatchCarousel(matches, selectedOdds, onOddSelected, onViewport, onToggleFavorite) { match ->
                 onNavigate(Destinations.match(match.eventId))
             }
         }

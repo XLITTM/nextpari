@@ -21,11 +21,18 @@ import com.nextpari.app.feature.profile.RemotePersonalDataRepository
 import com.nextpari.app.feature.wallet.RemoteWalletRepository
 import com.nextpari.app.feature.wallets.RemoteWalletsRepository
 import com.nextpari.app.feature.wallets.WalletsCatalog
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Before
@@ -638,13 +645,8 @@ class PlayerBackendContractTest {
     @Test
     fun refreshReplacesLocalBalancesWithServerList() = runTest {
         val harness = loggedIn()
-        val current = checkNotNull(harness.store.me())
-        harness.store.applyMe(current.copy(wallet = current.wallet.copy(balance = 1.0, currency = "USD")))
-        harness.store.applyWallets(
-            listOf(
-                com.nextpari.app.feature.wallets.PlayerWalletRow("local-id", "USD", "Доллар США", "1.00", true),
-            ),
-        )
+        val prior = checkNotNull(harness.store.verifiedWallet())
+        assertThat(harness.store.applyBalanceAfter(1.0, prior)).isTrue()
         enqueueWallets()
 
         val result = harness.wallets.refresh()
@@ -656,6 +658,123 @@ class PlayerBackendContractTest {
         assertThat(harness.store.me()?.wallet?.balance).isEqualTo(10.38)
         assertThat(harness.store.me()?.wallet?.currency).isEqualTo("TMT")
     }
+
+    @Test
+    fun loginAndWalletReopenUseLedgerSnapshotAfterAnotherDevicePlays() = runTest {
+        val afterFirstGame = WALLETS_BODY.replace("10.38", "19490")
+        enqueueLogin()
+        enqueueJson(ME_BODY.replace("10.38", "20000"))
+        enqueueJson(afterFirstGame)
+        enqueueProfile()
+        val harness = harness()
+
+        assertThat(harness.auth.login(LoginIdentifier.PlayerId("110790"), "password1")).isInstanceOf(ApiResult.Ok::class.java)
+        assertThat(harness.wallet.snapshot().displayBalance).isEqualTo("19490")
+        assertThat(harness.store.verifiedWallet()?.walletId).isEqualTo("w-tmt")
+        drain(4)
+
+        enqueueJson(WALLETS_BODY.replace("10.38", "19115.50"))
+        assertThat(harness.wallets.refresh().isSuccess).isTrue()
+        assertThat(harness.wallet.snapshot().displayBalance).isEqualTo("19115.50")
+        assertThat(harness.wallet.availableAmount()).isEqualTo(19115.5)
+        assertBalances(harness, tmt = "19115.50", usd = "25", tmtActive = true, usdActive = false)
+        assertThat(server.takeRequest().path).isEqualTo("/api/player/wallets")
+    }
+
+    @Test
+    fun delayedHydrationCannotReplaceNewerWalletOrRenewOldCookies() = runTest {
+        val harness = loggedIn()
+        val oldRead = CountDownLatch(1)
+        val releaseOld = CountDownLatch(1)
+        val walletCalls = AtomicInteger()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (request.path) {
+                "/api/player/me" -> walletJson(ME_BODY)
+                "/api/player/profile" -> walletJson(PROFILE_BODY)
+                "/api/player/wallets" -> if (walletCalls.incrementAndGet() == 1) {
+                    oldRead.countDown()
+                    if (!releaseOld.await(5, TimeUnit.SECONDS)) return MockResponse().setResponseCode(500)
+                    walletJson(WALLETS_BODY).addHeader("Set-Cookie", "${PlayerCookieNames.ACCESS}=stale-value; Path=/; HttpOnly")
+                } else walletJson(WALLETS_BODY.replace("10.38", "19115.50"))
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+        val first = async(Dispatchers.IO) { harness.coordinator.refreshPlayerState() }
+        try {
+            assertThat(oldRead.await(5, TimeUnit.SECONDS)).isTrue()
+            assertThat(harness.wallets.refresh().isSuccess).isTrue()
+            assertThat(harness.wallet.availableAmount()).isEqualTo(19115.5)
+        } finally {
+            releaseOld.countDown()
+        }
+        assertThat(first.await()).isInstanceOf(ApiResult.Ok::class.java)
+        assertThat(harness.wallet.availableAmount()).isEqualTo(19115.5)
+        assertThat(harness.jar.loadForRequest(server.url("/")).none { it.value == "stale-value" }).isTrue()
+    }
+
+    @Test
+    fun lateUnauthorizedWalletReadCannotClearAnotherPlayersLogin() = runTest {
+        val harness = loggedIn()
+        val oldRead = CountDownLatch(1)
+        val releaseOld = CountDownLatch(1)
+        val walletCalls = AtomicInteger()
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                return when (request.path) {
+                "/api/player/auth/login" -> walletJson("""{"ok":true}""")
+                    .addHeader("Set-Cookie", "${PlayerCookieNames.ACCESS}=new-player; Path=/; HttpOnly")
+                "/api/player/me" -> walletJson(ME_BODY.replace("110790", "110791"))
+                "/api/player/profile" -> walletJson(PROFILE_BODY)
+                "/api/player/wallets" -> if (walletCalls.incrementAndGet() == 1) {
+                    oldRead.countDown()
+                    if (!releaseOld.await(5, TimeUnit.SECONDS)) return MockResponse().setResponseCode(500)
+                    walletJson("""{"ok":false,"error":"JWT_INVALID"}""").setResponseCode(401)
+                        .addHeader("Set-Cookie", "${PlayerCookieNames.ACCESS}=; Max-Age=0; Path=/; HttpOnly")
+                } else walletJson(WALLETS_BODY.replace("w-tmt", "second-tmt").replace("10.38", "74"))
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+        val first = async(Dispatchers.IO) { harness.wallets.refresh() }
+        try {
+            assertThat(oldRead.await(5, TimeUnit.SECONDS)).isTrue()
+            assertThat(harness.auth.login(LoginIdentifier.PlayerId("110791"), "password1")).isInstanceOf(ApiResult.Ok::class.java)
+        } finally {
+            releaseOld.countDown()
+        }
+        assertThat(first.await().isFailure).isTrue()
+        assertThat(harness.sessions.session.value.playerPublicId).isEqualTo("110791")
+        assertThat(harness.store.verifiedWallet()?.walletId).isEqualTo("second-tmt")
+        assertThat(harness.wallet.availableAmount()).isEqualTo(74.0)
+        assertThat(harness.jar.loadForRequest(server.url("/")).any { it.value == "new-player" }).isTrue()
+    }
+
+    @Test
+    fun walletRefreshRejectsForeignOwnersInvalidActivePointersAndReusedCurrencyIds() = runTest {
+        val harness = loggedIn()
+        val badPayloads = listOf(
+            WALLETS_BODY.replace("\"wallets\":", "\"playerPublicId\":\"110791\",\"wallets\":"),
+            WALLETS_BODY.replace("\"wallets\":", "\"activeWalletId\":\"w-usd\",\"wallets\":"),
+            WALLETS_BODY.replace("TMTM", "EUR"),
+            WALLETS_BODY.replace("TMTM", "TRY"),
+        )
+        for (body in badPayloads) {
+            enqueueJson(body)
+            assertThat(harness.wallets.refresh().isFailure).isTrue()
+            assertThat(harness.store.verifiedWallet()?.walletId).isEqualTo("w-tmt")
+            assertThat(harness.wallet.availableAmount()).isEqualTo(10.38)
+        }
+        val staleRound = checkNotNull(harness.store.verifiedWallet())
+        enqueueJson(WALLETS_BODY.replace("10.38", "90"))
+        assertThat(harness.wallets.refresh().isSuccess).isTrue()
+        assertThat(harness.store.applyBalanceAfter(3.5, staleRound)).isFalse()
+        assertThat(harness.wallet.availableAmount()).isEqualTo(90.0)
+    }
+
+    private fun walletJson(body: String): MockResponse =
+        MockResponse().setHeader("Content-Type", "application/json").setBody(body)
 
     @Test
     fun profileReadMappingFillsPersonalData() = runTest {
@@ -937,6 +1056,7 @@ class PlayerBackendContractTest {
                 api = api,
                 json = NetworkModule.json,
                 hasSession = { jar.hasPlayerSessionCookies() },
+                onUnauthorized = coordinator::onUnauthorized,
             ),
             profile = RemotePersonalDataRepository(
                 store,

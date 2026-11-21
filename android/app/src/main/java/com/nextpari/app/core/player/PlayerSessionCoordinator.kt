@@ -1,9 +1,11 @@
 package com.nextpari.app.core.player
 
+import com.nextpari.app.core.network.ApiErrorMapper
 import com.nextpari.app.core.network.ApiResult
 import com.nextpari.app.core.network.NetworkError
 import com.nextpari.app.core.network.PlayerApi
 import com.nextpari.app.core.network.session.SecureCookieJar
+import com.nextpari.app.core.network.session.WalletResponseScope
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.core.session.SessionRepository
 import com.nextpari.app.feature.auth.LoginIdentifier
@@ -11,6 +13,9 @@ import com.nextpari.app.feature.auth.OneClickContinue
 import com.nextpari.app.feature.auth.RegistrationCopy
 import com.nextpari.app.feature.auth.RegistrationRequest
 import com.nextpari.app.feature.auth.RegistrationResult
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -26,9 +31,11 @@ class PlayerSessionCoordinator(
     private val json: Json,
     private val onSessionCleared: () -> Unit = {},
 ) {
+    private val identityLock = Any()
+    private val authRequests = Mutex()
     private var pendingOneClick: PlayerMeSnapshot? = null
 
-    suspend fun login(identifier: LoginIdentifier, password: String): ApiResult<AuthSession> {
+    suspend fun login(identifier: LoginIdentifier, password: String): ApiResult<AuthSession> = authRequests.withLock {
         val value = identifier.raw().trim()
         if (value.isEmpty() || password.isBlank()) {
             return ApiResult.Err(NetworkError.Unknown("Введите логин и пароль"))
@@ -40,10 +47,10 @@ class PlayerSessionCoordinator(
         if (!response.isSuccessful) {
             return ApiResult.Err(PlayerJsonMapper.mapAuthError(PlayerJsonMapper.errorCode(body)))
         }
-        return refreshPlayerState(loginMethod = method)
+        return establishSession(method)
     }
 
-    suspend fun register(request: RegistrationRequest): RegistrationResult {
+    suspend fun register(request: RegistrationRequest): RegistrationResult = authRequests.withLock {
         RegistrationCopy.clientError(request)?.let { return RegistrationResult.Failed(it) }
         val currency = RegistrationCopy.normalizeCurrency(request.currency)
             ?: return RegistrationResult.Failed(NetworkError.Unknown(RegistrationCopy.CURRENCY))
@@ -87,7 +94,7 @@ class PlayerSessionCoordinator(
         }
     }
 
-    suspend fun continueOneClick(): OneClickContinue {
+    suspend fun continueOneClick(): OneClickContinue = authRequests.withLock {
         if (pendingOneClick == null) return OneClickContinue.NeedLogin(RegistrationCopy.ONE_CLICK_LOGIN)
         return when (val established = establishSession("one_click")) {
             is ApiResult.Ok -> {
@@ -98,7 +105,8 @@ class PlayerSessionCoordinator(
         }
     }
 
-    suspend fun logout() {
+    suspend fun logout() = authRequests.withLock {
+        synchronized(identityLock) { store.clear() }
         try {
             api.logout()
         } catch (_: Exception) {
@@ -108,7 +116,7 @@ class PlayerSessionCoordinator(
         }
     }
 
-    suspend fun restore(): ApiResult<AuthSession> {
+    suspend fun restore(): ApiResult<AuthSession> = authRequests.withLock {
         if (!cookieJar.hasPlayerSessionCookies()) {
             clearLocal()
             return ApiResult.Err(NetworkError.Unauthorized)
@@ -117,84 +125,97 @@ class PlayerSessionCoordinator(
     }
 
     suspend fun refreshPlayerState(loginMethod: String? = null): ApiResult<AuthSession> {
-        val response = runCatching { api.me() }
-            .getOrElse { return ApiResult.Err(com.nextpari.app.core.network.ApiErrorMapper.fromThrowable(it)) }
+        val read = store.beginWalletRead()
+        if (read.playerId == null && loginMethod == null) return ApiResult.Err(NetworkError.Unauthorized)
+        val scope = WalletResponseScope { store.isCurrentWalletRead(read) }
+        val response = try {
+            api.me(scope)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            return ApiResult.Err(ApiErrorMapper.fromThrowable(error))
+        }
+        if (!store.isCurrentSession(read)) return ApiResult.Err(NetworkError.Unauthorized)
         val body = response.jsonBody(json)
-        if (response.code() == 401 || response.code() == 403) {
-            clearLocal()
+        if (response.isUnauthorized()) {
+            onUnauthorized(read)
             return ApiResult.Err(NetworkError.Unauthorized)
         }
         if (!response.isSuccessful) {
-            return ApiResult.Err(
-                PlayerJsonMapper.mapAuthError(
-                    PlayerJsonMapper.errorCode(body),
-                    NetworkError.Unknown("Не удалось загрузить профиль"),
-                ),
-            )
+            return ApiResult.Err(PlayerJsonMapper.mapAuthError(
+                PlayerJsonMapper.errorCode(body), NetworkError.Unknown("Не удалось загрузить профиль"),
+            ))
         }
         val snapshot = body?.let(PlayerJsonMapper::snapshotFromBody)
-            ?: run {
-                clearLocal()
-                return ApiResult.Err(NetworkError.Unauthorized)
-            }
-        refreshSecondaryReads()
-        return hydrateAuthenticated(snapshot, loginMethod ?: sessions.session.value.loginMethod)
+        if (snapshot == null || (read.playerId != null && read.playerId != snapshot.playerPublicId)) {
+            onUnauthorized(read)
+            return ApiResult.Err(NetworkError.Unauthorized)
+        }
+
+        val walletsResponse = secondaryRead { api.wallets(scope) }
+        if (walletsResponse?.isUnauthorized() == true) {
+            onUnauthorized(read)
+            return ApiResult.Err(NetworkError.Unauthorized)
+        }
+        val wallets = walletsResponse?.takeIf { it.isSuccessful }?.body()
+            ?.let { PlayerJsonMapper.walletsFromBody(it, snapshot.playerPublicId) }
+        val profileResponse = secondaryRead { api.profile(scope) }
+        if (profileResponse?.isUnauthorized() == true) {
+            onUnauthorized(read)
+            return ApiResult.Err(NetworkError.Unauthorized)
+        }
+        val profile = profileResponse?.takeIf { it.isSuccessful }?.body()?.let {
+            PlayerJsonMapper.profileFromBody(it.obj("profile") ?: it, snapshot.email).toQuestionnaire()
+        }
+        return synchronized(identityLock) {
+            if (!store.hydrate(read, snapshot, profile, wallets)) return@synchronized ApiResult.Err(NetworkError.Unauthorized)
+            val session = AuthSession(
+                playerPublicId = snapshot.playerPublicId,
+                displayName = playerDisplayName(snapshot.profile),
+                loginMethod = loginMethod ?: sessions.session.value.loginMethod,
+                isAuthenticated = true,
+                email = snapshot.email,
+            )
+            sessions.setSession(session)
+            ApiResult.Ok(session)
+        }
     }
 
     private suspend fun establishSession(loginMethod: String): ApiResult<AuthSession> {
+        synchronized(identityLock) {
+            store.clear()
+            sessions.clearImmediate()
+        }
         return refreshPlayerState(loginMethod = loginMethod)
     }
 
-    fun applyBalanceAfter(balanceAfter: Double, expectedWalletId: String = ""): Boolean =
-        store.applyBalanceAfter(balanceAfter, expectedWalletId)
+    fun onUnauthorized() = clearLocal()
 
-    fun onUnauthorized() {
-        clearLocal()
-    }
-
-    private suspend fun refreshSecondaryReads() {
-        runCatching {
-            val walletsResponse = api.wallets()
-            val walletsBody = walletsResponse.jsonBody(json)
-            if (walletsResponse.isSuccessful) {
-                walletsBody?.let(PlayerJsonMapper::walletsFromBody)?.let { rows ->
-                    store.applyWallets(mappedWalletsToRows(rows))
-                }
-            }
-        }
-        runCatching {
-            val profileResponse = api.profile()
-            val profileBody = profileResponse.jsonBody(json)
-            if (profileResponse.isSuccessful) {
-                val nested = profileBody?.obj("profile") ?: profileBody
-                val email = store.me()?.email.orEmpty()
-                if (nested != null) {
-                    store.applyProfile(PlayerJsonMapper.profileFromBody(nested, email).toQuestionnaire())
-                }
-            }
+    fun onUnauthorized(read: WalletRead) {
+        synchronized(identityLock) {
+            if (store.isCurrentWalletRead(read)) clearLocal()
         }
     }
 
-    private suspend fun hydrateAuthenticated(snapshot: PlayerMeSnapshot, loginMethod: String): ApiResult<AuthSession> {
-        store.applyMe(snapshot)
-        val session = AuthSession(
-            playerPublicId = snapshot.playerPublicId,
-            displayName = playerDisplayName(snapshot.profile),
-            loginMethod = loginMethod,
-            isAuthenticated = true,
-            email = snapshot.email,
-        )
-        sessions.setSession(session)
-        return ApiResult.Ok(session)
-    }
+    private suspend fun secondaryRead(call: suspend () -> Response<JsonObject>): Response<JsonObject>? =
+        try {
+            call()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            null
+        }
 
     private fun clearLocal() {
-        pendingOneClick = null
-        cookieJar.clear()
-        store.clear()
-        sessions.clearImmediate()
-        onSessionCleared()
+        synchronized(identityLock) {
+            pendingOneClick = null
+            store.clear()
+            cookieJar.clear()
+            sessions.clearImmediate()
+            onSessionCleared()
+        }
     }
+
 }
 
 private fun RegistrationRequest.wireBody(currency: String): JsonObject = when (method) {
@@ -247,6 +268,8 @@ private fun LoginIdentifier.loginBody(password: String): JsonObject = when (this
         put("password", password)
     }
 }
+
+private fun Response<JsonObject>.isUnauthorized(): Boolean = code() == 401 || code() == 403
 
 private fun Response<JsonObject>.jsonBody(json: Json): JsonObject? {
     body()?.let { return it }
