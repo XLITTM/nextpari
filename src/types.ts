@@ -112,6 +112,7 @@ export interface MatchEvent {
   league: string;
   leagueId?: string;
   country: string;
+  discipline?: string;
   team1: string;
   team2: string;
   team1Color: string;
@@ -326,7 +327,7 @@ export type Screen =
   | { name: 'wallets' }
   | { name: 'gamelist'; mode: 'live' | 'line' }
   | { name: 'sports'; mode: 'live' | 'line' | 'cybers' }
-  | { name: 'championships'; sport: string; mode: 'live' | 'line' }
+  | { name: 'championships'; sport: string; mode: 'live' | 'line'; discipline?: string }
   | { name: 'casino-demo' }
   | { name: 'casino-real'; category?: 'slots' | 'live' }
   | { name: 'casino-demo-game'; gameId: string; standard?: boolean }

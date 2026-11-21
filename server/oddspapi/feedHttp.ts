@@ -1,6 +1,7 @@
 import type { FootballFeedCard, FootballFeedMarket } from '../betsapi/footballFeedHttp.js';
 import type { MarketCategory, MarketGroup } from '../../src/types.js';
 import { indexV5Markets, isFullTimeMainMarket, presentV5Quotes, type V5MarketDefinition } from './canonical.js';
+import { competitionRank, takeDiverse } from '../../src/lib/competitionCatalog.js';
 import { isLadderType, marketTypeOf, outcomeLabelFor, subtypeLabel } from '../../src/lib/marketTaxonomy.js';
 import { clearV5RequestSchedule, scheduledRead, V5_DOCUMENTED_LIMITS, V5_REQUEST_GAPS } from './requestSchedule.js';
 import { OddsPapiV5TrialReader, V5_SPORT_IDS, type JsonRecord, type V5Result } from './v5TrialClient.js';
@@ -13,6 +14,7 @@ type Card = FootballFeedCard & {
   priceAudit: { rawBookmakerPrices: number; acceptedQuotes: number; displayedPrices: number; rejectedQuotes: number; rejectionReasons: Record<string, number> };
 };
 const SPORTS: Record<number, Card['sport']> = {10:'football',11:'basketball',12:'tennis',15:'hockey',16:'esports',17:'esports',18:'esports',23:'volleyball',25:'table-tennis',61:'esports'};
+const DISCIPLINE: Record<number, string> = {16:'Dota 2',17:'CS 2',18:'League of Legends',61:'Valorant'};
 export function clearV5FeedCache(): void { clearV5RequestSchedule(); }
 function record(value: unknown): JsonRecord { return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : {}; }
 function rows(value: unknown): JsonRecord[] { return Array.isArray(value) ? value.map(record) : []; }
@@ -83,7 +85,7 @@ export function v5FixtureToCard(f: JsonRecord, catalog: ReturnType<typeof indexV
   const kickoff=Number(f.startTime)*1000;
   const card: Card = {
     id:V5_EVENT_PREFIX+id,provider:'oddspapi-v5',sport:SPORTS[sportId],tier:sportId===10?1:3,
-    logos:{competitionId:null,competition:null,home:null,away:null},league:name(tournament.tournamentName),country:name(tournament.categoryName),home,away,
+    logos:{competitionId:null,competition:null,home:null,away:null},league:name(tournament.tournamentName),country:name(tournament.categoryName),discipline:DISCIPLINE[sportId]??null,home,away,
     kickoff:Number.isFinite(kickoff)&&kickoff>1e12?new Date(kickoff).toISOString():null,live,
     score:typeof score.participant1Score==='number'&&typeof score.participant2Score==='number'?{home:score.participant1Score,away:score.participant2Score}:null,
     liveClock,period:sportId===10&&clock.currentPeriod==='p1'?'first_half':sportId===10&&clock.currentPeriod==='p2'?'second_half':null,
@@ -130,8 +132,11 @@ export async function handleV5SportsFeed(input:{method?:string;url?:string}, env
     const [live,today]=await Promise.all([cached(`live:${sportId}`,45_000,()=>reader.live(sportId)),cached(`today:${sportId}`,180_000,()=>reader.today(sportId))]);
     const now=Date.now();const all=[...rows(live.data),...rows(today.data)];const unique=new Map<string,JsonRecord>();
     for(const f of all)if(record(f.sport).sportId===sportId&&name(f.fixtureId)&&!unique.has(name(f.fixtureId))&&(record(f.status).live===true||Number(f.startTime)*1000>now))unique.set(name(f.fixtureId),f);
-    const fixtures=[...unique.values()].sort((a,b)=>Number(record(b.status).live===true)-Number(record(a.status).live===true)||Number(a.startTime)-Number(b.startTime));
-    const selected=[...fixtures.filter(f=>record(f.status).live===true).slice(0,16),...fixtures.filter(f=>record(f.status).live!==true).slice(0,24)];
+    const fixtures=[...unique.values()];
+    const identity=(f:JsonRecord)=>`${name(record(f.tournament).categoryName)}|${name(record(f.tournament).tournamentName)}`;
+    const rank=(f:JsonRecord)=>{const sportId=record(f.sport).sportId;return competitionRank(typeof sportId==='number'?SPORTS[sportId]??'':'',name(record(f.tournament).tournamentName),name(record(f.tournament).categoryName));};
+    const time=(f:JsonRecord)=>Number(f.startTime)||0;
+    const selected=[...takeDiverse(fixtures.filter(f=>record(f.status).live===true),16,identity,rank,time),...takeDiverse(fixtures.filter(f=>record(f.status).live!==true),24,identity,rank,time)];
     const limited=(!live.ok&&live.error==='RATE_LIMITED')||(!today.ok&&today.error==='RATE_LIMITED')||live.snapshotStale||today.snapshotStale;
     return {sportId,fixtures:selected,ok:live.ok||today.ok,error:live.ok||today.ok?null:live.error||today.error,stale:live.snapshotStale||today.snapshotStale,rateLimited:limited};
   });
@@ -141,5 +146,10 @@ export async function handleV5SportsFeed(input:{method?:string;url?:string}, env
   const byId=new Map(priced.filter((c):c is Card=>Boolean(c)).map(c=>[c.id,c]));
   const events=raw.map(f=>byId.get(V5_EVENT_PREFIX+name(f.fixtureId))||v5FixtureToCard(f,null)).filter((c):c is Card=>Boolean(c)).sort((a,b)=>Number(b.markets.length>0)-Number(a.markets.length>0)||a.tier-b.tier||Number(b.live)-Number(a.live));
   const anyOk=listings.some(s=>s.ok);
-  return {status:anyOk?200:503,body:{...base,ok:anyOk,error:anyOk?null:listings[0]?.error??null,rateLimited:listings.some(s=>s.rateLimited),stale:listings.some(s=>s.stale),providerLimits:V5_DOCUMENTED_LIMITS,requestGapMs:V5_REQUEST_GAPS,events,featuredLive:events.filter(c=>c.live).slice(0,16),featuredLine:events.filter(c=>!c.live).slice(0,24),schedule:events.filter(c=>!c.live),coverage:listings.map(({sportId,ok,error,fixtures,stale,rateLimited})=>({sportId,ok,error,stale,rateLimited,count:fixtures.length}))}};
+  const rankOf=(card:Card)=>competitionRank(card.sport,card.league,card.country);
+  const byRank=(a:Card,b:Card)=>rankOf(a)-rankOf(b)||Date.parse(a.kickoff||'')-Date.parse(b.kickoff||'');
+  const featuredLive=events.filter(c=>c.live&&c.markets.length>0&&rankOf(c)<30).sort(byRank).slice(0,8);
+  const featuredLine=events.filter(c=>!c.live&&c.markets.length>0&&rankOf(c)<30).sort(byRank).slice(0,8);
+  const schedule=events.filter(c=>!c.live).sort((a,b)=>Date.parse(a.kickoff||'')-Date.parse(b.kickoff||''));
+  return {status:anyOk?200:503,body:{...base,ok:anyOk,error:anyOk?null:listings[0]?.error??null,rateLimited:listings.some(s=>s.rateLimited),stale:listings.some(s=>s.stale),providerLimits:V5_DOCUMENTED_LIMITS,requestGapMs:V5_REQUEST_GAPS,events,featuredLive,featuredLine,schedule,coverage:listings.map(({sportId,ok,error,fixtures,stale,rateLimited})=>({sportId,ok,error,stale,rateLimited,count:fixtures.length}))}};
 }

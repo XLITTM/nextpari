@@ -20,7 +20,8 @@ export function SearchModal({ onClose, onSelectMatch }: SearchModalProps) {
         (m) =>
           m.team1.toLowerCase().includes(q) ||
           m.team2.toLowerCase().includes(q) ||
-          m.league.toLowerCase().includes(q)
+          m.league.toLowerCase().includes(q) ||
+          m.country.toLowerCase().includes(q)
       )
     : [];
 

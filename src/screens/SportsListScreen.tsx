@@ -3,6 +3,7 @@ import { ChevronLeft, Search, Star } from 'lucide-react';
 import { SportIcon } from '../components/SportIcon';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useFavoritesStore } from '../stores/favoritesStore';
+import { sportNavIndex } from '../lib/competitionCatalog';
 import type { Screen, SportId } from '../types';
 
 interface SportsListScreenProps {
@@ -48,7 +49,7 @@ export function SportsListScreen({ initialMode = 'live', onBack, onNavigate, onS
       count: pool.filter((match) => match.sport === sport.id).length,
     }))
     .filter((sport) => sport.count > 0)
-    .sort((a, b) => pool.findIndex((match) => match.sport === a.id) - pool.findIndex((match) => match.sport === b.id));
+    .sort((a, b) => sportNavIndex(a.id) - sportNavIndex(b.id) || a.name.localeCompare(b.name, 'ru'));
 
   return (
     <div className="min-h-full flex flex-col bg-gray-100 dark:bg-gray-900">

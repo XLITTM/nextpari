@@ -2,6 +2,7 @@ import { Star } from 'lucide-react';
 import { SectionHeader } from './SectionHeader';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useFavoritesStore } from '../stores/favoritesStore';
+import { competitionRank } from '../lib/competitionCatalog';
 import { toLeagueId } from '../lib/leagueRoute';
 import { sportsRegion } from '../lib/sportsRegion';
 import { TeamLogo } from './TeamLogo';
@@ -42,6 +43,7 @@ export function ChampionshipsList({ onOpenLeague, excludeEsports = false }: Cham
       return acc;
     }, {}),
   )
+    .sort((a, b) => competitionRank(sourceMatches.find((match) => match.league === a.name)?.sport ?? 'football', a.name, a.country) - competitionRank(sourceMatches.find((match) => match.league === b.name)?.sport ?? 'football', b.name, b.country) || b.count - a.count)
     .slice(0, 8);
 
   const leagues = fromLive;

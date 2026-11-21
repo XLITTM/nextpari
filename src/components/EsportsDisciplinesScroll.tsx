@@ -2,7 +2,7 @@ import { Gamepad2 } from 'lucide-react';
 import { SectionHeader } from './SectionHeader';
 import { esportsDisciplines } from '../data';
 
-export function EsportsDisciplinesScroll() {
+export function EsportsDisciplinesScroll({ onOpen }: { onOpen?: (discipline: string) => void }) {
   return (
     <div>
       <SectionHeader
@@ -13,9 +13,11 @@ export function EsportsDisciplinesScroll() {
       />
       <div className="flex gap-2.5 overflow-x-auto no-scrollbar px-4 pb-1">
         {esportsDisciplines.map((d) => (
-          <div
+          <button
             key={d.id}
-            className={`relative shrink-0 w-40 h-56 rounded-2xl bg-gradient-to-br ${d.gradient} overflow-hidden active:scale-95 transition-transform cursor-pointer`}
+            type="button"
+            onClick={() => onOpen?.(d.name)}
+            className={`relative shrink-0 w-40 h-56 rounded-2xl bg-gradient-to-br ${d.gradient} overflow-hidden active:scale-95 transition-transform cursor-pointer text-left`}
           >
             <div className="absolute -right-8 -top-8 w-28 h-28 rounded-full bg-[#1e3a5f]" />
             <div className="absolute -left-6 bottom-10 w-24 h-24 rounded-full bg-[#1e3a5f]" />
@@ -29,7 +31,7 @@ export function EsportsDisciplinesScroll() {
             <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
               <span className="text-white font-extrabold text-base drop-shadow-lg">{d.name}</span>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>

@@ -6,6 +6,8 @@ export const FEATURED_SPORT_IDS: SportId[] = [
   'tennis',
   'basketball',
   'hockey',
+  'volleyball',
+  'table-tennis',
   'esports',
 ];
 

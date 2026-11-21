@@ -158,7 +158,8 @@ export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favor
   const [tab, setTab] = useState<'live' | 'line'>(mode);
   const { liveMatches, upcomingMatches, scheduleMatches, loading } = useLiveMatches();
   const chronological = scheduleMatches.length ? scheduleMatches : [...liveMatches, ...upcomingMatches];
-  const matches = tab === 'live' ? chronological.filter((match) => match.isLive) : chronological.filter((match) => !match.isLive);
+  const matches = (tab === 'live' ? chronological.filter((match) => match.isLive) : chronological.filter((match) => !match.isLive))
+    .sort((a, b) => tab === 'line' ? a.startTime - b.startTime : a.startTime - b.startTime);
 
   return (
     <div className="min-h-full bg-gray-200 dark:bg-gray-900 flex flex-col transition-colors">

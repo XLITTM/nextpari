@@ -62,6 +62,8 @@ import { casinoDemoPath, casinoRealPath, validCasinoDemoId } from './lib/casinoD
 import { CasinoDemoBack, CasinoDemoCatalog } from './components/CasinoDemoCatalog';
 import { CasinoDemoGameScreen } from './screens/CasinoDemoGameScreen';
 
+const showSportsCheck = import.meta.env.DEV && window.location.pathname === '/dev/sports';
+
 const showMarketCheck = import.meta.env.DEV && (
   window.location.pathname === '/dev/markets'
   || new URLSearchParams(window.location.search).get('markets') === '1'
@@ -148,7 +150,7 @@ function screensEqual(a: Screen, b: Screen): boolean {
     case 'sports':
       return a.mode === (b as { mode: 'live' | 'line' | 'cybers' }).mode;
     case 'championships':
-      return a.sport === (b as { sport: string }).sport && a.mode === (b as { mode: 'live' | 'line' }).mode;
+      return a.sport === (b as { sport: string }).sport && a.mode === (b as { mode: 'live' | 'line' }).mode && (a.discipline ?? '') === ((b as { discipline?: string }).discipline ?? '');
     case 'league': {
       const other = b as { leagueId: string; mode?: 'live' | 'line' };
       return a.leagueId === other.leagueId && (a.mode ?? 'live') === (other.mode ?? 'live');
@@ -536,8 +538,10 @@ function AppContent() {
           <ChampionshipsScreen
             sport={screen.sport as SportId}
             initialMode={screen.mode as 'live' | 'line'}
+            discipline={screen.discipline}
             onBack={goBack}
             onNavigate={setScreen}
+            onSearchClick={openSearch}
           />
         );
       case 'casino-demo':
@@ -626,6 +630,14 @@ function AppContent() {
         return null;
     }
   };
+
+  if (showSportsCheck) {
+    return (
+      <LiveMatchesProvider>
+        <ChampionshipsScreen sport="football" initialMode="line" onBack={() => undefined} onNavigate={() => undefined} onSearchClick={() => undefined} />
+      </LiveMatchesProvider>
+    );
+  }
 
   if (showMarketCheck) {
     return <MarketSemanticsCheck />;

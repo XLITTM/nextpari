@@ -4,6 +4,8 @@ import { SportIcon } from '../components/SportIcon';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useFavoritesStore } from '../stores/favoritesStore';
+import { competitionBucket, competitionRank, countryPresentation, isInternationalCompetition } from '../lib/competitionCatalog';
+import { sportsRegion } from '../lib/sportsRegion';
 import { toLeagueId } from '../lib/leagueRoute';
 import { sports } from '../data';
 import type { MatchEvent, Screen, SportId } from '../types';
@@ -11,8 +13,10 @@ import type { MatchEvent, Screen, SportId } from '../types';
 interface ChampionshipsScreenProps {
   sport: SportId;
   initialMode: 'live' | 'line';
+  discipline?: string;
   onBack: () => void;
   onNavigate: (screen: Screen) => void;
+  onSearchClick?: () => void;
 }
 
 interface LeagueRow {
@@ -27,29 +31,43 @@ interface CountryGroup {
   leagues: LeagueRow[];
 }
 
+function leagueRows(matches: MatchEvent[]): LeagueRow[] {
+  const leagues = new Map<string, LeagueRow>();
+  for (const match of matches) {
+    const name = match.league.trim();
+    const country = match.country.trim();
+    if (!name) continue;
+    const key = `${country}|${name}`;
+    const row = leagues.get(key) ?? { name, country, count: 0 };
+    row.count += 1;
+    leagues.set(key, row);
+  }
+  return [...leagues.values()].sort((a, b) => competitionRank(matches[0]?.sport ?? 'football', a.name, a.country) - competitionRank(matches[0]?.sport ?? 'football', b.name, b.country) || a.name.localeCompare(b.name, 'ru'));
+}
+
 function groupByCountry(matches: MatchEvent[]): CountryGroup[] {
   const countries = new Map<string, { count: number; leagues: Map<string, LeagueRow> }>();
-  for (const match of matches) {
-    const country = match.country.trim();
-    const name = match.league.trim();
-    if (!name) continue;
-    const countryRow = countries.get(country) ?? { count: 0, leagues: new Map<string, LeagueRow>() };
-    countryRow.count += 1;
-    const leagueRow = countryRow.leagues.get(name) ?? { name, country, count: 0 };
-    leagueRow.count += 1;
-    countryRow.leagues.set(name, leagueRow);
-    countries.set(country, countryRow);
+  for (const league of leagueRows(matches)) {
+    const countryRow = countries.get(league.country) ?? { count: 0, leagues: new Map<string, LeagueRow>() };
+    countryRow.count += league.count;
+    countryRow.leagues.set(`${league.country}|${league.name}`, league);
+    countries.set(league.country, countryRow);
   }
   return [...countries.entries()]
     .map(([country, row]) => ({
       country,
       count: row.count,
-      leagues: [...row.leagues.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+      leagues: [...row.leagues.values()],
     }))
-    .sort((a, b) => b.count - a.count || a.country.localeCompare(b.country));
+    .sort((a, b) => regionLabel(a.country).localeCompare(regionLabel(b.country), 'ru'));
 }
 
-export function ChampionshipsScreen({ sport, initialMode, onBack, onNavigate }: ChampionshipsScreenProps) {
+function regionLabel(country: string): string {
+  const presentation = countryPresentation(country);
+  return sportsRegion(presentation.region) || presentation.name;
+}
+
+export function ChampionshipsScreen({ sport, initialMode, discipline, onBack, onNavigate, onSearchClick }: ChampionshipsScreenProps) {
   const [activeTab, setActiveTab] = useState<'live' | 'line'>(initialMode);
   const [expanded, setExpanded] = useState('');
   const { liveMatches, upcomingMatches, loading } = useLiveMatches();
@@ -57,10 +75,15 @@ export function ChampionshipsScreen({ sport, initialMode, onBack, onNavigate }: 
   const toggleLeagueFavorite = useFavoritesStore((s) => s.toggleLeagueFavorite);
 
   const sportName = sports.find((row) => row.id === sport)?.name ?? 'Спорт';
-  const groups = useMemo(() => {
-    const pool = activeTab === 'line' ? upcomingMatches : liveMatches;
-    return groupByCountry(pool.filter((match) => match.sport === sport));
-  }, [activeTab, liveMatches, upcomingMatches, sport]);
+  const pool = useMemo(() => {
+    const source = activeTab === 'line' ? upcomingMatches : liveMatches;
+    return source.filter((match) => match.sport === sport && (!discipline || match.discipline === discipline));
+  }, [activeTab, discipline, liveMatches, upcomingMatches, sport]);
+  const rows = useMemo(() => leagueRows(pool), [pool]);
+  const favorites = rows.filter((league) => favoriteLeagueIds.includes(league.name));
+  const top = rows.filter((league) => competitionBucket(sport, league.name, league.country) === 'top' && !favoriteLeagueIds.includes(league.name));
+  const international = rows.filter((league) => competitionBucket(sport, league.name, league.country) === 'international' && !favoriteLeagueIds.includes(league.name));
+  const groups = useMemo(() => groupByCountry(pool.filter((match) => competitionBucket(sport, match.league, match.country) === 'country' && !favoriteLeagueIds.includes(match.league) && !isInternationalCompetition(match.league, match.country))), [pool, favoriteLeagueIds, sport]);
 
   useEffect(() => {
     if (!groups.some((group) => group.country === expanded)) {
@@ -81,7 +104,7 @@ export function ChampionshipsScreen({ sport, initialMode, onBack, onNavigate }: 
           </h1>
 
           <div className="flex items-center gap-1">
-            <button type="button" className="w-9 h-9 flex items-center justify-center text-gray-500">
+            <button type="button" onClick={onSearchClick} className="w-9 h-9 flex items-center justify-center text-gray-500" aria-label="Поиск">
               <Search className="w-5 h-5" />
             </button>
             <button type="button" className="w-9 h-9 flex items-center justify-center text-gray-500">
@@ -125,10 +148,39 @@ export function ChampionshipsScreen({ sport, initialMode, onBack, onNavigate }: 
       <div className="flex-1 overflow-y-auto pb-20">
         {loading && groups.length === 0 ? (
           <SkeletonLoader count={4} variant="list" />
-        ) : groups.length === 0 ? (
+        ) : rows.length === 0 ? (
           <p className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Сейчас матчей нет</p>
         ) : (
           <div className="bg-white dark:bg-[#1e293b]">
+            {[{ title: 'Избранное', leagues: favorites }, { title: 'Топ-турниры', leagues: top }, { title: 'Международные', leagues: international }].filter((section) => section.leagues.length > 0).map((section) => (
+              <div key={section.title} className="border-b border-gray-100 dark:border-gray-800">
+                <p className="px-4 pt-3 text-xs font-medium uppercase text-gray-500">{section.title}</p>
+                {section.leagues.map((league) => (
+                  <button
+                    key={`${section.title}|${league.country}|${league.name}`}
+                    type="button"
+                    onClick={() => onNavigate({ name: 'league', leagueId: toLeagueId(league.country, league.name), mode: activeTab })}
+                    className="w-full flex items-center justify-between px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800"
+                  >
+                    <span className="min-w-0 truncate pr-3 text-left text-sm text-gray-700 dark:text-gray-300">{league.name}</span>
+                    <span className="flex items-center gap-2 shrink-0">
+                      <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full text-xs font-medium">{league.count}</span>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="flex h-8 w-8 items-center justify-center text-gray-400"
+                        onClick={(event) => { event.stopPropagation(); toggleLeagueFavorite(league.name); }}
+                        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.stopPropagation(); event.preventDefault(); toggleLeagueFavorite(league.name); } }}
+                        aria-label="Добавить чемпионат в избранное"
+                      >
+                        <Star className={`h-5 w-5 ${favoriteLeagueIds.includes(league.name) ? 'fill-brand-600 text-brand-600' : ''}`} />
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))}
+            {groups.length > 0 && <p className="px-4 pt-3 text-xs font-medium uppercase text-gray-500">Страны</p>}
             {groups.map((item) => {
               const isExpanded = expanded === item.country;
               return (
@@ -141,7 +193,7 @@ export function ChampionshipsScreen({ sport, initialMode, onBack, onNavigate }: 
                     <div className="flex items-center gap-3 min-w-0">
                       <Globe className="w-5 h-5 shrink-0 text-gray-400" />
                       <span className="text-[15px] font-medium text-gray-800 dark:text-gray-200 truncate">
-                        {item.country}
+                        {regionLabel(item.country)}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">

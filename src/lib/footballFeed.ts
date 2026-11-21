@@ -24,6 +24,7 @@ export interface FootballFeedCard {
   logos?: { competitionId?: string | null; competition?: string | null; home?: string | null; away?: string | null };
   league: string;
   country: string;
+  discipline?: string | null;
   home: string;
   away: string;
   kickoff: string | null;
@@ -166,6 +167,7 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
     team2Logo: card.logos?.away ?? undefined,
     league: card.league,
     country: card.country,
+    discipline: card.discipline ?? undefined,
     team1: card.home,
     team2: card.away,
     team1Color: '#14532d',

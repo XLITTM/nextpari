@@ -38,6 +38,7 @@ export interface FootballFeedCard {
   country: string;
   home: string;
   away: string;
+  discipline?: string | null;
   kickoff: string | null;
   live: boolean;
   score: { home: number; away: number } | null;

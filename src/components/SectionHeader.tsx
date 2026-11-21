@@ -1,4 +1,4 @@
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Flame } from 'lucide-react';
 
 interface SectionHeaderProps {
   title: string;
@@ -7,12 +7,14 @@ interface SectionHeaderProps {
   filterLabel?: string;
   badge?: string;
   badgeColor?: string;
+  flame?: boolean;
 }
 
-export function SectionHeader({ title, onFilterClick, onSeeAll, filterLabel, badge, badgeColor }: SectionHeaderProps) {
+export function SectionHeader({ title, onFilterClick, onSeeAll, filterLabel, badge, badgeColor, flame }: SectionHeaderProps) {
   return (
     <div className="flex items-center justify-between px-4 py-2">
       <div className="flex items-center gap-2">
+        {flame ? <Flame className="h-4 w-4 text-red-500" aria-hidden="true" /> : null}
         <h2 className="text-sm font-bold text-gray-900 dark:text-white">{title}</h2>
         {badge && (
           <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-2xl ${badgeColor || 'bg-[#0c1a2e] text-brand-400'}`}>
