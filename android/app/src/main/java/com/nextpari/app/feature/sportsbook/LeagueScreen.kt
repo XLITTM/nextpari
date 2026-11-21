@@ -45,7 +45,7 @@ fun LeagueScreen(
     TrackFootballViewport(listState, viewModel::visibleMatches)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF0F2F5))) {
-        SportsbookScreenHeader(title = name, onBack = onBack, actions = emptyList())
+        SportsbookScreenHeader(title = matches.firstOrNull()?.league ?: name, onBack = onBack, actions = emptyList())
         FootballFeedControl(football.loading, football.feed.notice, football.feed.retryable, viewModel::refreshFeed)
         when {
             football.loading && matches.isEmpty() -> MatchSkeletonCarousel(count = 3)
