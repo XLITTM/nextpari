@@ -44,6 +44,12 @@ data class MatchCardModel(
     val kickoffEpochMs: Long? = null,
     val serverTier: Int? = null,
     val insights: MatchInsights? = null,
+    val provider: String? = null,
+    val providerCompetitionId: String? = null,
+    val homeParticipantId: String? = null,
+    val awayParticipantId: String? = null,
+    val discipline: String? = null,
+    val readOnly: Boolean = false,
 )
 
 data class ChampionshipRow(
