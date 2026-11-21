@@ -36,8 +36,12 @@ class FootballPresentationTest {
     fun absentMalformedAndStaleClocksNeverProduceAMinute() {
         assertNull(FootballLiveClock.fromWire(null, receipt, tick))
         assertNull(FootballLiveClock.fromWire(Json.parseToJsonElement("""{"minute":"32"}"""), receipt, tick))
-        assertNull(FootballLiveClock.fromWire(clock(stale = true), receipt, tick))
-        assertNull(FootballLiveClock.fromWire(clock(), receipt + 90_001, tick))
+        val stale = FootballLiveClock.fromWire(clock(stale = true), receipt, tick)
+        assertEquals(true, stale?.stale)
+        assertNull(stale?.labelAt(tick))
+        val tooOld = FootballLiveClock.fromWire(clock(), receipt + 90_001, tick)
+        assertEquals(true, tooOld?.stale)
+        assertNull(tooOld?.labelAt(tick))
         assertNull(FootballLiveClock.fromWire(clock(observedAt = "2026-11-12T12:00:20Z"), receipt, tick))
     }
 

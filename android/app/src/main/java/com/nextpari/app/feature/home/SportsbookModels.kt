@@ -50,6 +50,8 @@ data class MatchCardModel(
     val awayParticipantId: String? = null,
     val discipline: String? = null,
     val readOnly: Boolean = false,
+    val boardStale: Boolean = false,
+    val scoreObservedAtEpochMs: Long? = null,
 )
 
 data class ChampionshipRow(

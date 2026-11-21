@@ -103,8 +103,16 @@ class FootballIntegrationTest {
             server.enqueue(jsonResponse("""{"ok":true,"events":[$fixture]}"""))
             assertEquals("100", repository.read("100").fixtures.single().match.id)
             assertEquals("/api/player/sports/football-feed?eventId=100", server.takeRequest().path)
+            server.enqueue(jsonResponse("""{"ok":true,"events":[$fixture]}"""))
+            assertEquals("100", repository.readLiveBoard().fixtures.single().match.id)
+            val board = server.takeRequest()
+            assertEquals("live", board.requestUrl?.queryParameter("board"))
+            assertEquals("1", board.requestUrl?.queryParameter("includeSports"))
+            assertNull(board.requestUrl?.queryParameter("oddsFor"))
+            server.enqueue(jsonResponse("{}", 429))
+            assertTrue(repository.readLiveBoard().retryable)
             assertTrue(repository.read("malformed").fixtures.isEmpty())
-            assertEquals(2, server.requestCount)
+            assertEquals(4, server.requestCount)
         }
     }
 

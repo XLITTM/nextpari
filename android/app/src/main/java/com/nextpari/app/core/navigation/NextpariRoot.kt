@@ -3,6 +3,7 @@ package com.nextpari.app.core.navigation
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import com.nextpari.app.feature.sportsbook.FOOTBALL_LIVE_BOARD_GAP_MS
 import com.nextpari.app.feature.sportsbook.SportsCouponScreen
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.EnterTransition
@@ -292,11 +293,20 @@ internal fun AuthenticatedShell(
         Destinations.SPORTS_LINE, Destinations.CHAMPIONSHIPS, Destinations.LEAGUE -> true
         else -> false
     }
+    val showsLiveBoard = showsFootball || current == Destinations.MATCH || current == Destinations.FAVORITES
     LaunchedEffect(showsFootball, session.playerPublicId, lifecycle) {
         if (showsFootball) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             while (true) {
                 sportsbookViewModel.refreshFeed()
                 delay(45_000)
+            }
+        }
+    }
+    LaunchedEffect(showsLiveBoard, session.playerPublicId, lifecycle) {
+        if (showsLiveBoard) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                sportsbookViewModel.refreshLiveBoard()
+                delay(FOOTBALL_LIVE_BOARD_GAP_MS)
             }
         }
     }

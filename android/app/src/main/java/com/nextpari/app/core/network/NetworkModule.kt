@@ -36,7 +36,7 @@ object NetworkModule {
                 val url = request.url
                 val footballFeed = url.encodedPath == "/api/player/sports/football-feed"
                 val isFootballList = footballFeed && url.queryParameter("eventId").isNullOrBlank() &&
-                    "oddsFor" !in url.queryParameterNames
+                    "oddsFor" !in url.queryParameterNames && url.queryParameter("board") != "live"
                 // The list waits for the server's 35-second coverage window. Odds stay on their own budget.
                 val timed = when {
                     isFootballList -> chain.withReadTimeout(FOOTBALL_LIST_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)

@@ -31,6 +31,7 @@ private val kickoffFormat = DateTimeFormatter.ofPattern("dd.MM HH:mm")
 
 interface FootballRepository {
     suspend fun read(eventId: String? = null): FootballSnapshot
+    suspend fun readLiveBoard(): FootballSnapshot = FootballSnapshot()
     suspend fun readOdds(eventIds: List<String>): FootballOddsBatch
     suspend fun place(request: SportsBetRequest): SportsBetResult
 }
@@ -147,10 +148,30 @@ data class FootballFixture(
         }
         val priced = if (oddsPapiEventId.matches(match.eventId)) withOddsPapiMarkets(exactQuote?.markets.orEmpty(), exactQuote?.displayGroups.orEmpty(), availability)
             else withMarkets(exactQuote?.markets.orEmpty(), availability)
-        return priced.copy(
+        val keepFullCatalog = oddsPapiEventId.matches(match.eventId) && fullMarkets &&
+            markets.size > priced.markets.size && availability == FootballPriceState.Open
+        val next = if (keepFullCatalog) copy(
+            match = match.copy(
+                outcomes = priced.match.outcomes,
+                extraMarkets = match.extraMarkets,
+                priceNote = priced.match.priceNote,
+            ),
+            priceState = priced.priceState,
+            quoteOrder = order,
+            fullMarkets = true,
+            validUntil = if (priced.priceState == FootballPriceState.Open) priced.marketDeadline(until) else 0,
+        ) else priced.copy(
             quoteOrder = order,
             fullMarkets = exactQuote != null && availability == FootballPriceState.Open,
             validUntil = if (priced.priceState == FootballPriceState.Open) priced.marketDeadline(until) else 0,
+        )
+        // Odds hydration updates prices only. It never overwrites the latest scoreboard.
+        return next.copy(
+            match = match.copy(
+                outcomes = next.match.outcomes,
+                extraMarkets = next.match.extraMarkets,
+                priceNote = next.match.priceNote,
+            ),
         )
     }
 }
@@ -218,6 +239,22 @@ class RemoteFootballRepository(
             )
         }
         return snapshot.copy(fixtures = snapshot.fixtures.map { it.copy(fullMarkets = true) })
+    }
+
+    override suspend fun readLiveBoard(): FootballSnapshot {
+        val response = try {
+            api.footballFeed(eventId = null, includeSports = "1", board = "live")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            return FootballSnapshot(notice = "LIVE_BOARD", retryable = true)
+        }
+        if (response.code() == 429) return FootballSnapshot(notice = "RATE_LIMITED", retryable = true)
+        val body = response.body()
+        if (!response.isSuccessful || body == null) return FootballSnapshot(notice = "LIVE_BOARD", retryable = true)
+        val feed = json.decodeFromJsonElement<FootballFeedDto>(body)
+        val receipt = responseTime(response.raw())
+        return feed.toSnapshot(null, receipt, SystemClock.elapsedRealtime(), checkMarketAge = false)
     }
 
     override suspend fun readOdds(eventIds: List<String>): FootballOddsBatch {
@@ -344,7 +381,7 @@ private data class FootballOddsDto(
 )
 
 @Serializable
-internal data class FootballScoreDto(val home: Int, val away: Int)
+internal data class FootballScoreDto(val home: Int, val away: Int, val updatedAt: String? = null)
 
 @Serializable
 data class FootballOutcomeDto(val key: String, val price: Double? = null, val sourceSelectionId: String? = null)
@@ -419,6 +456,7 @@ internal data class FootballEventDto(
     val awayParticipantId: String? = null,
     val discipline: String? = null,
     val providerSportId: Int? = null,
+    val boardStale: Boolean = false,
 ) {
     fun toFixture(
         receiptEpochMs: Long = 0, receiptElapsedMs: Long = 0, allowClock: Boolean = true, checkMarketAge: Boolean = false,
@@ -432,6 +470,8 @@ internal data class FootballEventDto(
         val kickoffTime = kickoff?.let { runCatching { Instant.parse(it) }.getOrNull() }
         val kickoffLabel = kickoffTime?.atZone(ZoneId.systemDefault())?.format(kickoffFormat)
         val clock = if (live && allowClock) FootballLiveClock.fromWire(liveClock, receiptEpochMs, receiptElapsedMs) else null
+        val scoreObserved = score?.updatedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
+            ?: clock?.observedAtEpochMs
         val badges = FootballBadges.fromCatalog(logos)
         val match = MatchCardModel(
             id = id,
@@ -462,6 +502,8 @@ internal data class FootballEventDto(
             awayParticipantId = awayParticipantId,
             discipline = canonicalEsportsDiscipline(discipline) ?: if(sport=="esports") mapOf(16 to "dota2",17 to "cs2",18 to "lol",61 to "valorant")[providerSportId] else null,
             readOnly = v5 || readOnly != null,
+            boardStale = boardStale || clock?.stale == true,
+            scoreObservedAtEpochMs = scoreObserved,
         )
         val resolvedCompetitionId = canonicalCompetitionId ?: competitionId ?: badges?.competitionId
         val identifiedMatch = match.copy(competitionId = resolvedCompetitionId,

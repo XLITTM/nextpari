@@ -114,6 +114,7 @@ interface PlayerApi {
     suspend fun footballFeed(
         @Query("eventId") eventId: String? = null,
         @Query("includeSports") includeSports: String? = null,
+        @Query("board") board: String? = null,
     ): Response<JsonObject>
 
     @GET("api/player/sports/football-feed")

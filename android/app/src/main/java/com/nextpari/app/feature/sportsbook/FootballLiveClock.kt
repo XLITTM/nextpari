@@ -25,14 +25,21 @@ data class FootballLiveClock private constructor(
     private val running: Boolean,
     private val ageAtReceiptMs: Long,
     private val receiptElapsedMs: Long,
+    val observedAtEpochMs: Long,
+    val stale: Boolean = false,
 ) {
     fun labelAt(nowElapsedMs: Long): String? {
+        if (stale) return null
         val age = ageAtReceiptMs + (nowElapsedMs - receiptElapsedMs).coerceAtLeast(0)
         if (age > STALE_AFTER_MS) return null
         val seconds = elapsedSeconds + if (running) (age / 1_000).toInt() else 0
         if (seconds > MAX_SECONDS) return null
         return "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')}"
     }
+
+    internal fun asStale(): FootballLiveClock = FootballLiveClock(
+        elapsedSeconds, running = false, ageAtReceiptMs, receiptElapsedMs, observedAtEpochMs, stale = true,
+    )
 
     companion object {
         internal fun fromWire(value: JsonElement?, receiptEpochMs: Long, receiptElapsedMs: Long): FootballLiveClock? {
@@ -41,8 +48,8 @@ data class FootballLiveClock private constructor(
             val minute = field("minute")?.takeUnless { it.isString }?.intOrNull ?: return null
             val second = field("second")?.takeUnless { it.isString }?.intOrNull ?: return null
             val running = field("running")?.takeUnless { it.isString }?.booleanOrNull ?: return null
-            if (minute !in 0..130 || second !in 0..59 ||
-                field("stale")?.takeUnless { it.isString }?.booleanOrNull != false) return null
+            val staleFlag = field("stale")?.takeUnless { it.isString }?.booleanOrNull ?: return null
+            if (minute !in 0..130 || second !in 0..59) return null
             val time = field("observedAt")?.takeIf { it.isString }?.content ?: return null
             val observation = try {
                 Instant.parse(time).toEpochMilli()
@@ -51,9 +58,16 @@ data class FootballLiveClock private constructor(
             } catch (_: ArithmeticException) {
                 return null
             }
-            if (observation < receiptEpochMs - STALE_AFTER_MS || observation > receiptEpochMs + 5_000) return null
-            return FootballLiveClock(minute * 60 + second, running,
-                (receiptEpochMs - observation).coerceAtLeast(0), receiptElapsedMs)
+            if (observation > receiptEpochMs + 5_000) return null
+            val tooOld = observation < receiptEpochMs - STALE_AFTER_MS
+            return FootballLiveClock(
+                minute * 60 + second,
+                running && !staleFlag && !tooOld,
+                (receiptEpochMs - observation).coerceAtLeast(0),
+                receiptElapsedMs,
+                observation,
+                stale = staleFlag || tooOld,
+            )
         }
     }
 }

@@ -61,11 +61,13 @@ class SportsbookViewModel(
     private var feedJob: Job? = null
     private var detailJob: Job? = null
     private var oddsJob: Job? = null
+    private var boardJob: Job? = null
     private var quoteWake: Job? = null
     private var expiryJob: Job? = null
     private var generation = 0L
     private var requestOrder = 0L
     private var nextBatchAt = Long.MIN_VALUE
+    private var nextBoardAt = Long.MIN_VALUE
     private val attemptedAt = mutableMapOf<String, Long>()
     private val viewports = linkedMapOf<Any, List<String>>()
     private var visibleDetail: String? = null
@@ -88,14 +90,17 @@ class SportsbookViewModel(
         feedJob?.cancel()
         detailJob?.cancel()
         oddsJob?.cancel()
+        boardJob?.cancel()
         quoteWake?.cancel()
         expiryJob?.cancel()
         placeJob?.cancel()
         feedJob = null
         detailJob = null
         oddsJob = null
+        boardJob = null
         quoteWake = null
         expiryJob = null
+        nextBoardAt = Long.MIN_VALUE
         visibleDetail = null
         viewports.clear()
         attemptedAt.clear()
@@ -136,19 +141,22 @@ class SportsbookViewModel(
             ui.update { state ->
                 val feed = listed.copy(fixtures = listed.fixtures.map { fresh ->
                     val prior = state.fixtureFor(fresh.match.eventId)?.takeIf(fresh::sameEvent)
-                    when {
+                    val priced = when {
                         prior != null && (prior.quoteOrder > order ||
                             (listed.notice == null && fresh.priceState == FootballPriceState.Unpriced)) ->
                             fresh.withPrices(prior)
                         else -> fresh.stamped(order, started)
                     }
+                    if (prior == null) priced
+                    else priced.withScoreboard(fresherScoreboard(prior.match, fresh.match, preferIncoming = false))
                 })
                 val listedDetail = state.detailId?.let { id -> feed.fixtures.firstOrNull { it.match.eventId == id } }
                 val detail = if (listedDetail != null) {
                     val previous = state.detail.fixtures.singleOrNull()?.takeIf(listedDetail::sameEvent)
-                    val match = listedDetail.match.copy(insights = previous?.match?.insights.takeIf { feed.notice == null })
-                    FootballSnapshot(listOf(listedDetail.copy(match = match)),
-                        feed.notice ?: listedDetail.priceState.notice, feed.canPrice, feed.retryable)
+                    val fixture = if (previous == null) listedDetail
+                    else mergeListingIntoDetail(previous, listedDetail, keepInsights = feed.notice == null)
+                    FootballSnapshot(listOf(fixture),
+                        feed.notice ?: fixture.priceState.notice, feed.canPrice, feed.retryable)
                 } else state.detail
                 state.copy(feed = feed, detail = detail, loading = false)
             }
@@ -204,10 +212,15 @@ class SportsbookViewModel(
             ui.update { state ->
                 val fixtures = detail.fixtures.map { fresh ->
                     val current = state.fixtureFor(id)?.takeIf { it.sameEvent(fresh) }
-                    if (detail.canPrice && current != null && (current.quoteOrder > order ||
+                    val priced = if (detail.canPrice && current != null && (current.quoteOrder > order ||
                             (fresh.priceState == FootballPriceState.Unpriced && current.hasPrice(now())))) {
                         fresh.withPrices(current)
                     } else fresh.stamped(order, started)
+                    val listed = state.feed.fixtures.firstOrNull { it.match.eventId == id && it.sameEvent(priced) }
+                    val boardSource = listed?.match ?: current?.match
+                    if (boardSource != null) {
+                        priced.withScoreboard(fresherScoreboard(boardSource, priced.match, preferIncoming = false))
+                    } else priced
                 }
                 state.copy(detail = detail.copy(fixtures = fixtures,
                     notice = detail.notice ?: fixtures.singleOrNull()?.takeIf { footballEventId.matches(id) }?.priceState?.notice), detailLoading = false)
@@ -221,6 +234,44 @@ class SportsbookViewModel(
         if (visibleDetail == id) {
             visibleDetail = null
             scheduleOdds()
+        }
+    }
+
+    fun refreshLiveBoard() {
+        val repository = football ?: return
+        if (!hasCurrentPlayer() || now() < nextBoardAt) return
+        if (boardJob?.isActive == true) return
+        val run = generation
+        boardJob = viewModelScope.launch {
+            val board = try {
+                repository.readLiveBoard()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                FootballSnapshot(notice = "LIVE_BOARD", retryable = true)
+            }
+            if (!current(run)) return@launch
+            if (board.fixtures.isEmpty()) {
+                if (board.notice != null) {
+                    if (board.retryable) nextBoardAt = now() + FOOTBALL_LIVE_BOARD_BACKOFF_MS
+                    ui.update { state ->
+                        state.copy(
+                            feed = state.feed.copy(fixtures = markLiveBoardStale(state.feed.fixtures)),
+                            detail = state.detail.copy(fixtures = markLiveBoardStale(state.detail.fixtures)),
+                        )
+                    }
+                }
+                return@launch
+            }
+            ui.update { state ->
+                val feed = state.feed.copy(fixtures = applyLiveBoard(state.feed.fixtures, board.fixtures))
+                val detailFixtures = applyLiveBoard(state.detail.fixtures, board.fixtures).map { updated ->
+                    val listed = feed.fixtures.firstOrNull { it.match.eventId == updated.match.eventId }
+                    if (listed == null) updated
+                    else updated.copy(match = mergeDetailScoreboard(listed.match, updated.match) ?: updated.match)
+                }
+                state.copy(feed = feed, detail = state.detail.copy(fixtures = detailFixtures))
+            }
         }
     }
 
@@ -373,7 +424,8 @@ class SportsbookViewModel(
     fun matchById(id: String): MatchCardModel? {
         val current = ui.value
         val detailMatch = detailFixture(id)?.match
-        val match = detailMatch ?: current.feed.fixtures.firstOrNull { it.match.id == id }?.match
+        val listed = current.feed.fixtures.firstOrNull { it.match.id == id }?.match
+        val match = mergeDetailScoreboard(listed, detailMatch)
         return match?.copy(isFavorite = id in current.favoriteMatchIds)
     }
     fun marketsFor(id: String): List<MarketGroup> = detailFixture(id)?.markets.orEmpty()
@@ -502,6 +554,8 @@ class SportsbookViewModel(
 internal const val FOOTBALL_ODDS_GAP_MS = 15_000L
 internal const val FOOTBALL_ODDS_BACKOFF_MS = 60_000L
 internal const val FOOTBALL_QUOTE_MAX_AGE_MS = 30_000L
+internal const val FOOTBALL_LIVE_BOARD_GAP_MS = 15_000L
+internal const val FOOTBALL_LIVE_BOARD_BACKOFF_MS = 60_000L
 
 private val FootballPriceState.isThrottled: Boolean
     get() = this == FootballPriceState.RateLimited || this == FootballPriceState.Stale
