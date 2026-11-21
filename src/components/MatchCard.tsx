@@ -151,7 +151,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
       </div>
 
       <div className="px-3 pb-2">
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className={`grid gap-1.5 ${outcomeButtons.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {outcomeButtons.map((o) => {
             const clickable = clickableCardSelection(match, o.key, '1X2', o.odds);
             return (

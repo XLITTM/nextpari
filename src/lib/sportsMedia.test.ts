@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ownerFootballLogo } from '../../server/sports/catalog/ownerFootballMedia.js';
-import { approvedFootballLogo, sportsRegion } from './sportsRegion.js';
+import { approvedFootballLogo, sportsRegion, verifiedPublishedLogo } from './sportsRegion.js';
 
 describe('approved football media', () => {
   it('publishes only the three reviewed provider ids', () => {
@@ -18,6 +18,10 @@ describe('approved football media', () => {
     assert.equal(approvedFootballLogo('/crest1.webp'), null);
     assert.equal(approvedFootballLogo('https://football-logos.cc/badge.png'), null);
     assert.equal(approvedFootballLogo('/images/sports/football/arsenal.png'), '/images/sports/football/arsenal.png');
+    assert.equal(verifiedPublishedLogo('team', 'Manchester City'), '/images/sports/football/manchester-city.png');
+    assert.equal(verifiedPublishedLogo('team', 'Manchester United'), null);
+    assert.equal(verifiedPublishedLogo('competition', 'Premier League', 'Lebanon'), null);
+    assert.equal(verifiedPublishedLogo('competition', 'Premier League', 'England'), '/images/sports/football/premier-league.png');
   });
 
   it('shows home-nation flags and leaves international codes blank', () => {

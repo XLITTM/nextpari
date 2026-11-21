@@ -11,17 +11,18 @@ export interface CardOutcomeButton {
   locked: boolean;
 }
 
+const TWO_WAY_SPORTS = new Set(['basketball', 'tennis', 'table-tennis', 'volleyball', 'esports']);
+
 export function mainOutcomeButtons(match: MatchEvent): CardOutcomeButton[] {
   const button = (key: string, odds: number): CardOutcomeButton => ({
     key,
     odds: odds > 1 ? odds : 0,
     locked: odds <= 1,
   });
-  return [
-    button('П1', match.markets['1']),
-    button('X', match.markets.x),
-    button('П2', match.markets['2']),
-  ];
+  const home = button('П1', match.markets['1']);
+  const away = button('П2', match.markets['2']);
+  if (TWO_WAY_SPORTS.has(match.sport) && !(match.markets.x > 1)) return [home, away];
+  return [home, button('X', match.markets.x), away];
 }
 
 export interface ExtraCardOutcome {

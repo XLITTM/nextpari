@@ -141,36 +141,39 @@ function isCardType(type: string): boolean {
   return type.endsWith('-bookings') || type.includes('-bookings-') || type.includes('-cards');
 }
 
-function isTotalType(type: string): boolean {
-  return type === 'totals' || type === 'totals-points' || type === 'teamtotals-team1' || type === 'teamtotals-team2';
+function marketCategory(line: LayoutLine, sport: SportId): { id: string; label: string } {
+  const type = line.family;
+  if (isPlayerType(type)) return { id: 'players', label: 'Статистика игроков' };
+  if (isCornerType(type)) return { id: 'corners', label: 'Угловые' };
+  if (isCardType(type)) return { id: 'cards', label: 'Желтые карточки' };
+  if (type.includes('shotsongoal') || type.includes('shots')) return { id: 'shots', label: 'Удары в створ ворот' };
+  if (type.includes('offside')) return { id: 'offsides', label: 'Офсайды' };
+  if (type.includes('foul')) return { id: 'fouls', label: 'Фолы' };
+  if (type.includes('penalt')) return { id: 'quick', label: 'Быстрые события' };
+  if (line.periodId === 'p1') return { id: 'p1', label: sport === 'football' ? '1-й тайм' : periodCaption('p1', sport) };
+  if (line.periodId === 'p2') return { id: 'p2', label: sport === 'football' ? '2-й тайм' : periodCaption('p2', sport) };
+  return { id: 'main', label: 'Основная игра' };
 }
 
-function isHandicapType(type: string): boolean {
-  return type === 'spreads' || type === 'spreads-european' || type === 'spreads-points';
-}
+const CATEGORY_ORDER = ['main', 'p1', 'p2', 'corners', 'quick', 'cards', 'shots', 'offsides', 'fouls', 'players'];
 
 export function marketTabs(lines: readonly LayoutLine[], sport: SportId): MarketTab[] {
-  const tabs: MarketTab[] = [{ id: 'all', label: 'Все' }];
-  if (lines.some((line) => line.family === '1x2' && !line.period)) tabs.push({ id: '1x2', label: 'Исход' });
-  if (lines.some((line) => isTotalType(line.family) && !line.period)) tabs.push({ id: 'totals', label: 'Тоталы' });
-  if (lines.some((line) => isHandicapType(line.family) && !line.period)) tabs.push({ id: 'handicaps', label: 'Форы' });
-  if (lines.some((line) => isCornerType(line.family))) tabs.push({ id: 'corners', label: 'Угловые' });
-  if (lines.some((line) => isCardType(line.family))) tabs.push({ id: 'cards', label: 'Карточки' });
-  if (lines.some((line) => line.period)) tabs.push({ id: 'periods', label: periodTabLabel(sport) });
-  if (lines.some((line) => isPlayerType(line.family))) tabs.push({ id: 'players', label: 'Игроки' });
-  return tabs;
+  const present = new Map<string, string>();
+  for (const line of lines) {
+    const category = marketCategory(line, sport);
+    if (!present.has(category.id)) present.set(category.id, category.label);
+  }
+  return CATEGORY_ORDER.filter((id) => present.has(id)).map((id) => ({ id, label: present.get(id) ?? id }));
 }
 
-function matchesTab(line: LayoutLine, tab: string): boolean {
-  if (tab === 'all') return true;
-  if (tab === '1x2') return line.family === '1x2' && !line.period;
-  if (tab === 'totals') return isTotalType(line.family) && !line.period;
-  if (tab === 'handicaps') return isHandicapType(line.family) && !line.period;
-  if (tab === 'corners') return isCornerType(line.family);
-  if (tab === 'cards') return isCardType(line.family);
-  if (tab === 'periods') return line.period;
-  if (tab === 'players') return isPlayerType(line.family);
-  return false;
+function matchesTab(line: LayoutLine, tab: string, sport: SportId): boolean {
+  if (tab === 'all' || tab === 'popular') {
+    if (tab === 'popular') {
+      return marketCategory(line, sport).id === 'main' && ['1x2', 'doublechance', 'bothteamsscore', 'totals', 'spreads', 'spreads-european', 'teamtotals-team1', 'teamtotals-team2', 'correctscore', 'exactscore'].includes(line.family);
+    }
+    return true;
+  }
+  return marketCategory(line, sport).id === tab;
 }
 
 function matchesQuery(line: LayoutLine, query: string, sport: SportId): boolean {
@@ -188,7 +191,7 @@ function periodRank(periodId: string | null): number {
 }
 
 export function marketAccordions(lines: readonly LayoutLine[], tab: string, query: string, sport: SportId): MarketAccordion[] {
-  const visible = lines.filter((line) => matchesTab(line, tab) && matchesQuery(line, query, sport));
+  const visible = lines.filter((line) => matchesTab(line, tab, sport) && matchesQuery(line, query, sport));
   const buckets = new Map<string, LayoutLine[]>();
   for (const line of visible) {
     const key = `${line.family}|${line.periodId ?? 'match'}`;

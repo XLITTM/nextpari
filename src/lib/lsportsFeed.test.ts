@@ -44,5 +44,7 @@ describe('lsports display feed guards', () => {
     }));
     assert.deepEqual(buttons.map((row) => row.odds), [0, 0, 0]);
     assert.ok(buttons.every((row) => row.locked));
+    const twoWay = mainOutcomeButtons(match({ sport: 'table-tennis', markets: { '1': 1.85, x: 0, '2': 1.85 }, marketsLocked: true }));
+    assert.deepEqual(twoWay.map((row) => row.key), ['П1', 'П2']);
   });
 });

@@ -8,7 +8,7 @@ import { CasinoLanding } from '../components/CasinoLanding';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { EsportsDisciplinesScroll } from '../components/EsportsDisciplinesScroll';
 import { useLiveMatches } from '../LiveMatchesContext';
-import { isTopCompetition } from '../lib/competitionCatalog';
+import { competitionRank } from '../lib/competitionCatalog';
 import type { MainTab, MatchEvent, Screen, SportId } from '../types';
 
 interface HomeScreenProps {
@@ -29,7 +29,7 @@ export function HomeScreen({
   onToggleFavorite,
 }: HomeScreenProps) {
   const [selectedSport, setSelectedSport] = useState<SportId>('all');
-  const { liveMatches, upcomingMatches, featuredLive, featuredLine, scheduleMatches, loading } = useLiveMatches();
+  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
   const sportFilter = mainTab === 'sport' && selectedSport === 'esports' ? 'all' : selectedSport;
 
   const filteredLive = useMemo(() => {
@@ -48,17 +48,18 @@ export function HomeScreen({
     const sportsOnly = upcomingMatches.filter((match) => match.sport !== 'esports');
     return sportFilter === 'all' ? sportsOnly : sportsOnly.filter((match) => match.sport === sportFilter);
   }, [upcomingMatches, sportFilter]);
-  const popularLive = featuredLive.length ? featuredLive : filteredLive;
-  const popularLine = featuredLine.length ? featuredLine : filteredUpcoming;
-  const sportPopularLive = featuredLive.length
-    ? featuredLive.filter((match) => match.sport !== 'esports' && (sportFilter === 'all' || match.sport === sportFilter))
-    : sportLiveMatches;
-  const sportPopularLine = featuredLine.length
-    ? featuredLine.filter((match) => match.sport !== 'esports' && (sportFilter === 'all' || match.sport === sportFilter))
-    : sportUpcomingMatches;
-  const hasPrimaryOdds = (match: MatchEvent) => match.priceState === 'open' && (match.markets['1'] > 1 || match.markets.x > 1 || match.markets['2'] > 1);
-  const topLive = sportPopularLive.filter((match) => isTopCompetition(match.sport, match.league, match.country) && hasPrimaryOdds(match));
-  const topLine = sportPopularLine.filter((match) => isTopCompetition(match.sport, match.league, match.country) && hasPrimaryOdds(match));
+  const rankMatches = (rows: MatchEvent[]) => {
+    const seen = new Set<string>();
+    return rows.filter((match) => {
+      if (seen.has(match.id)) return false;
+      seen.add(match.id);
+      return true;
+    }).sort((a, b) => competitionRank(a.sport, a.league, a.country) - competitionRank(b.sport, b.league, b.country) || a.startTime - b.startTime);
+  };
+  const popularLive = rankMatches(filteredLive);
+  const popularLine = rankMatches(filteredUpcoming);
+  const sportPopularLive = rankMatches(sportLiveMatches);
+  const sportPopularLine = rankMatches(sportUpcomingMatches);
   const esportsLiveMatches = liveMatches.filter((match) => match.sport === 'esports');
   const esportsUpcomingMatches = upcomingMatches.filter((match) => match.sport === 'esports');
 
@@ -130,18 +131,6 @@ export function HomeScreen({
       <div>
         <SportsScroll selected={sportFilter} onSelect={setSelectedSport} excludeEsports />
         <div className="flex flex-col gap-6 pt-2">
-          {topLive.length > 0 && (
-            <section>
-              <SectionHeader title="Топ-матчи" flame onSeeAll={() => onOpenGameList('live')} />
-              {renderCards(topLive)}
-            </section>
-          )}
-          {topLine.length > 0 && (
-            <section>
-              <SectionHeader title="Топ-матчи · Линия" flame onSeeAll={() => onOpenGameList('line')} />
-              {renderCards(topLine)}
-            </section>
-          )}
           <section>
             <SectionHeader
               title="Популярное LIVE"
@@ -187,12 +176,6 @@ export function HomeScreen({
       <PromoScroll onNavigate={onNavigate} />
 
       <div className="flex flex-col gap-6 pt-2">
-        {topLive.length > 0 && (
-          <section>
-            <SectionHeader title="Топ-матчи" flame onSeeAll={() => onOpenGameList('live')} />
-            {renderCards(topLive)}
-          </section>
-        )}
         {(loading || filteredLive.length > 0) && (
           <section>
             <SectionHeader

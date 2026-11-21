@@ -1,12 +1,11 @@
 import { useState } from 'react';
-import { ArrowLeft, Search, Star } from 'lucide-react';
+import { ArrowLeft, Search } from 'lucide-react';
 import type { MatchEvent } from '../types';
-import { mainOutcomeButtons } from '../lib/cardOdds';
-import { OddButton } from '../components/OddButton';
-import { clickableCardSelection } from '../lib/sportsSelection';
-import { SportIcon } from '../components/SportIcon';
+import { MatchCard } from '../components/MatchCard';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { SkeletonLoader } from '../components/SkeletonLoader';
+import { competitionRank, sportNavIndex } from '../lib/competitionCatalog';
+import { sports } from '../data';
 
 interface GameListScreenProps {
   mode: 'live' | 'line';
@@ -17,149 +16,19 @@ interface GameListScreenProps {
   onToggleFavorite: (matchId: string) => void;
 }
 
-function formatKickoff(ts: number): { date: string; time: string } {
-  const d = new Date(ts);
-  if (!Number.isFinite(ts) || ts <= 0) {
-    return { date: 'VS', time: 'Не начался' };
-  }
-  const now = new Date();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(now.getDate() + 1);
-  const isSameDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-  const time = d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  if (isSameDay(d, now)) return { date: 'Сегодня', time };
-  if (isSameDay(d, tomorrow)) return { date: 'Завтра', time };
-  const months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
-  return { date: `${d.getDate()} ${months[d.getMonth()]}`, time };
-}
-
-function hasRealLiveScore(match: MatchEvent): boolean {
-  return Boolean(
-    match.isLive &&
-      match.liveScore &&
-      match.liveScore.team1 != null &&
-      match.liveScore.team2 != null,
-  );
-}
-
-function getOutcomeButtons(match: MatchEvent) {
-  return mainOutcomeButtons(match);
-}
-
-function MatchRowCard({
-  match,
-  onOpenMatch,
-  isFavorite,
-  onToggleFavorite,
-}: {
-  match: MatchEvent;
-  onOpenMatch: (id: string) => void;
-  isFavorite: boolean;
-  onToggleFavorite: () => void;
-}) {
-  const outcomeButtons = getOutcomeButtons(match);
-
-  const marketName = outcomeButtons.length === 3 ? '1X2' : 'Победитель';
-
-  return (
-    <div
-      onClick={() => onOpenMatch(match.id)}
-      className="bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden active:scale-[0.99] transition-transform cursor-pointer"
-    >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0" />
-          <span className="text-xs font-bold text-gray-700 dark:text-gray-200 truncate">
-            {match.country}. {match.league}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Star
-            className={`w-4 h-4 transition-colors ${isFavorite ? 'fill-green-500 text-green-500' : 'text-gray-600 dark:text-gray-300'}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleFavorite();
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="px-3 py-3 flex items-center gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
-            <div
-              className="w-6 h-6 rounded-full shrink-0 border border-gray-200 dark:border-gray-600"
-              style={{ backgroundColor: match.team1Color }}
-            />
-            <span className="text-sm font-bold text-gray-900 dark:text-white truncate">{match.team1}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded-full shrink-0 border border-gray-200 dark:border-gray-600"
-              style={{ backgroundColor: match.team2Color }}
-            />
-            <span className="text-sm font-bold text-gray-900 dark:text-white truncate">{match.team2}</span>
-          </div>
-        </div>
-
-        <div className="shrink-0 flex flex-col items-center px-2">
-          {match.isLive ? (
-            hasRealLiveScore(match) ? (
-              <span className="text-2xl font-extrabold text-gray-900 dark:text-white tabular-nums leading-none">
-                {match.liveScore!.team1} : {match.liveScore!.team2}
-              </span>
-            ) : (
-              <span className="text-sm font-extrabold text-gray-900 dark:text-white">LIVE</span>
-            )
-          ) : (
-            <span className="flex flex-col items-center leading-tight">
-              <span className="text-[11px] font-bold text-gray-700 dark:text-gray-300">
-                {formatKickoff(match.startTime).date}
-              </span>
-              <span className="text-sm font-extrabold text-gray-900 dark:text-white tabular-nums">
-                {formatKickoff(match.startTime).time}
-              </span>
-            </span>
-          )}
-          <span className="text-[11px] text-gray-700 dark:text-gray-300 mt-1.5 text-center font-bold">
-            {match.isLive
-              ? /^\d{8,}$/.test((match.liveStatus ?? '').trim())
-                ? 'LIVE'
-                : ['LIVE', match.liveStatus].filter(Boolean).join(' ')
-              : 'Не начался'}
-          </span>
-        </div>
-      </div>
-
-      <div className="px-3 pb-3">
-        <div className="text-xs font-bold text-gray-700 dark:text-gray-200 mb-1.5">1X2</div>
-        <div className="grid grid-cols-3 gap-2">
-          {outcomeButtons.map((outcome) => {
-            const clickable = clickableCardSelection(match, outcome.key, marketName, outcome.odds);
-            return (
-              <OddButton
-                key={outcome.key}
-                label={outcome.key}
-                odds={outcome.odds}
-                selection={clickable.selection}
-                locked={outcome.locked || clickable.locked}
-                size="sm"
-              />
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favorites, onToggleFavorite }: GameListScreenProps) {
   const [tab, setTab] = useState<'live' | 'line'>(mode);
-  const { liveMatches, upcomingMatches, scheduleMatches, loading } = useLiveMatches();
-  const chronological = scheduleMatches.length ? scheduleMatches : [...liveMatches, ...upcomingMatches];
-  const matches = (tab === 'live' ? chronological.filter((match) => match.isLive) : chronological.filter((match) => !match.isLive))
-    .sort((a, b) => tab === 'line' ? a.startTime - b.startTime : a.startTime - b.startTime);
+  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
+  const seen = new Set<string>();
+  const matches = (tab === 'live' ? liveMatches : upcomingMatches)
+    .filter((match) => {
+      if (seen.has(match.id) || match.isLive !== (tab === 'live')) return false;
+      seen.add(match.id);
+      return true;
+    })
+    .sort((a, b) => sportNavIndex(a.sport) - sportNavIndex(b.sport)
+      || competitionRank(a.sport, a.league, a.country) - competitionRank(b.sport, b.league, b.country)
+      || a.startTime - b.startTime);
 
   return (
     <div className="min-h-full bg-gray-200 dark:bg-gray-900 flex flex-col transition-colors">
@@ -216,17 +85,41 @@ export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favor
             Сейчас матчей нет
           </p>
         ) : (
-          matches.map((match) => (
-            <MatchRowCard
-              key={match.id}
-              match={match}
-              onOpenMatch={onOpenMatch}
-              isFavorite={favorites.includes(match.id)}
-              onToggleFavorite={() => onToggleFavorite(match.id)}
-            />
-          ))
+          matches.map((match, index) => {
+            const previous = matches[index - 1];
+            const sportChanged = previous?.sport !== match.sport;
+            const leagueChanged = sportChanged || previous?.league !== match.league || previous?.country !== match.country;
+            const sportName = sports.find((sport) => sport.id === match.sport)?.name ?? match.sport;
+            return (
+              <MatchGroup key={match.id} match={match} sportName={sportChanged ? sportName : ''} leagueName={leagueChanged ? match.league : ''} onOpenMatch={onOpenMatch} favorite={favorites.includes(match.id)} onToggleFavorite={() => onToggleFavorite(match.id)} />
+            );
+          })
         )}
       </div>
+    </div>
+  );
+}
+
+function MatchGroup({
+  match,
+  sportName,
+  leagueName,
+  onOpenMatch,
+  favorite,
+  onToggleFavorite,
+}: {
+  match: MatchEvent;
+  sportName: string;
+  leagueName: string;
+  onOpenMatch: (id: string) => void;
+  favorite: boolean;
+  onToggleFavorite: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      {sportName ? <p className="px-1 pt-2 text-xs font-bold uppercase text-gray-500">{sportName}</p> : null}
+      {leagueName ? <p className="px-1 text-xs font-semibold text-gray-600 dark:text-gray-300">{leagueName}</p> : null}
+      <MatchCard match={match} onOpenMatch={onOpenMatch} isFavorite={favorite} onToggleFavorite={onToggleFavorite} />
     </div>
   );
 }

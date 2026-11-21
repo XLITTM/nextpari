@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Search, Globe, Tv, Star, ChevronDown, ChevronUp } from 'lucide-react';
 import { SportIcon } from '../components/SportIcon';
+import { TeamLogo } from '../components/TeamLogo';
 import { SkeletonLoader } from '../components/SkeletonLoader';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { useFavoritesStore } from '../stores/favoritesStore';
@@ -23,6 +24,7 @@ interface LeagueRow {
   name: string;
   country: string;
   count: number;
+  logo?: string;
 }
 
 interface CountryGroup {
@@ -38,7 +40,8 @@ function leagueRows(matches: MatchEvent[]): LeagueRow[] {
     const country = match.country.trim();
     if (!name) continue;
     const key = `${country}|${name}`;
-    const row = leagues.get(key) ?? { name, country, count: 0 };
+    const row = leagues.get(key) ?? { name, country, count: 0, logo: match.competitionLogo };
+    if (row.logo !== match.competitionLogo) row.logo = undefined;
     row.count += 1;
     leagues.set(key, row);
   }
@@ -152,7 +155,7 @@ export function ChampionshipsScreen({ sport, initialMode, discipline, onBack, on
           <p className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">Сейчас матчей нет</p>
         ) : (
           <div className="bg-white dark:bg-[#1e293b]">
-            {[{ title: 'Избранное', leagues: favorites }, { title: 'Топ-турниры', leagues: top }, { title: 'Международные', leagues: international }].filter((section) => section.leagues.length > 0).map((section) => (
+            {[{ title: 'Избранное', leagues: favorites }, { title: 'Топ-чемпионаты', leagues: top }, { title: 'Международные', leagues: international }].filter((section) => section.leagues.length > 0).map((section) => (
               <div key={section.title} className="border-b border-gray-100 dark:border-gray-800">
                 <p className="px-4 pt-3 text-xs font-medium uppercase text-gray-500">{section.title}</p>
                 {section.leagues.map((league) => (
@@ -162,7 +165,10 @@ export function ChampionshipsScreen({ sport, initialMode, discipline, onBack, on
                     onClick={() => onNavigate({ name: 'league', leagueId: toLeagueId(league.country, league.name), mode: activeTab })}
                     className="w-full flex items-center justify-between px-4 py-3 active:bg-gray-50 dark:active:bg-gray-800"
                   >
-                    <span className="min-w-0 truncate pr-3 text-left text-sm text-gray-700 dark:text-gray-300">{league.name}</span>
+                    <span className="flex min-w-0 items-center gap-2 pr-3 text-left text-sm text-gray-700 dark:text-gray-300">
+                      {league.logo ? <TeamLogo teamName={league.name} logo={league.logo} /> : null}
+                      <span className="truncate">{league.name}</span>
+                    </span>
                     <span className="flex items-center gap-2 shrink-0">
                       <span className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full text-xs font-medium">{league.count}</span>
                       <span
@@ -220,6 +226,7 @@ export function ChampionshipsScreen({ sport, initialMode, discipline, onBack, on
                           className="w-full flex items-center justify-between px-4 py-3 pl-12 active:bg-gray-200 dark:active:bg-gray-800 transition-colors border-t border-gray-100 dark:border-gray-800"
                         >
                           <div className="flex items-center gap-2 text-left pr-4 min-w-0">
+                            {league.logo ? <TeamLogo teamName={league.name} logo={league.logo} /> : null}
                             <span className="text-sm text-gray-700 dark:text-gray-300">{league.name}</span>
                           </div>
                           <div className="flex items-center gap-3 shrink-0">

@@ -26,6 +26,16 @@ export function sportsRegion(raw: string): string {
   return `${flag} ${label}`;
 }
 
+export function verifiedPublishedLogo(kind: 'team' | 'competition', name: string, country = ''): string | null {
+  const label = name.trim();
+  if (kind === 'team' && label === 'Manchester City') return '/images/sports/football/manchester-city.png';
+  if (kind === 'team' && label === 'Arsenal') return '/images/sports/football/arsenal.png';
+  if (kind === 'competition' && label === 'Premier League' && country.trim().toLowerCase() === 'england') {
+    return '/images/sports/football/premier-league.png';
+  }
+  return null;
+}
+
 export function approvedFootballLogo(path: string | null | undefined): string | null {
   return path && /^\/images\/sports\/football\/[a-z0-9-]+\.png$/.test(path) ? path : null;
 }

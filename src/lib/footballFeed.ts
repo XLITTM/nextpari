@@ -1,3 +1,4 @@
+import { verifiedPublishedLogo } from './sportsRegion';
 import type { BetSelection, MarketGroup, MatchEvent } from '../types';
 
 export type FootballPriceState = NonNullable<MatchEvent['priceState']>;
@@ -162,9 +163,9 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
     sportsTier: card.tier,
     observedMainAt: oneXtwo?.updatedAt ?? undefined,
     leagueId: card.logos?.competitionId ?? undefined,
-    competitionLogo: card.logos?.competition ?? undefined,
-    team1Logo: card.logos?.home ?? undefined,
-    team2Logo: card.logos?.away ?? undefined,
+    competitionLogo: card.logos?.competition || verifiedPublishedLogo('competition', card.league, card.country) || undefined,
+    team1Logo: card.logos?.home || verifiedPublishedLogo('team', card.home) || undefined,
+    team2Logo: card.logos?.away || verifiedPublishedLogo('team', card.away) || undefined,
     league: card.league,
     country: card.country,
     discipline: card.discipline ?? undefined,

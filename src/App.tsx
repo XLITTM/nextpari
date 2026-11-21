@@ -63,6 +63,7 @@ import { CasinoDemoBack, CasinoDemoCatalog } from './components/CasinoDemoCatalo
 import { CasinoDemoGameScreen } from './screens/CasinoDemoGameScreen';
 
 const showSportsCheck = import.meta.env.DEV && window.location.pathname === '/dev/sports';
+const showGamesCheck = import.meta.env.DEV && window.location.pathname === '/dev/games';
 
 const showMarketCheck = import.meta.env.DEV && (
   window.location.pathname === '/dev/markets'
@@ -630,6 +631,14 @@ function AppContent() {
         return null;
     }
   };
+
+  if (showGamesCheck) {
+    return (
+      <LiveMatchesProvider>
+        <GameListScreen mode="live" onBack={() => undefined} onSearchClick={() => undefined} onOpenMatch={() => undefined} favorites={[]} onToggleFavorite={() => undefined} />
+      </LiveMatchesProvider>
+    );
+  }
 
   if (showSportsCheck) {
     return (
