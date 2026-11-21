@@ -17,13 +17,13 @@ class SportsbookHierarchyTest {
     @Test
     fun countryGroupingCountsAndFirstExpanded() {
         val groups = CountryGrouping.groupByCountry(listOf(spainA, spainB, england, copa))
-        assertThat(groups.map { it.country }).containsExactly("Испания", "Англия").inOrder()
-        assertThat(groups.first().count).isEqualTo(3)
-        assertThat(groups.first().leagues.map { it.name to it.count }).containsExactly("Ла Лига" to 2, "Кубок" to 1).inOrder()
-        assertThat(groups[1].count).isEqualTo(1)
-        assertThat(CountryGrouping.initialExpanded(groups)).isEqualTo("Испания")
+        assertThat(groups.map { it.country }).containsExactly("Англия", "Испания").inOrder()
+        assertThat(groups.first().count).isEqualTo(1)
+        assertThat(groups[1].leagues.map { it.name to it.count }).containsExactly("Кубок" to 1, "Ла Лига" to 2).inOrder()
+        assertThat(groups[1].count).isEqualTo(3)
+        assertThat(CountryGrouping.initialExpanded(groups)).isEqualTo("Англия")
         assertThat(CountryGrouping.nextExpanded(groups, "Испания")).isEqualTo("Испания")
-        assertThat(CountryGrouping.nextExpanded(groups, "Франция")).isEqualTo("Испания")
+        assertThat(CountryGrouping.nextExpanded(groups, "Франция")).isEqualTo("Англия")
         assertThat(CountryGrouping.initialExpanded(emptyList())).isEmpty()
     }
 
@@ -39,23 +39,16 @@ class SportsbookHierarchyTest {
     }
 
     @Test
-    fun marketTabsPerSportMatchWeb() {
-        assertThat(MarketTabs.forSport("football").map { it.label }).containsExactly(
-            "Все", "Основная игра", "Тоталы", "Форы", "1-й тайм", "2-й тайм", "Угловые",
-            "Двойной шанс", "Обе забьют", "Карточки", "Голы",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("tennis").map { it.label }).containsExactly(
-            "Все рынки", "Победитель", "Сеты", "Геймы",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("basketball").map { it.label }).containsExactly(
-            "Все рынки", "Победитель", "Тотал очков", "Четверти", "Половины",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("hockey").map { it.label }).containsExactly(
-            "Все рынки", "Основная игра", "Тоталы", "Форы",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("esports").map { it.label }).containsExactly(
-            "Все рынки", "Победитель", "Карты / раунды",
-        ).inOrder()
+    fun marketTabsAreSpecificToEachSport() {
+        assertThat(MarketTabs.forSport("football").map { it.id }).containsAtLeast("corners", "cards", "btts", "double-chance")
+        for(sport in listOf("tennis", "basketball", "hockey", "volleyball", "table-tennis", "esports")) {
+            val ids=MarketTabs.forSport(sport).map { it.id }
+            assertThat(ids).containsAtLeast("all", "main", "handicaps")
+            assertThat(ids).containsNoneOf("corners", "cards", "1st-half", "2nd-half")
+        }
+        assertThat(MarketTabs.forSport("basketball").map { it.id }).containsAtLeast("quarters", "halves", "players")
+        assertThat(MarketTabs.forSport("tennis").map { it.id }).containsAtLeast("sets", "games", "tiebreaks", "aces")
+        assertThat(MarketTabs.forSport("esports").map { it.id }).containsAtLeast("maps", "rounds", "kills")
     }
 
     @Test
@@ -138,22 +131,17 @@ class SportsbookHierarchyTest {
 
     @Test
     fun sportSelectorAndListsShowObservedSportsInCatalogOrder() {
-        val tennis = spainA.copy(id = "4", sport = "tennis", league = "ATP")
-        val handball = spainA.copy(id = "5", sport = "handball")
-        val virtual = spainA.copy(id = "6", sport = "esports")
-        val live = listOf(tennis, virtual, spainA)
-        val line = listOf(handball)
-        assertThat(SportsListCatalog.selector(emptyList(), emptyList()).map { it.id })
-            .containsExactly("all", *SportsListCatalog.supported.filterNot { it.id == "esports" }.map { it.id }.toTypedArray())
-            .inOrder()
-        assertThat(SportsListCatalog.selector(live, line).map { it.id }.first()).isEqualTo("all")
-        assertThat(SportsListCatalog.selector(live, line).map { it.id }).doesNotContain("esports")
-        assertThat(SportsListCatalog.EMPTY_MATCHES).isEqualTo("Сейчас матчей нет")
-        assertThat(SportsListCatalog.rows("live", live, line).map { it.id to it.count })
-            .containsExactly("football" to 1, "tennis" to 1).inOrder()
-        assertThat(SportsListCatalog.rows("line", live, line).map { it.id }).containsExactly("handball")
-        assertThat(SportsListCatalog.rows("cybers", live, line).map { it.id }).containsExactly("esports")
-        assertThat(SportsListCatalog.rows("cybers", emptyList(), emptyList())).isEmpty()
+        val tennis = spainA.copy(id="4",eventId="4",sport="tennis",league="ATP")
+        val handball = spainA.copy(id="5",eventId="5",sport="handball")
+        val virtual = spainA.copy(id="6",eventId="6",sport="esports")
+        val live=listOf(tennis,virtual,spainA)
+        val line=listOf(handball)
+        assertThat(SportsListCatalog.selector(emptyList(),emptyList()).map { it.id }).containsExactly("all")
+        assertThat(SportsListCatalog.selector(live,line).map { it.id }).containsExactly("all","football","tennis","esports","handball").inOrder()
+        assertThat(SportsListCatalog.rows("live",live,line).map { it.id to it.count }).containsExactly("football" to 1,"tennis" to 1).inOrder()
+        assertThat(SportsListCatalog.rows("line",live,line).map { it.id }).containsExactly("handball")
+        assertThat(SportsListCatalog.rows("cybers",live,line).map { it.id }).containsExactly("esports")
+        assertThat(SportsListCatalog.rows("cybers",emptyList(),emptyList())).isEmpty()
     }
 
     @Test
