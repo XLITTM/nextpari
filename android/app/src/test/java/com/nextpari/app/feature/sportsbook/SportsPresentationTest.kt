@@ -23,11 +23,11 @@ class SportsPresentationTest {
 
     @Test
     fun serverOrderIsPreservedAndLegacyFeedIsPrioritized() {
-        val reserve = nations.copy(id = "101", league = "Argentina Nacional Reserve League", country = "AR")
-        val low = nations.copy(id = "102", league = "2. Bundesliga", country = "DE")
-        val youth = nations.copy(id = "103", league = "UEFA Nations League U17")
-        val virtual = nations.copy(id = "104", league = "Esoccer GT Leagues – 12 mins play")
-        val basketball = nations.copy(id = "105", league = "NBA", sport = "basketball")
+        val reserve = nations.copy(id = "101", eventId = "101", league = "Argentina Nacional Reserve League", country = "AR")
+        val low = nations.copy(id = "102", eventId = "102", league = "2. Bundesliga", country = "DE")
+        val youth = nations.copy(id = "103", eventId = "103", league = "UEFA Nations League U17")
+        val virtual = nations.copy(id = "104", eventId = "104", league = "Esoccer GT Leagues – 12 mins play")
+        val basketball = nations.copy(id = "105", eventId = "105", league = "NBA", sport = "basketball")
         val verified = listOf(basketball, nations, youth, reserve, low)
         assertEquals(verified, FeaturedSports.ordered(verified))
         assertEquals(listOf(nations, basketball, low, reserve, youth, virtual),
@@ -42,9 +42,9 @@ class SportsPresentationTest {
 
     @Test
     fun missingOddsDoNotDemoteMajorPrematchAndLegacyTiesFollowKickoff() {
-        val early = nations.copy(id = "1", isLive = false, kickoffEpochMs = 1L, outcomes = emptyList())
-        val late = early.copy(id = "2", kickoffEpochMs = 2L)
-        val other = early.copy(id = "3", league = "Regional Cup")
+        val early = nations.copy(id = "1", eventId = "1", isLive = false, kickoffEpochMs = 1L, outcomes = emptyList())
+        val late = early.copy(id = "2", eventId = "2", kickoffEpochMs = 2L)
+        val other = early.copy(id = "3", eventId = "3", league = "Regional Cup")
         assertEquals(listOf(early, late, other), FeaturedSports.ordered(listOf(other, late, early)))
     }
 
@@ -52,10 +52,10 @@ class SportsPresentationTest {
     fun featuredSectionsRankRealMajorEventsAndLimitLineToTheNextDay() {
         val now = 1_000_000L
         val nextDay = now + 86_400_000
-        val youth = nations.copy(id = "200", league = "U-20 World Cup", serverTier = 2)
-        val nba = nations.copy(id = "201", sport = "basketball", league = "NBA", serverTier = 0)
-        val friendly = nations.copy(id = "202", league = "Club Friendlies", serverTier = 2)
-        val virtual = nations.copy(id = "203", league = "Esoccer GT Leagues", serverTier = 1)
+        val youth = nations.copy(id = "200", eventId = "200", league = "U-20 World Cup", serverTier = 2)
+        val nba = nations.copy(id = "201", eventId = "201", sport = "basketball", league = "NBA", serverTier = 0)
+        val friendly = nations.copy(id = "202", eventId = "202", league = "Club Friendlies", serverTier = 2)
+        val virtual = nations.copy(id = "203", eventId = "203", league = "Esoccer GT Leagues", serverTier = 1)
         assertEquals(listOf(nba, nations, youth, friendly),
             FeaturedSports.popularLive(listOf(youth, nba, virtual, friendly, nations)))
 
@@ -116,14 +116,16 @@ class SportsPresentationTest {
     }
 
     @Test
-    fun bundledClubAndLeagueArtUsesReviewedAliasesAndRefusesConflictingIdentity() {
-        val premier = nations.copy(league = "Premier League", country = "ENG", team1 = "Arsenal", team2 = "Manchester City")
-        assertEquals(R.drawable.badge_premier_league, BundledFootballBadges.competition(premier))
-        assertEquals(R.drawable.badge_arsenal, BundledFootballBadges.team(premier, premier.team1))
-        assertEquals(R.drawable.badge_manchester_city, BundledFootballBadges.team(premier, premier.team2))
-        assertNull(BundledFootballBadges.team(premier, "Arsenal U21"))
-        assertNull(BundledFootballBadges.team(premier.copy(country = "AR"), "Arsenal"))
-        assertNull(BundledFootballBadges.team(premier.copy(competitionId = "football:other:premier-league"), "Arsenal"))
+    fun bundledClubAndLeagueArtRequiresVerifiedCanonicalIdentity() {
+        val names=nations.copy(league="Premier League",country="ENG",team1="Arsenal",team2="Manchester City")
+        assertNull(BundledFootballBadges.competition(names))
+        assertNull(BundledFootballBadges.team(names,names.team1,home=true))
+        val verified=names.copy(competitionId="football:eng:premier-league",homeParticipantId="football:eng:arsenal",awayParticipantId="football:eng:manchester-city")
+        assertEquals(R.drawable.badge_premier_league,BundledFootballBadges.competition(verified))
+        assertEquals(R.drawable.badge_arsenal,BundledFootballBadges.team(verified,verified.team1,home=true))
+        assertEquals(R.drawable.badge_manchester_city,BundledFootballBadges.team(verified,verified.team2,home=false))
+        assertNull(BundledFootballBadges.competition(verified.copy(competitionId="football:other:premier-league")))
+        assertNull(BundledFootballBadges.team(verified.copy(homeParticipantId="unverified"),verified.team1,home=true))
     }
 
     @Test
