@@ -17,6 +17,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.decodeFromJsonElement
 
 /** Explicit opt-in test: public GET only; no credentials, player session or POST. */
 class SportsSmokeInstrumentation : Instrumentation() {
@@ -26,6 +27,13 @@ class SportsSmokeInstrumentation : Instrumentation() {
         val result=Bundle()
         try {
             check(arguments.getString("productionRead")=="1") { "Use -e productionRead 1 to permit the public endpoint GET" }
+            val captureFile=arguments.getString("captureFile")
+            val data=if(captureFile!=null) {
+                // Optional transport for emulators without a working proxy route. The caller
+                // supplies the unmodified response of the actual public production GET.
+                val raw=File(captureFile).readText()
+                NetworkModule.json.decodeFromJsonElement<FootballFeedDto>(NetworkModule.json.parseToJsonElement(raw)).toSnapshot(null)
+            } else {
             val builder=NetworkModule.okHttpClient().newBuilder()
             arguments.getString("proxyPort")?.toIntOrNull()?.let { port ->
                 builder.proxy(Proxy(Proxy.Type.HTTP,InetSocketAddress("10.0.2.2",port)))
@@ -40,7 +48,8 @@ class SportsSmokeInstrumentation : Instrumentation() {
                 builder.sslSocketFactory(ssl.socketFactory,trust)
             }
             val repo=RemoteFootballRepository(NetworkModule.playerApi(builder.build(),"https://nextpari.net/"),NetworkModule.json)
-            val data=runBlocking { repo.read() }
+            runBlocking { repo.read() }
+            }
             check(data.fixtures.isNotEmpty()) { "Production read empty: ${data.notice}" }
             check(data.fixtures.all { it.match.readOnly && oddsPapiEventId.matches(it.match.eventId) })
             check(data.fixtures.flatMap { it.markets }.flatMap { it.outcomes }.all { it.selection==null && it.locked })
@@ -64,7 +73,8 @@ class SportsSmokeInstrumentation : Instrumentation() {
             }
             val football=fixtures["football"]?:fixtures.values.first()
             capture("markets-dark",Destinations.match(football.match.eventId),true)
-            result.putString("stream","PRODUCTION_READ_OK events=${data.fixtures.size} sports=${fixtures.keys}; screenshots=$directory\n")
+            val origin=if(captureFile==null)"PRODUCTION_READ_OK" else "PRODUCTION_CAPTURE_RENDER_OK"
+            result.putString("stream","$origin events=${data.fixtures.size} sports=${fixtures.keys}; screenshots=$directory\n")
             runOnMainSync { activity.finish();SportsReadOnlyTestActivity.snapshot=null }
             finish(Activity.RESULT_OK,result)
         } catch(error:Throwable) {
