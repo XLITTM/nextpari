@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -39,7 +41,7 @@ class SportsReadOnlyTestActivity : ComponentActivity() {
             NextpariTheme(darkTheme=dark) {
                 val nav=rememberNavController()
                 androidx.compose.runtime.LaunchedEffect(screen) { nav.navigate(screen) }
-                NavHost(nav,"sports") {
+                NavHost(nav,"sports",modifier=Modifier.systemBarsPadding()) {
                     composable("sports") { SportsListScreen("line",{finish()},nav::navigate,vm) }
                     composable(Destinations.CHAMPIONSHIPS) { entry -> ChampionshipsScreen(entry.arguments?.getString("sport").orEmpty(),entry.arguments?.getString("mode").orEmpty(),{nav.popBackStack()},nav::navigate,vm) }
                     composable("league/{leagueId}") { entry -> LeagueScreen(entry.arguments?.getString("leagueId").orEmpty(),"line",{nav.popBackStack()},nav::navigate,vm) }
