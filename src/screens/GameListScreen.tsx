@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ArrowLeft, Search } from 'lucide-react';
 import type { MatchEvent } from '../types';
 import { MatchCard } from '../components/MatchCard';
 import { useLiveMatches } from '../LiveMatchesContext';
 import { SkeletonLoader } from '../components/SkeletonLoader';
-import { competitionRank, sportNavIndex } from '../lib/competitionCatalog';
+import { competitionRank, countryPresentation, sportNavIndex } from '../lib/competitionCatalog';
 import { sports } from '../data';
+import { sportsRegion } from '../lib/sportsRegion';
 
 interface GameListScreenProps {
   mode: 'live' | 'line';
@@ -18,7 +19,8 @@ interface GameListScreenProps {
 
 export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favorites, onToggleFavorite }: GameListScreenProps) {
   const [tab, setTab] = useState<'live' | 'line'>(mode);
-  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
+  const { liveMatches, upcomingMatches, loading, ensurePrices } = useLiveMatches();
+  const onVisible = useCallback((id: string) => { void ensurePrices([id]); }, [ensurePrices]);
   const seen = new Set<string>();
   const matches = (tab === 'live' ? liveMatches : upcomingMatches)
     .filter((match) => {
@@ -88,10 +90,22 @@ export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favor
           matches.map((match, index) => {
             const previous = matches[index - 1];
             const sportChanged = previous?.sport !== match.sport;
-            const leagueChanged = sportChanged || previous?.league !== match.league || previous?.country !== match.country;
+            const countryChanged = sportChanged || previous?.country !== match.country;
+            const leagueChanged = countryChanged || previous?.league !== match.league;
             const sportName = sports.find((sport) => sport.id === match.sport)?.name ?? match.sport;
+            const countryName = countryChanged ? (sportsRegion(countryPresentation(match.country).region) || countryPresentation(match.country).name || match.country) : '';
             return (
-              <MatchGroup key={match.id} match={match} sportName={sportChanged ? sportName : ''} leagueName={leagueChanged ? match.league : ''} onOpenMatch={onOpenMatch} favorite={favorites.includes(match.id)} onToggleFavorite={() => onToggleFavorite(match.id)} />
+              <MatchGroup
+                key={match.id}
+                match={match}
+                sportName={sportChanged ? sportName : ''}
+                countryName={countryName}
+                leagueName={leagueChanged ? match.league : ''}
+                onOpenMatch={onOpenMatch}
+                favorite={favorites.includes(match.id)}
+                onToggleFavorite={() => onToggleFavorite(match.id)}
+                onVisible={onVisible}
+              />
             );
           })
         )}
@@ -103,23 +117,28 @@ export function GameListScreen({ mode, onBack, onSearchClick, onOpenMatch, favor
 function MatchGroup({
   match,
   sportName,
+  countryName,
   leagueName,
   onOpenMatch,
   favorite,
   onToggleFavorite,
+  onVisible,
 }: {
   match: MatchEvent;
   sportName: string;
+  countryName: string;
   leagueName: string;
   onOpenMatch: (id: string) => void;
   favorite: boolean;
   onToggleFavorite: () => void;
+  onVisible: (id: string) => void;
 }) {
   return (
     <div className="space-y-2">
       {sportName ? <p className="px-1 pt-2 text-xs font-bold uppercase text-gray-500">{sportName}</p> : null}
+      {countryName ? <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{countryName}</p> : null}
       {leagueName ? <p className="px-1 text-xs font-semibold text-gray-600 dark:text-gray-300">{leagueName}</p> : null}
-      <MatchCard match={match} onOpenMatch={onOpenMatch} isFavorite={favorite} onToggleFavorite={onToggleFavorite} />
+      <MatchCard match={match} onOpenMatch={onOpenMatch} isFavorite={favorite} onToggleFavorite={onToggleFavorite} onVisible={onVisible} />
     </div>
   );
 }

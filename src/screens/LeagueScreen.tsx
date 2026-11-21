@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { MatchCard } from '../components/MatchCard';
 import { SkeletonLoader } from '../components/SkeletonLoader';
@@ -21,7 +22,8 @@ export function LeagueScreen({
   favorites,
   onToggleFavorite,
 }: LeagueScreenProps) {
-  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
+  const { liveMatches, upcomingMatches, loading, ensurePrices } = useLiveMatches();
+  const onVisible = useCallback((id: string) => { void ensurePrices([id]); }, [ensurePrices]);
   const { country, name } = fromLeagueId(leagueId);
   const resolvedMode = mode ?? 'live';
   const pool = resolvedMode === 'line' ? upcomingMatches : liveMatches;
@@ -60,6 +62,7 @@ export function LeagueScreen({
               onOpenMatch={onOpenMatch}
               isFavorite={favorites.includes(match.id)}
               onToggleFavorite={() => onToggleFavorite(match.id)}
+              onVisible={onVisible}
             />
           ))
         )}

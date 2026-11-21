@@ -29,7 +29,7 @@ export function HomeScreen({
   onToggleFavorite,
 }: HomeScreenProps) {
   const [selectedSport, setSelectedSport] = useState<SportId>('all');
-  const { liveMatches, upcomingMatches, loading } = useLiveMatches();
+  const { liveMatches, upcomingMatches, featuredLive, featuredLine, loading } = useLiveMatches();
   const sportFilter = mainTab === 'sport' && selectedSport === 'esports' ? 'all' : selectedSport;
 
   const filteredLive = useMemo(() => {
@@ -56,10 +56,26 @@ export function HomeScreen({
       return true;
     }).sort((a, b) => competitionRank(a.sport, a.league, a.country) - competitionRank(b.sport, b.league, b.country) || a.startTime - b.startTime);
   };
-  const popularLive = rankMatches(filteredLive);
-  const popularLine = rankMatches(filteredUpcoming);
-  const sportPopularLive = rankMatches(sportLiveMatches);
-  const sportPopularLine = rankMatches(sportUpcomingMatches);
+  const featuredBySport = (rows: MatchEvent[], fallback: MatchEvent[]) => {
+    const rankedFeatured = rankMatches(rows);
+    return rankedFeatured.length ? rankedFeatured.slice(0, 8) : rankMatches(fallback).slice(0, 8);
+  };
+  const popularLive = featuredBySport(
+    featuredLive.filter((match) => selectedSport === 'all' ? match.sport !== 'esports' : match.sport === selectedSport),
+    filteredLive,
+  );
+  const popularLine = featuredBySport(
+    featuredLine.filter((match) => selectedSport === 'all' ? match.sport !== 'esports' : match.sport === selectedSport),
+    filteredUpcoming,
+  );
+  const sportPopularLive = featuredBySport(
+    featuredLive.filter((match) => match.sport !== 'esports' && (sportFilter === 'all' || match.sport === sportFilter)),
+    sportLiveMatches,
+  );
+  const sportPopularLine = featuredBySport(
+    featuredLine.filter((match) => match.sport !== 'esports' && (sportFilter === 'all' || match.sport === sportFilter)),
+    sportUpcomingMatches,
+  );
   const esportsLiveMatches = liveMatches.filter((match) => match.sport === 'esports');
   const esportsUpcomingMatches = upcomingMatches.filter((match) => match.sport === 'esports');
 

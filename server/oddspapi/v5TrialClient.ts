@@ -204,15 +204,42 @@ export class OddsPapiV5TrialReader {
   }
   today(sportId: number): Promise<V5Result<JsonRecord[]>> {
     if (!validSportId(sportId)) return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
-    return this.get('fixtures/today', { sportId: String(sportId), bookmakers: V5_BOOKMAKER });
+    return this.get('fixtures/today', { sportId: String(sportId), bookmakers: V5_BOOKMAKER }, { timeoutMs: 20_000, maxBytes: 8_000_000 });
   }
   live(sportId: number): Promise<V5Result<JsonRecord[]>> {
     if (!validSportId(sportId)) return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
-    return this.get('fixtures/live', { sportId: String(sportId), bookmakers: V5_BOOKMAKER });
+    return this.get('fixtures/live', { sportId: String(sportId), bookmakers: V5_BOOKMAKER }, { timeoutMs: 20_000, maxBytes: 8_000_000 });
+  }
+  /**
+   * Documented uncapped listing: GET /en/fixtures with startTimeFrom/startTimeTo (epoch seconds).
+   * Does not invent dates. Callers must pass a bounded horizon.
+   */
+  fixtures(sportId: number, range: { startTimeFrom: number; startTimeTo: number; statusId?: number }): Promise<V5Result<JsonRecord[]>> {
+    if (!validSportId(sportId)) return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
+    if (!Number.isSafeInteger(range.startTimeFrom) || !Number.isSafeInteger(range.startTimeTo) || range.startTimeTo < range.startTimeFrom) {
+      return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
+    }
+    const query: Record<string, string> = {
+      sportId: String(sportId),
+      bookmakers: V5_BOOKMAKER,
+      startTimeFrom: String(range.startTimeFrom),
+      startTimeTo: String(range.startTimeTo),
+    };
+    if (range.statusId !== undefined) query.statusId = String(range.statusId);
+    return this.get('fixtures', query, { timeoutMs: 20_000, maxBytes: 8_000_000 });
   }
   fixtureOdds(id: string): Promise<V5Result<JsonRecord>> {
     if (!sourceFixtureId(id)) return Promise.resolve({ ok: false, status: null, error: 'INVALID_RESPONSE', data: null });
     return this.get('fixtures/odds', { fixtureId: id, bookmakers: V5_BOOKMAKER });
+  }
+  /** Documented main-line snapshot, capped at 100 fixture IDs by the provider. */
+  mainOdds(ids: readonly string[]): Promise<V5Result<JsonRecord[]>> {
+    const unique = [...new Set(ids.filter(sourceFixtureId))].slice(0, 100);
+    if (unique.length === 0) return Promise.resolve({ ok: true, status: 200, error: null, data: [] });
+    return this.get('fixtures/odds/main', {
+      fixtureIds: unique.join(','),
+      bookmakers: V5_BOOKMAKER,
+    }, { timeoutMs: 20_000, maxBytes: 8_000_000 });
   }
   participants(ids: readonly number[]): Promise<V5Result<JsonRecord[]>> {
     const unique = [...new Set(ids.filter((id) => Number.isSafeInteger(id) && id > 0))].slice(0, 40);

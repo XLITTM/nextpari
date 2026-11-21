@@ -74,9 +74,11 @@ test('all requests are GET, use 1xbet, and never accept user-supplied bookmaker 
   assert.equal((await client.today(10)).ok, true);
   assert.equal((await client.live(25)).ok, true);
   assert.equal((await client.fixtureOdds(id)).ok, true);
+  assert.equal((await client.fixtures(10, { startTimeFrom: 1_700_000_000, startTimeTo: 1_700_086_400, statusId: 0 })).ok, true);
+  assert.equal((await client.mainOdds([id])).ok, true);
   const invalid = await client.today(999);
   assert.equal(invalid.error, 'INVALID_RESPONSE');
-  assert.equal(requests.length, 3);
+  assert.equal(requests.length, 5);
   for (const request of requests) {
     const url = new URL(request.uri);
     assert.equal(url.origin, 'https://v5.oddspapi.io');

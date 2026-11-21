@@ -32,10 +32,13 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const generation = useRef(0);
   const latest = useRef<MatchEvent[]>(EMPTY_MATCHES);
+  const attempted = useRef(new Set<string>());
 
   const applyQuotes = useCallback(async (ids: string[], ticket: number) => {
-    if (!ids.length || ticket !== generation.current) return;
-    const quotes = await fetchFootballQuotes(ids);
+    const unique = ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id) && !attempted.current.has(id));
+    if (!unique.length || ticket !== generation.current) return;
+    for (const id of unique) attempted.current.add(id);
+    const quotes = await fetchFootballQuotes(unique);
     if (ticket !== generation.current) return;
     latest.current = applyFootballQuotes(latest.current, quotes);
     setMatches(latest.current);
@@ -44,11 +47,12 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
 
   const ensurePrices = useCallback(async (ids: string[]) => {
     const ticket = generation.current;
-    await applyQuotes(ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id)).slice(0, 8), ticket);
+    await applyQuotes(ids, ticket);
   }, [applyQuotes]);
 
   const refresh = useCallback(async () => {
     const ticket = ++generation.current;
+    attempted.current = new Set();
     setLoading(true);
     try {
       const listed = await fetchFootballFeed();
@@ -61,10 +65,24 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
         line: listed.featuredLine.map((match) => match.id),
         schedule: listed.schedule.map((match) => match.id),
       });
-      const plan = footballQuoteIds(merged);
+      const hydrateRest = async () => {
+        for (;;) {
+          if (ticket !== generation.current) return;
+          const plan = footballQuoteIds(latest.current, attempted.current);
+          if (!plan.primary.length) return;
+          const batch = await applyQuotes(plan.primary, ticket);
+          const limited = batch?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
+          if (limited) return;
+          if (!batch?.length) return;
+        }
+      };
+      const plan = footballQuoteIds(merged, attempted.current);
       const first = await applyQuotes(plan.primary, ticket);
       const limited = first?.some((quote) => quote.priceState === 'rate_limited' || quote.priceState === 'deferred');
-      if (!limited) await applyQuotes(plan.secondary, ticket);
+      if (!limited) {
+        if (plan.secondary.length) await applyQuotes(plan.secondary, ticket);
+        void hydrateRest();
+      }
     } catch {
       if (ticket === generation.current) {
         setMatches((current) => current);

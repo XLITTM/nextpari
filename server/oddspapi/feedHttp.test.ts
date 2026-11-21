@@ -33,7 +33,10 @@ test('hides suspended, stale, unknown, or rotated bookmaker prices',()=>{
   }
 });
 test('does not invent names or a running clock',()=>{
-  assert.equal(v5FixtureToCard(fixture({participants:{}}),catalog,now),null);
+  const unnamed=v5FixtureToCard(fixture({participants:{}}),catalog,now);
+  assert.equal(unnamed?.home,'');
+  assert.equal(unnamed?.away,'');
+  assert.equal(unnamed?.id,'oddspapi-v5:'+fixtureId);
   const card=v5FixtureToCard(fixture({clock:{currentTime:'89:12',currentPeriod:'p2',stopped:true,updatedAt:new Date(now).toISOString()}}),catalog,now)!;
   assert.equal(card.liveClock?.running,false);assert.equal(card.liveClock?.minute,89);
   assert.equal(v5FixtureToCard(fixture(),catalog,now)?.liveClock,null);
@@ -122,6 +125,124 @@ test('keeps distinct player prices and numeric exact-goal labels in the same sna
   assert.equal(card.priceAudit.displayedPrices,10);
   assert.deepEqual(card.priceAudit.rejectionReasons,{});
 });
+test('keeps every same-league live fixture instead of one per competition', async () => {
+  const env = { ODDSPAPI_V5_API_KEY: 'unit-test-only' };
+  const rows = [1, 2, 3, 4, 5].map((index) => {
+    const id = `id10000020670154${70 + index}`;
+    return fixture({
+      fixtureId: id,
+      participants: { participant1Name: `Home ${index}`, participant2Name: `Away ${index}` },
+      tournament: { tournamentName: 'Premier League', categoryName: 'England' },
+      odds: { '1xbet': Object.fromEntries([101, 102, 103].map((outcomeId) => [
+        `${id}:1xbet:${outcomeId}:0`,
+        { bookmaker: '1xbet', outcomeId, marketId: 101, price: 2.1, active: true, changedAt: now },
+      ])) },
+    });
+  });
+  const reader = new OddsPapiV5TrialReader({
+    env,
+    fetchImpl: async (raw) => {
+      const path = new URL(String(raw)).pathname;
+      if (path.endsWith('/markets')) return new Response(JSON.stringify(markets), { status: 200 });
+      if (path.endsWith('/live') || path.endsWith('/fixtures') || path.endsWith('/today') || path.endsWith('/main')) {
+        return new Response(JSON.stringify(rows), { status: 200 });
+      }
+      return new Response(JSON.stringify(rows[0]), { status: 200 });
+    },
+  });
+  const listed = await handleV5SportsFeed({ url: '/' }, env, reader);
+  const events = (listed.body as { events?: Array<{ league: string; id: string }>; pipeline?: { selected: number } }).events ?? [];
+  assert.equal(events.length, 5);
+  assert.equal(events.filter((event) => event.league === 'Premier League').length, 5);
+  assert.equal((listed.body as { pipeline?: { selected: number } }).pipeline?.selected, 5);
+  assert.equal(listed.body.betsAccepted, false);
+});
+
+test('does not cap the football catalog at 16 live, 24 prematch or 40 fixtures', async () => {
+  const env = { ODDSPAPI_V5_API_KEY: 'unit-test-only' };
+  const liveRows = Array.from({ length: 18 }, (_, index) => fixture({
+    fixtureId: `id10000020670155${String(index).padStart(2, '0')}`,
+    status: { live: true },
+    tournament: { tournamentName: `League ${index}`, categoryName: 'England' },
+    participants: { participant1Name: `L${index}H`, participant2Name: `L${index}A` },
+    startTime: Math.floor(now / 1000) - 60,
+    odds: { '1xbet': {} },
+    bookmakers: { '1xbet': { hasOdds: true, staleOdds: false, suspended: false, participantsRotated: false } },
+  }));
+  const lineRows = Array.from({ length: 26 }, (_, index) => fixture({
+    fixtureId: `id10000020670156${String(index).padStart(2, '0')}`,
+    status: { live: false },
+    tournament: { tournamentName: `Line ${index}`, categoryName: 'Spain' },
+    participants: { participant1Name: `P${index}H`, participant2Name: `P${index}A` },
+    startTime: Math.floor(now / 1000) + 3600 + index,
+    odds: { '1xbet': {} },
+    bookmakers: { '1xbet': { hasOdds: true, staleOdds: false, suspended: false, participantsRotated: false } },
+  }));
+  const reader = new OddsPapiV5TrialReader({
+    env,
+    fetchImpl: async (raw) => {
+      const path = new URL(String(raw)).pathname;
+      if (path.endsWith('/markets')) return new Response(JSON.stringify(markets), { status: 200 });
+      if (path.endsWith('/live')) return new Response(JSON.stringify(liveRows), { status: 200 });
+      if (path.endsWith('/fixtures') || path.endsWith('/today')) return new Response(JSON.stringify(lineRows), { status: 200 });
+      return new Response(JSON.stringify(liveRows[0]), { status: 200 });
+    },
+  });
+  const listed = await handleV5SportsFeed({ url: '/' }, env, reader);
+  const body = listed.body as { events?: unknown[]; featuredLive?: unknown[]; pipeline?: { selected: number; normalized: number } };
+  assert.equal(body.events?.length, 44);
+  assert.equal(body.pipeline?.selected, 44);
+  assert.ok((body.featuredLive?.length ?? 0) <= 8);
+});
+
+test('uses regulation 1X2 on hockey cards when an overtime winner is also present', () => {
+  const hockey = fixture({
+    sport: { sportId: 15 },
+    odds: {
+      '1xbet': {
+        [`${fixtureId}:1xbet:401:0`]: { bookmaker: '1xbet', outcomeId: 401, marketId: 401, price: 2.4, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:402:0`]: { bookmaker: '1xbet', outcomeId: 402, marketId: 401, price: 3.1, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:403:0`]: { bookmaker: '1xbet', outcomeId: 403, marketId: 401, price: 3.4, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:501:0`]: { bookmaker: '1xbet', outcomeId: 501, marketId: 501, price: 1.9, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:502:0`]: { bookmaker: '1xbet', outcomeId: 502, marketId: 501, price: 1.9, active: true, changedAt: now },
+      },
+    },
+  });
+  const hockeyCatalog = indexV5Markets([
+    { marketId: 401, marketName: 'Regulation', marketType: '1x2', period: 'fulltime', handicap: 0, outcomes: [{ outcomeId: 401, outcomeName: '1' }, { outcomeId: 402, outcomeName: 'X' }, { outcomeId: 403, outcomeName: '2' }] },
+    { marketId: 501, marketName: 'Including OT', marketType: 'moneyline', period: 'result', handicap: 0, outcomes: [{ outcomeId: 501, outcomeName: '1' }, { outcomeId: 502, outcomeName: '2' }] },
+  ]);
+  const card = v5FixtureToCard(hockey, hockeyCatalog, now)!;
+  assert.equal(card.sport, 'hockey');
+  assert.equal(card.markets[0]?.key, '1x2');
+  assert.equal(card.markets[0]?.outcomes.length, 3);
+  assert.equal(card.markets[0]?.externalMarketId, '401');
+});
+
+test('uses a full-match basketball winner when 1X2 and moneyline both exist', () => {
+  const basketball = fixture({
+    sport: { sportId: 11 },
+    odds: {
+      '1xbet': {
+        [`${fixtureId}:1xbet:201:0`]: { bookmaker: '1xbet', outcomeId: 201, marketId: 201, price: 1.8, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:202:0`]: { bookmaker: '1xbet', outcomeId: 202, marketId: 201, price: 2.1, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:301:0`]: { bookmaker: '1xbet', outcomeId: 301, marketId: 301, price: 1.7, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:302:0`]: { bookmaker: '1xbet', outcomeId: 302, marketId: 301, price: 2.2, active: true, changedAt: now },
+        [`${fixtureId}:1xbet:303:0`]: { bookmaker: '1xbet', outcomeId: 303, marketId: 301, price: 4.5, active: true, changedAt: now },
+      },
+    },
+  });
+  const basketballCatalog = indexV5Markets([
+    { marketId: 201, marketName: 'Winner', marketType: 'moneyline', period: 'result', handicap: 0, outcomes: [{ outcomeId: 201, outcomeName: '1' }, { outcomeId: 202, outcomeName: '2' }] },
+    { marketId: 301, marketName: 'Regulation', marketType: '1x2', period: 'fulltime', handicap: 0, outcomes: [{ outcomeId: 301, outcomeName: '1' }, { outcomeId: 302, outcomeName: '2' }, { outcomeId: 303, outcomeName: 'X' }] },
+  ]);
+  const card = v5FixtureToCard(basketball, basketballCatalog, now)!;
+  assert.equal(card.sport, 'basketball');
+  assert.equal(card.markets[0]?.key, 'moneyline');
+  assert.equal(card.markets[0]?.outcomes.length, 2);
+  assert.equal(card.markets[0]?.externalMarketId, '201');
+});
+
 test('the deployed place endpoint refuses before session or wallet access',async()=>{
   const old=process.env.ODDSPAPI_V5_READONLY_FEED;
   process.env.ODDSPAPI_V5_READONLY_FEED='1';

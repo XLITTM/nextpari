@@ -306,7 +306,7 @@ function outcomeSide(name: string): '1' | 'x' | '2' | null {
 }
 
 function periodSpecific(value: string): boolean {
-  return /half|quarter|period|set|map|inning|1st|2nd|first|second|\bp[1-9]\b/.test(value);
+  return /half|quarter|period|set|map|inning|1st|2nd|first|second|\bp[1-9]\b|overtime|extra.?time|penalt|\bot\b/.test(value);
 }
 
 export function isFullTimeMainMarket(market: V5MarketDefinition): boolean {
@@ -319,6 +319,26 @@ export function isFullTimeMainMarket(market: V5MarketDefinition): boolean {
   const fullPeriod = period === '' || /^(ft|fulltime|full-time|full time|match|regular|result)$/.test(period);
   const mainType = /^(1x2|moneyline|match winner|winner)$/.test(type);
   return fullPeriod && mainType;
+}
+
+const TWO_WAY_SPORT_IDS = new Set<number>([11, 12, 16, 17, 18, 23, 25, 61]);
+
+/**
+ * Pick one card-level winner market without rejecting a fixture that has several
+ * legitimate full-match families (regulation 1X2 vs overtime-inclusive moneyline).
+ */
+export function pickPrimaryMainMarket(
+  sportId: number | null,
+  markets: readonly V5MarketDefinition[],
+): V5MarketDefinition | null {
+  const mains = markets.filter(isFullTimeMainMarket);
+  if (mains.length === 0) return null;
+  const prefer = (type: string) => mains.find((market) => market.marketType.trim().toLowerCase() === type);
+  if (sportId === 10 || sportId === 15) return prefer('1x2') ?? prefer('moneyline') ?? mains[0] ?? null;
+  if (sportId !== null && TWO_WAY_SPORT_IDS.has(sportId)) {
+    return prefer('moneyline') ?? prefer('winner') ?? prefer('match winner') ?? prefer('1x2') ?? mains[0] ?? null;
+  }
+  return prefer('1x2') ?? prefer('moneyline') ?? mains[0] ?? null;
 }
 
 export interface V5CardPrices {
@@ -337,12 +357,16 @@ export function cardPricesForFixture(
   if (!display) return null;
   const empty = { '1': null, x: null, '2': null } as V5CardPrices['prices'];
   const presented = presentV5Quotes(fixture, catalog, now);
-  const rows = presented.accepted.filter((quote) => {
-    const market = catalog.byId.get(quote.marketId);
-    return market ? isFullTimeMainMarket(market) : false;
-  });
-  const marketIds = new Set(rows.map((quote) => quote.marketId));
-  if (marketIds.size !== 1) return { fixtureId: display.fixtureId, canonicalEventId: display.canonicalEventId, available: false, prices: empty };
+  const primary = pickPrimaryMainMarket(
+    display.sportId,
+    [...new Set(presented.accepted.map((quote) => quote.marketId))]
+      .flatMap((marketId) => {
+        const market = catalog.byId.get(marketId);
+        return market ? [market] : [];
+      }),
+  );
+  if (!primary) return { fixtureId: display.fixtureId, canonicalEventId: display.canonicalEventId, available: false, prices: empty };
+  const rows = presented.accepted.filter((quote) => quote.marketId === primary.marketId);
   const prices = { ...empty };
   for (const quote of rows) {
     const side = outcomeSide(quote.outcomeName);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Star, Lock } from 'lucide-react';
 import type { MatchEvent, BetSelection } from '../types';
 import { useBetSlip } from '../BetSlipContext';
@@ -20,6 +20,7 @@ interface MatchCardProps {
   carousel?: boolean;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
+  onVisible?: (matchId: string) => void;
 }
 
 function formatCardMinute(status?: string): string {
@@ -32,9 +33,21 @@ function formatCardMinute(status?: string): string {
   return cleaned;
 }
 
-export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, onToggleFavorite }: MatchCardProps) {
+export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, onToggleFavorite, onVisible }: MatchCardProps) {
   const { isSelectionActive } = useBetSlip();
   const [scoreHighlight, setScoreHighlight] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!onVisible) return;
+    const node = rootRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) onVisible(match.id);
+    }, { rootMargin: '240px' });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [match.id, onVisible]);
   const scoreKey =
     match.isLive && match.liveScore
       ? `${match.liveScore.team1}:${match.liveScore.team2}`
@@ -75,6 +88,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
   return (
     <div
+      ref={rootRef}
       className={`flex h-[144px] flex-col bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden active:scale-[0.99] transition-transform cursor-pointer ${
         carousel ? 'w-[85%] shrink-0' : 'w-full'
       }`}
@@ -154,6 +168,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
         <div className={`grid gap-1.5 ${outcomeButtons.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
           {outcomeButtons.map((o) => {
             const clickable = clickableCardSelection(match, o.key, '1X2', o.odds);
+            const loading = (match.priceState === 'unpriced' || match.priceState === 'deferred') && !(o.odds > 1);
             return (
               <MatchOddButton
                 key={o.key}
@@ -161,6 +176,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
                 label={o.key}
                 odds={o.odds}
                 locked={o.locked || clickable.locked}
+                loading={loading}
                 displayOnly={match.feedTag === 'oddspapi-v5'}
                 isActive={isSelectionActive(match.id, o.key, clickable.selection.market)}
               />
@@ -178,6 +194,7 @@ function MatchOddButton({
   odds,
   isActive,
   locked = false,
+  loading = false,
   displayOnly = false,
 }: {
   selection: BetSelection;
@@ -185,6 +202,7 @@ function MatchOddButton({
   odds: number;
   isActive: boolean;
   locked?: boolean;
+  loading?: boolean;
   displayOnly?: boolean;
 }) {
   const handlers = useOddInteraction(selection);
@@ -214,7 +232,9 @@ function MatchOddButton({
       >
         {label}
       </span>
-      {(locked && !displayOnly) || odds <= 1 ? (
+      {loading ? (
+        <span className="text-xs font-bold text-gray-400 animate-pulse">…</span>
+      ) : (locked && !displayOnly) || odds <= 1 ? (
         <Lock className="w-3.5 h-3.5 text-gray-400" strokeWidth={2.4} />
       ) : (
         <OddsFlashValue

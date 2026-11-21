@@ -1,4 +1,4 @@
-import { verifiedPublishedLogo } from './sportsRegion';
+import { approvedFootballLogo, verifiedPublishedLogo } from './sportsRegion';
 import type { BetSelection, MarketGroup, MatchEvent } from '../types';
 
 export type FootballPriceState = NonNullable<MatchEvent['priceState']>;
@@ -101,6 +101,11 @@ function selectionFor(
   };
 }
 
+function footballMark(card: FootballFeedCard, kind: 'team' | 'competition', name: string): string | null {
+  if ((card.sport ?? 'football') !== 'football') return null;
+  return verifiedPublishedLogo(kind, name, card.country, card.league, kind === 'competition' ? card.logos?.competitionId ?? '' : '');
+}
+
 export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
   const oneXtwo = card.markets.find((market) => (market.key === '1x2' || market.key === 'moneyline') && market.status === 'open');
   const priceState: FootballPriceState = card.priceState ?? (oneXtwo ? 'open' : 'unpriced');
@@ -163,9 +168,9 @@ export function footballCardToMatch(card: FootballFeedCard): MatchEvent {
     sportsTier: card.tier,
     observedMainAt: oneXtwo?.updatedAt ?? undefined,
     leagueId: card.logos?.competitionId ?? undefined,
-    competitionLogo: card.logos?.competition || verifiedPublishedLogo('competition', card.league, card.country) || undefined,
-    team1Logo: card.logos?.home || verifiedPublishedLogo('team', card.home) || undefined,
-    team2Logo: card.logos?.away || verifiedPublishedLogo('team', card.away) || undefined,
+    competitionLogo: footballMark(card, 'competition', card.league) || approvedFootballLogo(card.logos?.competition) || undefined,
+    team1Logo: footballMark(card, 'team', card.home) || approvedFootballLogo(card.logos?.home) || undefined,
+    team2Logo: footballMark(card, 'team', card.away) || approvedFootballLogo(card.logos?.away) || undefined,
     league: card.league,
     country: card.country,
     discipline: card.discipline ?? undefined,
@@ -325,13 +330,24 @@ export function footballPriceNote(state: MatchEvent['priceState'], hasPrices: bo
 
 const RETRY_STATES = new Set<MatchEvent['priceState']>(['unpriced', 'deferred', 'rate_limited', 'upstream', 'stale', undefined]);
 
-export function footballQuoteIds(matches: MatchEvent[]): { primary: string[]; secondary: string[] } {
-  const needs = (match: MatchEvent) => (match.feedTag === 'oddspapi-v5' || match.feedTag === 'betsapi' && !match.id.startsWith('betsapi:') && match.sport !== 'esports') && RETRY_STATES.has(match.priceState);
+export const CATALOG_ODDS_BATCH = 40;
+
+export function footballQuoteIds(
+  matches: MatchEvent[],
+  attempted: ReadonlySet<string> = new Set(),
+  batch = CATALOG_ODDS_BATCH,
+): { primary: string[]; secondary: string[] } {
+  const needs = (match: MatchEvent) =>
+    (match.feedTag === 'oddspapi-v5' || (match.feedTag === 'betsapi' && !match.id.startsWith('betsapi:') && match.sport !== 'esports'))
+    && RETRY_STATES.has(match.priceState)
+    && !attempted.has(match.id);
   const live = matches.filter((match) => match.isLive && needs(match)).map((match) => match.id);
   const prematch = matches.filter((match) => !match.isLive && needs(match)).map((match) => match.id);
-  const primary = [...live.slice(0, 6), ...prematch].slice(0, 8);
-  const secondary = prematch.filter((id) => !primary.includes(id)).slice(0, 8);
-  return { primary, secondary };
+  const queued = [...live, ...prematch];
+  return {
+    primary: queued.slice(0, batch),
+    secondary: queued.slice(batch, batch * 2),
+  };
 }
 
 function retainFootballClock(next: MatchEvent, previous?: MatchEvent): MatchEvent {
@@ -430,7 +446,7 @@ export async function fetchFootballFeed(signal?: AbortSignal): Promise<FootballF
 }
 
 export async function fetchFootballQuotes(ids: string[], signal?: AbortSignal): Promise<FootballOddsQuote[]> {
-  const unique = ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id)).slice(0, 8);
+  const unique = ids.filter((id) => /^(?:\d{1,20}|oddspapi-v5:id\d{8,32})$/.test(id)).slice(0, CATALOG_ODDS_BATCH);
   if (!unique.length) return [];
   const response = await fetch(`/api/player/sports/football-feed?oddsFor=${unique.map(encodeURIComponent).join(',')}`, {
     signal,
