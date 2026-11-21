@@ -85,7 +85,15 @@ fun MarketAccordion(
         }
         AnimatedVisibility(visible = open, enter = expandVertically(), exit = shrinkVertically()) {
             Column(Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                market.outcomes.chunked(columns).forEach { row ->
+                val table=market.rows.takeIf { it.isNotEmpty() }
+                if(table!=null) table.forEach { line ->
+                    line.outcomes.chunked(if(line.outcomes.size==3)3 else 2).forEach { cells ->
+                        Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
+                            if(!line.line.isNullOrBlank()) Text(line.line,color=colors.textSecondary,fontSize=13.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(.65f),maxLines=1)
+                            cells.forEach { outcome -> MarketOutcomeButton(outcome,false,Modifier.weight(1f)) { onSelect(outcome) } }
+                        }
+                    }
+                } else market.outcomes.chunked(columns).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                         row.forEach { outcome ->
                             MarketOutcomeButton(
@@ -104,7 +112,7 @@ fun MarketAccordion(
 }
 
 fun outcomeIdentity(outcome: MarketOutcome): String =
-    outcome.selection?.identity ?: listOf(outcome.eventId, outcome.marketId, outcome.outcomeId.orEmpty(), outcome.line.orEmpty(), outcome.label).joinToString("|")
+    outcome.selection?.identity ?: listOf(outcome.eventId,outcome.bookmakerId,outcome.periodId,outcome.marketId,outcome.sourceSelectionId,outcome.outcomeId,outcome.line,outcome.label).joinToString("|")
 
 @Composable
 fun MarketOutcomeButton(
