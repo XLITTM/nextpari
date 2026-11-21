@@ -12,7 +12,7 @@ internal val oddsPapiEventId = Regex("oddspapi-v5:id[0-9]{8,32}")
 data class OddsPapiOutcomeDto(
     val label: String = "", val odds: JsonPrimitive? = null,
     val sourceSelectionId: String? = null, val updatedAt: String? = null,
-    val active: Boolean? = null, val suspended: Boolean = false,
+    val active: Boolean? = null, val suspended: Boolean = false, val playerName: String? = null,
 )
 
 @Serializable
@@ -96,7 +96,7 @@ internal object SportMarketStructure {
                 val sets = if(sport == "table-tennis") "партий" else "сетов"
                 add(listOf("Точный счёт", "Correct Set Score", "Set Score", "Correct Score"), "set-score", "Точный счёт по $sets", "sets")
                 add(listOf(if(sport == "table-tennis") "Тотал" else "Тотал очков", if(games) "Total Games Over Under" else "Total Points", if(games) "Total Games" else "Total Points Over Under"), "totals", "Тотал $unit", "totals")
-                add(listOf("Game Handicap", "Point Handicap", "Фора"), "point-handicap", "Фора по $unit", "handicaps")
+                add(listOf("Game Handicap", "Point Handicap", "Фора"), "point-handicap", "Фора по ${if(games) "геймам" else "очкам"}", "handicaps")
                 add(listOf("Set Handicap", "Фора по сетам"), "set-handicap", "Фора по $sets", "handicaps")
                 add(listOf("Total Sets", "Тотал сетов"), "total-sets", "Тотал $sets", "sets")
                 if (games) {
@@ -135,6 +135,81 @@ internal object SportMarketStructure {
             }
         }
     }
+    /** Exact V5 marketType keys documented in https://docs.oddspapi.io/coverage/markets. */
+    private fun wireDefinition(sport: String,type: String): Definition? {
+        fun spec(family: String,title: String,category: String,entity: String="")=Definition(family,title,category,entity)
+        val unit=when(sport) { "football" -> "голов";"hockey" -> "шайб";"basketball" -> "очков";else -> "очков" }
+        when(type) {
+            "moneyline" -> return spec("winner","Победитель","main")
+            "1x2" -> return spec("result","1X2","main")
+            "doublechance" -> if(sport=="football")return spec("double-chance","Двойной шанс","double-chance")
+            "drawnobet" -> return spec("draw-no-bet","Победа с возвратом при ничьей","main")
+            "bothteamsscore" -> return spec("btts","Обе забьют",if(sport=="football")"btts" else "goals")
+            "correctscore" -> return spec(if(sport in setOf("tennis","volleyball","table-tennis"))"set-score" else "correct-score",
+                when(sport) { "tennis","volleyball" -> "Точный счёт по сетам";"table-tennis" -> "Точный счёт по партиям";"esports" -> "Точный счёт по картам";else -> "Точный счёт" },
+                when(sport) { "tennis","volleyball","table-tennis" -> "sets";"esports" -> "maps";else -> "goals" })
+            "totals" -> return when(sport) {
+                "tennis","volleyball" -> spec("total-sets","Тотал сетов","sets")
+                "esports" -> spec("total-maps","Тотал карт","maps")
+                "football","basketball","hockey" -> spec("totals","Тотал $unit","totals")
+                else -> null
+            }
+            "spreads" -> return when(sport) {
+                "tennis","volleyball" -> spec("set-handicap","Фора по сетам","handicaps")
+                "esports" -> spec("map-handicap","Фора по картам","handicaps")
+                "football" -> spec("asian-handicap","Азиатская фора","handicaps")
+                "basketball" -> spec("spread","Фора по очкам","handicaps")
+                "hockey" -> spec("handicap","Фора по шайбам","handicaps")
+                else -> null
+            }
+            "spreads-european" -> if(sport=="football")return spec("european-handicap","Европейская фора","handicaps")
+            "halftime-fulltime" -> if(sport=="football")return spec("half-full","Тайм / матч","main")
+            "firstgoal" -> return spec("first-goal",if(sport=="hockey")"Первая шайба" else "Первый гол","goals")
+            "lastgoal" -> return spec("last-goal",if(sport=="hockey")"Последняя шайба" else "Последний гол","goals")
+            "exactscore" -> return spec("exact-score","Точное число $unit","goals")
+            "oddeven" -> return spec("odd-even","Чёт / нечёт","main")
+            "highestscoringh" -> if(sport=="football")return spec("highest-half","Самый результативный тайм","goals")
+            "winfrombehind" -> return spec("win-from-behind","Победа с отыгрышем","main")
+            "winningmargin" -> return spec("winning-margin","Победа с разницей","main")
+        }
+        val stats=when(sport) {
+            "football" -> mapOf("corners" to "угловых","bookings" to "карточек","red-cards" to "красных карточек","yellow-cards" to "жёлтых карточек","shots" to "ударов","shotsongoal" to "ударов в створ")
+            "tennis" -> mapOf("games" to "геймов","points" to "очков","aces" to "эйсов","tiebreaks" to "тай-брейков","doublefaults" to "двойных ошибок","breaks" to "брейков")
+            "table-tennis","volleyball" -> mapOf("points" to "очков")
+            "esports" -> mapOf("kills" to "убийств","rounds" to "раундов","roshans" to "Рошанов","towers" to "башен","turrets" to "вышек","barons" to "Баронов","dragons" to "драконов","inhibitors" to "ингибиторов","headshots" to "попаданий в голову")
+            else -> emptyMap()
+        }
+        for((stat,noun) in stats) {
+            val category=when { sport=="football" && stat=="corners" -> "corners";sport=="football" && stat in setOf("bookings","red-cards","yellow-cards") -> "cards";sport=="esports" && stat=="rounds" -> "rounds";sport=="esports" -> "kills";stat=="aces" -> "aces";stat=="tiebreaks" -> "tiebreaks";else -> "totals" }
+            if(type=="totals-$stat")return spec("totals-$stat","Тотал $noun",category)
+            if(type=="spreads-$stat")return spec("handicap-$stat","Фора по ${mapOf("games" to "геймам","points" to "очкам","aces" to "эйсам","tiebreaks" to "тай-брейкам","doublefaults" to "двойным ошибкам","breaks" to "брейкам","corners" to "угловым","bookings" to "карточкам","kills" to "убийствам","rounds" to "раундам")[stat] ?: noun}",if(sport=="esports" || sport=="football")category else "handicaps")
+            if(type=="oddeven-$stat")return spec("odd-even-$stat","Чёт / нечёт $noun",category)
+            if(type=="1x2-$stat")return spec("result-$stat","1X2 по $noun",category)
+            for(team in 1..2) if(type=="teamtotals-$stat-team$team")return spec("team-totals-$stat","Тотал $noun команды $team",category,"team:$team")
+        }
+        for(team in 1..2) {
+            if(type=="teamtotals-team$team")return spec("team-totals","Индивидуальный тотал $team","totals","team:$team")
+            if(sport=="football") when(type) {
+                "exactscore-team$team" -> return spec("team-exact-score","Точное число голов команды $team","goals","team:$team")
+                "wintonil-team$team" -> return spec("win-nil","Команда $team победит всухую","goals","team:$team")
+                "cleansheet-team$team" -> return spec("clean-sheet","Команда $team не пропустит","goals","team:$team")
+                "toscoreinbh-team$team" -> return spec("score-both","Команда $team забьёт в обоих таймах","goals","team:$team")
+                "wineitherh-team$team" -> return spec("win-either","Команда $team выиграет хотя бы один тайм","main","team:$team")
+                "winbothh-team$team" -> return spec("win-both","Команда $team выиграет оба тайма","main","team:$team")
+                "highestscoringh-team$team" -> return spec("team-highest-half","Самый результативный тайм команды $team","goals","team:$team")
+                "oddeven-team$team" -> return spec("team-odd-even","Чёт / нечёт команды $team","goals","team:$team")
+            }
+        }
+        if(sport=="esports") when(type) {
+            "firstblood" -> return spec(type,"Первая кровь","kills")
+            "firsttower" -> return spec(type,"Первая башня","kills")
+            "firstbarracks" -> return spec(type,"Первые казармы","kills")
+            "firstroshan" -> return spec(type,"Первый Рошан","kills")
+            "firstbaron" -> return spec(type,"Первый Барон","kills")
+        }
+        // Race-to and player markets need an explicit target or participant identity.
+        return null
+    }
     private val dictionaries by lazy {
         listOf("football", "basketball", "tennis", "table-tennis", "volleyball", "hockey", "esports").associateWith(::definitions)
     }
@@ -159,9 +234,13 @@ internal object SportMarketStructure {
         // https://oddspapi.io/blog/tennis-odds-api-live-atp-wta/
         val exactSets = (sport == "volleyball" && group.externalMarketId in setOf("2313", "2315", "2317")) ||
             (sport == "tennis" && group.externalMarketId == "12231")
-        val definition = if(exactSets && group.externalPeriodId == "result") Definition("total-sets", "Тотал сетов", "sets")
-            else dictionaries[sport]?.get(normalized)
-            ?: return MarketPresentation("other", "Неизвестный рынок · ${base.ifBlank { group.externalMarketId.orEmpty() }}", "other", "${group.externalMarketId}:$base")
+        val named=dictionaries[sport]?.get(normalized)
+        val typed=wireDefinition(sport,group.marketFamily.orEmpty())
+        val generic=normalized in setOf("тотал","азиатская фора","победитель","точный счёт","исход","1x2")
+        val definition=if(exactSets && group.externalPeriodId=="result") Definition("total-sets","Тотал сетов","sets")
+            else (if(generic)typed?:named else named?:typed)
+                ?: return MarketPresentation("other","Неизвестный рынок · ${base.ifBlank { group.externalMarketId.orEmpty() }}","other","${group.externalMarketId}:$base")
+
         val scope = if(sport == "hockey" && definition.family in setOf("result", "winner")) {
             if(group.externalPeriodId == "result") Definition("winner-ot", "Победитель с учётом ОТ и буллитов", "main")
             else if(group.externalPeriodId == "fulltime") Definition("regulation-result", "1X2 в основное время", "main")
@@ -190,6 +269,12 @@ internal object SportMarketStructure {
     }
 
     fun periodLabel(sport: String, period: String?): String? {
+        if(sport=="basketball") when(period) {
+            "p1+p2" -> return "1-я половина";"p3+p4" -> return "2-я половина"
+            "p3+p4+overtime" -> return "2-я половина с ОТ";"p4+overtime" -> return "4-я четверть с ОТ"
+            "result" -> return "Матч с ОТ";"fulltime" -> return "Основное время"
+        }
+        if(period=="overtime") return "Дополнительное время"
         if(sport == "hockey" && period == "result") return "С ОТ и буллитами"
         if(sport == "hockey" && period == "fulltime") return "Основное время"
         if(period.isNullOrBlank() || period in setOf("fulltime","result","ft","match")) return null
@@ -233,10 +318,12 @@ internal fun FootballFixture.withOddsPapiMarkets(
             val at=out.updatedAt?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
             val age=at?.let { observation.epoch-it }
             val until=if(!checkAge)observation.elapsed+limit else age?.takeIf { it in -1_000 until limit }?.let { observation.elapsed+limit-it.coerceAtLeast(0) }
-            val valid=state==FootballPriceState.Open && dto.status !in setOf("suspended","closed") && out.active!=false && !out.suspended && selection!=null && until!=null
+            val player=selection?.substringAfterLast(':')?.takeIf { it!="0" }
+            val playerIdentified=player==null || !out.playerName.isNullOrBlank()
+            val valid=playerIdentified && state==FootballPriceState.Open && dto.status !in setOf("suspended","closed") && out.active!=false && !out.suspended && selection!=null && until!=null
             val value=out.odds?.content?.toBigDecimalOrNull()?.takeIf { it>BigDecimal.ONE && valid }
             MarketOutcome(eventId=match.eventId,marketId=marketId,marketKey=spec.family,line=line,
-                outcomeId=selection?.split(':')?.getOrNull(2),label=out.label,odds=value?.stripTrailingZeros()?.let { it.setScale(maxOf(2,it.scale())).toPlainString() },
+                outcomeId=selection?.split(':')?.getOrNull(2),label=if(player==null)out.label else out.playerName?.takeIf { it.isNotBlank() }?.let { "$it · ${out.label}" } ?: "Имя игрока недоступно",odds=value?.stripTrailingZeros()?.let { it.setScale(maxOf(2,it.scale())).toPlainString() },
                 locked=true,observedUntil=until,bookmakerId=bookmaker,periodId=period,sourceSelectionId=selection,provider="oddspapi-v5",updatedAt=out.updatedAt,sourceStatus=dto.status)
         }.filter { it.label.isNotBlank() }
         if(outcomes.isEmpty())null else SourceLine(dto,spec,line,outcomes)
