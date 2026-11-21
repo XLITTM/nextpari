@@ -226,7 +226,7 @@ private fun OutcomeButton(
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(outcome.key, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1)
-        if (outcome.locked || outcome.odds.isNullOrBlank()) {
+        if (outcome.odds.isNullOrBlank()) {
             Icon(NextpariWebIcons.Lock, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(14.dp))
         } else {
             Text(outcome.odds, color = oddsColor, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, maxLines = 1)
