@@ -73,6 +73,8 @@ fun ChampionshipsScreen(
     androidx.compose.runtime.LaunchedEffect(Unit) { com.nextpari.app.core.AppGraph.sportsFavorites.load() }
     var actionNotice by rememberSaveable { mutableStateOf("") }
     val favorites = storedFavorites.leagueIds
+    val topLeagues=CompetitionOrder.top(groups)
+    val favoriteLeagues=groups.flatMap { it.leagues }.filter { it.id in favorites }
     val sportName = SportsListCatalog.sportName(sport)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF3F4F6))) {
@@ -128,6 +130,12 @@ fun ChampionshipsScreen(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             else -> LazyColumn(Modifier.fillMaxSize().background(if (dark) Color(0xFF1E293B) else Color.White)) {
+                if(topLeagues.isNotEmpty()) item {
+                    CompetitionSection("Топ-турниры",topLeagues,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
+                }
+                if(favoriteLeagues.isNotEmpty()) item {
+                    CompetitionSection("Избранные турниры",favoriteLeagues,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
+                }
                 items(groups, key = { it.country.ifEmpty { it.leagues.firstOrNull()?.name.orEmpty() } }) { group ->
                     CountryAccordion(
                         group = group,
@@ -137,13 +145,30 @@ fun ChampionshipsScreen(
                         onToggle = { expanded = if (expanded == group.country) "" else group.country },
                         onLeague = { league ->
                             viewModel.rememberMode(tab)
-                            onNavigate(Destinations.league(LeagueIds.toLeagueId(league.country, league.name)))
+                            onNavigate(Destinations.league(league.id))
                         },
                         onFavorite = { name ->
                             favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleLeague(name) }
                         },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompetitionSection(title: String,leagues: List<LeagueRow>,dark: Boolean,onLeague: (LeagueRow)->Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp)) {
+        Text(title,color=if(dark)Color(0xFFE5E7EB) else Color(0xFF1F2937),fontSize=14.sp,fontWeight=FontWeight.SemiBold)
+        leagues.forEach { league ->
+            Row(Modifier.fillMaxWidth().clickable { onLeague(league) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
+                CompetitionArtwork(league.badge?.url,league.badgeRes,league.country,Modifier.size(20.dp)) {
+                    Icon(NextpariWebIcons.Trophy,null,tint=Color(0xFF9CA3AF),modifier=Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(league.name,color=if(dark)Color(0xFFD1D5DB) else Color(0xFF374151),fontSize=14.sp,modifier=Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis)
+                CountPill(league.count)
             }
         }
     }
@@ -216,13 +241,13 @@ private fun CountryAccordion(
                         CountPill(league.count)
                         Spacer(Modifier.width(12.dp))
                         Box(
-                            Modifier.size(32.dp).clickable { onFavorite(league.name) },
+                            Modifier.size(32.dp).clickable { onFavorite(league.id) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (league.name in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
+                                if (league.id in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
                                 contentDescription = "Добавить чемпионат в избранное",
-                                tint = if (league.name in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
+                                tint = if (league.id in favorites) Color(0xFF16A34A) else Color(0xFF9CA3AF),
                                 modifier = Modifier.size(20.dp),
                             )
                         }
