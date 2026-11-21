@@ -5,13 +5,14 @@ import { approvedFootballLogo } from '../lib/sportsRegion';
 interface TeamLogoProps {
   teamName: string;
   logo?: string | null;
-  size?: 'xs' | 'sm' | 'md' | 'lg';
+  size?: 'xs' | 'sm' | 'card' | 'md' | 'lg';
   className?: string;
 }
 
 const sizeMap = {
   xs: 'w-5 h-5 p-0.5',
   sm: 'w-6 h-6 p-0.5',
+  card: 'h-8 w-8',
   md: 'w-10 h-10 p-1',
   lg: 'w-14 h-14 p-2',
 };

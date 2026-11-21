@@ -21,6 +21,7 @@ interface MatchCardProps {
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
   onVisible?: (matchId: string) => void;
+  showLeague?: boolean;
 }
 
 function formatCardMinute(status?: string): string {
@@ -33,7 +34,7 @@ function formatCardMinute(status?: string): string {
   return cleaned;
 }
 
-export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, onToggleFavorite, onVisible }: MatchCardProps) {
+export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, onToggleFavorite, onVisible, showLeague = true }: MatchCardProps) {
   const { isSelectionActive } = useBetSlip();
   const [scoreHighlight, setScoreHighlight] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -89,12 +90,12 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
   return (
     <div
       ref={rootRef}
-      className={`flex h-[144px] flex-col bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden active:scale-[0.99] transition-transform cursor-pointer ${
+      className={`relative flex h-[144px] flex-col bg-gray-50 dark:bg-[#1e293b] rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden active:scale-[0.99] transition-transform cursor-pointer ${
         carousel ? 'w-[85%] shrink-0' : 'w-full'
       }`}
       onClick={() => onOpenMatch(match.id)}
     >
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
+      {showLeague ? <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-200 min-w-0">
           {match.competitionLogo ? <TeamLogo teamName={match.league} logo={match.competitionLogo} /> :
             <SportIcon sport={match.sport} className="w-6 h-6 text-[#4ade80] shrink-0" />}
@@ -117,14 +118,26 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
             />
           </button>
         </div>
-      </div>
+      </div> : (
+        <button
+          type="button"
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center text-gray-700 dark:text-gray-200"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFavorite?.();
+          }}
+          aria-label={isFavorite ? 'Убрать из избранного' : 'Добавить в избранное'}
+        >
+          <Star className={`h-4 w-4 ${isFavorite ? 'fill-green-500 text-green-500' : ''}`} strokeWidth={2.2} />
+        </button>
+      )}
 
       <div className="min-h-0 flex-1 px-3 py-1.5">
         <div className="flex items-center gap-3">
           <div className="flex-1 min-w-0 text-right">
             <div className="flex items-center justify-end gap-2">
               <span className="text-sm font-extrabold text-gray-900 dark:text-white truncate">{match.team1}</span>
-              <TeamLogo teamName={match.team1} logo={match.team1Logo} size="sm" />
+              <TeamLogo teamName={match.team1} logo={match.team1Logo} size="card" />
             </div>
           </div>
 
@@ -145,7 +158,7 @@ export function MatchCard({ match, onOpenMatch, carousel, isFavorite = false, on
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <TeamLogo teamName={match.team2} logo={match.team2Logo} size="sm" />
+              <TeamLogo teamName={match.team2} logo={match.team2Logo} size="card" />
               <span className="text-sm font-extrabold text-gray-900 dark:text-white truncate">{match.team2}</span>
             </div>
           </div>

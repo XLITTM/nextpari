@@ -138,7 +138,7 @@ function MatchGroup({
       {sportName ? <p className="px-1 pt-2 text-xs font-bold uppercase text-gray-500">{sportName}</p> : null}
       {countryName ? <p className="px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">{countryName}</p> : null}
       {leagueName ? <p className="px-1 text-xs font-semibold text-gray-600 dark:text-gray-300">{leagueName}</p> : null}
-      <MatchCard match={match} onOpenMatch={onOpenMatch} isFavorite={favorite} onToggleFavorite={onToggleFavorite} onVisible={onVisible} />
+      <MatchCard match={match} onOpenMatch={onOpenMatch} isFavorite={favorite} onToggleFavorite={onToggleFavorite} onVisible={onVisible} showLeague={false} />
     </div>
   );
 }

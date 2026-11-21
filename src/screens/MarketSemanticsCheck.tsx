@@ -1,55 +1,94 @@
+import { useEffect, useState } from 'react';
+import { MatchCard } from '@/components/MatchCard';
 import { OddsPapiMarketBoard } from '@/components/OddsPapiMarketBoard';
-import type { MarketGroup, MatchEvent } from '@/types';
-
-const groups: MarketGroup[] = [
-  market('Исход', '1x2', '101', 'fulltime', [['П1', 1.28, '101'], ['X', 5.2, '102'], ['П2', 8.1, '103']]),
-  market('Двойной шанс', 'doublechance', '121', 'fulltime', [['1X', 1.12, '121'], ['12', 1.4, '122'], ['X2', 2.1, '123']]),
-  market('Тотал · 2.5', 'totals', '106', 'fulltime', [['Больше', 1.83, '106'], ['Меньше', 1.97, '107']]),
-  market('Тотал · 3.5', 'totals', '108', 'fulltime', [['Больше', 2.1, '108'], ['Меньше', 1.7, '109']]),
-  market('Азиатская фора · -1.5', 'spreads', '201', 'fulltime', [['П1', 1.9, '201'], ['П2', 1.9, '202']]),
-  market('Европейская фора · -1', 'spreads-european', '211', 'fulltime', [['П1', 2.4, '211'], ['X', 3.3, '212'], ['П2', 2.6, '213']]),
-  market('Тотал команды 1 · 1.5', 'teamtotals-team1', '301', 'fulltime', [['Больше', 1.6, '301'], ['Меньше', 2.2, '302']]),
-  market('Тотал команды 2 · 0.5', 'teamtotals-team2', '311', 'fulltime', [['Больше', 2.2, '311'], ['Меньше', 1.6, '312']]),
-  market('Точный счёт', 'correctscore', '401', 'fulltime', [['1:0', 6.5, '401'], ['2:1', 8, '402']]),
-  market('Точное число голов', 'exactscore', '501', 'fulltime', [['1', 4.2, '501'], ['2', 3.4, '502']]),
-  market('Угловые: исход', '1x2-corners', '701', 'fulltime', [['П1', 1.7, '701'], ['X', 3.4, '702'], ['П2', 4.1, '703']]),
-  market('Угловые: тотал · 9.5', 'totals-corners', '801', 'fulltime', [['Больше', 1.8, '801'], ['Меньше', 1.9, '802']]),
-  market('Тотал · 0.5', 'totals', '901', 'p1', [['Больше', 1.4, '901'], ['Меньше', 2.7, '902']]),
-];
-
-function market(name: string, marketFamily: string, externalMarketId: string, period: string, rows: Array<[string, number, string]>): MarketGroup {
-  return {
-    id: externalMarketId,
-    name,
-    marketFamily,
-    externalMarketId,
-    externalPeriodId: period,
-    outcomes: rows.map(([label, odds, outcomeId]) => ({
-      label,
-      odds,
-      locked: true,
-      outcomeId,
-      sourceSelectionId: `id1000001772221406:1xbet:${outcomeId}:0`,
-    })),
-  };
-}
+import { footballCardToMatch, type FootballFeedCard } from '@/lib/footballFeed';
+import type { MatchEvent } from '@/types';
 
 export function MarketSemanticsCheck() {
-  const match = {
-    id: 'oddspapi-v5:id1000001772221406',
-    sport: 'football',
-    team1: 'Manchester City',
-    team2: 'Fulham FC',
-    league: 'Premier League',
-    marketGroups: groups,
+  const [live, setLive] = useState<MatchEvent | null>(null);
+  const [prematch, setPrematch] = useState<MatchEvent | null>(null);
+  const [cards, setCards] = useState<MatchEvent[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const listed = await fetch('/api/player/sports/football-feed?includeSports=1').then((response) => response.json()) as {
+        events?: FootballFeedCard[];
+      };
+      const football = (listed.events ?? []).filter((event) => event.sport === 'football');
+      const liveCard = football.find((event) => event.live);
+      const lineCard = football.find((event) => !event.live);
+      const wanted = ['ssc napoli', 'lille osc', 'olympique lyon', 'strasbourg alsace', 'stade brest 29', 'rc celta de vigo', 'real madrid', 'torino fc', 'racing club de lens', 'toulouse fc', 'as monaco', 'aj auxerre', 'juventus turin', 'venezia fc', 'angers sco', 'lazio rome'];
+      const seen = new Set<string>();
+      const named = football.filter((event) => {
+        const names = `${event.home} ${event.away}`.toLowerCase();
+        const hit = wanted.find((name) => names.includes(name));
+        if (!hit || seen.has(hit)) return false;
+        seen.add(hit);
+        return true;
+      });
+      const ligue = named.length > 0
+        ? named
+        : football.filter((event) => event.league === 'Ligue 1' && /france/i.test(event.country)).slice(0, 3);
+      const [liveDetail, lineDetail] = await Promise.all([
+        liveCard ? detail(liveCard.id) : Promise.resolve(null),
+        lineCard ? detail(lineCard.id) : Promise.resolve(null),
+      ]);
+      if (cancelled) return;
+      setLive(liveDetail ? footballCardToMatch(liveDetail) : null);
+      setPrematch(lineDetail ? footballCardToMatch(lineDetail) : null);
+      setCards(ligue.map((card) => footballCardToMatch(card)));
+    }
+    load().catch((reason: unknown) => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить матчи');
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  const fallback = {
+    ...cards[0],
+    id: 'logo-fallback',
+    team1: 'Unlisted Village FC',
+    team2: 'Reserve Town Women',
+    team1Logo: undefined,
+    team2Logo: undefined,
+    league: 'Ligue 1',
   } as MatchEvent;
+
   return (
-    <div className="mx-auto min-h-screen max-w-[720px] bg-[#f0f2f5] dark:bg-gray-900">
-      <header className="px-4 py-3">
-        <p className="text-xs font-semibold text-gray-500">Premier League</p>
-        <h1 className="text-lg font-bold text-[#1A1A1A] dark:text-white">Manchester City — Fulham FC</h1>
-      </header>
-      <OddsPapiMarketBoard match={match} />
+    <div className="min-h-screen bg-[#f0f2f5] dark:bg-gray-900">
+      <section className="mx-auto max-w-3xl space-y-2 px-3 py-4">
+        <h1 className="text-base font-bold text-[#1A1A1A]">Проверка рынков и значков</h1>
+        {error ? <p className="text-sm text-red-600">{error}</p> : null}
+        <p className="px-1 text-xs font-semibold text-gray-600">Значки команд</p>
+        {cards.map((match) => (
+          <MatchCard key={match.id} match={match} onOpenMatch={() => undefined} />
+        ))}
+        <p className="px-1 pt-3 text-xs font-semibold text-gray-600">Карточка без значка</p>
+        {cards[0] ? <MatchCard match={fallback} onOpenMatch={() => undefined} showLeague /> : null}
+      </section>
+      {live ? <Board title="LIVE" match={live} /> : <p className="px-4 text-sm">LIVE загружается…</p>}
+      {prematch ? <Board title="Линия" match={prematch} /> : <p className="px-4 text-sm">Линия загружается…</p>}
     </div>
   );
+}
+
+function Board({ title, match }: { title: string; match: MatchEvent }) {
+  return (
+    <section className="mx-auto max-w-[430px] border-t border-gray-200 bg-white">
+      <header className="px-4 py-3">
+        <p className="text-xs font-semibold text-gray-500">{title} · {match.league}</p>
+        <h2 className="text-lg font-bold text-[#1A1A1A]">{match.team1} — {match.team2}</h2>
+      </header>
+      <OddsPapiMarketBoard match={match} />
+    </section>
+  );
+}
+
+async function detail(id: string): Promise<FootballFeedCard | null> {
+  const body = await fetch('/api/player/sports/football-feed?eventId=' + encodeURIComponent(id)).then((response) => response.json()) as {
+    events?: FootballFeedCard[];
+  };
+  return body.events?.[0] ?? null;
 }

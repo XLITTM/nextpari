@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { isQuarterLine, placeFootballMarket } from './marketTaxonomy.js';
-import { layoutLinesFromGroups, marketAccordions, marketTabs, type LayoutLine } from './marketLayout.js';
+import { handicapSides, layoutLinesFromGroups, marketAccordions, marketTabs, type LayoutLine } from './marketLayout.js';
 import type { MarketGroup } from '../types.js';
 
 function placed(marketType: string, handicap: number | null, period = 'fulltime') {
@@ -105,10 +105,9 @@ test('match detail sections split quarter lines and keep every selection', () =>
   lines[13]!.title = 'Total';
   lines[14]!.title = 'Total';
   const tabs = marketTabs(lines, 'football').map((tab) => tab.label);
-  assert.deepEqual(tabs, [
-    'Все', 'Тоталы', 'Азиатские тоталы', 'Европейская фора', 'Азиатская фора',
-    'Угловые', 'Карточки', 'Тоталы команд', 'Таймы', 'Другие',
-  ]);
+  assert.deepEqual(tabs, ['Основная игра', '1-й тайм', 'Угловые', 'Жёлтые карточки']);
+  assert.equal(tabs.includes('Азиатские тоталы'), false);
+  assert.equal(tabs.includes('Европейская фора'), false);
   const all = marketAccordions(lines, 'all', '', 'football');
   const shown = all.flatMap((accordion) => accordion.lines);
   assert.equal(shown.length, lines.length);
@@ -118,21 +117,28 @@ test('match detail sections split quarter lines and keep every selection', () =>
   );
   assert.ok(shown.every((item, index) => item.outcomes[0]?.odds === lines.find((source) => source.id === item.id)?.outcomes[0]?.odds));
   assert.ok(shown.every((item) => item.outcomes[0]?.externalPeriodId === item.periodId));
-  const totals = marketAccordions(lines, 'totals', '', 'football');
-  assert.deepEqual(totals.flatMap((accordion) => accordion.lines.map((item) => item.line)).sort(), ['2.5', '2.5']);
-  const asianTotals = marketAccordions(lines, 'asian-totals', '', 'football');
-  assert.deepEqual(asianTotals.flatMap((accordion) => accordion.lines.map((item) => item.line)).sort(), ['2.25', '2.75']);
-  assert.equal(marketAccordions(lines, 'asian-handicap', '', 'football').flatMap((accordion) => accordion.lines).length, 3);
-  assert.equal(marketAccordions(lines, 'european-handicap', '', 'football')[0]?.lines[0]?.outcomes[0]?.externalMarketId, '1090');
+  const main = marketAccordions(lines, 'main', '', 'football');
+  const mainTitles = main.map((accordion) => accordion.title);
+  assert.deepEqual(main.find((accordion) => accordion.title === 'Тотал')?.lines.map((item) => item.line), ['2.5', '2.5']);
+  assert.deepEqual(main.find((accordion) => accordion.title === 'Азиатский тотал')?.lines.map((item) => item.line), ['2.25', '2.75']);
+  assert.deepEqual(main.find((accordion) => accordion.title === 'Фора')?.lines.map((item) => item.line), ['-1']);
+  assert.deepEqual(main.find((accordion) => accordion.title === 'Азиатская фора')?.lines.map((item) => item.line), ['-0.25', '0.75']);
+  assert.equal(main.find((accordion) => accordion.title === 'Европейский гандикап')?.table, 'handicap3');
+  assert.equal(main.find((accordion) => accordion.title === 'Европейский гандикап')?.lines[0]?.outcomes[0]?.externalMarketId, '1090');
+  assert.equal(main.find((accordion) => accordion.title === 'Азиатский индивидуальный тотал 1-го')?.lines[0]?.line, '1.25');
+  assert.deepEqual(mainTitles.filter((title) => ['Тотал', 'Азиатский тотал', 'Фора', 'Азиатская фора', 'Европейский гандикап'].includes(title)), [
+    'Тотал', 'Фора', 'Азиатский тотал', 'Азиатская фора', 'Европейский гандикап',
+  ]);
   const corners = marketAccordions(lines, 'corners', '', 'football');
   assert.equal(corners.flatMap((accordion) => accordion.lines).length, 4);
   assert.equal(corners.length, 3);
-  assert.equal(corners.filter((accordion) => accordion.id.startsWith('corners-asian:')).length, 2);
+  assert.equal(corners.filter((accordion) => accordion.title.startsWith('Угловые: азиат')).length, 2);
   assert.equal(marketAccordions(lines, 'cards', '', 'football')[0]?.lines[0]?.line, '4.5');
-  const half = all.find((accordion) => accordion.periodId === 'p1' && accordion.title.startsWith('Азиатский тотал'));
+  const half = marketAccordions(lines, 'p1', '', 'football').find((accordion) => accordion.title === 'Азиатский тотал');
   assert.equal(half?.lines[0]?.outcomes[0]?.externalMarketId, '201');
   assert.equal(half?.lines[0]?.outcomes[0]?.externalPeriodId, 'p1');
-  assert.equal(marketAccordions(lines, 'team-totals', '', 'football')[0]?.title, 'Азиатский тотал команды 1');
+  assert.equal(half?.periodId, 'p1');
+  assert.notEqual(half?.id, main.find((accordion) => accordion.title === 'Азиатский тотал')?.id);
   const sameName = all.filter((accordion) => accordion.lines.some((item) => item.title === 'Total'));
   assert.equal(sameName.length, 2);
   assert.notEqual(sameName[0]?.id, sameName[1]?.id);
@@ -171,6 +177,13 @@ test('groups built from provider rows keep the numeric line and the market id', 
   assert.deepEqual(accordions.map((accordion) => accordion.lines[0]?.line), ['2.5', '2.25']);
   assert.deepEqual(accordions.map((accordion) => accordion.lines[0]?.outcomes[0]?.odds), [1.87, 1.95]);
   assert.deepEqual(accordions.map((accordion) => accordion.lines[0]?.outcomes[0]?.externalMarketId), ['1010', '1012']);
+});
+
+test('two-way handicaps keep the provider sign on the home side', () => {
+  assert.deepEqual(handicapSides('-0.25', [{ label: 'П1' }, { label: 'П2' }]), { home: '-0.25', away: '+0.25' });
+  assert.deepEqual(handicapSides('0.75', [{ label: 'П1' }, { label: 'П2' }]), { home: '+0.75', away: '-0.75' });
+  assert.deepEqual(handicapSides('-1', [{ label: 'П1' }, { label: 'П2' }]), { home: '-1', away: '+1' });
+  assert.equal(handicapSides('-1', [{ label: 'П1' }, { label: 'X' }, { label: 'П2' }]), null);
 });
 
 test('other sports do not receive the football handicap tabs', () => {

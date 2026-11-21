@@ -51,6 +51,15 @@ export default defineConfig(({ mode }) => {
       host: '127.0.0.1',
       port: 5173,
       strictPort: true,
+      watch: {
+        ignored: ['**/.tmp-deploy/**', '**/android/**'],
+      },
+      proxy: {
+        '/api/player/sports': {
+          target: 'https://nextpari.net',
+          changeOrigin: true,
+        },
+      },
     },
     preview: {
       host: '127.0.0.1',

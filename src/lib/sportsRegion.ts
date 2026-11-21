@@ -1,3 +1,5 @@
+import { footballLogoPath } from './footballLogos';
+
 type RegionNames = { of(code: string): string | undefined };
 const DisplayNames = (Intl as typeof Intl & {
   DisplayNames?: new (locales: string[], options: { type: 'region'; fallback: 'none' }) => RegionNames;
@@ -26,14 +28,14 @@ export function sportsRegion(raw: string): string {
   return `${flag} ${label}`;
 }
 
-export function verifiedPublishedLogo(kind: 'team' | 'competition', name: string, country = ''): string | null {
-  const label = name.trim();
-  if (kind === 'team' && label === 'Manchester City') return '/images/sports/football/manchester-city.png';
-  if (kind === 'team' && label === 'Arsenal') return '/images/sports/football/arsenal.png';
-  if (kind === 'competition' && label === 'Premier League' && country.trim().toLowerCase() === 'england') {
-    return '/images/sports/football/premier-league.png';
-  }
-  return null;
+export function verifiedPublishedLogo(
+  kind: 'team' | 'competition',
+  name: string,
+  country = '',
+  league = '',
+  canonicalId = '',
+): string | null {
+  return footballLogoPath(kind, name, country, kind === 'competition' ? name : league, canonicalId);
 }
 
 export function approvedFootballLogo(path: string | null | undefined): string | null {

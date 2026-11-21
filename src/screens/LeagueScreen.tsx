@@ -63,6 +63,7 @@ export function LeagueScreen({
               isFavorite={favorites.includes(match.id)}
               onToggleFavorite={() => onToggleFavorite(match.id)}
               onVisible={onVisible}
+              showLeague={false}
             />
           ))
         )}

@@ -1,20 +1,24 @@
 import { useMemo, useState } from 'react';
 import { ChevronDown, List, Pin, Search } from 'lucide-react';
-import { layoutLinesFromGroups, marketAccordions, marketTabs } from '@/lib/marketLayout';
+import { handicapSides, layoutLinesFromGroups, marketAccordions, marketTabs, type LayoutLine, type LayoutOutcome, type MarketAccordion, type MarketTable } from '@/lib/marketLayout';
 import type { MatchEvent } from '@/types';
 
-export function OddsPapiMarketBoard({ match }: { match: MatchEvent }) {
+export function OddsPapiMarketBoard({ match, startOpen = false }: { match: MatchEvent; startOpen?: boolean }) {
   const lines = useMemo(
     () => layoutLinesFromGroups(match.marketGroups ?? [], match.sport),
     [match.marketGroups, match.sport],
   );
   const tabs = marketTabs(lines, match.sport);
   const [mode, setMode] = useState<'all' | 'players' | 'popular'>('all');
-  const [tab, setTab] = useState('all');
+  const [tab, setTab] = useState('main');
   const [query, setQuery] = useState('');
   const [sheet, setSheet] = useState(false);
   const [pinned, setPinned] = useState<string[]>([]);
-  const activeTab = mode === 'players' ? 'players' : mode === 'popular' ? 'popular' : (tabs.some((item) => item.id === tab) ? tab : tabs[0]?.id ?? 'main');
+  const activeTab = mode === 'players'
+    ? 'players'
+    : mode === 'popular'
+      ? 'popular'
+      : (tabs.some((item) => item.id === tab) ? tab : tabs[0]?.id ?? 'main');
   const accordions = marketAccordions(lines, activeTab, query, match.sport)
     .sort((left, right) => Number(pinned.includes(right.id)) - Number(pinned.includes(left.id)));
 
@@ -64,8 +68,8 @@ export function OddsPapiMarketBoard({ match }: { match: MatchEvent }) {
         </div>
       )}
       {accordions.map((accordion) => (
-        <details key={accordion.id} open={pinned.includes(accordion.id) || accordion === accordions[0]} className="rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
-          <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-semibold text-[#1A1A1A] dark:text-white">
+        <details key={accordion.id} {...(pinned.includes(accordion.id) || startOpen ? { open: true } : {})} className="group rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
+          <summary className="flex cursor-pointer list-none items-center gap-2 border-b border-transparent px-3 py-2 text-sm font-semibold text-[#1A1A1A] group-open:border-gray-100 dark:text-white dark:group-open:border-gray-700">
             <span className="min-w-0 flex-1 truncate">{accordion.title}</span>
             <span className="text-xs font-medium text-gray-500">{accordion.lines.reduce((sum, line) => sum + line.outcomes.length, 0)}</span>
             <button
@@ -80,26 +84,10 @@ export function OddsPapiMarketBoard({ match }: { match: MatchEvent }) {
             >
               <Pin className={`h-3.5 w-3.5 ${pinned.includes(accordion.id) ? 'fill-[#22C55E] text-[#22C55E]' : ''}`} />
             </button>
-            <ChevronDown className="h-4 w-4 text-gray-400" />
+            <ChevronDown className="h-4 w-4 text-gray-400 transition-transform group-open:rotate-180" />
           </summary>
-          <div className="space-y-2 px-2 pb-2">
-            {accordion.lines.map((line) => (
-              <div key={line.id} className="grid grid-cols-[4.5rem_1fr] items-center gap-1.5" data-market-id={line.outcomes[0]?.externalMarketId ?? ''} data-period-id={line.periodId ?? ''}>
-                <span className="text-xs font-semibold text-gray-500">{line.line || line.title}</span>
-                <div className={`grid gap-1.5 ${line.outcomes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                  {line.outcomes.map((outcome) => (
-                    <div
-                      key={`${line.id}-${outcome.sourceSelectionId ?? outcome.label}`}
-                      data-selection-id={outcome.sourceSelectionId ?? ''}
-                      className="flex justify-between rounded-lg border border-gray-200 p-2 text-xs dark:border-gray-600 dark:text-white"
-                    >
-                      <span>{outcome.label}</span>
-                      <strong>{outcome.odds > 1 ? outcome.odds : '—'}</strong>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
+          <div className="px-2 py-2" data-table={accordion.table}>
+            <MarketTableView accordion={accordion} />
           </div>
         </details>
       ))}
@@ -122,6 +110,163 @@ export function OddsPapiMarketBoard({ match }: { match: MatchEvent }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function priceText(odds: number): string {
+  return odds > 1 ? String(odds) : '—';
+}
+
+function MarketTableView({ accordion }: { accordion: MarketAccordion }) {
+  const table = resolvedTable(accordion);
+  if (table === 'total') return <TotalTable lines={accordion.lines} />;
+  if (table === 'handicap2') return <HandicapTable lines={accordion.lines} />;
+  if (table === 'handicap3') return <EuropeanTable lines={accordion.lines} />;
+  if (table === 'grid') return <SelectionGrid lines={accordion.lines} />;
+  if (table === 'yesno' || table === 'outcomes') return <OutcomeRow lines={accordion.lines} />;
+  return <LegacyRows lines={accordion.lines} />;
+}
+
+function resolvedTable(accordion: MarketAccordion): MarketTable {
+  if (accordion.table === 'handicap3' && accordion.lines.every((line) => line.outcomes.length <= 3 && line.outcomes.every((outcome) => ['П1', 'X', 'П2'].includes(outcome.label)))) return 'handicap3';
+  if (accordion.table === 'handicap2' && accordion.lines.every((line) => handicapSides(line.line, line.outcomes))) return 'handicap2';
+  if (accordion.table === 'total' && accordion.lines.every((line) => line.outcomes.every((outcome) => outcome.label === 'Больше' || outcome.label === 'Меньше'))) return 'total';
+  if (accordion.table === 'rows') return 'rows';
+  if (accordion.table === 'grid') return 'grid';
+  if (accordion.table === 'yesno') return 'yesno';
+  return 'outcomes';
+}
+
+function rowAttrs(line: LayoutLine) {
+  return {
+    'data-market-id': line.outcomes[0]?.externalMarketId ?? '',
+    'data-period-id': line.periodId ?? '',
+    'data-line': line.line,
+  };
+}
+
+function Price({ outcome, lineId }: { outcome: LayoutOutcome | null; lineId: string }) {
+  if (!outcome) return <div className="rounded-md bg-gray-100 py-1.5 text-center text-xs text-gray-400 dark:bg-gray-700">—</div>;
+  return (
+    <div data-selection-id={outcome.sourceSelectionId ?? ''} className="rounded-md bg-gray-100 py-1.5 text-center text-xs font-bold tabular-nums text-[#1A1A1A] dark:bg-gray-700 dark:text-white">
+      <span className="sr-only">{lineId}</span>
+      {priceText(outcome.odds)}
+    </div>
+  );
+}
+
+function findOutcome(line: LayoutLine, labels: string[]): LayoutOutcome | null {
+  return line.outcomes.find((outcome) => labels.includes(outcome.label)) ?? null;
+}
+
+function TotalTable({ lines }: { lines: LayoutLine[] }) {
+  return (
+    <div className="space-y-1">
+      <div className="grid grid-cols-[3.25rem_1fr_1fr] gap-1 text-[11px] font-semibold text-gray-500">
+        <span />
+        <span className="text-center">Больше</span>
+        <span className="text-center">Меньше</span>
+      </div>
+      {lines.map((line) => (
+        <div key={line.id} className="grid grid-cols-[3.25rem_1fr_1fr] items-center gap-1" {...rowAttrs(line)}>
+          <span className="text-center text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">{line.line}</span>
+          <Price outcome={findOutcome(line, ['Больше'])} lineId={line.id} />
+          <Price outcome={findOutcome(line, ['Меньше'])} lineId={line.id} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HandicapTable({ lines }: { lines: LayoutLine[] }) {
+  return (
+    <div className="space-y-1">
+      {lines.map((line) => {
+        const sides = handicapSides(line.line, line.outcomes);
+        const home = findOutcome(line, ['П1', '1']);
+        const away = findOutcome(line, ['П2', '2']);
+        return (
+          <div key={line.id} className="grid grid-cols-2 gap-1" {...rowAttrs(line)}>
+            <LabeledPrice label={sides?.home ?? line.line} outcome={home} />
+            <LabeledPrice label={sides?.away ?? ''} outcome={away} />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EuropeanTable({ lines }: { lines: LayoutLine[] }) {
+  return (
+    <div className="space-y-1">
+      <div className="grid grid-cols-[3.25rem_1fr_1fr_1fr] gap-1 text-[11px] font-semibold text-gray-500">
+        <span />
+        <span className="text-center">П1</span>
+        <span className="text-center">X</span>
+        <span className="text-center">П2</span>
+      </div>
+      {lines.map((line) => (
+        <div key={line.id} className="grid grid-cols-[3.25rem_1fr_1fr_1fr] items-center gap-1" {...rowAttrs(line)}>
+          <span className="text-center text-xs font-semibold tabular-nums text-gray-700 dark:text-gray-200">{line.line}</span>
+          <Price outcome={findOutcome(line, ['П1'])} lineId={line.id} />
+          <Price outcome={findOutcome(line, ['X'])} lineId={line.id} />
+          <Price outcome={findOutcome(line, ['П2'])} lineId={line.id} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function OutcomeRow({ lines }: { lines: LayoutLine[] }) {
+  return (
+    <div className="space-y-1">
+      {lines.map((line) => (
+        <div key={line.id} className={`grid gap-1 ${line.outcomes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`} {...rowAttrs(line)}>
+          {line.outcomes.map((outcome) => (
+            <LabeledPrice key={outcome.sourceSelectionId ?? outcome.label} label={outcome.label} outcome={outcome} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SelectionGrid({ lines }: { lines: LayoutLine[] }) {
+  const outcomes = lines.flatMap((line) => line.outcomes.map((outcome) => ({ line, outcome })));
+  return (
+    <div className="grid grid-cols-3 gap-1">
+      {outcomes.map(({ line, outcome }) => (
+        <div key={`${line.id}-${outcome.sourceSelectionId ?? outcome.label}`} data-market-id={outcome.externalMarketId ?? ''} data-period-id={line.periodId ?? ''}>
+          <LabeledPrice label={outcome.label} outcome={outcome} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LabeledPrice({ label, outcome }: { label: string; outcome: LayoutOutcome | null }) {
+  return (
+    <div data-selection-id={outcome?.sourceSelectionId ?? ''} className="flex min-w-0 items-center justify-between gap-1 rounded-md bg-gray-100 px-2 py-1.5 text-xs dark:bg-gray-700 dark:text-white">
+      <span className="truncate font-medium text-gray-600 dark:text-gray-300">{label}</span>
+      <strong className="tabular-nums text-[#1A1A1A] dark:text-white">{outcome ? priceText(outcome.odds) : '—'}</strong>
+    </div>
+  );
+}
+
+function LegacyRows({ lines }: { lines: LayoutLine[] }) {
+  return (
+    <div className="space-y-1">
+      {lines.map((line) => (
+        <div key={line.id} className="grid grid-cols-[4.5rem_1fr] items-center gap-1.5" {...rowAttrs(line)}>
+          <span className="text-xs font-semibold text-gray-500">{line.line || line.title}</span>
+          <div className={`grid gap-1 ${line.outcomes.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            {line.outcomes.map((outcome) => (
+              <LabeledPrice key={outcome.sourceSelectionId ?? outcome.label} label={outcome.label} outcome={outcome} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

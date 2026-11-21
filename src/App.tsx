@@ -324,6 +324,7 @@ function AppContent() {
   }, [replaceScreen]);
 
   useEffect(() => {
+    if (import.meta.env.DEV && window.location.pathname.startsWith('/dev/')) return;
     const existing = readPlayerHistory(window.history.state);
     const initial = screenFromPath();
     const pathLocked = pathForScreen(initial) !== '/' || initial.name !== 'home';
