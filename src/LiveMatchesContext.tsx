@@ -1,7 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   applyFootballQuotes,
+  applyLiveBoard,
   fetchFootballFeed,
+  fetchFootballLiveBoard,
   fetchFootballQuotes,
   mergeListedMatches,
 } from './lib/footballFeed';
@@ -141,17 +143,29 @@ export function LiveMatchesProvider({ children }: { children: ReactNode }) {
     }
   }, [pump]);
 
+  const refreshBoard = useCallback(async () => {
+    if (!latest.current.some((match) => match.isLive)) return;
+    const live = await fetchFootballLiveBoard();
+    if (!live.length) return;
+    latest.current = applyLiveBoard(latest.current, live);
+    setMatches(latest.current);
+  }, []);
+
   useEffect(() => {
     clearEvents();
     void refresh();
-    const timer = window.setInterval(() => {
+    const catalogTimer = window.setInterval(() => {
       void refresh();
     }, 60_000);
+    const boardTimer = window.setInterval(() => {
+      void refreshBoard();
+    }, 15_000);
     return () => {
-      window.clearInterval(timer);
+      window.clearInterval(catalogTimer);
+      window.clearInterval(boardTimer);
       window.clearTimeout(retryTimer.current);
     };
-  }, [clearEvents, refresh]);
+  }, [clearEvents, refresh, refreshBoard]);
 
   const archive = useRef(new Map<string, MatchEvent>());
   for (const match of matches) {

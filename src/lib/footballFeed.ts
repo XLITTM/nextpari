@@ -407,20 +407,101 @@ function retainFootballClock(next: MatchEvent, previous?: MatchEvent): MatchEven
   };
 }
 
+function boardStamp(match: Pick<MatchEvent, 'liveClock'>): number {
+  return Date.parse(match.liveClock?.observedAt ?? '');
+}
+
+export function fresherScoreboard(
+  current: MatchEvent,
+  incoming: MatchEvent,
+  tie: 'current' | 'incoming' = 'incoming',
+): Pick<MatchEvent, 'isLive' | 'liveScore' | 'liveClock' | 'liveStatus' | 'period'> {
+  if (!incoming.isLive && current.isLive && incoming.liveScore == null && !incoming.liveClock) {
+    return {
+      isLive: current.isLive,
+      liveScore: current.liveScore,
+      liveClock: current.liveClock,
+      liveStatus: current.liveStatus,
+      period: current.period,
+    };
+  }
+  const currentAt = boardStamp(current);
+  const incomingAt = boardStamp(incoming);
+  const pick = (match: MatchEvent) => ({
+    isLive: match.isLive,
+    liveScore: match.liveScore ?? (match === incoming ? current.liveScore : incoming.liveScore),
+    liveClock: match.liveClock ?? (match === incoming ? current.liveClock : incoming.liveClock),
+    liveStatus: match.liveStatus ?? (match === incoming ? current.liveStatus : incoming.liveStatus),
+    period: match.period ?? (match === incoming ? current.period : incoming.period),
+  });
+  if (Number.isFinite(currentAt) && Number.isFinite(incomingAt)) {
+    if (incomingAt > currentAt) return pick(incoming);
+    if (currentAt > incomingAt) return pick(current);
+    return pick(tie === 'incoming' ? incoming : current);
+  }
+  if (!incoming.liveClock && current.liveClock) return pick(current);
+  if (incoming.liveClock && !current.liveClock) return pick(incoming);
+  if (incoming.liveScore && !current.liveScore) return pick(incoming);
+  if (current.liveScore && !incoming.liveScore) return pick(current);
+  return pick(tie === 'incoming' ? incoming : current);
+}
+
+export function mergeDetailScoreboard(listed?: MatchEvent, detail?: MatchEvent | null): MatchEvent | undefined {
+  if (!detail) return listed;
+  if (!listed) return detail;
+  const board = fresherScoreboard(listed, detail, 'current');
+  return {
+    ...listed,
+    ...detail,
+    isLive: board.isLive,
+    liveScore: board.liveScore,
+    liveClock: board.liveClock,
+    liveStatus: board.liveStatus,
+    period: board.period,
+  };
+}
+
+export function applyLiveBoard(previous: MatchEvent[], live: MatchEvent[]): MatchEvent[] {
+  const incoming = new Map(live.map((match) => [match.id, match]));
+  return previous.map((match) => {
+    const next = incoming.get(match.id);
+    if (!next) return match;
+    const board = fresherScoreboard(match, next, 'incoming');
+    return {
+      ...match,
+      isLive: next.isLive,
+      liveScore: board.liveScore,
+      liveClock: board.liveClock,
+      liveStatus: board.liveStatus,
+      period: board.period,
+    };
+  });
+}
+
 export function mergeListedMatches(previous: MatchEvent[], listed: MatchEvent[]): MatchEvent[] {
   const prior = new Map(previous.map((match) => [match.id, match]));
   return listed.map((item) => {
     const old = prior.get(item.id);
-    if (!old || item.priceState !== 'unpriced') return retainFootballClock(item, old);
-    if (!old.priceState || old.priceState === 'unpriced') return retainFootballClock(item, old);
+    const withPrices = !old || item.priceState !== 'unpriced' || !old.priceState || old.priceState === 'unpriced'
+      ? item
+      : {
+        ...item,
+        markets: old.markets,
+        extraMarkets: old.extraMarkets,
+        marketGroups: old.marketGroups,
+        betsapiQuotes: old.betsapiQuotes,
+        marketsLocked: old.marketsLocked,
+        priceState: old.priceState,
+      };
+    if (!old) return retainFootballClock(withPrices);
+    const board = fresherScoreboard(old, withPrices, 'incoming');
     return retainFootballClock({
-      ...item,
-      markets: old.markets,
-      extraMarkets: old.extraMarkets,
-      marketGroups: old.marketGroups,
-      betsapiQuotes: old.betsapiQuotes,
-      marketsLocked: old.marketsLocked,
-      priceState: old.priceState,
+      ...withPrices,
+      isLive: withPrices.isLive,
+      liveScore: board.liveScore,
+      liveClock: board.liveClock,
+      liveStatus: board.liveStatus,
+      period: board.period,
     }, old);
   });
 }
@@ -459,9 +540,13 @@ export function applyFootballQuotes(matches: MatchEvent[], quotes: FootballOddsQ
     const priced = quote.priceState === 'stale' ? { ...next, priceState: 'stale' as const } : next;
     return retainFootballClock({
       ...priced,
+      liveScore: match.liveScore,
+      liveClock: match.liveClock,
+      liveStatus: match.liveStatus,
+      period: match.period,
+      isLive: match.isLive,
       stats: priced.stats ?? match.stats,
       statsAvailability: priced.statsAvailability ?? match.statsAvailability,
-      period: priced.period ?? match.period,
     }, match);
   });
 }
@@ -490,6 +575,20 @@ export async function fetchFootballFeed(signal?: AbortSignal): Promise<FootballF
     featuredLine: map(body.featuredLine),
     schedule: map(body.schedule),
   };
+}
+
+export async function fetchFootballLiveBoard(signal?: AbortSignal): Promise<MatchEvent[]> {
+  try {
+    const response = await fetch('/api/player/sports/football-feed?board=live&includeSports=1', {
+      signal,
+      credentials: 'same-origin',
+    });
+    if (!response.ok) return [];
+    const body = await response.json() as { events?: FootballFeedCard[] };
+    return (body.events ?? []).map(footballCardToMatch);
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchFootballQuotes(

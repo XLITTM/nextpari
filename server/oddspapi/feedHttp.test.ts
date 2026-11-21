@@ -1,6 +1,6 @@
 import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { clearV5FeedCache, handleV5SportsFeed, v5FixtureToCard } from './feedHttp.js';
+import { clearV5FeedCache, handleV5SportsFeed, mergeFixture, v5FixtureToCard } from './feedHttp.js';
 import { indexV5Markets } from './canonical.js';
 import { OddsPapiV5TrialReader } from './v5TrialClient.js';
 import placeHandler from '../../api/player/sports/place.js';
@@ -377,6 +377,100 @@ test('basketball spreads stay on the generic handicap category', () => {
   assert.equal(card.sport, 'basketball');
   assert.equal(card.displayGroups[0]?.category, 'handicaps');
   assert.equal(card.displayGroups[0]?.outcomes.length, 2);
+});
+
+test('an older main-odds snapshot cannot revert a newer live score', () => {
+  const liveAt = new Date(now).toISOString();
+  const oddsAt = new Date(now - 120_000).toISOString();
+  const listing = fixture({
+    scores: { result: { participant1Score: 1, participant2Score: 1 }, updatedAt: liveAt },
+    clock: { currentTime: '70:12', currentPeriod: 'p2', stopped: false, updatedAt: liveAt },
+  });
+  const priced = fixture({
+    scores: { result: { participant1Score: 0, participant2Score: 1 }, updatedAt: oddsAt },
+    clock: { currentTime: '69:35', currentPeriod: 'p2', stopped: false, updatedAt: oddsAt },
+  });
+  const merged = mergeFixture(listing, priced);
+  const card = v5FixtureToCard(merged, catalog, now)!;
+  assert.deepEqual(card.score, { home: 1, away: 1 });
+  assert.equal(card.liveClock?.minute, 70);
+  assert.equal(card.markets[0]?.outcomes[0]?.price, 2.1);
+});
+
+test('odds can change while the trusted live score stays put', () => {
+  const observed = new Date(now).toISOString();
+  const listing = fixture({
+    scores: { result: { participant1Score: 0, participant2Score: 1 }, updatedAt: observed },
+    clock: { currentTime: '69:35', currentPeriod: 'p2', stopped: false, updatedAt: observed },
+    odds: { '1xbet': {} },
+  });
+  const priced = fixture({
+    scores: { result: { participant1Score: 0, participant2Score: 1 }, updatedAt: observed },
+    clock: { currentTime: '69:35', currentPeriod: 'p2', stopped: false, updatedAt: observed },
+  });
+  const card = v5FixtureToCard(mergeFixture(listing, priced), catalog, now)!;
+  assert.deepEqual(card.score, { home: 0, away: 1 });
+  assert.equal(card.markets[0]?.outcomes.find((outcome) => outcome.key === 'home')?.price, 2.1);
+});
+
+test('a newer live goal replaces the previous score without using odds timestamps', () => {
+  const before = new Date(now - 30_000).toISOString();
+  const after = new Date(now).toISOString();
+  const listing = fixture({
+    scores: { result: { participant1Score: 1, participant2Score: 1 }, updatedAt: after },
+    clock: { currentTime: '70:05', currentPeriod: 'p2', stopped: false, updatedAt: after },
+  });
+  const priced = fixture({
+    scores: { result: { participant1Score: 0, participant2Score: 1 }, updatedAt: before },
+    clock: { currentTime: '69:35', currentPeriod: 'p2', stopped: false, updatedAt: before },
+  });
+  assert.deepEqual(v5FixtureToCard(mergeFixture(listing, priced), catalog, now)?.score, { home: 1, away: 1 });
+});
+
+test('ambiguous odds metadata does not overwrite a live score', () => {
+  const listing = fixture({
+    scores: { result: { participant1Score: 1, participant2Score: 1 } },
+    clock: { currentTime: '70:00', currentPeriod: 'p2', stopped: false, updatedAt: new Date(now).toISOString() },
+  });
+  const priced = fixture({
+    scores: { result: { participant1Score: 0, participant2Score: 1 } },
+  });
+  assert.deepEqual(v5FixtureToCard(mergeFixture(listing, priced), catalog, now)?.score, { home: 1, away: 1 });
+});
+
+test('a stale live snapshot keeps the last score and stops the clock', () => {
+  const observed = new Date(now - 5_000).toISOString();
+  const card = v5FixtureToCard(fixture({
+    scores: { result: { participant1Score: 0, participant2Score: 1 } },
+    clock: { currentTime: '69:35', currentPeriod: 'p2', stopped: false, updatedAt: observed },
+  }), catalog, now, { boardStale: true })!;
+  assert.deepEqual(card.score, { home: 0, away: 1 });
+  assert.equal(card.liveClock?.stale, true);
+  assert.equal(card.liveClock?.running, false);
+  assert.equal(card.liveClock?.minute, 69);
+});
+
+test('the live board endpoint does not hydrate odds', async () => {
+  const calls: string[] = [];
+  const row = fixture({
+    scores: { result: { participant1Score: 1, participant2Score: 0 } },
+    clock: { currentTime: '12:00', currentPeriod: 'p1', stopped: false, updatedAt: new Date(now).toISOString() },
+  });
+  const reader = new OddsPapiV5TrialReader({
+    env: { ODDSPAPI_V5_API_KEY: 'unit-test-only' },
+    fetchImpl: async (raw) => {
+      const path = new URL(String(raw)).pathname;
+      calls.push(path);
+      if (path.endsWith('/live')) return new Response(JSON.stringify([row]), { status: 200 });
+      return new Response(JSON.stringify([]), { status: 200 });
+    },
+  });
+  const board = await handleV5SportsFeed({ url: '/?board=live' }, { ODDSPAPI_V5_API_KEY: 'unit-test-only' }, reader);
+  const events = (board.body as { events?: Array<{ score: { home: number }; markets: unknown[] }> }).events ?? [];
+  assert.equal(board.status, 200);
+  assert.equal(events[0]?.score.home, 1);
+  assert.equal(events[0]?.markets.length, 0);
+  assert.equal(calls.some((path) => path.endsWith('/main')), false);
 });
 
 test('the deployed place endpoint refuses before session or wallet access',async()=>{

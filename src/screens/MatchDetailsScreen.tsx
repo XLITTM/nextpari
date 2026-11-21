@@ -8,7 +8,7 @@ import { useLiveMatches } from '../LiveMatchesContext';
 import { useLiveOdds } from '../hooks/useLiveOdds';
 import { footballClockLabel } from '../lib/footballClock';
 import { useFootballClockNow } from '../lib/useFootballClock';
-import { fetchFootballEvent, isBetsapiMatch, resolveDetailsMatch } from '../lib/footballFeed';
+import { fetchFootballEvent, isBetsapiMatch, mergeDetailScoreboard, resolveDetailsMatch } from '../lib/footballFeed';
 import { bet365Groups, fetchBet365Expanded } from '../lib/bet365View';
 import { matchEventFromStore } from '../lib/liveMatches';
 import { useSportsStore } from '../stores/sportsStore';
@@ -44,7 +44,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
   const { findMatch, ensurePrices } = useLiveMatches();
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof fetchFootballEvent>>>(null);
   const listed = findMatch(matchId);
-  const catalogMatch = detail?.id === matchId ? detail : listed;
+  const catalogMatch = mergeDetailScoreboard(listed, detail?.id === matchId ? detail : null) ?? listed;
   const storeState = useSportsStore((s) => s.events[matchId]);
   const upsertEvent = useSportsStore((s) => s.upsertEvent);
   const isLive = storeState?.event.time_status === '1' || Boolean(catalogMatch?.isLive);
@@ -125,13 +125,17 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
       extraMarkets: (Number(resolved.extraMarkets) || 0) + expanded.length,
       priceState: bet365Stale ? 'stale' as const : resolved.priceState,
     } : resolved;
+    const board = mergeDetailScoreboard(resolved, detail) ?? resolved;
     const merged = {
       ...resolved,
       ...(detail.feedTag === 'oddspapi-v5' ? detail : {}),
       stats: detail.stats ?? resolved.stats,
       statsAvailability: detail.statsAvailability ?? resolved.statsAvailability,
-      period: detail.period ?? resolved.period,
-      liveClock: detail.liveClock ?? resolved.liveClock,
+      period: board.period,
+      liveClock: board.liveClock,
+      liveScore: board.liveScore,
+      liveStatus: board.liveStatus,
+      isLive: board.isLive,
     };
     if (!expanded.length) return merged;
     return {
@@ -168,7 +172,7 @@ export function MatchDetailsScreen({ matchId, onBack, onNavigate }: MatchDetails
         sportKind={sportKind}
         minute={isBetsapiMatch(match) ? footballClockLabel(match.liveClock, clockNow) ?? undefined : storeState?.matchTime}
         timeStr={isBetsapiMatch(match) ? undefined : storeState?.event.time_str}
-        scoreText={storeState?.score}
+        scoreText={isBetsapiMatch(match) ? undefined : storeState?.score}
         clockRunning={isBetsapiMatch(match) ? false : storeState?.event.period !== 'HT' && storeState?.event.clock_running !== false}
         period={isBetsapiMatch(match) ? (match.period === 'first_half' ? '1' : match.period === 'second_half' ? '2' : undefined) : storeState?.event.period}
         kickoffUnix={isBetsapiMatch(match) ? 0 : Number(storeState?.event.start_time || storeState?.event.time || 0)}

@@ -18,6 +18,7 @@ export const FEATURED_LIVE_LIMIT = 8;
 export const FEATURED_LINE_LIMIT = 8;
 export const MAIN_ODDS_CHUNK = 100;
 export const CLIENT_ODDS_BATCH = 40;
+export const LIVE_LISTING_FRESH_MS = 15_000;
 
 type Card = FootballFeedCard & {
   provider: 'oddspapi-v5';
@@ -150,7 +151,7 @@ export function v5FixtureToCard(
   f: JsonRecord,
   catalog: ReturnType<typeof indexV5Markets> | null,
   now = Date.now(),
-  options?: { snapshotStale?: boolean; listCard?: boolean; hydrated?: boolean },
+  options?: { snapshotStale?: boolean; boardStale?: boolean; listCard?: boolean; hydrated?: boolean },
 ): Card | null {
   const id = fixtureIdOf(f);
   const sportId = sportIdOf(f);
@@ -268,19 +269,64 @@ export function v5FixtureToCard(
     },
   };
   if (options?.snapshotStale && card.priceState === 'open') card.priceState = 'stale';
+  if (options?.boardStale && card.liveClock) {
+    card.liveClock = { ...card.liveClock, running: false, stale: true };
+  }
   return card;
 }
 
-function mergeFixture(listing: JsonRecord, priced: JsonRecord | null): JsonRecord {
+function stampMs(...values: unknown[]): number {
+  let latest = Number.NaN;
+  for (const value of values) {
+    const parsed = typeof value === 'number' && Number.isFinite(value)
+      ? value
+      : Date.parse(typeof value === 'string' ? value : '');
+    if (!Number.isFinite(parsed)) continue;
+    if (!Number.isFinite(latest) || parsed > latest) latest = parsed;
+  }
+  return latest;
+}
+
+export function boardObservationMs(fixture: JsonRecord): number {
+  const scores = record(fixture.scores);
+  const result = record(scores.result);
+  const clock = record(fixture.clock);
+  const status = record(fixture.status);
+  return stampMs(
+    clock.updatedAt,
+    scores.updatedAt,
+    result.updatedAt,
+    status.updatedAt,
+    fixture.updatedAt,
+  );
+}
+
+function hasBoard(value: unknown): boolean {
+  return Object.keys(record(value)).length > 0;
+}
+
+export function mergeFixture(listing: JsonRecord, priced: JsonRecord | null): JsonRecord {
   if (!priced) return listing;
+  const listingAt = boardObservationMs(listing);
+  const pricedAt = boardObservationMs(priced);
+  const pricedBoardNewer = Number.isFinite(pricedAt) && Number.isFinite(listingAt) && pricedAt > listingAt;
+  const scores = pricedBoardNewer && hasBoard(priced.scores)
+    ? priced.scores
+    : hasBoard(listing.scores) ? listing.scores : priced.scores;
+  const clock = pricedBoardNewer && hasBoard(priced.clock)
+    ? priced.clock
+    : hasBoard(listing.clock) ? listing.clock : priced.clock;
+  const status = pricedBoardNewer
+    ? { ...record(listing.status), ...record(priced.status) }
+    : { ...record(priced.status), ...record(listing.status) };
   return {
     ...listing,
     ...priced,
     participants: { ...record(listing.participants), ...record(priced.participants) },
     tournament: { ...record(listing.tournament), ...record(priced.tournament) },
-    status: { ...record(listing.status), ...record(priced.status) },
-    scores: Object.keys(record(priced.scores)).length ? priced.scores : listing.scores,
-    clock: Object.keys(record(priced.clock)).length ? priced.clock : listing.clock,
+    status,
+    scores,
+    clock,
     odds: priced.odds ?? listing.odds,
     bookmakers: priced.bookmakers ?? listing.bookmakers,
   };
@@ -429,13 +475,44 @@ export async function handleV5SportsFeed(
     if (r.data.fixtureId !== id) return { card: null, result: r };
     const sportId = sportIdOf(r.data);
     const cat = sportId !== null ? await catalog(sportId) : null;
-    return { card: v5FixtureToCard(r.data, cat, Date.now(), { snapshotStale: r.snapshotStale }), result: r };
+    return { card: v5FixtureToCard(r.data, cat, Date.now(), { snapshotStale: r.snapshotStale, boardStale: r.snapshotStale }), result: r };
   }
   if (params.has('eventId')) {
     const id = sourceId(params.get('eventId') || '');
     if (!id) return { status: 404, body: { ...base, ok: false, error: 'NOT_FOUND', events: [] } };
     const { card, result } = await detail(id);
     return { status: card ? 200 : result.ok ? 404 : 503, body: { ...base, ok: Boolean(card), error: result.error, events: card ? [card] : [] } };
+  }
+  if (params.get('board') === 'live') {
+    const sportIds = params.get('includeSports') === '1' ? Object.values(V5_SPORT_IDS) : [10];
+    const now = Date.now();
+    const listings = await mapLimit(sportIds, 1, async (sportId) => {
+      const live = await cached(`live:${sportId}`, LIVE_LISTING_FRESH_MS, () => reader.live(sportId));
+      return {
+        sportId,
+        fixtures: rows(live.data).filter((f) => sportIdOf(f) === sportId && record(f.status).live === true),
+        ok: live.ok,
+        stale: live.snapshotStale,
+        rateLimited: (!live.ok && live.error === 'RATE_LIMITED') || live.snapshotStale,
+      };
+    });
+    const events = listings.flatMap((listing) => listing.fixtures.flatMap((row) => {
+      const card = v5FixtureToCard(row, null, now, {
+        listCard: true,
+        boardStale: listing.stale,
+      });
+      return card ? [card] : [];
+    }));
+    return {
+      status: listings.some((listing) => listing.ok) || events.length ? 200 : 503,
+      body: {
+        ...base,
+        ok: events.length > 0 || listings.some((listing) => listing.ok),
+        events,
+        rateLimited: listings.some((listing) => listing.rateLimited),
+        stale: listings.some((listing) => listing.stale),
+      },
+    };
   }
   if (params.has('oddsFor')) {
     const ids = [...new Set((params.get('oddsFor') || '').split(',').map((id) => sourceId(id)).filter((id): id is string => Boolean(id)))].slice(0, MAIN_ODDS_CHUNK);
@@ -472,7 +549,7 @@ export async function handleV5SportsFeed(
   let raw = 0;
   const listings = await mapLimit(sportIds, 1, async (sportId) => {
     const [live, prematch] = await Promise.all([
-      cached(`live:${sportId}`, 45_000, () => reader.live(sportId)),
+      cached(`live:${sportId}`, LIVE_LISTING_FRESH_MS, () => reader.live(sportId)),
       readPrematch(reader, sportId, from, to),
     ]);
     const liveRows = rows(live.data);
@@ -505,8 +582,10 @@ export async function handleV5SportsFeed(
     const id = fixtureIdOf(listing);
     const merged = mergeFixture(listing, hydrated.byId.get(id) ?? null);
     const sportId = sportIdOf(merged);
+    const listingStale = listings.find((item) => item.sportId === sportId)?.stale === true;
     const card = v5FixtureToCard(merged, sportId !== null ? catalogs.get(sportId) ?? null : null, now, {
       snapshotStale: hydrated.stale,
+      boardStale: listingStale,
       listCard: true,
       hydrated: hydrated.byId.has(id),
     });
