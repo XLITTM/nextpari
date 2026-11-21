@@ -74,6 +74,18 @@ const SUBTYPE_LABELS: Record<string, string> = {
   'spreads-points': 'Фора по очкам',
   'oddeven-games': 'Чёт / нечет геймов',
   'racetogames': 'Гонка по геймам',
+  'spreads-kills': 'Фора по убийствам',
+  'totals-kills': 'Тотал убийств',
+  'teamtotals-kills-team1': 'Тотал убийств команды 1',
+  'teamtotals-kills-team2': 'Тотал убийств команды 2',
+  'oddeven-kills': 'Чёт / нечет убийств',
+  'racetokills': 'Гонка убийств',
+  'totals-towers': 'Тотал башен',
+  'totals-roshans': 'Тотал Рошанов',
+  'firstblood': 'Первая кровь',
+  'firsttower': 'Первая башня',
+  'firstbarracks': 'Первые бараки',
+  'firstroshan': 'Первый Рошан',
 };
 
 /** Full-time markets first, in bookmaker order. Period blocks repeat afterwards. */
@@ -93,7 +105,11 @@ export const FOOTBALL_MARKET_ORDER = [
 export const BASKETBALL_MARKET_ORDER = ['moneyline', '1x2', 'spreads', 'totals', 'teamtotals-team1', 'teamtotals-team2', 'oddeven'];
 export const RACKET_MARKET_ORDER = ['moneyline', '1x2', 'spreads', 'spreads-points', 'totals', 'totals-points', 'teamtotals-team1', 'teamtotals-team2', 'oddeven-games', 'racetogames'];
 export const HOCKEY_MARKET_ORDER = ['1x2', 'moneyline', 'totals', 'spreads', 'teamtotals-team1', 'teamtotals-team2', 'bothteamsscore'];
-export const ESPORTS_MARKET_ORDER = ['moneyline', '1x2', 'spreads', 'totals', 'teamtotals-team1', 'teamtotals-team2'];
+export const ESPORTS_MARKET_ORDER = [
+  'moneyline', '1x2', 'spreads', 'totals', 'teamtotals-team1', 'teamtotals-team2', 'correctscore',
+  'spreads-kills', 'totals-kills', 'teamtotals-kills-team1', 'teamtotals-kills-team2', 'oddeven-kills', 'racetokills',
+  'totals-towers', 'totals-roshans', 'firstblood', 'firsttower', 'firstbarracks', 'firstroshan',
+];
 
 const SIDE_TYPES = new Set([
   '1x2', 'moneyline', 'spreads', 'spreads-european', '1x2-corners', '1x2-bookings', '1x2-shotsongoal',

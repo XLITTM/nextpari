@@ -18,5 +18,6 @@ test('translates only the verified outcome for that market type', () => {
   assert.equal(subtypeLabel({ marketType: '2up', marketName: '2Up - Full Time Result', period: 'fulltime', handicap: null }), '2Up - Full Time Result');
   assert.equal(subtypeLabel({ marketType: 'totals-points', marketName: 'Total Points', period: 'fulltime', handicap: 74.5 }), 'Тотал очков');
   assert.equal(subtypeLabel({ marketType: 'oddeven-games', marketName: 'Odd Even Games', period: 'fulltime', handicap: null }), 'Чёт / нечет геймов');
+  assert.equal(subtypeLabel({ marketType: 'totals-kills', marketName: 'Kills - Over Under First Map', period: 'p1', handicap: 48.5 }), 'Тотал убийств');
   assert.equal(outcomeLabelFor('winningmargin', '1 By 2'), '1 By 2');
 });
