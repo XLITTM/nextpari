@@ -138,6 +138,13 @@ data class FootballFixture(
     fun withQuote(quote: FootballOddsQuote?, fallback: FootballPriceState, order: Long, until: Long): FootballFixture {
         val exactQuote = quote?.takeIf { it.id == match.eventId }
         val availability = exactQuote?.availability ?: fallback
+        if (oddsPapiEventId.matches(match.eventId) && exactQuote?.markets.isNullOrEmpty() &&
+            exactQuote?.displayGroups.isNullOrEmpty()) {
+            // A missing refresh closes prices, not the already observed market catalog.
+            // Keep source identity for the next successful refresh and for stable navigation.
+            return locked(if (availability == FootballPriceState.Open) FootballPriceState.Unpriced else availability)
+                .copy(quoteOrder = order)
+        }
         val priced = if (oddsPapiEventId.matches(match.eventId)) withOddsPapiMarkets(exactQuote?.markets.orEmpty(), exactQuote?.displayGroups.orEmpty(), availability)
             else withMarkets(exactQuote?.markets.orEmpty(), availability)
         return priced.copy(
