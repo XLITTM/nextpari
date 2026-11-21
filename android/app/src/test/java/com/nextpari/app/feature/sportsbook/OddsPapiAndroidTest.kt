@@ -102,6 +102,24 @@ class OddsPapiAndroidTest {
             assertEquals(1,server.requestCount)
         } finally {server.shutdown()}
     }
+    @Test fun canonicalWireTypesKeepDifferentSportUnitsAndMapStatisticsSeparate() {
+        fun family(sport:String,type:String)=SportMarketStructure.describe(sport,group(name="Тотал").copy(marketFamily=type)).family
+        assertEquals("total-sets",family("tennis","totals"))
+        assertEquals("total-sets",family("volleyball","totals"))
+        assertEquals("total-maps",family("esports","totals"))
+        assertEquals("totals-kills",family("esports","totals-kills"))
+        assertEquals("totals-rounds",family("esports","totals-rounds"))
+        assertEquals("totals-points",family("table-tennis","totals-points"))
+        assertEquals("2-я половина с ОТ",SportMarketStructure.periodLabel("basketball","p3+p4+overtime"))
+    }
+    @Test fun unlabelledPlayerPropsNeverExposeAnUnattributedPrice() {
+        val props=group(name="Автор гола").copy(marketFamily="players-anytimegoalscorer",
+            outcomes=group().outcomes.map { it.copy(sourceSelectionId=it.sourceSelectionId!!.dropLast(1)+"12345") })
+        val unavailable=event(groups=listOf(props)).toFixture(epoch,1000,checkMarketAge=true)!!
+        assertTrue(unavailable.markets.flatMap { it.outcomes }.all { it.odds==null && it.sourceSelectionId!=null })
+        val named=event(groups=listOf(props.copy(outcomes=props.outcomes.map { it.copy(playerName="Verified player") }))).toFixture(epoch,1000,checkMarketAge=true)!!
+        assertTrue(named.markets.flatMap { it.outcomes }.all { it.odds!=null && it.label.startsWith("Verified player") && it.locked })
+    }
     @Test fun actualProductionReadUsesTheExistingEndpoint() = runBlocking {
         assumeTrue(System.getenv("NEXTPARI_LIVE_SPORTS_CHECK")=="1")
         val builder=NetworkModule.okHttpClient().newBuilder()
