@@ -347,8 +347,9 @@ class SportsbookViewModel(
     fun line(): List<MatchCardModel> = matches(false)
     fun pool(mode: String): List<MatchCardModel> {
         val matches = if (mode == "line") line() else live()
+        if (mode != "line") return matches
         val real = orderedByIds(matches, ui.value.feed.schedule) ?: return matches
-        return real + matches.filter(FeaturedSports::isEsports)
+        return (real + matches.filter(FeaturedSports::isEsports)).distinctBy(MatchCardModel::eventId)
     }
 
     fun featured(live: Boolean, matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> {
