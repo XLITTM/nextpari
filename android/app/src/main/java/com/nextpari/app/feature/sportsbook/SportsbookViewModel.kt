@@ -365,7 +365,7 @@ class SportsbookViewModel(
     }
     fun sportRows(tab: String): List<SportListRow> = SportsListCatalog.rows(tab, live(), line())
     fun championships(sport: String, mode: String): List<CountryGroup> =
-        CountryGrouping.groupByCountry(pool(mode).filter { it.sport == sport })
+        CountryGrouping.groupByCountry(pool(mode).filter { CompetitionOrder.matchesSport(it,sport) })
     fun leagueMatches(leagueId: String, mode: String): List<MatchCardModel> =
         LeagueMatches.filter(pool(mode), leagueId)
 
@@ -389,6 +389,7 @@ class SportsbookViewModel(
     }
 
     fun toggle(selection: SportsBetSelection) {
+        if(oddsPapiEventId.matches(selection.fixtureId) || selection.provider=="oddspapi-v5") return
         if (!hasCurrentPlayer() || ui.value.placing || pending != null) return
         val fixture = ui.value.fixtureFor(selection.fixtureId)
         if (fixture?.hasPrice(now()) != true || !fixture.markets.any { group ->
@@ -509,13 +510,13 @@ private fun attemptKey(fixture: FootballFixture) = "${fixture.match.eventId}:${f
 internal fun footballOddsCandidates(
     fixtures: List<FootballFixture>, visibleIds: List<String>, detail: FootballFixture?, allowFallback: Boolean,
 ): List<FootballFixture> {
-    val footballOnly = fixtures.filter { it.match.sport == "football" && footballEventId.matches(it.match.eventId) }
+    val footballOnly = fixtures.filter { (it.match.sport == "football" && footballEventId.matches(it.match.eventId)) || oddsPapiEventId.matches(it.match.eventId) }
     val byId = footballOnly.associateBy { it.match.eventId }
     val visible = visibleIds.distinct().mapNotNull(byId::get)
     val candidates = if (visible.isNotEmpty()) visible else if (allowFallback && detail == null) {
         footballOnly.filter { it.match.isLive }.take(6) + footballOnly.filterNot { it.match.isLive }.take(FOOTBALL_BATCH_SIZE)
     } else emptyList()
-    return (listOfNotNull(detail?.takeIf { it.match.sport == "football" && footballEventId.matches(it.match.eventId) }) + candidates.filter { it.match.isLive } + candidates.filterNot { it.match.isLive })
+    return (listOfNotNull(detail?.takeIf { (it.match.sport == "football" && footballEventId.matches(it.match.eventId)) || oddsPapiEventId.matches(it.match.eventId) }) + candidates.filter { it.match.isLive } + candidates.filterNot { it.match.isLive })
         .distinctBy { it.match.eventId }
 }
 
