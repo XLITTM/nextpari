@@ -28,6 +28,29 @@ class SportsbookHierarchyTest {
     }
 
     @Test
+    fun verifiedCompetitionIdentityRanksEnglandAheadOfAnotherPremierLeague() {
+        val england = MatchCardModel(id = "epl", eventId = "epl", sport = "football", provider = "oddspapi-v5",
+            league = "Premier League", country = "England", team1 = "Arsenal", team2 = "Manchester City")
+        val lebanon = england.copy(id = "leb", eventId = "leb", country = "Lebanon", team1 = "A", team2 = "B")
+        val champions = england.copy(id = "ucl", eventId = "ucl", league = "UEFA Champions League", country = "International", team1 = "C", team2 = "D")
+        val tennis = england.copy(id = "tt", eventId = "tt", sport = "table-tennis", league = "TT Cup", country = "International", team1 = "E", team2 = "F")
+        assertThat(CompetitionOrder.rank(england)).isLessThan(CompetitionOrder.rank(lebanon))
+        assertThat(CompetitionOrder.rank(lebanon)).isEqualTo(Int.MAX_VALUE)
+        assertThat(FeaturedSports.tier(england)).isEqualTo(0)
+        assertThat(FeaturedSports.tier(lebanon)).isEqualTo(1)
+        val groups = CountryGrouping.groupByCountry(listOf(lebanon, tennis, champions, england))
+        val directory = CompetitionDirectory.organize(groups, setOf(CompetitionOrder.leagueKey(england)))
+        assertThat(directory.favorites.map { it.name }).containsExactly("Premier League")
+        assertThat(directory.top.map { it.name }).containsExactly("UEFA Champions League")
+        assertThat(directory.countries.flatMap { it.leagues }.map { it.name }).containsExactly("Premier League")
+        assertThat(directory.countries.flatMap { it.leagues }.map { it.name }).doesNotContain("UEFA Champions League")
+        val listed = GameListLayout.entries(listOf(tennis, lebanon, england)).filterIsInstance<GameListEntry.Fixture>().map { it.match.eventId }
+        assertThat(listed).containsExactly("epl", "leb", "tt").inOrder()
+        assertThat(GameListLayout.entries(listOf(england, tennis)).filterIsInstance<GameListEntry.Heading>().map { it.title })
+            .containsAtLeast("Футбол", "Premier League", "Настольный теннис", "TT Cup")
+    }
+
+    @Test
     fun leagueCountAndRouteRoundTrip() {
         val id = LeagueIds.toLeagueId("Испания", "Ла Лига")
         assertThat(id).isEqualTo("Испания|Ла Лига")

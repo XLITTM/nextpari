@@ -96,15 +96,24 @@ fun GameListScreen(
                 state = listState,
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
-                items(matches, key = { it.id }) { match ->
-                    NextpariMatchCard(
-                        model = match,
-                        carousel = false,
-                        onOpen = { onNavigate(Destinations.match(match.id)) },
-                        onToggleFavorite = { viewModel.toggleMatchFavorite(match.id) },
-                        selectedOdds = football.selectedKeys,
-                        onOddSelected = viewModel::toggle,
-                    )
+                items(GameListLayout.entries(matches), key = { it.key }) { entry ->
+                    when (entry) {
+                        is GameListEntry.Heading -> Text(
+                            entry.title.uppercase(),
+                            color = if (dark) Color(0xFF9CA3AF) else Color(0xFF6B7280),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+                        )
+                        is GameListEntry.Fixture -> NextpariMatchCard(
+                            model = entry.match,
+                            carousel = false,
+                            onOpen = { onNavigate(Destinations.match(entry.match.id)) },
+                            onToggleFavorite = { viewModel.toggleMatchFavorite(entry.match.id) },
+                            selectedOdds = football.selectedKeys,
+                            onOddSelected = viewModel::toggle,
+                        )
+                    }
                 }
             }
         }

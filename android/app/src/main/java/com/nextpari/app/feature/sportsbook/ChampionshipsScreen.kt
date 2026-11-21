@@ -64,17 +64,16 @@ fun ChampionshipsScreen(
     var searchLabel by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     val groups = CountryGrouping.search(viewModel.championships(sport, tab), query, searchLabel == "Страна")
-    var expanded by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(groups.map { it.country }) {
-        expanded = CountryGrouping.nextExpanded(groups, expanded)
-    }
     val storedFavorites by com.nextpari.app.core.AppGraph.sportsFavorites.favorites.collectAsStateWithLifecycle()
+    val favorites = storedFavorites.leagueIds
+    val directory = CompetitionDirectory.organize(groups, favorites)
+    var expanded by rememberSaveable { mutableStateOf("") }
+    LaunchedEffect(directory.countries.map { it.country }) {
+        expanded = CountryGrouping.nextExpanded(directory.countries, expanded)
+    }
     val favoriteScope = androidx.compose.runtime.rememberCoroutineScope()
     androidx.compose.runtime.LaunchedEffect(Unit) { com.nextpari.app.core.AppGraph.sportsFavorites.load() }
     var actionNotice by rememberSaveable { mutableStateOf("") }
-    val favorites = storedFavorites.leagueIds
-    val topLeagues=CompetitionOrder.top(groups)
-    val favoriteLeagues=groups.flatMap { it.leagues }.filter { it.id in favorites }
     val sportName = SportsListCatalog.sportName(sport)
 
     Column(Modifier.fillMaxSize().background(if (dark) Color(0xFF111827) else Color(0xFFF3F4F6))) {
@@ -130,13 +129,16 @@ fun ChampionshipsScreen(
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             else -> LazyColumn(Modifier.fillMaxSize().background(if (dark) Color(0xFF1E293B) else Color.White)) {
-                if(topLeagues.isNotEmpty()) item {
-                    CompetitionSection("Топ-турниры",topLeagues,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
+                if(directory.favorites.isNotEmpty()) item {
+                    CompetitionSection("Избранное",directory.favorites,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
                 }
-                if(favoriteLeagues.isNotEmpty()) item {
-                    CompetitionSection("Избранные турниры",favoriteLeagues,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
+                if(directory.top.isNotEmpty()) item {
+                    CompetitionSection("Топ-чемпионаты",directory.top,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
                 }
-                items(groups, key = { it.country.ifEmpty { it.leagues.firstOrNull()?.name.orEmpty() } }) { group ->
+                if(directory.international.isNotEmpty()) item {
+                    CompetitionSection("Международные",directory.international,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
+                }
+                items(directory.countries, key = { it.country.ifEmpty { it.leagues.firstOrNull()?.name.orEmpty() } }) { group ->
                     CountryAccordion(
                         group = group,
                         expanded = expanded == group.country,

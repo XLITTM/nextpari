@@ -106,7 +106,7 @@ object CountryGrouping {
             countryRow.count += 1
             val id=CompetitionOrder.leagueKey(match)
             val league = countryRow.leagues.getOrPut(id) { LeagueRow(name=name,country=country,count=0,id=id,
-                canonicalId=match.competitionId,rank=CompetitionOrder.rank(match.sport,match.competitionId)) }
+                canonicalId=match.competitionId,rank=CompetitionOrder.rank(match)) }
             val badge = match.competitionBadge.takeIf { league.count == 0 || league.badge == it }
             val bundledBadge = BundledFootballBadges.competition(match).takeIf { league.count == 0 || league.badgeRes == it }
             countryRow.leagues[id] = league.copy(count = league.count + 1, badge = badge, badgeRes = bundledBadge)
@@ -236,7 +236,7 @@ object MarketTabs {
 
     fun forSport(sport: String): List<MarketTabSpec> {
         val tabs=when(sport) {
-            "football" -> listOf("all" to "Все","main" to "Основные","totals" to "Тоталы","handicaps" to "Форы","double-chance" to "Двойной шанс","btts" to "Обе забьют","goals" to "Голы","1st-half" to "1-й тайм","2nd-half" to "2-й тайм","corners" to "Угловые","cards" to "Карточки","other" to "Другие")
+            "football" -> listOf("all" to "Все","main" to "Основные","totals" to "Тоталы","handicaps" to "Форы","double-chance" to "Двойной шанс","btts" to "Обе забьют","goals" to "Голы","1st-half" to "1-й тайм","2nd-half" to "2-й тайм","corners" to "Угловые","cards" to "Карточки","shots" to "Удары в створ","other" to "Другие")
             "basketball" -> listOf("all" to "Все","main" to "Победитель","totals" to "Тоталы очков","handicaps" to "Форы","quarters" to "Четверти","halves" to "Половины","players" to "Игроки","other" to "Другие")
             "tennis" -> listOf("all" to "Все","main" to "Победитель","totals" to "Тоталы геймов","handicaps" to "Форы","sets" to "Сеты","games" to "Геймы","tiebreaks" to "Тай-брейки","aces" to "Эйсы","other" to "Другие")
             "table-tennis" -> listOf("all" to "Все","main" to "Победитель","sets" to "Партии","totals" to "Тоталы очков","handicaps" to "Форы","other" to "Другие")
@@ -366,6 +366,78 @@ object SportsbookCatalog {
 
     fun pool(mode: String, live: List<MatchCardModel>, line: List<MatchCardModel>): List<MatchCardModel> =
         if (mode == "line") line else live
+}
+
+data class CompetitionDirectory(
+    val favorites: List<LeagueRow>,
+    val top: List<LeagueRow>,
+    val international: List<LeagueRow>,
+    val countries: List<CountryGroup>,
+) {
+    companion object {
+        private val internationalCountries = setOf("international", "europe", "world", "uefa", "fifa", "atp", "wta", "eu")
+
+        fun organize(groups: List<CountryGroup>, favoriteIds: Set<String>): CompetitionDirectory {
+            val claimed = linkedSetOf<String>()
+            fun take(rows: List<LeagueRow>) = rows.filter { claimed.add(it.id) }
+            val leagues = groups.flatMap { it.leagues }
+            val favorites = take(leagues.filter { it.id in favoriteIds })
+            val top = take(CompetitionOrder.top(groups))
+            val international = take(groups.filter { isInternational(it.country) }.flatMap { it.leagues })
+            val countries = groups.mapNotNull { group ->
+                if (isInternational(group.country)) return@mapNotNull null
+                val remaining = group.leagues.filter { it.id !in claimed }
+                if (remaining.isEmpty()) null else group.copy(count = remaining.sumOf(LeagueRow::count), leagues = remaining)
+            }
+            return CompetitionDirectory(favorites, top, international, countries)
+        }
+
+        private fun isInternational(country: String): Boolean {
+            val key = country.trim().lowercase(java.util.Locale.ROOT)
+            return key.isEmpty() || key in internationalCountries || SportsRegions.code(country) == "eu"
+        }
+    }
+}
+
+sealed interface GameListEntry {
+    val key: String
+    data class Heading(override val key: String, val title: String) : GameListEntry
+    data class Fixture(val match: MatchCardModel) : GameListEntry {
+        override val key: String get() = match.eventId
+    }
+}
+
+object GameListLayout {
+    fun entries(matches: List<MatchCardModel>): List<GameListEntry> {
+        val sorted = matches.distinctBy(MatchCardModel::eventId).sortedWith(
+            compareBy<MatchCardModel> { sportIndex(it.sport) }
+                .thenBy { CompetitionOrder.rank(it) }
+                .thenBy { it.kickoffEpochMs ?: Long.MAX_VALUE }
+                .thenBy { it.eventId },
+        )
+        val rows = mutableListOf<GameListEntry>()
+        var sport: String? = null
+        var league: String? = null
+        for (match in sorted) {
+            if (match.sport != sport) {
+                sport = match.sport
+                league = null
+                rows += GameListEntry.Heading("sport:$sport", SportsListCatalog.sportName(sport))
+            }
+            val leagueId = CompetitionOrder.leagueKey(match)
+            if (leagueId != league) {
+                league = leagueId
+                rows += GameListEntry.Heading("league:$leagueId", match.league)
+            }
+            rows += GameListEntry.Fixture(match)
+        }
+        return rows
+    }
+
+    private fun sportIndex(sport: String): Int {
+        val index = SportsListCatalog.supported.indexOfFirst { it.id == sport }
+        return if (index < 0) SportsListCatalog.supported.size + 1 else index
+    }
 }
 
 object HomeChampionships {

@@ -61,7 +61,7 @@ internal object FeaturedSports {
 
     fun tier(match: MatchCardModel): Int {
         if (isEsports(match)) return 5
-        if(match.provider=="oddspapi-v5") return if(CompetitionOrder.rank(match.sport,match.competitionId)!=Int.MAX_VALUE)0 else 1
+        if(match.provider=="oddspapi-v5") return if(CompetitionOrder.rank(match)!=Int.MAX_VALUE)0 else 1
         match.serverTier?.takeIf { it in 0..5 }?.let { return it }
         val league = normalized(match.league)
         if (match.sport == "football" && lowerPriorityFootball.containsMatchIn(league)) return 2

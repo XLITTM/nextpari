@@ -118,8 +118,15 @@ class SportsPresentationTest {
     @Test
     fun bundledClubAndLeagueArtRequiresVerifiedCanonicalIdentity() {
         val names=nations.copy(league="Premier League",country="ENG",team1="Arsenal",team2="Manchester City")
-        assertNull(BundledFootballBadges.competition(names))
-        assertNull(BundledFootballBadges.team(names,names.team1,home=true))
+        assertEquals(R.drawable.badge_premier_league, BundledFootballBadges.competition(names))
+        assertEquals(R.drawable.badge_arsenal, BundledFootballBadges.team(names, names.team1, home = true))
+        assertEquals(R.drawable.badge_manchester_city, BundledFootballBadges.team(names, names.team2, home = false))
+        assertNull(BundledFootballBadges.competition(names.copy(country = "Lebanon")))
+        assertNull(BundledFootballBadges.competition(names.copy(league = "Premier League 2")))
+        assertNull(BundledFootballBadges.team(names, "Manchester United", home = true))
+        assertNull(BundledFootballBadges.team(names, "Arsenal Women", home = true))
+        assertNull(BundledFootballBadges.competition(names.copy(league = "LaLiga", country = "Spain")))
+        assertNull(BundledFootballBadges.team(names.copy(team1 = "Real Madrid", team2 = "Barcelona"), "Real Madrid", home = true))
         val verified=names.copy(competitionId="football:eng:premier-league",homeParticipantId="football:eng:arsenal",awayParticipantId="football:eng:manchester-city")
         assertEquals(R.drawable.badge_premier_league,BundledFootballBadges.competition(verified))
         assertEquals(R.drawable.badge_arsenal,BundledFootballBadges.team(verified,verified.team1,home=true))

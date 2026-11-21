@@ -180,7 +180,7 @@ internal object SportMarketStructure {
             else -> emptyMap()
         }
         for((stat,noun) in stats) {
-            val category=when { sport=="football" && stat=="corners" -> "corners";sport=="football" && stat in setOf("bookings","red-cards","yellow-cards") -> "cards";sport=="esports" && stat=="rounds" -> "rounds";sport=="esports" -> "kills";stat=="aces" -> "aces";stat=="tiebreaks" -> "tiebreaks";else -> "totals" }
+            val category=when { sport=="football" && stat=="corners" -> "corners";sport=="football" && stat in setOf("bookings","red-cards","yellow-cards") -> "cards";sport=="football" && stat in setOf("shots","shotsongoal") -> "shots";sport=="esports" && stat=="rounds" -> "rounds";sport=="esports" -> "kills";stat=="aces" -> "aces";stat=="tiebreaks" -> "tiebreaks";else -> "totals" }
             if(type=="totals-$stat")return spec("totals-$stat","Тотал $noun",category)
             if(type=="spreads-$stat")return spec("handicap-$stat","Фора по ${mapOf("games" to "геймам","points" to "очкам","aces" to "эйсам","tiebreaks" to "тай-брейкам","doublefaults" to "двойным ошибкам","breaks" to "брейкам","corners" to "угловым","bookings" to "карточкам","kills" to "убийствам","rounds" to "раундам")[stat] ?: noun}",if(sport=="esports" || sport=="football")category else "handicaps")
             if(type=="oddeven-$stat")return spec("odd-even-$stat","Чёт / нечёт $noun",category)
@@ -251,7 +251,7 @@ internal object SportMarketStructure {
     fun familyRank(family: String?): Int = listOf("result", "regulation-result", "winner", "winner-ot", "draw-no-bet", "double-chance", "asian-handicap", "european-handicap", "spread", "handicap", "point-handicap", "set-handicap", "map-handicap", "totals", "team-totals", "total-sets", "total-maps", "btts", "correct-score", "set-score").indexOf(family).takeIf { it >= 0 } ?: 100
     fun categoryRank(sport: String, category: String): Int {
         val order = when(sport) {
-            "football" -> listOf("main", "double-chance", "handicaps", "totals", "btts", "goals", "corners", "cards")
+            "football" -> listOf("main", "double-chance", "handicaps", "totals", "btts", "goals", "corners", "cards", "shots")
             "basketball" -> listOf("main", "handicaps", "totals", "players")
             "tennis" -> listOf("main", "sets", "handicaps", "totals", "games", "tiebreaks", "aces")
             "table-tennis", "volleyball" -> listOf("main", "sets", "handicaps", "totals")

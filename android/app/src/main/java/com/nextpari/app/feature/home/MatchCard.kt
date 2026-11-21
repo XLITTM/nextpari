@@ -144,7 +144,12 @@ fun NextpariMatchCard(
             }
         }
         val outcomes = model.outcomes.take(3).ifEmpty {
-            if (model.marketTitle == "1X2") listOf("П1", "X", "П2").map { MatchOutcome(it, locked = true) } else emptyList()
+            when {
+                model.marketTitle == "1X2" && model.sport in setOf("football", "hockey") ->
+                    listOf("П1", "X", "П2").map { MatchOutcome(it, locked = true) }
+                model.marketTitle == "Победитель" -> listOf("П1", "П2").map { MatchOutcome(it, locked = true) }
+                else -> emptyList()
+            }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             outcomes.forEach { outcome ->

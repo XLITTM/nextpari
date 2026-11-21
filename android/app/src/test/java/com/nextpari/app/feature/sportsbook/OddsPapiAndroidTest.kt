@@ -137,12 +137,15 @@ class OddsPapiAndroidTest {
         val base=MatchCardModel(id="1",sport="football",league="Premier League",country="England",team1="A",team2="B")
         val ranked=base.copy(id="3",eventId="3",competitionId="football:eng:premier-league")
         val other=base.copy(id="2",eventId="2",sport="basketball")
+        val lebanon=base.copy(id="4",eventId="4",country="Lebanon")
         val groups=CountryGrouping.groupByCountry(listOf(base,ranked,other,ranked))
-        assertEquals(1,CompetitionOrder.top(groups).size)
+        assertEquals(2,CompetitionOrder.top(groups).size)
         assertEquals(3,groups.sumOf{it.count})
         assertNotEquals(CompetitionOrder.leagueKey(base),CompetitionOrder.leagueKey(other))
+        assertNotEquals(CompetitionOrder.leagueKey(base),CompetitionOrder.leagueKey(ranked))
         assertEquals(listOf(ranked),LeagueMatches.filter(listOf(base,ranked,other),CompetitionOrder.leagueKey(ranked)))
-        assertTrue(CompetitionOrder.top(CountryGrouping.groupByCountry(listOf(base))).isEmpty())
+        assertEquals(1,CompetitionOrder.top(CountryGrouping.groupByCountry(listOf(base))).size)
+        assertTrue(CompetitionOrder.top(CountryGrouping.groupByCountry(listOf(lebanon))).isEmpty())
     }
     @Test fun productionCaptureDecodesAllActuallyObservedSportsWithoutDroppingV5Ids() {
         val capture=System.getenv("NEXTPARI_CAPTURE_FILE")
@@ -177,6 +180,22 @@ class OddsPapiAndroidTest {
         assertEquals("totals-rounds",family("esports","totals-rounds"))
         assertEquals("totals-points",family("table-tennis","totals-points"))
         assertEquals("2-я половина с ОТ",SportMarketStructure.periodLabel("basketball","p3+p4+overtime"))
+        assertEquals("shots",SportMarketStructure.describe("football",group(name="Удары").copy(marketFamily="totals-shotsongoal")).category)
+        assertEquals("corners",SportMarketStructure.describe("football",group(name="Угловые").copy(marketFamily="totals-corners")).category)
+        assertEquals("asian-handicap",SportMarketStructure.describe("football",group(line="0.25",name="Фора").copy(marketFamily="spreads")).family)
+        assertEquals("european-handicap",SportMarketStructure.describe("football",group(line="0.25",name="Фора").copy(marketFamily="spreads-european")).family)
+        val asian=group(line="0.25",id="501",name="Фора").copy(marketFamily="spreads")
+        val european=group(line="0.25",id="502",name="Фора").copy(marketFamily="spreads-european",
+            outcomes=group(line="0.25",id="502").outcomes.map { it.copy(odds=JsonPrimitive("1.25")) })
+        val split=event(groups=listOf(asian,european)).toFixture(epoch,1000,checkMarketAge=true)!!
+        assertEquals(setOf("asian-handicap","european-handicap"),split.markets.map { it.family }.toSet())
+        assertEquals(listOf("shots"),MarketTabs.available("football",event(groups=listOf(group(name="Створ").copy(marketFamily="totals-shotsongoal"))).toFixture(epoch,1000,checkMarketAge=true)!!.markets).map { it.id }.filter { it=="shots" || it=="totals" })
+    }
+    @Test fun esportsDisciplineUsesTheVerifiedNameRatherThanTheRawFeedLabel() {
+        val match=event("esports",emptyList()).copy(discipline="Dota 2").toFixture()!!.match
+        assertEquals("dota2",match.discipline)
+        assertEquals("cs2",canonicalEsportsDiscipline("CS 2"))
+        assertNull(canonicalEsportsDiscipline("BLAST Slam"))
     }
     @Test fun unlabelledPlayerPropsNeverExposeAnUnattributedPrice() {
         val props=group(name="Автор гола").copy(marketFamily="players-anytimegoalscorer",

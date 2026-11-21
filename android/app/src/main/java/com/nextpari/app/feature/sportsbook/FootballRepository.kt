@@ -431,9 +431,7 @@ internal data class FootballEventDto(
         if (readOnly != null && (expectedSport == null || (expectedSport != sport && !(sport == "esports" && tier in setOf(3, 5))))) return null
         val kickoffTime = kickoff?.let { runCatching { Instant.parse(it) }.getOrNull() }
         val kickoffLabel = kickoffTime?.atZone(ZoneId.systemDefault())?.format(kickoffFormat)
-        val clock = if (live && allowClock && sport == "football") {
-            FootballLiveClock.fromWire(liveClock, receiptEpochMs, receiptElapsedMs)
-        } else null
+        val clock = if (live && allowClock) FootballLiveClock.fromWire(liveClock, receiptEpochMs, receiptElapsedMs) else null
         val badges = FootballBadges.fromCatalog(logos)
         val match = MatchCardModel(
             id = id,
@@ -462,7 +460,7 @@ internal data class FootballEventDto(
             providerCompetitionId = providerCompetitionId?.content ?: tournamentId?.content,
             homeParticipantId = homeParticipantId,
             awayParticipantId = awayParticipantId,
-            discipline = discipline ?: if(sport=="esports") mapOf(16 to "dota2",17 to "cs2",18 to "lol",61 to "valorant")[providerSportId] else null,
+            discipline = canonicalEsportsDiscipline(discipline) ?: if(sport=="esports") mapOf(16 to "dota2",17 to "cs2",18 to "lol",61 to "valorant")[providerSportId] else null,
             readOnly = v5 || readOnly != null,
         )
         val resolvedCompetitionId = canonicalCompetitionId ?: competitionId ?: badges?.competitionId

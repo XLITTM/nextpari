@@ -41,12 +41,13 @@ internal data class FootballBadges(
             fun field(key: String) = (row[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
             val competitionId = field("competitionId")?.takeIf { it.isNotBlank() && it == it.trim() }
             val competition = ownedBadgeUrl(field("competition"))
-            return FootballBadges(
+            val badges = FootballBadges(
                 home = ownedBadgeUrl(field("home")),
                 away = ownedBadgeUrl(field("away")),
                 competition = if (competitionId != null && competition != null) FootballCompetitionBadge(competitionId, competition) else null,
                 competitionId = competitionId,
             )
+            return badges.takeUnless { it.home == null && it.away == null && it.competition == null && it.competitionId == null }
         }
     }
 }
@@ -120,22 +121,23 @@ internal object BundledFootballBadges {
     // PR #93 starter catalog: Premier League (BetsAPI 94), Arsenal (17230), Manchester City (708).
     const val PREMIER_LEAGUE_ID = "football:eng:premier-league"
 
-    private fun isPremierLeague(match: MatchCardModel): Boolean {
-        if (match.sport != "football") return false
+    private fun exact(value: String) = value.trim().replace(Regex("\\s+"), " ").lowercase(java.util.Locale.ROOT)
+
+    fun competition(match: MatchCardModel): Int? {
+        if (match.sport != "football") return null
         val canonical = match.competitionId ?: match.competitionBadge?.canonicalId
-        if (canonical != null) return canonical == PREMIER_LEAGUE_ID
-        if (match.hasLogoCatalog) return false
-        return false
-
+        if (canonical != null) return R.drawable.badge_premier_league.takeIf { canonical == PREMIER_LEAGUE_ID }
+        val england = SportsRegions.code(match.country) == "eng" || exact(match.country) == "england"
+        return R.drawable.badge_premier_league.takeIf { england && exact(match.league) == "premier league" }
     }
-
-    fun competition(match: MatchCardModel): Int? = R.drawable.badge_premier_league.takeIf { isPremierLeague(match) }
 
     fun team(match: MatchCardModel, name: String, home: Boolean? = null): Int? {
         if(match.sport!="football") return null
-        when(if(home==true)match.homeParticipantId else if(home==false)match.awayParticipantId else null) {
-            "football:eng:arsenal" -> return R.drawable.badge_arsenal
-            "football:eng:manchester-city" -> return R.drawable.badge_manchester_city
+        val participant = if(home==true) match.homeParticipantId else if(home==false) match.awayParticipantId else null
+        if (participant != null) return when(participant) {
+            "football:eng:arsenal" -> R.drawable.badge_arsenal
+            "football:eng:manchester-city" -> R.drawable.badge_manchester_city
+            else -> null
         }
         if (match.hasLogoCatalog) {
             val url = when (home) {
@@ -149,8 +151,11 @@ internal object BundledFootballBadges {
                 else -> null
             }
         }
-        return null
-
+        return when (exact(name)) {
+            "arsenal" -> R.drawable.badge_arsenal
+            "manchester city" -> R.drawable.badge_manchester_city
+            else -> null
+        }
     }
 }
 
