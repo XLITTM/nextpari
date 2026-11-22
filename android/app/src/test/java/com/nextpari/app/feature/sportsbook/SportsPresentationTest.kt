@@ -4,7 +4,6 @@ import androidx.compose.ui.unit.dp
 import com.nextpari.app.R
 import com.nextpari.app.core.storage.InMemoryPreferencesStorage
 import com.nextpari.app.feature.favorites.SportsFavoritesStore
-import com.nextpari.app.feature.home.MatchCardHeight
 import com.nextpari.app.feature.home.MatchCardModel
 import com.nextpari.app.feature.home.carouselCardWidth
 import java.io.File
@@ -161,20 +160,22 @@ class SportsPresentationTest {
     }
 
     @Test
-    fun carouselFitsCommonPhoneWidthsWithASharedHeight() {
+    fun carouselFitsCommonPhoneWidthsAndCardsUseIntrinsicHeight() {
         assertEquals(288.dp, carouselCardWidth(320.dp))
         assertEquals(320.dp, carouselCardWidth(360.dp))
         assertEquals(320.dp, carouselCardWidth(390.dp))
         assertEquals(320.dp, carouselCardWidth(430.dp))
         assertEquals(320.dp, carouselCardWidth(412.dp))
-        assertEquals(210.dp, MatchCardHeight)
         val source = File("src/main/java/com/nextpari/app/feature/home/MatchCard.kt").readText()
-        assertEquals(1, Regex("heightIn\\(min = MatchCardHeight\\)").findAll(source).count())
-        assertEquals(1, Regex("\\.height\\(MatchCardHeight\\)").findAll(source).count())
-        assertTrue(source.contains("wrapContentHeight"))
+        assertEquals(0, Regex("heightIn\\(min = MatchCardHeight\\)").findAll(source).count())
+        assertEquals(0, Regex("MatchCardHeight").findAll(source).count())
+        assertFalse(source.contains("210.dp"))
+        assertFalse(source.contains("heightIn(min = 72.dp)"))
+        assertFalse(source.contains("heightIn(min = 16.dp)"))
+        assertTrue(source.contains("MatchCardOddsBottom = 10.dp"))
+        assertTrue(source.contains(".wrapContentHeight()"))
         assertTrue(source.contains("background(face, shape)"))
         assertTrue(source.contains("marketTitle"))
-        assertTrue(source.contains("MatchCardOddsBottom"))
         assertTrue(source.contains("MatchCardLogoSize"))
         assertTrue(source.contains("horizontalAlignment = Alignment.CenterHorizontally"))
         assertTrue(source.contains("MatchTeamArtwork(model, home, Modifier.size(MatchCardLogoSize))"))
@@ -187,6 +188,16 @@ class SportsPresentationTest {
         assertFalse(source.contains(".clip(shape)\n            .background(face)"))
         assertFalse(source.contains("priceNote"))
         assertFalse(source.contains("extraMarkets"))
+        val gameList = File("src/main/java/com/nextpari/app/feature/sportsbook/GameListScreen.kt").readText()
+        assertTrue(gameList.contains("NextpariMatchCard("))
+        assertFalse(gameList.contains("heightIn(min"))
+        assertFalse(gameList.contains("MatchCardHeight"))
+        val league = File("src/main/java/com/nextpari/app/feature/sportsbook/LeagueScreen.kt").readText()
+        assertTrue(league.contains("NextpariMatchCard("))
+        assertFalse(league.contains("heightIn(min"))
+        val home = File("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
+        assertTrue(home.contains("MatchCarousel("))
+        assertFalse(home.contains("heightIn(min = 210"))
     }
 
     @Test

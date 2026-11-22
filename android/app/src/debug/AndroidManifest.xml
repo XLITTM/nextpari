@@ -9,6 +9,10 @@
             android:name=".debug.ScreenCheckActivity"
             android:exported="true"
             android:theme="@style/Theme.Nextpari" />
+        <activity
+            android:name=".debug.MatchCardHeightCheckActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Nextpari" />
         <!-- Instrumentation-only, no launcher or deep link. -->
         <activity android:name="com.nextpari.app.feature.sportsbook.SportsReadOnlyTestActivity" android:exported="false" />
     </application>

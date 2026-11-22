@@ -13,10 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        // versionCode 5 is the compact match-card and esports title-overlay correction.
+        versionCode = 6
+        // versionCode 6 sizes match cards to their content instead of a 210.dp floor.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.3"
+        versionName = "0.2.4"
 
         testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true

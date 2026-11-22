@@ -13,6 +13,8 @@ class VipNeonDevicePreviewTest {
         assertThat(moduleFile("src/release/AndroidManifest.xml").exists()).isFalse()
         assertThat(mainManifest).doesNotContain("VipNeonDevicePreviewActivity")
         assertThat(debugManifest).contains(".debug.VipNeonDevicePreviewActivity")
+        assertThat(debugManifest).contains(".debug.MatchCardHeightCheckActivity")
+        assertThat(mainManifest).doesNotContain("MatchCardHeightCheckActivity")
         assertThat(preview).contains("BottomNavSpec")
         assertThat(preview).contains("MainTabsSpec")
         assertThat(preview).contains("NextpariBottomNav(")
@@ -22,6 +24,11 @@ class VipNeonDevicePreviewTest {
         assertThat(preview).doesNotContain("api/player/wallets")
         assertThat(preview).doesNotContain("addWallet")
         assertThat(preview).doesNotContain("setActiveWallet")
+        val heightCheck = moduleFile("src/debug/java/com/nextpari/app/debug/MatchCardHeightCheckActivity.kt").readText()
+        assertThat(heightCheck).contains("NextpariMatchCard(")
+        assertThat(heightCheck).contains("LEGACY_MIN_HEIGHT = 210.dp")
+        assertThat(heightCheck).doesNotContain("heightIn(min")
+        assertThat(heightCheck).doesNotContain("minHeight")
     }
 
     private fun moduleFile(relative: String): File {
