@@ -8,6 +8,8 @@ import androidx.lifecycle.viewModelScope
 import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.session.AuthSession
 import com.nextpari.app.feature.favorites.SportsFavoritesStore
+import com.nextpari.app.feature.express.ExpressCouponResult
+import com.nextpari.app.feature.express.ExpressOfDay
 import com.nextpari.app.feature.home.HomeCatalogRepository
 import com.nextpari.app.feature.home.MatchCardModel
 import java.util.UUID
@@ -450,6 +452,42 @@ class SportsbookViewModel(
                 group.outcomes.any { it.selection == selection }
             }) return
         ui.update { it.copy(selections = toggleSportsSelection(it.selections, selection), couponNotice = null, acceptedBetId = null) }
+    }
+
+    fun addExpressToCoupon(express: ExpressOfDay): ExpressCouponResult {
+        if (!hasCurrentPlayer() || ui.value.placing || pending != null) {
+            return ExpressCouponResult(emptyList(), "Войдите, чтобы добавить экспресс в купон.")
+        }
+        val picks = express.selections.sortedBy { it.sortOrder }.map { it.toSportsSelection() }
+        if (picks.size < 2) {
+            return ExpressCouponResult(emptyList(), "В экспрессе недостаточно исходов.")
+        }
+        val live = mutableListOf<SportsBetSelection>()
+        for (pick in picks) {
+            if (oddsPapiEventId.matches(pick.fixtureId) || pick.provider == "oddspapi-v5") {
+                return ExpressCouponResult(emptyList(), "Исходы нельзя добавить в купон: приём ставок по выбранной линии выключен.")
+            }
+            val fixture = ui.value.fixtureFor(pick.fixtureId)
+            val matched = fixture?.markets?.flatMap { it.outcomes }?.mapNotNull { it.selection }
+                ?.firstOrNull { it.identity == pick.identity || (it.fixtureId == pick.fixtureId && it.marketKey == pick.marketKey && it.outcomeId == pick.outcomeId) }
+            if (fixture?.hasPrice(now()) != true || matched == null) {
+                return ExpressCouponResult(emptyList(), "Исход недоступен: ${pick.matchLabel}.")
+            }
+            if (matched.price != pick.price) {
+                return ExpressCouponResult(emptyList(), "Коэффициент изменился: ${pick.matchLabel}. Исходы не добавлены.")
+            }
+            live += matched
+        }
+        ui.update {
+            it.copy(
+                selections = live.fold(it.selections.filterNot { row -> live.any { pick -> pick.fixtureId == row.fixtureId } }) { acc, pick ->
+                    acc + pick
+                },
+                couponNotice = null,
+                acceptedBetId = null,
+            )
+        }
+        return ExpressCouponResult(live, null)
     }
 
     fun remove(selection: SportsBetSelection) {

@@ -36,6 +36,12 @@ import com.nextpari.app.feature.casino.CasinoArtwork
 import com.nextpari.app.feature.casino.CasinoCatalogStore
 import com.nextpari.app.feature.home.FakeHomeCatalogRepository
 import com.nextpari.app.feature.home.HomeCatalogRepository
+import com.nextpari.app.feature.express.EmptyExpressRepository
+import com.nextpari.app.feature.express.ExpressRepository
+import com.nextpari.app.feature.express.RemoteExpressRepository
+import com.nextpari.app.feature.results.EmptyResultsRepository
+import com.nextpari.app.feature.results.RemoteResultsRepository
+import com.nextpari.app.feature.results.ResultsRepository
 import com.nextpari.app.feature.sportsbook.FootballRepository
 import com.nextpari.app.feature.sportsbook.RemoteFootballRepository
 import com.nextpari.app.feature.profile.FakePersonalDataRepository
@@ -84,6 +90,10 @@ object AppGraph {
         private set
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
     var footballRepository: FootballRepository? = null
+        private set
+    var expressRepository: ExpressRepository = EmptyExpressRepository()
+        private set
+    var resultsRepository: ResultsRepository = EmptyResultsRepository()
         private set
     var playerApi: PlayerApi? = null
         private set
@@ -163,6 +173,8 @@ object AppGraph {
         personalDataRepository = RemotePersonalDataRepository(playerStateStore, api, NetworkModule.json, sessionReady)
         gameRepository = RemoteGameRepository(api, NetworkModule.json)
         footballRepository = RemoteFootballRepository(api, NetworkModule.json)
+        expressRepository = RemoteExpressRepository(api, NetworkModule.json)
+        resultsRepository = RemoteResultsRepository(api)
         sessionRepository.setReady(false)
         restorePhase.value = SessionRestorePhase.Checking
         restoreDetail.value = null

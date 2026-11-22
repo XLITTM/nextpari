@@ -60,7 +60,7 @@ class DestinationsTest {
         val expected = listOf(
             "home", "match/{matchId}", "betslip", "favorites", "history", "bet-details/{betId}",
             "menu", "wallet", "promo", "personal-data", "wallets", "gamelist/live", "gamelist/line",
-            "sports/live", "sports/line", "sports/cybers", "championships/{sport}/{mode}", "slots",
+            "sports/live", "sports/line", "sports/cybers", "sports/express", "sports/results", "championships/{sport}/{mode}", "slots",
             "live-casino", "casino/categories", "casino/providers", "casino/my", "casino/tournaments",
             "provider-sportsbook", "games", "promo-details", "promo-marathon",
             "promo-welcome", "settings", "info", "promo-unbeatable", "blackjack", "aviator",

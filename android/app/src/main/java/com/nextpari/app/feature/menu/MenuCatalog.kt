@@ -31,11 +31,11 @@ object MenuCatalog {
     val sport = listOf(
         MenuItem("LIVE", "Ставь на события в прямом эфире", DestinationsSports.LIVE),
         MenuItem("Линия", "Ставь на предстоящие события", DestinationsSports.LINE),
-        MenuItem("Экспресс дня", "Ставки на выгодные экспрессы"),
+        MenuItem("Экспресс дня", "Ставки на выгодные экспрессы", DestinationsSports.EXPRESS),
         MenuItem("Стрим", "Игры с онлайн-трансляцией"),
         MenuItem("Киберспорт", "Лучшие киберспортивные события", DestinationsSports.CYBERS),
         MenuItem("Спортбук провайдера", "Откроется во встроенном окне после подключения", "provider-sportsbook"),
-        MenuItem("Результаты", "Итоги прошедших событий"),
+        MenuItem("Результаты", "Итоги прошедших событий", DestinationsSports.RESULTS),
         MenuItem("Ставь на своих", "События любимых стран"),
     )
 
@@ -83,4 +83,6 @@ private object DestinationsSports {
     const val LIVE = "sports/live"
     const val LINE = "sports/line"
     const val CYBERS = "sports/cybers"
+    const val EXPRESS = "sports/express"
+    const val RESULTS = "sports/results"
 }

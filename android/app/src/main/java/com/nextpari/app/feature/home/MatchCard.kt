@@ -57,10 +57,12 @@ import com.nextpari.app.feature.sportsbook.SportsRegions
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
 import com.nextpari.app.feature.sportsbook.matchLiveStatus
 
-internal val MatchCardHeight = 196.dp
+internal val MatchCardHeight = 228.dp
 private val MatchCardShape = RoundedCornerShape(18.dp)
 private val MatchCardWidth = 320.dp
 private val MatchCardOddsBottom = 12.dp
+private val MatchCardLogoSize = 40.dp
+private val MatchCardScoreWidth = 76.dp
 
 internal fun carouselCardWidth(available: Dp): Dp =
     (available - 32.dp).coerceIn(0.dp, MatchCardWidth)
@@ -121,34 +123,35 @@ fun NextpariMatchCard(
             Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
-                .heightIn(min = 56.dp)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .heightIn(min = 84.dp)
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.Top,
         ) {
             TeamSide(model, home = true, modifier = Modifier.weight(1f))
-            Text(
-                if (model.isLive) model.score ?: "—" else "VS",
-                color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-                modifier = Modifier.width(66.dp),
-            )
-            TeamSide(model, home = false, modifier = Modifier.weight(1f))
-        }
-        Box(
-            Modifier.fillMaxWidth().wrapContentHeight().heightIn(min = 16.dp).padding(horizontal = 10.dp, vertical = 2.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            val status = if (model.isLive) matchLiveStatus(model) else model.kickoffLabel
-            status?.let {
+            Column(
+                Modifier.width(MatchCardScoreWidth).padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text(
-                    it,
-                    color = if (model.isLive) colors.accentInk else colors.textSecondary,
-                    fontSize = 11.sp,
-                    fontWeight = if (model.isLive) FontWeight.SemiBold else FontWeight.Normal,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+                    if (model.isLive) model.score ?: "—" else "VS",
+                    color = colors.text, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                 )
+                val status = if (model.isLive) matchLiveStatus(model) else model.kickoffLabel
+                status?.let {
+                    Text(
+                        it,
+                        color = if (model.isLive) colors.accentInk else colors.textSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = if (model.isLive) FontWeight.SemiBold else FontWeight.Normal,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
+            TeamSide(model, home = false, modifier = Modifier.weight(1f))
         }
         Box(
             Modifier.fillMaxWidth().wrapContentHeight().heightIn(min = 20.dp).padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 4.dp),
@@ -194,14 +197,17 @@ fun NextpariMatchCard(
 @Composable
 private fun TeamSide(model: MatchCardModel, home: Boolean, modifier: Modifier) {
     val name = if (home) model.team1 else model.team2
-    Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (!home) MatchTeamArtwork(model, home, Modifier.size(27.dp))
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        MatchTeamArtwork(model, home, Modifier.size(MatchCardLogoSize))
         Text(
             name, color = NextpariTheme.colors.text, fontWeight = FontWeight.Bold, fontSize = 12.sp,
-            maxLines = 3, overflow = TextOverflow.Ellipsis, textAlign = if (home) TextAlign.End else TextAlign.Start,
-            modifier = Modifier.weight(1f).wrapContentHeight(),
+            maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().wrapContentHeight(),
         )
-        if (home) MatchTeamArtwork(model, home, Modifier.size(27.dp))
     }
 }
 

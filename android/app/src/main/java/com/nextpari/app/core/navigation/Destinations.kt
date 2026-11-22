@@ -25,6 +25,8 @@ object Destinations {
     const val SPORTS_LIVE = "sports/live"
     const val SPORTS_LINE = "sports/line"
     const val SPORTS_CYBERS = "sports/cybers"
+    const val EXPRESS = "sports/express"
+    const val RESULTS = "sports/results"
     const val CHAMPIONSHIPS = "championships/{sport}/{mode}"
     const val SLOTS = "slots"
     const val CASINO_STANDARD = "casino/standard/{category}"
@@ -69,7 +71,7 @@ object Destinations {
     val webPlayerRoutes = listOf(
         HOME, MATCH, BETSLIP, FAVORITES, HISTORY, BET_DETAILS, MENU, WALLET, PROMO,
         PERSONAL_DATA, WALLETS, GAMELIST_LIVE, GAMELIST_LINE, SPORTS_LIVE, SPORTS_LINE,
-        SPORTS_CYBERS, CHAMPIONSHIPS, SLOTS, LIVE_CASINO, CASINO_CATEGORIES, CASINO_PROVIDERS,
+        SPORTS_CYBERS, EXPRESS, RESULTS, CHAMPIONSHIPS, SLOTS, LIVE_CASINO, CASINO_CATEGORIES, CASINO_PROVIDERS,
         CASINO_MY, CASINO_TOURNAMENTS, PROVIDER_SPORTSBOOK, GAMES,
         PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, SETTINGS, INFO, PROMO_UNBEATABLE,
         BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK, LEAGUE,

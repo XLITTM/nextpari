@@ -147,6 +147,8 @@ class SportsbookHierarchyTest {
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_LIVE)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_LINE)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_CYBERS)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.EXPRESS)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.RESULTS)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.CHAMPIONSHIPS)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.championships("football", "live"))).isEqualTo(Destinations.HOME)
         assertThat(Destinations.showsHeader(Destinations.SPORTS_LIVE)).isFalse()

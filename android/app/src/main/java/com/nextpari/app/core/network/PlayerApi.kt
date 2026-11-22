@@ -127,4 +127,19 @@ interface PlayerApi {
 
     @GET("api/player/sports/bets")
     suspend fun sportsBets(): Response<JsonObject>
+
+    @GET("api/player/sports/express")
+    suspend fun expressOfDay(): Response<JsonObject>
+
+    @POST("api/player/sports/express/{expressId}/coupon-validate")
+    suspend fun validateExpressCoupon(
+        @Path("expressId") expressId: String,
+        @Body body: JsonObject,
+    ): Response<JsonObject>
+
+    @GET("api/player/sports/results")
+    suspend fun sportsResults(
+        @Query("window") window: String,
+        @Query("sport") sport: String? = null,
+    ): Response<JsonObject>
 }

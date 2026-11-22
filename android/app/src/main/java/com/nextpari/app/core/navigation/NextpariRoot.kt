@@ -81,7 +81,9 @@ import com.nextpari.app.feature.sportsbook.SportsbookScreenHeader
 import com.nextpari.app.feature.update.ReleaseUpdateCard
 import com.nextpari.app.feature.history.HistoryScreen
 import com.nextpari.app.feature.home.GamesHubScreen
+import com.nextpari.app.feature.express.ExpressOfDayScreen
 import com.nextpari.app.feature.home.HomeScreen
+import com.nextpari.app.feature.results.ResultsScreen
 import com.nextpari.app.feature.home.HomeViewModel
 import com.nextpari.app.feature.info.InfoScreen
 import com.nextpari.app.feature.menu.MenuScreen
@@ -584,6 +586,16 @@ internal fun AuthenticatedShell(
                     onNavigate = { navController.navigateTo(it) },
                     viewModel = sportsbookViewModel,
                 )
+            }
+            composable(Destinations.EXPRESS) {
+                ExpressOfDayScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenCoupon = { navController.navigateTo(Destinations.BETSLIP) },
+                    sportsbook = sportsbookViewModel,
+                )
+            }
+            composable(Destinations.RESULTS) {
+                ResultsScreen(onBack = { navController.popBackStack() })
             }
             composable(Destinations.CHAMPIONSHIPS) { entry ->
                 ChampionshipsScreen(

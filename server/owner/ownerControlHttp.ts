@@ -43,6 +43,7 @@ export function isOwnerControlPath(pathname: string): boolean {
   if (!path.startsWith('/api/owner/')) return false;
   if (path.startsWith('/api/owner/auth/')) return false;
   if (path.startsWith('/api/owner/staff/')) return false;
+  if (path === '/api/owner/express' || path.startsWith('/api/owner/express/')) return false;
   return true;
 }
 

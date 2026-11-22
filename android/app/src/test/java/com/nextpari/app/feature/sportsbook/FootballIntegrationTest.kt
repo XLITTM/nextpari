@@ -3,7 +3,10 @@ package com.nextpari.app.feature.sportsbook
 import com.nextpari.app.core.network.NetworkModule
 import com.nextpari.app.core.network.session.InMemoryCookiePersistence
 import com.nextpari.app.core.network.session.SecureCookieJar
+import com.nextpari.app.feature.express.ExpressOfDay
+import com.nextpari.app.feature.express.ExpressSelection
 import com.nextpari.app.feature.home.FakeHomeCatalogRepository
+import com.nextpari.app.feature.home.EsportsCatalog
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -265,6 +268,79 @@ class FootballIntegrationTest {
             vm.setPlayer(null)
         } finally {
             Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun expressCouponRejectsStaleOddsPapiAndUnavailableLegs() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        try {
+            val first = live.toFixture()!!.copy(priceState = FootballPriceState.Open, validUntil = Long.MAX_VALUE)
+            val second = live.copy(id = "200", home = "C", away = "D").toFixture()!!.copy(priceState = FootballPriceState.Open, validUntil = Long.MAX_VALUE)
+            val vm = SportsbookViewModel(
+                FakeHomeCatalogRepository(),
+                RecordingFootballRepository(FootballSnapshot(listOf(first, second))),
+                now = { 1L },
+            )
+            vm.setPlayer("player-one")
+            vm.refreshFeed()
+            runCurrent()
+            val firstPick = first.match.outcomes.first().selection!!
+            val secondPick = second.match.outcomes.first().selection!!
+            fun express(vararg picks: SportsBetSelection) = ExpressOfDay(
+                id = "ex1",
+                title = "День",
+                description = "",
+                status = "published",
+                selections = picks.mapIndexed { index, pick ->
+                    ExpressSelection(
+                        id = "s$index",
+                        sortOrder = index,
+                        canonicalEventId = pick.fixtureId,
+                        provider = pick.provider,
+                        feedType = pick.feedType,
+                        fixtureId = pick.fixtureId,
+                        marketId = pick.marketId,
+                        marketKey = pick.marketKey,
+                        selectionId = pick.sourceSelectionId ?: pick.outcomeId,
+                        outcomeId = pick.outcomeId,
+                        line = pick.line,
+                        oddsSnapshot = pick.price,
+                        oddsSnapshotAt = "",
+                        matchLabel = pick.matchLabel,
+                        league = pick.league,
+                        outcomeName = pick.outcomeName,
+                    )
+                },
+            )
+            val added = vm.addExpressToCoupon(express(firstPick, secondPick))
+            assertEquals(2, added.added.size)
+            assertNull(added.message)
+            assertEquals(2, vm.state.value.selections.size)
+            vm.remove(firstPick)
+            vm.remove(secondPick)
+            val stale = vm.addExpressToCoupon(express(firstPick.copy(price = 9.9), secondPick))
+            assertTrue(stale.added.isEmpty())
+            assertTrue(stale.message!!.contains("изменился") || stale.message!!.contains("недоступен"))
+            val blocked = vm.addExpressToCoupon(express(
+                firstPick.copy(provider = "oddspapi-v5", fixtureId = "oddspapi-v5:id12345678"),
+                secondPick,
+            ))
+            assertTrue(blocked.added.isEmpty())
+            assertTrue(blocked.message!!.contains("выключен"))
+            vm.setPlayer(null)
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun esportsTilesKeepLocalArtworkAndDisciplineRoutes() {
+        val ids = EsportsCatalog.disciplines.map { it.id }
+        assertEquals(listOf("cs2", "dota2", "lol", "valorant"), ids)
+        EsportsCatalog.disciplines.forEach { item ->
+            assertEquals("championships/esports-${item.discipline}/live", item.destination)
+            assertTrue(item.imageRes != 0)
         }
     }
 

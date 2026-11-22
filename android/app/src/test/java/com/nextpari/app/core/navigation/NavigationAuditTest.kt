@@ -112,6 +112,8 @@ class NavigationAuditTest {
             "src/main/java/com/nextpari/app/feature/sportsbook/LeagueScreen.kt",
             "src/main/java/com/nextpari/app/feature/sportsbook/GameListScreen.kt",
             "src/main/java/com/nextpari/app/feature/sportsbook/MatchDetailsScreen.kt",
+            "src/main/java/com/nextpari/app/feature/express/ExpressOfDayScreen.kt",
+            "src/main/java/com/nextpari/app/feature/results/ResultsScreen.kt",
         )
         val blob = files.joinToString("\n") { moduleFile(it).readText() }
         assertThat(blob).doesNotContain("navigateTo(Destinations.MATCH)")
@@ -187,6 +189,8 @@ class NavigationAuditTest {
         "sports/live" -> "SPORTS_LIVE"
         "sports/line" -> "SPORTS_LINE"
         "sports/cybers" -> "SPORTS_CYBERS"
+        "sports/express" -> "EXPRESS"
+        "sports/results" -> "RESULTS"
         "slots" -> "SLOTS"
         "live-casino" -> "LIVE_CASINO"
         "casino/categories" -> "CASINO_CATEGORIES"

@@ -95,6 +95,16 @@ class ProductSectionsTest {
             assertThat(item.imageRes).isNotEqualTo(0)
             assertThat(item.destination).doesNotContain("{")
         }
+        listOf("esports_cs2", "esports_dota2", "esports_lol", "esports_valorant").forEach { name ->
+            val webp = moduleFile("src/main/res/drawable-nodpi/$name.webp")
+            val png = moduleFile("src/main/res/drawable-nodpi/$name.png")
+            assertThat(webp.exists()).isTrue()
+            assertThat(png.exists()).isFalse()
+        }
+        val home = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
+        assertThat(home).contains("clip(RoundedCornerShape(16.dp))")
+        assertThat(home).contains("contentScale = ContentScale.Crop")
+        assertThat(home).contains("item.name")
     }
 
     @Test
@@ -152,5 +162,14 @@ class ProductSectionsTest {
         listOf("YOHOHO", "Yohoho", "YohohoGames").forEach { token ->
             assertThat(blob).doesNotContain(token)
         }
+    }
+
+    private fun moduleFile(relative: String): java.io.File {
+        val candidates = listOf(
+            java.io.File(relative),
+            java.io.File("app/$relative"),
+            java.io.File("android/app/$relative"),
+        )
+        return candidates.firstOrNull { it.exists() } ?: java.io.File(relative)
     }
 }
