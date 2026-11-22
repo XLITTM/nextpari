@@ -67,6 +67,7 @@ data class EsportsDiscipline(
     val endColor: Long,
     val discipline: String,
     val imageRes: Int,
+    val bakedInTitle: Boolean = false,
 ) {
     val destination: String
         get() = com.nextpari.app.core.navigation.Destinations.championships("esports-$discipline", "live")
@@ -74,8 +75,8 @@ data class EsportsDiscipline(
 
 object EsportsCatalog {
     val disciplines: List<EsportsDiscipline> = listOf(
-        EsportsDiscipline("cs2", "CS 2", 0xFF334155, 0xFF020617, "cs2", R.drawable.esports_cs2),
-        EsportsDiscipline("dota2", "Dota 2", 0xFF9F1239, 0xFF450A0A, "dota2", R.drawable.esports_dota2),
+        EsportsDiscipline("cs2", "CS 2", 0xFF334155, 0xFF020617, "cs2", R.drawable.esports_cs2, bakedInTitle = true),
+        EsportsDiscipline("dota2", "Dota 2", 0xFF9F1239, 0xFF450A0A, "dota2", R.drawable.esports_dota2, bakedInTitle = true),
         EsportsDiscipline("lol", "League of Legends", 0xFF1D4ED8, 0xFF0F172A, "lol", R.drawable.esports_lol),
         EsportsDiscipline("valorant", "Valorant", 0xFFBE123C, 0xFF1C1917, "valorant", R.drawable.esports_valorant),
     )

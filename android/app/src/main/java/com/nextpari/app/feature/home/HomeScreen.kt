@@ -469,46 +469,48 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>, onNavigate: (Stri
                         modifier = Modifier.fillMaxSize(),
                         contentScale = ContentScale.Crop,
                     )
-                    Box(
-                        Modifier
-                            .align(Alignment.TopStart)
-                            .padding(10.dp)
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(Color.Black.copy(alpha = 0.45f)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        NextpariSportIconBadge(
-                            sportId = "esports",
-                            contentDescription = null,
-                            active = true,
-                            containerSize = 28.dp,
-                            iconSize = 22.dp,
-                        )
-                    }
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomStart)
-                            .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))))
-                            .padding(12.dp),
-                    ) {
-                        Column {
-                            Text(
-                                item.name,
-                                color = Color.White,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontSize = 16.sp,
-                                lineHeight = 20.sp,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
+                    if (!item.bakedInTitle) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopStart)
+                                .padding(10.dp)
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color.Black.copy(alpha = 0.45f)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            NextpariSportIconBadge(
+                                sportId = "esports",
+                                contentDescription = null,
+                                active = true,
+                                containerSize = 28.dp,
+                                iconSize = 22.dp,
                             )
-                            Text(
-                                "Киберспорт",
-                                color = Color.White.copy(alpha = 0.78f),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                        }
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomStart)
+                                .fillMaxWidth()
+                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))))
+                                .padding(12.dp),
+                        ) {
+                            Column {
+                                Text(
+                                    item.name,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 16.sp,
+                                    lineHeight = 20.sp,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    "Киберспорт",
+                                    color = Color.White.copy(alpha = 0.78f),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     }
                 }

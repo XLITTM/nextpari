@@ -167,7 +167,7 @@ class SportsPresentationTest {
         assertEquals(320.dp, carouselCardWidth(390.dp))
         assertEquals(320.dp, carouselCardWidth(430.dp))
         assertEquals(320.dp, carouselCardWidth(412.dp))
-        assertEquals(228.dp, MatchCardHeight)
+        assertEquals(210.dp, MatchCardHeight)
         val source = File("src/main/java/com/nextpari/app/feature/home/MatchCard.kt").readText()
         assertEquals(1, Regex("heightIn\\(min = MatchCardHeight\\)").findAll(source).count())
         assertEquals(1, Regex("\\.height\\(MatchCardHeight\\)").findAll(source).count())

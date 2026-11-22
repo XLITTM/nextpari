@@ -13,10 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        // versionCode 4 is the sports UI, express-of-the-day, and results contract build.
+        versionCode = 5
+        // versionCode 5 is the compact match-card and esports title-overlay correction.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.2"
+        versionName = "0.2.3"
 
         testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true

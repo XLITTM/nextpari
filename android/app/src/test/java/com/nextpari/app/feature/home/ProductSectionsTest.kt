@@ -95,6 +95,10 @@ class ProductSectionsTest {
             assertThat(item.imageRes).isNotEqualTo(0)
             assertThat(item.destination).doesNotContain("{")
         }
+        assertThat(EsportsCatalog.disciplines.filter { it.bakedInTitle }.map { it.id })
+            .containsExactly("cs2", "dota2").inOrder()
+        assertThat(EsportsCatalog.disciplines.filterNot { it.bakedInTitle }.map { it.id })
+            .containsExactly("lol", "valorant").inOrder()
         listOf("esports_cs2", "esports_dota2", "esports_lol", "esports_valorant").forEach { name ->
             val webp = moduleFile("src/main/res/drawable-nodpi/$name.webp")
             val png = moduleFile("src/main/res/drawable-nodpi/$name.png")
@@ -104,6 +108,7 @@ class ProductSectionsTest {
         val home = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
         assertThat(home).contains("clip(RoundedCornerShape(16.dp))")
         assertThat(home).contains("contentScale = ContentScale.Crop")
+        assertThat(home).contains("if (!item.bakedInTitle)")
         assertThat(home).contains("item.name")
     }
 

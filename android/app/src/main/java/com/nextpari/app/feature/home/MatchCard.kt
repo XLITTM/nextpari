@@ -57,11 +57,11 @@ import com.nextpari.app.feature.sportsbook.SportsRegions
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
 import com.nextpari.app.feature.sportsbook.matchLiveStatus
 
-internal val MatchCardHeight = 228.dp
+internal val MatchCardHeight = 210.dp
 private val MatchCardShape = RoundedCornerShape(18.dp)
 private val MatchCardWidth = 320.dp
-private val MatchCardOddsBottom = 12.dp
-private val MatchCardLogoSize = 40.dp
+private val MatchCardOddsBottom = 8.dp
+private val MatchCardLogoSize = 36.dp
 private val MatchCardScoreWidth = 76.dp
 
 internal fun carouselCardWidth(available: Dp): Dp =
@@ -100,7 +100,7 @@ fun NextpariMatchCard(
             .clickable(onClickLabel = "Открыть матч", onClick = onOpen),
     ) {
         Row(
-            Modifier.fillMaxWidth().height(32.dp).padding(horizontal = 10.dp),
+            Modifier.fillMaxWidth().height(28.dp).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -123,15 +123,15 @@ fun NextpariMatchCard(
             Modifier
                 .fillMaxWidth()
                 .wrapContentHeight()
-                .heightIn(min = 84.dp)
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .heightIn(min = 72.dp)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.Top,
         ) {
             TeamSide(model, home = true, modifier = Modifier.weight(1f))
             Column(
-                Modifier.width(MatchCardScoreWidth).padding(horizontal = 4.dp, vertical = 2.dp),
+                Modifier.width(MatchCardScoreWidth).padding(horizontal = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     if (model.isLive) model.score ?: "—" else "VS",
@@ -154,7 +154,7 @@ fun NextpariMatchCard(
             TeamSide(model, home = false, modifier = Modifier.weight(1f))
         }
         Box(
-            Modifier.fillMaxWidth().wrapContentHeight().heightIn(min = 20.dp).padding(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 4.dp),
+            Modifier.fillMaxWidth().wrapContentHeight().heightIn(min = 16.dp).padding(start = 10.dp, end = 10.dp, top = 0.dp, bottom = 2.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             model.marketTitle?.let {
@@ -200,7 +200,7 @@ private fun TeamSide(model: MatchCardModel, home: Boolean, modifier: Modifier) {
     Column(
         modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         MatchTeamArtwork(model, home, Modifier.size(MatchCardLogoSize))
         Text(
@@ -336,8 +336,8 @@ fun MatchSkeletonCarousel(count: Int = 2) {
                 Column(
                     Modifier.width(width).height(MatchCardHeight).clip(MatchCardShape).background(card),
                 ) {
-                    Box(Modifier.fillMaxWidth().height(32.dp).background(bar))
-                    Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                    Box(Modifier.fillMaxWidth().height(28.dp).background(bar))
+                    Column(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Box(Modifier.fillMaxWidth().height(46.dp).clip(RoundedCornerShape(10.dp)).background(bar))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             repeat(3) {
