@@ -3,12 +3,12 @@ export const ANDROID_APK_PAGE_PATH = '/android';
 
 export const ANDROID_APK = {
   packageName: 'com.nextpari.app.debug',
-  versionName: '0.2.0-debug',
-  versionCode: 2,
-  fileName: 'NextPari-0.2.0-debug-571dfe95.apk',
-  publicPath: '/downloads/NextPari-0.2.0-debug-571dfe95.apk',
-  bytes: 49_722_935,
-  sha256: '571DFE9576AF079132AA79A2EEEC31AAE01349D5C7554441569C14A8DF694108',
+  versionName: '0.2.1-debug',
+  versionCode: 3,
+  fileName: 'NextPari-0.2.1-debug-6B449AC9.apk',
+  publicPath: '/downloads/NextPari-0.2.1-debug-6B449AC9.apk',
+  bytes: 49_578_864,
+  sha256: '6B449AC98620B0369B7E4714FC6411485EB554A2B3E55A888B8F03A638645275',
   channel: 'debug-test',
   testNotice: 'Тестовая версия — для тестирования.',
 } as const;
