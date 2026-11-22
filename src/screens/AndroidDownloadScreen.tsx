@@ -1,5 +1,5 @@
 import { ChevronLeft, Download } from 'lucide-react';
-import { ANDROID_APK, formatAndroidApkSize } from '../lib/androidApk';
+import { ANDROID_APK, ANDROID_APK_PREVIOUS, formatAndroidApkSize } from '../lib/androidApk';
 
 interface AndroidDownloadScreenProps {
   onBack: () => void;
@@ -85,6 +85,15 @@ export function AndroidDownloadScreen({ onBack }: AndroidDownloadScreenProps) {
           <Download className="w-5 h-5" />
           Скачать APK · {sizeLabel}
         </a>
+        <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+          <a
+            href={ANDROID_APK_PREVIOUS.publicPath}
+            download={ANDROID_APK_PREVIOUS.fileName}
+            className="underline underline-offset-2"
+          >
+            Предыдущая сборка {ANDROID_APK_PREVIOUS.versionName} (откат)
+          </a>
+        </p>
 
         <section className="bg-gray-50 dark:bg-[#1e293b] rounded-2xl p-4 shadow-sm">
           <h2 className="text-sm font-bold text-gray-900 dark:text-white mb-2">Как установить</h2>

@@ -4,36 +4,50 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ANDROID_APK, ANDROID_APK_PAGE_PATH, formatAndroidApkSize } from './androidApk.js';
+import {
+  ANDROID_APK,
+  ANDROID_APK_PAGE_PATH,
+  ANDROID_APK_PREVIOUS,
+  formatAndroidApkSize,
+} from './androidApk.js';
+
+function downloadsFile(name: string): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'public', 'downloads', name);
+}
 
 test('debug APK listing is a versioned tester artifact, not a production release', () => {
   assert.equal(ANDROID_APK.packageName, 'com.nextpari.app.debug');
-  assert.equal(ANDROID_APK.versionName, '0.2.1-debug');
-  assert.equal(ANDROID_APK.versionCode, 3);
+  assert.equal(ANDROID_APK.versionName, '0.2.2-debug');
+  assert.equal(ANDROID_APK.versionCode, 4);
   assert.equal(ANDROID_APK.channel, 'debug-test');
   assert.equal(ANDROID_APK.testNotice, 'Тестовая версия — для тестирования.');
   assert.equal(ANDROID_APK_PAGE_PATH, '/android');
-  assert.match(ANDROID_APK.publicPath, /^\/downloads\/NextPari-0\.2\.1-debug-[0-9A-Fa-f]{8}\.apk$/);
-  assert.equal(ANDROID_APK.fileName, 'NextPari-0.2.1-debug-6B449AC9.apk');
-  assert.equal(ANDROID_APK.bytes, 49_578_864);
-  assert.equal(ANDROID_APK.sha256, '6B449AC98620B0369B7E4714FC6411485EB554A2B3E55A888B8F03A638645275');
+  assert.match(ANDROID_APK.publicPath, /^\/downloads\/NextPari-0\.2\.2-debug-[0-9A-Fa-f]{8}\.apk$/);
+  assert.equal(ANDROID_APK.fileName, 'NextPari-0.2.2-debug-7E3A99BC.apk');
+  assert.equal(ANDROID_APK.bytes, 49_741_636);
+  assert.equal(ANDROID_APK.sha256, '7E3A99BCEDFE2D94D0BDE9873F6DEB17191D91E88BA55C3ADA64EF5AFB68747D');
   assert.equal(ANDROID_APK.sha256.length, 64);
-  assert.equal(formatAndroidApkSize(), '47.3 МБ');
+  assert.equal(formatAndroidApkSize(), '47.4 МБ');
+  assert.notEqual(ANDROID_APK.fileName, ANDROID_APK_PREVIOUS.fileName);
+  assert.equal(ANDROID_APK_PREVIOUS.versionName, '0.2.1-debug');
+  assert.equal(ANDROID_APK_PREVIOUS.versionCode, 3);
+  assert.equal(ANDROID_APK_PREVIOUS.fileName, 'NextPari-0.2.1-debug-6B449AC9.apk');
 });
 
 test('local APK matches published metadata when the artifact is present', () => {
-  const apkPath = join(
-    dirname(fileURLToPath(import.meta.url)),
-    '..',
-    '..',
-    'public',
-    'downloads',
-    ANDROID_APK.fileName,
-  );
+  const apkPath = downloadsFile(ANDROID_APK.fileName);
   if (!existsSync(apkPath)) return;
   const bytes = readFileSync(apkPath);
   assert.equal(bytes.byteLength, ANDROID_APK.bytes);
   assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), ANDROID_APK.sha256);
+});
+
+test('previous 0.2.1 APK remains available as a rollback artifact', () => {
+  const apkPath = downloadsFile(ANDROID_APK_PREVIOUS.fileName);
+  if (!existsSync(apkPath)) return;
+  const bytes = readFileSync(apkPath);
+  assert.equal(bytes.byteLength, ANDROID_APK_PREVIOUS.bytes);
+  assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), ANDROID_APK_PREVIOUS.sha256);
 });
 
 test('Vercel SPA fallback does not swallow the APK path', () => {
@@ -47,6 +61,10 @@ test('Vercel SPA fallback does not swallow the APK path', () => {
   const apkHeaders = vercel.headers?.find((row) => row.source?.includes('downloads/') && row.source.includes('apk'));
   const contentType = apkHeaders?.headers?.find((row) => row.key === 'Content-Type')?.value;
   assert.equal(contentType, 'application/vnd.android.package-archive');
-  const disposition = apkHeaders?.headers?.find((row) => row.key === 'Content-Disposition')?.value;
-  assert.equal(disposition, 'attachment; filename="NextPari-0.2.1-debug-6B449AC9.apk"');
+  const primary = vercel.headers?.find((row) => row.source?.includes(ANDROID_APK.fileName));
+  const disposition = primary?.headers?.find((row) => row.key === 'Content-Disposition')?.value;
+  assert.equal(disposition, `attachment; filename="${ANDROID_APK.fileName}"`);
+  const previous = vercel.headers?.find((row) => row.source?.includes(ANDROID_APK_PREVIOUS.fileName));
+  const previousDisposition = previous?.headers?.find((row) => row.key === 'Content-Disposition')?.value;
+  assert.equal(previousDisposition, `attachment; filename="${ANDROID_APK_PREVIOUS.fileName}"`);
 });
