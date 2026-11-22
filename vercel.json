@@ -35,6 +35,15 @@
       ]
     },
     {
+      "source": "/downloads/NextPari-0.2.3-debug-D7240321.apk",
+      "headers": [
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"NextPari-0.2.3-debug-D7240321.apk\""
+        }
+      ]
+    },
+    {
       "source": "/downloads/NextPari-0.2.2-debug-7E3A99BC.apk",
       "headers": [
         {

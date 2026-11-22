@@ -17,21 +17,21 @@ function downloadsFile(name: string): string {
 
 test('debug APK listing is a versioned tester artifact, not a production release', () => {
   assert.equal(ANDROID_APK.packageName, 'com.nextpari.app.debug');
-  assert.equal(ANDROID_APK.versionName, '0.2.2-debug');
-  assert.equal(ANDROID_APK.versionCode, 4);
+  assert.equal(ANDROID_APK.versionName, '0.2.3-debug');
+  assert.equal(ANDROID_APK.versionCode, 5);
   assert.equal(ANDROID_APK.channel, 'debug-test');
   assert.equal(ANDROID_APK.testNotice, 'Тестовая версия — для тестирования.');
   assert.equal(ANDROID_APK_PAGE_PATH, '/android');
-  assert.match(ANDROID_APK.publicPath, /^\/downloads\/NextPari-0\.2\.2-debug-[0-9A-Fa-f]{8}\.apk$/);
-  assert.equal(ANDROID_APK.fileName, 'NextPari-0.2.2-debug-7E3A99BC.apk');
-  assert.equal(ANDROID_APK.bytes, 49_741_636);
-  assert.equal(ANDROID_APK.sha256, '7E3A99BCEDFE2D94D0BDE9873F6DEB17191D91E88BA55C3ADA64EF5AFB68747D');
+  assert.match(ANDROID_APK.publicPath, /^\/downloads\/NextPari-0\.2\.3-debug-[0-9A-Fa-f]{8}\.apk$/);
+  assert.equal(ANDROID_APK.fileName, 'NextPari-0.2.3-debug-D7240321.apk');
+  assert.equal(ANDROID_APK.bytes, 49_741_640);
+  assert.equal(ANDROID_APK.sha256, 'D72403215327AD4441B76BD0A596552DCCC85A7929672E75E6E208BC329D2536');
   assert.equal(ANDROID_APK.sha256.length, 64);
   assert.equal(formatAndroidApkSize(), '47.4 МБ');
   assert.notEqual(ANDROID_APK.fileName, ANDROID_APK_PREVIOUS.fileName);
-  assert.equal(ANDROID_APK_PREVIOUS.versionName, '0.2.1-debug');
-  assert.equal(ANDROID_APK_PREVIOUS.versionCode, 3);
-  assert.equal(ANDROID_APK_PREVIOUS.fileName, 'NextPari-0.2.1-debug-6B449AC9.apk');
+  assert.equal(ANDROID_APK_PREVIOUS.versionName, '0.2.2-debug');
+  assert.equal(ANDROID_APK_PREVIOUS.versionCode, 4);
+  assert.equal(ANDROID_APK_PREVIOUS.fileName, 'NextPari-0.2.2-debug-7E3A99BC.apk');
 });
 
 test('local APK matches published metadata when the artifact is present', () => {
@@ -42,7 +42,7 @@ test('local APK matches published metadata when the artifact is present', () => 
   assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), ANDROID_APK.sha256);
 });
 
-test('previous 0.2.1 APK remains available as a rollback artifact', () => {
+test('previous 0.2.2 APK remains available as a rollback artifact', () => {
   const apkPath = downloadsFile(ANDROID_APK_PREVIOUS.fileName);
   if (!existsSync(apkPath)) return;
   const bytes = readFileSync(apkPath);
