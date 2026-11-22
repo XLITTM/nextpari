@@ -51,6 +51,7 @@ private val lowerPriorityFootball = Regex(
     """\b(?:reserves?|u[- ]?[12][0-9]|under[- ]?[12][0-9]|youth|academy|amateur|club friendl(?:y|ies))\b""",
 )
 private const val FEATURED_LINE_WINDOW_MS = 24 * 60 * 60 * 1_000L
+private const val FEATURED_FOOTBALL_LINE_WINDOW_MS = 72 * 60 * 60 * 1_000L
 
 internal object FeaturedSports {
     fun isVirtualFootball(league: String): Boolean =
@@ -78,8 +79,18 @@ internal object FeaturedSports {
         return if (index < 0) SportsListCatalog.supported.size + 1 else index
     }
 
+    fun featuredSportBucket(sport: String): Int = when (sport) {
+        "football" -> 0
+        "basketball" -> 1
+        "tennis" -> 2
+        "hockey" -> 3
+        "volleyball" -> 4
+        "table-tennis" -> 5
+        else -> 10 + sportPriority(sport)
+    }
+
     fun prioritize(matches: List<MatchCardModel>): List<MatchCardModel> = matches.sortedWith(
-        compareBy<MatchCardModel> { sportPriority(it.sport) }
+        compareBy<MatchCardModel> { featuredSportBucket(it.sport) }
             .thenBy { CompetitionOrder.rank(it) }
             .thenBy(::tier)
             .thenBy { if (it.isLive) Long.MIN_VALUE else it.kickoffEpochMs ?: Long.MAX_VALUE }
@@ -89,13 +100,18 @@ internal object FeaturedSports {
     fun popularLive(matches: List<MatchCardModel>): List<MatchCardModel> =
         prioritize(matches.filter { it.isLive && !isEsports(it) })
 
-    fun popularLine(matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> =
-        prioritize(
-            matches.filter { match ->
-                !match.isLive && !isEsports(match) &&
-                    match.kickoffEpochMs?.let { it > nowMs && it <= nowMs + FEATURED_LINE_WINDOW_MS } == true
-            },
-        )
+    fun popularLine(matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> {
+        val upcoming = matches.filter { match -> !match.isLive && !isEsports(match) }
+        val football = upcoming.filter { match ->
+            match.sport == "football" &&
+                match.kickoffEpochMs?.let { it > nowMs && it <= nowMs + FEATURED_FOOTBALL_LINE_WINDOW_MS } == true
+        }
+        val others = upcoming.filter { match ->
+            match.sport != "football" &&
+                match.kickoffEpochMs?.let { it > nowMs && it <= nowMs + FEATURED_LINE_WINDOW_MS } == true
+        }
+        return prioritize(football + others)
+    }
 
     fun ordered(matches: List<MatchCardModel>): List<MatchCardModel> {
         val ranks = matches.map(::tier)

@@ -191,6 +191,11 @@ class OddsPapiAndroidTest {
         assertTrue(SportMarketStructure.footballFamilyOrder("totals") < SportMarketStructure.footballFamilyOrder("asian-totals"))
         assertTrue(SportMarketStructure.footballFamilyOrder("handicap") < SportMarketStructure.footballFamilyOrder("asian-handicap"))
         assertTrue(SportMarketStructure.footballFamilyOrder("asian-handicap") < SportMarketStructure.footballFamilyOrder("european-handicap"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("european-handicap") < SportMarketStructure.footballFamilyOrder("btts"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("odd-even") < SportMarketStructure.footballFamilyOrder("european-handicap"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("team-totals", "Индивидуальный тотал 1") <
+            SportMarketStructure.footballFamilyOrder("team-totals", "Индивидуальный тотал 2"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("correct-score") < SportMarketStructure.footballFamilyOrder("asian-totals"))
         val asian=group(line="0.25",id="501",name="Фора").copy(marketFamily="spreads")
         val european=group(line="0.25",id="502",name="Фора").copy(marketFamily="spreads-european",
             outcomes=group(line="0.25",id="502").outcomes.map { it.copy(odds=JsonPrimitive("1.25")) })

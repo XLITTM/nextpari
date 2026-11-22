@@ -29,12 +29,13 @@ data class PromoSection(
 
 object PromoCatalog {
     val menuItems: List<PromoMenuItem> = listOf(
-        PromoMenuItem("Бонусные игры", "Играйте и получайте призы", 0xFFF59E0B, soon = true),
+        PromoMenuItem("Приветственный пакет", "Условия будущей бонусной программы", 0xFF059669, route = Destinations.PROMO_WELCOME),
+        PromoMenuItem("Бонусные игры", "Появятся после подключения бонусной системы", 0xFFF59E0B, soon = true),
         PromoMenuItem("Проверка промокода", "Промокоды появятся после подключения бонусной системы", 0xFF059669, soon = true),
         PromoMenuItem("Кешбэк", "Информация о будущей программе кешбэка", 0xFFF59E0B, route = Destinations.VIP_CASHBACK),
         PromoMenuItem("VIP кешбэк", "Информация о VIP-программе", 0xFF059669, route = Destinations.VIP_CASHBACK),
-        PromoMenuItem("Участие в акциях", "Турниры и конкурсы прогнозов", 0xFFF59E0B, soon = true),
-        PromoMenuItem("Бонусы", "Подарки и поощрения для игроков", 0xFF059669, soon = true),
+        PromoMenuItem("Участие в акциях", "Турниры и конкурсы прогнозов появятся после подключения бонусной системы", 0xFFF59E0B, soon = true),
+        PromoMenuItem("Бонусы", "Подарки и поощрения появятся после подключения бонусной системы", 0xFF059669, soon = true),
     )
 
     val heroSummary = "Акции и бонусы появятся после подключения бонусной системы"

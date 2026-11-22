@@ -63,11 +63,14 @@ class SportsPresentationTest {
         val major = nba.copy(isLive = false, kickoffEpochMs = nextDay)
         val past = nations.copy(isLive = false, kickoffEpochMs = now)
         val later = nations.copy(isLive = false, kickoffEpochMs = nextDay + 1)
-        assertEquals(listOf(early, major), FeaturedSports.popularLine(
+        assertEquals(listOf(later, early, major), FeaturedSports.popularLine(
             listOf(early, past, major, later, nations, virtual.copy(isLive = false, kickoffEpochMs = now + 1),
                 youth.copy(isLive = false, kickoffEpochMs = null)),
             now,
         ))
+        assertEquals("football", FeaturedSports.popularLine(listOf(major, later), now).first().sport)
+        assertTrue(FeaturedSports.featuredSportBucket("football") < FeaturedSports.featuredSportBucket("basketball"))
+        assertTrue(FeaturedSports.featuredSportBucket("basketball") < FeaturedSports.featuredSportBucket("tennis"))
     }
 
     @Test
@@ -82,7 +85,7 @@ class SportsPresentationTest {
         val tt = nations.copy(id = "tt", eventId = "tt", sport = "table-tennis", league = "TT Cup", country = "International")
         val live = listOf(tt, china, nba, ligue, bund, serie, laliga, premier)
         val preview = HomeChampionships.preview(live, excludeEsports = true)
-        assertTrue(preview.size in 4..5)
+        assertEquals(HomeChampionships.PREVIEW_DEFAULT, preview.size)
         assertTrue(preview.size <= HomeChampionships.PREVIEW_MAX)
         assertFalse(preview.any { group -> group.leagues.any { it.name == "TT Cup" } })
         val full = HomeChampionships.groups(live, excludeEsports = true)
@@ -161,13 +164,18 @@ class SportsPresentationTest {
     fun carouselFitsCommonPhoneWidthsWithASharedHeight() {
         assertEquals(288.dp, carouselCardWidth(320.dp))
         assertEquals(320.dp, carouselCardWidth(360.dp))
+        assertEquals(320.dp, carouselCardWidth(390.dp))
+        assertEquals(320.dp, carouselCardWidth(430.dp))
         assertEquals(320.dp, carouselCardWidth(412.dp))
-        assertEquals(168.dp, MatchCardHeight)
+        assertEquals(196.dp, MatchCardHeight)
         val source = File("src/main/java/com/nextpari/app/feature/home/MatchCard.kt").readText()
         assertEquals(1, Regex("heightIn\\(min = MatchCardHeight\\)").findAll(source).count())
         assertEquals(1, Regex("\\.height\\(MatchCardHeight\\)").findAll(source).count())
+        assertTrue(source.contains("wrapContentHeight"))
+        assertTrue(source.contains("background(face, shape)"))
         assertTrue(source.contains("marketTitle"))
-        assertTrue(source.contains("padding(start = 10.dp, end = 10.dp, bottom = 8.dp, top = 2.dp)"))
+        assertTrue(source.contains("MatchCardOddsBottom"))
+        assertFalse(source.contains(".clip(shape)\n            .background(face)"))
         assertFalse(source.contains("priceNote"))
         assertFalse(source.contains("extraMarkets"))
     }

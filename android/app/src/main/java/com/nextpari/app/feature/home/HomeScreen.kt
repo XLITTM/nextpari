@@ -76,8 +76,18 @@ fun HomeScreen(
         esportsLine = line.filter { it.sport == "esports" })
     val colors = NextpariTheme.colors
     val now = System.currentTimeMillis()
-    val popularLive = sportsbook.featured(true, state.filteredLive, now)
-    val popularLine = sportsbook.featured(false, state.filteredLine, now)
+    val featuredLive = if (state.mainTabId == "sport") {
+        state.filteredLive
+    } else {
+        SportsbookFilters.matchesForSport(live, "all", excludeEsportsWhenAll = true)
+    }
+    val featuredLine = if (state.mainTabId == "sport") {
+        state.filteredLine
+    } else {
+        SportsbookFilters.matchesForSport(line, "all", excludeEsportsWhenAll = true)
+    }
+    val popularLive = sportsbook.featured(true, featuredLive, now)
+    val popularLine = sportsbook.featured(false, featuredLine, now)
     val topListState = rememberLazyListState()
     val sportListState = rememberLazyListState()
     val esportsListState = rememberLazyListState()
@@ -261,14 +271,18 @@ fun HomeScreen(
                         "slots",
                         "Популярные слоты",
                         active = "popular-slots" in visibleSections,
-                    ) { onNavigate(Destinations.SLOTS) }
+                        onOpenCatalog = { onNavigate(Destinations.SLOTS) },
+                        onOpenGame = { game -> onNavigate(Destinations.casinoDemoGame(game.id)) },
+                    )
                 }
                 item(key = "popular-live-casino") {
                     CasinoRealCatalog(
                         "live",
                         "Популярное Live Casino",
                         active = "popular-live-casino" in visibleSections,
-                    ) { onNavigate(Destinations.LIVE_CASINO) }
+                        onOpenCatalog = { onNavigate(Destinations.LIVE_CASINO) },
+                        onOpenGame = { game -> onNavigate(Destinations.casinoDemoGame(game.id)) },
+                    )
                 }
             }
         }
@@ -443,8 +457,9 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>, onNavigate: (Stri
             items(items, key = { it.id }) { item ->
                 Box(
                     modifier = Modifier
-                        .width(160.dp)
-                        .height(224.dp)
+                        .width(168.dp)
+                        .height(228.dp)
+                        .shadow(4.dp, RoundedCornerShape(16.dp), clip = false)
                         .clip(RoundedCornerShape(16.dp))
                         .clickable(onClickLabel = item.name) { onNavigate(item.destination) },
                 ) {
@@ -456,20 +471,45 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>, onNavigate: (Stri
                     )
                     Box(
                         Modifier
+                            .align(Alignment.TopStart)
+                            .padding(10.dp)
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color.Black.copy(alpha = 0.45f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        NextpariSportIconBadge(
+                            sportId = "esports",
+                            contentDescription = null,
+                            active = true,
+                            containerSize = 28.dp,
+                            iconSize = 22.dp,
+                        )
+                    }
+                    Box(
+                        Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f))))
+                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.88f))))
                             .padding(12.dp),
                     ) {
-                        Text(
-                            item.name,
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 16.sp,
-                            lineHeight = 20.sp,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        Column {
+                            Text(
+                                item.name,
+                                color = Color.White,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 16.sp,
+                                lineHeight = 20.sp,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                "Киберспорт",
+                                color = Color.White.copy(alpha = 0.78f),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
                     }
                 }
             }

@@ -13,10 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        // versionCode 2 is the first owner-signed release.
+        versionCode = 3
+        // versionCode 3 is the owner-facing catalog and match-card correction build.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.0"
+        versionName = "0.2.1"
 
         testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true

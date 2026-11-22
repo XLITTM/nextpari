@@ -55,10 +55,12 @@ class GameWebPolicyTest {
     @Test
     fun demoGameUsesOnlyTheExactNextPariDocument() {
         val gameId = "sa-0123456789abcdef0123456789abcdef"
-        val route = "https://nextpari.net/casino/demo/$gameId"
+        val route = "https://nextpari.net/casino/real/$gameId"
+        val demo = "https://nextpari.net/casino/demo/$gameId"
         assertThat(GameWebPolicy.gameUrl(gameId)).isEqualTo(route)
         assertThat(GameWebPolicy.gameUrl("sa-not-a-game")).isNull()
         assertThat(GameWebPolicy.decideMainFrame(route, gameId)).isEqualTo(GameFrameDecision.Allow)
+        assertThat(GameWebPolicy.decideMainFrame(demo, gameId)).isEqualTo(GameFrameDecision.Allow)
         assertThat(GameWebPolicy.decideMainFrame("https://nextpari.net/casino/demo", gameId)).isEqualTo(GameFrameDecision.Leave)
         assertThat(GameWebPolicy.decideMainFrame(route.replace("sa-0", "sa-%30"), gameId)).isEqualTo(GameFrameDecision.Leave)
         assertThat(GameWebPolicy.decideMainFrame(route, "dice")).isEqualTo(GameFrameDecision.Leave)

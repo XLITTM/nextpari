@@ -17,6 +17,7 @@ interface PlayerApi {
         @Query("q") query: String,
         @Query("category") category: String,
         @Query("page") page: Int,
+        @Query("provider") provider: String = "",
     ): Response<com.nextpari.app.feature.casino.CasinoDemoPage>
 
     @GET("api/player/casino/demo")
@@ -24,6 +25,7 @@ interface PlayerApi {
         @Query("q") query: String,
         @Query("category") category: String,
         @Query("page") page: Int,
+        @Query("provider") provider: String = "",
     ): Response<com.nextpari.app.feature.casino.CasinoDemoPage>
 
     @POST("api/player/auth/login")

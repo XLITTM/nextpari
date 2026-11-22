@@ -61,6 +61,7 @@ class PromoVipHomeTest {
     @Test
     fun promoScreenHasNoDuplicateCarouselAndExactSixRows() {
         assertThat(PromoCatalog.menuItems.map { it.label }).containsExactly(
+            "Приветственный пакет",
             "Бонусные игры",
             "Проверка промокода",
             "Кешбэк",
@@ -69,16 +70,18 @@ class PromoVipHomeTest {
             "Бонусы",
         ).inOrder()
         assertThat(PromoCatalog.menuItems.map { it.desc }).containsExactly(
-            "Играйте и получайте призы",
+            "Условия будущей бонусной программы",
+            "Появятся после подключения бонусной системы",
             "Промокоды появятся после подключения бонусной системы",
             "Информация о будущей программе кешбэка",
             "Информация о VIP-программе",
-            "Турниры и конкурсы прогнозов",
-            "Подарки и поощрения для игроков",
+            "Турниры и конкурсы прогнозов появятся после подключения бонусной системы",
+            "Подарки и поощрения появятся после подключения бонусной системы",
         ).inOrder()
         assertThat(PromoCatalog.heroSummary).isEqualTo("Акции и бонусы появятся после подключения бонусной системы")
         assertThat(PromoCatalog.menuItems.first { it.label == "Кешбэк" }.route).isEqualTo(Destinations.VIP_CASHBACK)
         assertThat(PromoCatalog.menuItems.first { it.label == "VIP кешбэк" }.route).isEqualTo(Destinations.VIP_CASHBACK)
+        assertThat(PromoCatalog.menuItems.first { it.label == "Приветственный пакет" }.route).isEqualTo(Destinations.PROMO_WELCOME)
         assertThat(PromoCatalog.menuItems.filter { it.soon }.map { it.label }).containsExactly(
             "Бонусные игры", "Проверка промокода", "Участие в акциях", "Бонусы",
         ).inOrder()
@@ -115,7 +118,7 @@ class PromoVipHomeTest {
         assertThat(accordion).doesNotContain("Чемпионаты Линия")
         assertThat(accordion).doesNotContain("Сейчас событий нет")
         assertThat(accordion).doesNotContain("mutableStateOf(\"live\")")
-        assertThat(accordion).contains("if (groups.isEmpty()) return")
+        assertThat(accordion).contains("if (preview.isEmpty()) return")
         assertThat(accordion).contains("AnimatedVisibility")
         assertThat(accordion).contains("Destinations.league")
 

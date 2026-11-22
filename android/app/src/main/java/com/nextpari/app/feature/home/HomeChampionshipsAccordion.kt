@@ -65,8 +65,11 @@ fun HomeChampionshipsAccordion(
     onNavigate: (String) -> Unit,
     excludeEsports: Boolean = false,
 ) {
-    val groups = HomeChampionships.preview(live, excludeEsports)
-    if (groups.isEmpty()) return
+    val preview = HomeChampionships.preview(live, excludeEsports)
+    if (preview.isEmpty()) return
+    val catalog = HomeChampionships.groups(live, excludeEsports)
+    var showAll by rememberSaveable { mutableStateOf(false) }
+    val groups = if (showAll) catalog else preview
 
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
@@ -86,7 +89,13 @@ fun HomeChampionshipsAccordion(
             title = HomeChampionships.TITLE,
             filterLabel = "Спорт",
             onFilter = { onNavigate(HomeChampionships.seeAllRoute(sportId)) },
-            onSeeAll = { onNavigate(HomeChampionships.seeAllRoute(sportId)) },
+            onSeeAll = {
+                if (!showAll && catalog.size > preview.size) {
+                    showAll = true
+                } else {
+                    onNavigate(HomeChampionships.seeAllRoute(sportId))
+                }
+            },
         )
         groups.forEach { group ->
             HomeCountryCard(

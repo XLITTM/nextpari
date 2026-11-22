@@ -60,7 +60,12 @@ class HomeViewModel(
 
     fun selectTab(id: String) {
         savedState[TAB_KEY] = id
-        ui.value = ui.value.copy(mainTabId = id)
+        if (id == "top") {
+            savedState[SPORT_KEY] = "all"
+            ui.value = ui.value.copy(mainTabId = id, selectedSportId = "all")
+        } else {
+            ui.value = ui.value.copy(mainTabId = id)
+        }
     }
 
     fun selectSport(id: String) {

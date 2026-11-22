@@ -22,7 +22,7 @@ class CasinoCatalogStoreTest {
             clock = { testScheduler.currentTime },
             freshnessMs = 90_000,
             sessionId = { "player-1" },
-            fetch = { _, _, _ ->
+            fetch = { _, _, _, _ ->
                 calls += 1
                 delay(120)
                 page()
@@ -53,7 +53,7 @@ class CasinoCatalogStoreTest {
             clock = { testScheduler.currentTime },
             freshnessMs = 90_000,
             sessionId = { session },
-            fetch = { _, category, _ ->
+            fetch = { _, category, _, _ ->
                 calls += 1
                 delay(40)
                 page(category)
@@ -77,7 +77,7 @@ class CasinoCatalogStoreTest {
             clock = { testScheduler.currentTime },
             freshnessMs = 90_000,
             sessionId = { "player-1" },
-            fetch = { _, _, _ -> delay(10); page("good-luck") },
+            fetch = { _, _, _, _ -> delay(10); page("good-luck") },
         )
         cache.list("", "live", 1)
         assertThat(cache.peek("", "live", 1)?.games?.single()?.id).isEqualTo("good-luck")
@@ -85,6 +85,42 @@ class CasinoCatalogStoreTest {
         testScheduler.advanceTimeBy(91_000)
         assertThat(cache.peek("", "live", 1)?.games?.single()?.title).isEqualTo("Nile Fortunes")
         assertThat(cache.peekFresh("", "live", 1)).isNull()
+    }
+
+    @Test
+    fun directoryUsesProvidersAndCategoriesFromPageMetadataWithoutPagingEveryGame() = runTest {
+        var calls = 0
+        val cache = CasinoCatalogCache(
+            clock = { testScheduler.currentTime },
+            freshnessMs = 90_000,
+            sessionId = { "player-1" },
+            fetch = { _, category, page, _ ->
+                calls += 1
+                CasinoDemoPage(
+                    ok = true,
+                    games = listOf(page("game-$category-$page").games.single()),
+                    nextPage = if (page == 1) 2 else null,
+                    providers = listOf(
+                        CasinoProviderRef("evolution", "Evolution"),
+                        CasinoProviderRef("pragmatic", "Pragmatic Play"),
+                        CasinoProviderRef("playngo", "Play'n GO"),
+                    ),
+                    categories = listOf("crash", "slots", "live", "table"),
+                    total = if (category.isEmpty()) 240 else 48,
+                )
+            },
+        )
+        val original = CasinoCatalogStore.cache
+        try {
+            // Use the local cache through CasinoCatalogStore.list by temporarily swapping fetch.
+        } finally {
+            assertThat(original).isNotNull()
+        }
+        val root = cache.list("", "", 1)
+        assertThat(root.providers.map { it.name }).containsExactly("Evolution", "Pragmatic Play", "Play'n GO").inOrder()
+        assertThat(CasinoCatalogLogic.sortCategories(root.categories)).containsExactly("slots", "live", "table", "crash").inOrder()
+        assertThat(calls).isEqualTo(1)
+        assertThat(root.games).hasSize(1)
     }
 
     @Test

@@ -16,6 +16,12 @@ class CasinoCatalogLogicTest {
         assertThat(CasinoCatalogLogic.accept(desktop)).isFalse()
         assertThat(CasinoCatalogLogic.categoryLabel("slots")).isEqualTo("Слоты")
         assertThat(CasinoCatalogLogic.categoryLabel("live")).isEqualTo("Лайв казино")
+        assertThat(CasinoCatalogLogic.categoryLabel("table")).isEqualTo("Настольные")
+        assertThat(CasinoCatalogLogic.categoryLabel("crash")).isEqualTo("Crash")
+        assertThat(CasinoCatalogLogic.sortCategories(listOf("keno", "slots", "live", "table")))
+            .containsExactly("slots", "live", "table", "keno").inOrder()
+        assertThat(CasinoCatalogLogic.providerInitials("Pragmatic Play")).isEqualTo("PP")
+        assertThat(CasinoCatalogLogic.providerInitials("Evolution")).isEqualTo("EV")
         assertThat(CasinoCatalogLogic.emptyMessage(true)).contains("Войдите")
         assertThat(CasinoCatalogLogic.emptyMessage(false)).isEqualTo("Игры не найдены")
     }

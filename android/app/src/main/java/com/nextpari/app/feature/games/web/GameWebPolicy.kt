@@ -26,7 +26,8 @@ object GameWebPolicy {
     private val standardGamePath = Regex("^/casino/real/sa-[a-f0-9]{32}$")
     private val demoId = Regex("^sa-[a-f0-9]{32}$")
     fun isCasinoDemoId(id: String): Boolean = demoId.matches(id)
-    private fun casinoPath(id: String): String? = "/casino/demo/$id".takeIf { isCasinoDemoId(id) }
+    private fun casinoPath(id: String): String? = "/casino/real/$id".takeIf { isCasinoDemoId(id) }
+    private fun casinoDemoPath(id: String): String? = "/casino/demo/$id".takeIf { isCasinoDemoId(id) }
 
     fun gameUrl(gameCode: String): String? {
         val path = paths[gameCode] ?: standardCatalogs[gameCode] ?: casinoPath(gameCode) ?: return null
@@ -54,9 +55,10 @@ object GameWebPolicy {
             }
         }
         val casino = casinoPath(gameCode)
+        val casinoDemo = casinoDemoPath(gameCode)
         if (casino != null) {
             if (uri.rawQuery != null || uri.rawFragment != null) return GameFrameDecision.Block
-            return if (uri.rawPath == casino) GameFrameDecision.Allow else GameFrameDecision.Leave
+            return if (uri.rawPath == casino || uri.rawPath == casinoDemo) GameFrameDecision.Allow else GameFrameDecision.Leave
         }
         val allowed = paths[gameCode]
         if (allowed != null && (path == allowed || (gameCode == "blackjack" && path == "/games/21"))) {

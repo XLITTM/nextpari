@@ -77,6 +77,14 @@ fun CasinoHomeContent(
         CasinoEntry("Лайв казино", "Каталог Live Casino", NextpariSectionIcons.Casino, Color.Unspecified) {
             onNavigate(Destinations.LIVE_CASINO)
         }
+        Spacer(Modifier.height(8.dp))
+        CasinoEntry("Моё казино", "Избранное и недавние игры", NextpariWebIcons.Star, Color.Unspecified) {
+            onNavigate(Destinations.CASINO_MY)
+        }
+        Spacer(Modifier.height(8.dp))
+        CasinoEntry("Турниры", "Турниры казино", NextpariWebIcons.Trophy, Color.Unspecified) {
+            onNavigate(Destinations.CASINO_TOURNAMENTS)
+        }
         if (features.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             ProductSectionHeader(title = "Рекомендуем", badge = "Casino", onSeeAll = { onNavigate(Destinations.SLOTS) })
@@ -91,7 +99,7 @@ fun CasinoHomeContent(
         }
         if (tournaments.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
-            ProductSectionHeader(title = "Турниры", badge = "Casino", onSeeAll = { onNavigate(Destinations.PROMO) })
+            ProductSectionHeader(title = "Турниры", badge = "Casino", onSeeAll = { onNavigate(Destinations.CASINO_TOURNAMENTS) })
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -113,8 +121,20 @@ fun CasinoHomeContent(
                 }
             }
         }
-        CasinoRealCatalog("slots", "Популярные слоты", active = true) { onNavigate(Destinations.SLOTS) }
-        CasinoRealCatalog("live", "Популярное Live Casino", active = liveActive) { onNavigate(Destinations.LIVE_CASINO) }
+        CasinoRealCatalog(
+            category = "slots",
+            title = "Популярные слоты",
+            active = true,
+            onOpenCatalog = { onNavigate(Destinations.SLOTS) },
+            onOpenGame = { game -> onNavigate(Destinations.casinoDemoGame(game.id)) },
+        )
+        CasinoRealCatalog(
+            category = "live",
+            title = "Популярное Live Casino",
+            active = liveActive,
+            onOpenCatalog = { onNavigate(Destinations.LIVE_CASINO) },
+            onOpenGame = { game -> onNavigate(Destinations.casinoDemoGame(game.id)) },
+        )
     }
 }
 

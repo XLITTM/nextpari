@@ -105,6 +105,8 @@ object AppGraph {
     fun bindPreferences(storage: PreferencesStorage) {
         preferencesStorage = storage
         sportsFavorites = SportsFavoritesStore(storage) { playerStateStore.me()?.playerPublicId.orEmpty() }
+        com.nextpari.app.feature.casino.CasinoLibraryStore.preferences = { storage }
+        com.nextpari.app.feature.casino.CasinoLibraryStore.playerId = { playerStateStore.me()?.playerPublicId.orEmpty() }
     }
 
     fun sessionCookies(): List<Cookie> {
@@ -141,6 +143,7 @@ object AppGraph {
                 WebSessionBridge.clear()
                 CasinoCatalogStore.clear()
                 CasinoArtwork.clearMemory()
+                com.nextpari.app.feature.casino.CasinoLibraryStore.clearMemory()
             },
         )
         coordinatorHolder[0] = coordinator

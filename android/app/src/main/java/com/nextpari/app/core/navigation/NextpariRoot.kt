@@ -327,7 +327,7 @@ internal fun AuthenticatedShell(
     LaunchedEffect(lifecycle, session.playerPublicId) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { walletsViewModel.refresh() }
     }
-    val casinoWeb = current == Destinations.CASINO_STANDARD || current == Destinations.SLOTS || current == Destinations.LIVE_CASINO
+    val casinoWeb = current?.startsWith("casino/demo/") == true
     var previousWasGame by remember { mutableStateOf(false) }
     LaunchedEffect(current) {
         if (current == null) return@LaunchedEffect
@@ -615,10 +615,20 @@ internal fun AuthenticatedShell(
                 }
             }
             composable(Destinations.SLOTS) {
-                GameWebViewScreen("casino-slots") { navController.popBackStack() }
+                com.nextpari.app.feature.casino.CasinoBrowseScreen(
+                    category = "slots",
+                    title = "Слоты",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
             }
             composable(Destinations.LIVE_CASINO) {
-                GameWebViewScreen("casino-live") { navController.popBackStack() }
+                com.nextpari.app.feature.casino.CasinoBrowseScreen(
+                    category = "live",
+                    title = "Лайв казино",
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
             }
             composable(Destinations.CASINO_CATEGORIES) {
                 com.nextpari.app.feature.casino.CasinoDirectoryScreen(
@@ -634,22 +644,43 @@ internal fun AuthenticatedShell(
                     onNavigate = { navController.navigateTo(it) },
                 )
             }
-            placeholder(
-                navController,
-                Destinations.CASINO_MY,
-                "Моё казино",
-                "Избранное и недавние игры появятся, когда аккаунт сохранит их на сервере.",
-            )
-            placeholder(
-                navController,
-                Destinations.CASINO_TOURNAMENTS,
-                "Турниры",
-                "Турниры казино сейчас недоступны: сервер не отдаёт турнирные данные.",
-            )
+            composable(Destinations.CASINO_PROVIDER_GAMES) { entry ->
+                val providerId = java.net.URLDecoder.decode(
+                    entry.arguments?.getString("providerId").orEmpty(),
+                    Charsets.UTF_8.name(),
+                )
+                com.nextpari.app.feature.casino.CasinoBrowseScreen(
+                    category = "",
+                    provider = providerId,
+                    title = providerId.ifBlank { "Провайдер" },
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
+            composable(Destinations.CASINO_MY) {
+                com.nextpari.app.feature.casino.CasinoMyScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
+            composable(Destinations.CASINO_TOURNAMENTS) {
+                com.nextpari.app.feature.casino.CasinoTournamentsScreen(
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
             composable(Destinations.CASINO_STANDARD) { entry ->
-                val category = entry.arguments?.getString("category").orEmpty()
-                val code = if (category == "live") "casino-live" else "casino-slots"
-                GameWebViewScreen(code) { navController.popBackStack() }
+                val category = entry.arguments?.getString("category").orEmpty().ifBlank { "slots" }
+                com.nextpari.app.feature.casino.CasinoBrowseScreen(
+                    category = category,
+                    title = com.nextpari.app.feature.casino.CasinoCatalogLogic.categoryLabel(category),
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
+            composable(Destinations.CASINO_DEMO_GAME) { entry ->
+                val gameId = entry.arguments?.getString("gameId").orEmpty()
+                GameWebViewScreen(gameId) { navController.popBackStack() }
             }
             placeholder(navController, Destinations.PROVIDER_SPORTSBOOK, "Спортбук провайдера", "Спортбук провайдера недоступен: запуск не включён.")
             composable(Destinations.PROMO_DETAILS) {

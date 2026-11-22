@@ -40,6 +40,7 @@ object MenuCatalog {
     )
 
     val casino = listOf(
+        MenuItem("Казино", "Каталог казино NextPari", Destinations.CASINO_CATEGORIES),
         MenuItem("Лайв казино", "Каталог Live Casino", "live-casino"),
         MenuItem("Слоты", "Каталог слотов NextPari", "slots"),
         MenuItem("Моё казино", "Избранное и недавние игры", Destinations.CASINO_MY),

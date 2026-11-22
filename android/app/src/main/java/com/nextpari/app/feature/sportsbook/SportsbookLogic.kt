@@ -487,13 +487,7 @@ object HomeChampionships {
         if (all.isEmpty()) return emptyList()
         val scored = all.map { group -> group to previewScore(group, live) }
             .sortedWith(compareBy({ it.second }, { SportsRegions.name(it.first.country) }))
-        val prominent = scored.filter { it.second < 5_000 }
-        val take = when {
-            prominent.size >= PREVIEW_MAX -> PREVIEW_MAX
-            prominent.size >= PREVIEW_DEFAULT -> PREVIEW_DEFAULT
-            else -> minOf(PREVIEW_DEFAULT, scored.size)
-        }
-        return scored.take(take).map { it.first }
+        return scored.take(minOf(PREVIEW_DEFAULT, scored.size)).map { it.first }
     }
 
     private fun previewScore(group: CountryGroup, live: List<MatchCardModel>): Int {

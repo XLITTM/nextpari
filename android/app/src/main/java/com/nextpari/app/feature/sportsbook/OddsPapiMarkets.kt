@@ -277,24 +277,27 @@ internal object SportMarketStructure {
     }
     fun familyRank(family: String?): Int = listOf(
         "result", "regulation-result", "winner", "winner-ot", "draw-no-bet", "double-chance",
-        "totals", "handicap", "team-totals", "btts", "correct-score",
-        "asian-totals", "asian-handicap", "asian-team-totals", "european-handicap",
-        "first-goal", "next-goal", "last-goal",
+        "totals", "handicap", "team-totals", "correct-score",
+        "asian-totals", "asian-handicap", "asian-team-totals", "odd-even", "european-handicap",
+        "btts", "first-goal", "last-goal", "next-goal",
         "spread", "point-handicap", "set-handicap", "map-handicap", "total-sets", "total-maps", "set-score",
     ).indexOf(family).takeIf { it >= 0 } ?: 100
-    fun footballFamilyOrder(family: String?): Int = when (family) {
+    fun footballFamilyOrder(family: String?, name: String = ""): Int = when (family) {
         "result", "winner" -> 1
         "double-chance" -> 2
         "totals" -> 3
         "handicap" -> 4
-        "team-totals" -> 5
-        "btts" -> 7
-        "correct-score" -> 8
-        "asian-totals" -> 9
-        "asian-handicap" -> 10
-        "asian-team-totals" -> 11
+        "team-totals" -> if (name.contains("2") && !name.contains("1")) 6 else 5
+        "correct-score" -> 7
+        "asian-totals" -> 8
+        "asian-handicap" -> 9
+        "asian-team-totals" -> 10
+        "odd-even" -> 11
         "european-handicap" -> 12
-        "next-goal", "first-goal", "last-goal" -> 13
+        "btts" -> 13
+        "first-goal" -> 14
+        "last-goal" -> 15
+        "next-goal" -> 16
         else -> 50 + familyRank(family)
     }
     fun categoryRank(sport: String, category: String): Int {
@@ -392,7 +395,7 @@ internal fun FootballFixture.withOddsPapiMarkets(
         }.sortedWith(
             if (match.sport == "football") {
                 compareBy<MarketGroup> { SportMarketStructure.periodRank(it.periodId) }
-                    .thenBy { SportMarketStructure.footballFamilyOrder(it.family) }
+                    .thenBy { SportMarketStructure.footballFamilyOrder(it.family, it.name) }
                     .thenBy { it.name }
             } else {
                 compareBy<MarketGroup> { SportMarketStructure.categoryRank(match.sport, it.category) }

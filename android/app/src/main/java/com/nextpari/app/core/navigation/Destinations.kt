@@ -31,6 +31,7 @@ object Destinations {
     const val CASINO_DEMO_GAME = "casino/demo/{gameId}"
     const val CASINO_CATEGORIES = "casino/categories"
     const val CASINO_PROVIDERS = "casino/providers"
+    const val CASINO_PROVIDER_GAMES = "casino/provider/{providerId}"
     const val CASINO_MY = "casino/my"
     const val CASINO_TOURNAMENTS = "casino/tournaments"
     const val LIVE_CASINO = "live-casino"
@@ -138,7 +139,7 @@ object Destinations {
         if (route == LEAGUE || route.startsWith("league/")) return true
         if (route == CHAMPIONSHIPS || route.startsWith("championships/")) return true
         if (route.startsWith("gamelist/")) return true
-        if (route.startsWith("sports/") || route.startsWith("casino/demo/") || route.startsWith("casino/standard/")) return true
+        if (route.startsWith("sports/") || route.startsWith("casino/demo/") || route.startsWith("casino/standard/") || route.startsWith("casino/provider/")) return true
         return route in homeOwnedExact
     }
 
@@ -156,6 +157,10 @@ object Destinations {
 
     fun casinoStandard(category: String) = "casino/standard/$category"
     fun casinoDemoGame(gameId: String) = "casino/demo/$gameId"
+    fun casinoProvider(providerId: String): String {
+        val encoded = java.net.URLEncoder.encode(providerId, Charsets.UTF_8.name()).replace("+", "%20")
+        return "casino/provider/$encoded"
+    }
     fun match(matchId: String) = "match/$matchId"
     fun betDetails(betId: String) = "bet-details/$betId"
     fun championships(sport: String, mode: String) = "championships/$sport/$mode"

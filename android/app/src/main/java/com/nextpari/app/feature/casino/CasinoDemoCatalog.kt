@@ -13,7 +13,11 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,6 +53,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.Serializable
 
 @Serializable
+data class CasinoProviderRef(
+    val id: String = "",
+    val name: String = "",
+)
+
+@Serializable
 data class CasinoDemoGame(
     val id: String,
     val title: String,
@@ -57,6 +67,7 @@ data class CasinoDemoGame(
     val image: String? = null,
     val demo: Boolean = false,
     val mobile: Boolean? = null,
+    val provider: String = "",
 )
 
 @Serializable
@@ -64,6 +75,20 @@ data class CasinoDemoPage(
     val ok: Boolean = false,
     val games: List<CasinoDemoGame> = emptyList(),
     val nextPage: Int? = null,
+    val providers: List<CasinoProviderRef> = emptyList(),
+    val categories: List<String> = emptyList(),
+    val total: Int = 0,
+    val tournaments: List<CasinoTournamentDto> = emptyList(),
+)
+
+@Serializable
+data class CasinoTournamentDto(
+    val id: String = "",
+    val title: String = "",
+    val status: String? = null,
+    val prizePool: String? = null,
+    val startsAt: String? = null,
+    val endsAt: String? = null,
 )
 
 internal class CasinoCatalogException(
@@ -71,7 +96,9 @@ internal class CasinoCatalogException(
     message: String,
 ) : IllegalStateException(message)
 
-internal object CasinoCatalogLogic {
+object CasinoCatalogLogic {
+    val knownCategories = listOf("slots", "live", "table", "instant", "crash", "fishing", "bingo", "keno", "other")
+
     fun accept(game: CasinoDemoGame): Boolean =
         game.id.isNotBlank() && game.title.isNotBlank() && game.mobile != false
 
@@ -87,11 +114,30 @@ internal object CasinoCatalogLogic {
         else -> raw.ifBlank { "Другие" }
     }
 
+    fun categoryArtwork(raw: String): String = when (raw.lowercase()) {
+        "slots" -> "game_pharaoh"
+        "live" -> "game_blackjack"
+        "table" -> "game_dice"
+        "crash" -> "game_crystal"
+        else -> "game_apples"
+    }
+
+    fun sortCategories(ids: List<String>): List<String> =
+        ids.map { it.trim().lowercase() }.filter { it.isNotBlank() }.distinct()
+            .sortedWith(compareBy({ knownCategories.indexOf(it).takeIf { index -> index >= 0 } ?: 100 }, { it }))
+
     fun emptyMessage(unauthorized: Boolean): String =
         if (unauthorized) "Войдите в аккаунт, чтобы открыть каталог" else "Игры не найдены"
 
     fun preview(games: List<CasinoDemoGame>): List<CasinoDemoGame> =
         games.filter(CasinoCatalogLogic::accept).distinctBy(CasinoDemoGame::id).take(12)
+
+    fun providerInitials(name: String): String {
+        val parts = name.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+        if (parts.isEmpty()) return "NP"
+        if (parts.size == 1) return parts[0].take(2).uppercase()
+        return parts.take(2).map { it.first().uppercaseChar() }.joinToString("")
+    }
 }
 
 internal object CasinoRealCatalogClient {
@@ -99,10 +145,11 @@ internal object CasinoRealCatalogClient {
         query: String,
         category: String,
         page: Int,
+        provider: String = "",
         api: PlayerApi? = AppGraph.playerApi,
     ): CasinoDemoPage {
         val client = api ?: NetworkModule.playerApi(NetworkModule.okHttpClient())
-        val response = client.casinoRealCatalog(query, category, page)
+        val response = client.casinoRealCatalog(query, category, page, provider)
         if (response.code() == 401) {
             throw CasinoCatalogException(true, "JWT_REQUIRED")
         }
@@ -112,7 +159,12 @@ internal object CasinoRealCatalogClient {
         }
         return catalog.copy(
             games = catalog.games.filter(CasinoCatalogLogic::accept),
+            providers = catalog.providers.filter { it.id.isNotBlank() || it.name.isNotBlank() }
+                .map { it.copy(id = it.id.ifBlank { it.name }, name = it.name.ifBlank { it.id }) }
+                .distinctBy { it.id },
+            categories = CasinoCatalogLogic.sortCategories(catalog.categories),
             nextPage = catalog.nextPage?.takeIf { it == page + 1 },
+            tournaments = catalog.tournaments.filter { it.id.isNotBlank() && it.title.isNotBlank() },
         )
     }
 
@@ -120,7 +172,8 @@ internal object CasinoRealCatalogClient {
         query: String,
         category: String,
         page: Int,
-    ): CasinoDemoPage = CasinoCatalogStore.list(query, category, page)
+        provider: String = "",
+    ): CasinoDemoPage = CasinoCatalogStore.list(query, category, page, provider)
 }
 
 @Composable
@@ -129,6 +182,7 @@ fun CasinoRealCatalog(
     title: String,
     active: Boolean = true,
     onOpenCatalog: () -> Unit,
+    onOpenGame: (CasinoDemoGame) -> Unit = { onOpenCatalog() },
 ) {
     val colors = NextpariTheme.colors
     var retry by remember(category) { mutableStateOf(0) }
@@ -177,7 +231,9 @@ fun CasinoRealCatalog(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(games, key = CasinoDemoGame::id) { game -> CasinoRealTile(game, onOpenCatalog) }
+                items(games, key = CasinoDemoGame::id) { game ->
+                    CasinoGameTile(game) { onOpenGame(game) }
+                }
             }
         } else if (loading) {
             CasinoCatalogSkeleton()
@@ -219,9 +275,21 @@ private fun CasinoCatalogSkeleton() {
 }
 
 @Composable
-private fun CasinoRealTile(game: CasinoDemoGame, onOpen: () -> Unit) {
+internal fun CasinoGameTile(
+    game: CasinoDemoGame,
+    compact: Boolean = true,
+    onOpen: () -> Unit,
+) {
+    CasinoRealTile(game, compact, onOpen)
+}
+
+@Composable
+private fun CasinoRealTile(game: CasinoDemoGame, compact: Boolean = true, onOpen: () -> Unit) {
     val colors = NextpariTheme.colors
     val shape = RoundedCornerShape(16.dp)
+    val scope = rememberCoroutineScope()
+    val library by CasinoLibraryStore.library.collectAsStateWithLifecycle()
+    val favorite = game.id in library.favoriteIds
     val image by produceState(game.image?.let(CasinoArtwork::cached), game.image) {
         value = game.image?.let { CasinoArtwork.load(it) }
     }
@@ -243,6 +311,18 @@ private fun CasinoRealTile(game: CasinoDemoGame, onOpen: () -> Unit) {
                     contentScale = ContentScale.Crop,
                 )
             }
+            Icon(
+                NextpariWebIcons.Star,
+                contentDescription = if (favorite) "Убрать из избранного" else "Добавить в избранное",
+                tint = if (favorite) colors.accent else colors.textMuted,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(22.dp)
+                    .clickable {
+                        scope.launch { CasinoLibraryStore.toggleFavorite(game) }
+                    },
+            )
         }
         Text(game.title, Modifier.padding(start = 9.dp, top = 7.dp, end = 9.dp), color = colors.text,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
