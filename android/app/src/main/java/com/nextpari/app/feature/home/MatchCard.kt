@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -55,7 +56,7 @@ import com.nextpari.app.feature.sportsbook.SportsRegions
 import com.nextpari.app.feature.sportsbook.SportsBetSelection
 import com.nextpari.app.feature.sportsbook.matchLiveStatus
 
-internal val MatchCardHeight = 148.dp
+internal val MatchCardHeight = 168.dp
 private val MatchCardShape = RoundedCornerShape(18.dp)
 private val MatchCardWidth = 320.dp
 
@@ -87,7 +88,7 @@ fun NextpariMatchCard(
     Column(
         modifier = Modifier
             .then(if (carousel) Modifier.width(carouselWidth) else Modifier.fillMaxWidth())
-            .height(MatchCardHeight)
+            .heightIn(min = MatchCardHeight)
             .shadow(if (dark) 4.dp else 5.dp, shape, clip = false)
             .clip(shape)
             .background(face)
@@ -114,7 +115,7 @@ fun NextpariMatchCard(
             }
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(colors.border))
-        Row(Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 10.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             TeamSide(model, home = true, modifier = Modifier.weight(1f))
             Text(
                 if (model.isLive) model.score ?: "—" else "VS",
@@ -138,9 +139,16 @@ fun NextpariMatchCard(
                 )
             }
         }
-        Box(Modifier.fillMaxWidth().height(13.dp).padding(horizontal = 10.dp), contentAlignment = Alignment.CenterStart) {
+        Box(Modifier.fillMaxWidth().heightIn(min = 18.dp).padding(horizontal = 10.dp, vertical = 1.dp), contentAlignment = Alignment.CenterStart) {
             model.marketTitle?.let {
-                Text(it, color = colors.textSecondary, fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text(
+                    it,
+                    color = colors.textSecondary,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
         val outcomes = model.outcomes.take(3).ifEmpty {
@@ -151,7 +159,10 @@ fun NextpariMatchCard(
                 else -> emptyList()
             }
         }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 8.dp, top = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
             outcomes.forEach { outcome ->
                 val selection = outcome.selection
                 OutcomeButton(

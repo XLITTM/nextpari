@@ -169,7 +169,9 @@ class NextpariIconsTest {
         val selector = home.substringAfter("private fun SportsSelector(").substringBefore("private fun PromoRow(")
         assertThat(selector).contains("NextpariSportIconBadge(")
         assertThat(selector).doesNotContain("SportIconRes.drawable")
-        assertThat(home).contains("NextpariWebIcons.gamepad2(1.5f)")
+        assertThat(home).contains("painterResource(item.imageRes)")
+        assertThat(home).contains("item.destination")
+        assertThat(home).doesNotContain("NextpariWebIcons.gamepad2(1.5f)")
         listOf(
             "football", "tennis", "basketball", "hockey", "volleyball",
             "ufc", "mma", "mk", "polybet",

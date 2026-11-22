@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -22,7 +21,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -43,7 +41,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nextpari.app.feature.casino.CasinoRealCatalog
@@ -54,7 +51,6 @@ import com.nextpari.app.feature.sportsbook.SportsbookViewModel
 import com.nextpari.app.feature.sportsbook.SportsListCatalog
 import com.nextpari.app.core.navigation.Destinations
 import com.nextpari.app.core.ui.icons.NextpariSportIconBadge
-import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.neon.VipNeonChrome
@@ -114,7 +110,7 @@ fun HomeScreen(
                 }
             }
             "esports" -> {
-                item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
+                item(key = "esports-disciplines") { EsportsDisciplines(state.esports, onNavigate) }
                 item(key = "esports-live") {
                     MatchSection(
                         title = "Киберспорт LIVE",
@@ -235,7 +231,7 @@ fun HomeScreen(
                         )
                     }
                 }
-                item(key = "esports-disciplines") { EsportsDisciplines(state.esports) }
+                item(key = "esports-disciplines") { EsportsDisciplines(state.esports, onNavigate) }
                 if (HomeFeedVisibility.optionalDataOnly(state.esportsLive.size) == HomeSectionBody.Data) {
                     item(key = "esports-live") {
                         MatchSection(
@@ -261,10 +257,18 @@ fun HomeScreen(
                     }
                 }
                 item(key = "popular-slots") {
-                    CasinoRealCatalog("slots", "Популярные слоты") { onNavigate(Destinations.SLOTS) }
+                    CasinoRealCatalog(
+                        "slots",
+                        "Популярные слоты",
+                        active = "popular-slots" in visibleSections,
+                    ) { onNavigate(Destinations.SLOTS) }
                 }
                 item(key = "popular-live-casino") {
-                    CasinoRealCatalog("live", "Популярное Live Casino") { onNavigate(Destinations.LIVE_CASINO) }
+                    CasinoRealCatalog(
+                        "live",
+                        "Популярное Live Casino",
+                        active = "popular-live-casino" in visibleSections,
+                    ) { onNavigate(Destinations.LIVE_CASINO) }
                 }
             }
         }
@@ -425,9 +429,13 @@ private fun MatchSection(
 }
 
 @Composable
-private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
+private fun EsportsDisciplines(items: List<EsportsDiscipline>, onNavigate: (String) -> Unit) {
     Column(Modifier.padding(top = 16.dp)) {
-        ProductSectionHeader(title = "Дисциплины", badge = "Esports", onSeeAll = {})
+        ProductSectionHeader(
+            title = "Дисциплины",
+            badge = "Esports",
+            onSeeAll = { onNavigate(Destinations.SPORTS_CYBERS) },
+        )
         LazyRow(
             contentPadding = PaddingValues(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -438,35 +446,19 @@ private fun EsportsDisciplines(items: List<EsportsDiscipline>) {
                         .width(160.dp)
                         .height(224.dp)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(Brush.linearGradient(listOf(Color(item.startColor), Color(item.endColor)))),
+                        .clickable(onClickLabel = item.name) { onNavigate(item.destination) },
                 ) {
-                    Box(
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .offset(x = 32.dp, y = (-32).dp)
-                            .size(112.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1E3A5F).copy(alpha = 0.55f)),
-                    )
-                    Box(
-                        Modifier
-                            .align(Alignment.BottomStart)
-                            .offset(x = (-24).dp, y = (-40).dp)
-                            .size(96.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF1E3A5F).copy(alpha = 0.45f)),
-                    )
-                    Icon(
-                        NextpariWebIcons.gamepad2(1.5f),
-                        contentDescription = null,
-                        tint = Color(0xFF4ADE80).copy(alpha = 0.5f),
-                        modifier = Modifier.align(Alignment.Center).size(48.dp),
+                    Image(
+                        painter = painterResource(item.imageRes),
+                        contentDescription = item.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
                     )
                     Box(
                         Modifier
                             .align(Alignment.BottomStart)
                             .fillMaxWidth()
-                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))))
+                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.82f))))
                             .padding(12.dp),
                     ) {
                         Text(

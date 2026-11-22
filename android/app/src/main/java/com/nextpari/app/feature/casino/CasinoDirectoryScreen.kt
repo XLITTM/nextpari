@@ -39,14 +39,28 @@ fun CasinoDirectoryScreen(
     val colors = NextpariTheme.colors
     val title = if (kind == CasinoDirectoryKind.Categories) "Категории" else "Провайдеры"
     var retry by rememberSaveable { mutableStateOf(0) }
-    var loading by rememberSaveable { mutableStateOf(true) }
     var unauthorized by rememberSaveable { mutableStateOf(false) }
     var failed by rememberSaveable { mutableStateOf(false) }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
-    var games by androidx.compose.runtime.remember { mutableStateOf(listOf<CasinoDemoGame>()) }
+    var games by androidx.compose.runtime.remember {
+        mutableStateOf(
+            listOf("slots", "live").flatMap { category ->
+                CasinoCatalogStore.peek("", category, 1)?.games.orEmpty()
+            }.distinctBy(CasinoDemoGame::id),
+        )
+    }
+    var loading by rememberSaveable { mutableStateOf(games.isEmpty()) }
 
     LaunchedEffect(kind, retry) {
-        loading = true
+        val cached = listOf("slots", "live").flatMap { category ->
+            CasinoCatalogStore.peek("", category, 1)?.games.orEmpty()
+        }.distinctBy(CasinoDemoGame::id)
+        if (cached.isNotEmpty()) {
+            games = cached
+            loading = false
+        } else {
+            loading = true
+        }
         failed = false
         unauthorized = false
         try {
@@ -59,10 +73,10 @@ fun CasinoDirectoryScreen(
             throw error
         } catch (error: CasinoCatalogException) {
             unauthorized = error.unauthorized
-            failed = true
+            failed = games.isEmpty()
             loading = false
         } catch (_: Exception) {
-            failed = true
+            failed = games.isEmpty()
             loading = false
         }
     }
@@ -82,7 +96,7 @@ fun CasinoDirectoryScreen(
     Column(Modifier.fillMaxSize().background(colors.bg)) {
         NextpariTopBar(title, NextpariWebIcons.ChevronLeft, onBack)
         when {
-            loading -> Text("Загружаем каталог…", Modifier.padding(16.dp), color = colors.textSecondary)
+            loading && games.isEmpty() -> Text("Загружаем каталог…", Modifier.padding(16.dp), color = colors.textSecondary)
             failed -> Column(Modifier.padding(16.dp)) {
                 Text(CasinoCatalogLogic.emptyMessage(unauthorized), color = colors.textSecondary, fontSize = 14.sp)
                 TextButton(onClick = { retry++ }) { Text("Повторить") }

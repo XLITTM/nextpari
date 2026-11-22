@@ -18,15 +18,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Casino
-import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material.icons.outlined.EmojiEvents
-import androidx.compose.material.icons.outlined.LiveTv
-import androidx.compose.material.icons.outlined.Tv
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,7 +47,9 @@ import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
+import com.nextpari.app.feature.casino.CasinoCatalogStore
 import com.nextpari.app.feature.casino.CasinoRealCatalog
+import kotlinx.coroutines.delay
 
 @Composable
 fun CasinoHomeContent(
@@ -58,6 +59,15 @@ fun CasinoHomeContent(
     onNavigate: (String) -> Unit,
 ) {
     val colors = NextpariTheme.colors
+    var liveActive by remember {
+        mutableStateOf(CasinoCatalogStore.peekFresh("", "live", 1) != null)
+    }
+    LaunchedEffect(Unit) {
+        if (!liveActive) {
+            delay(280)
+            liveActive = true
+        }
+    }
     Column(Modifier.padding(top = 8.dp, bottom = 16.dp)) {
         ProductSectionHeader(title = "Казино")
         CasinoEntry("Слоты", "Каталог слотов", NextpariWebIcons.Dices, NextpariWebIcons.MenuGreen) {
@@ -103,8 +113,8 @@ fun CasinoHomeContent(
                 }
             }
         }
-        CasinoRealCatalog("slots", "Популярные слоты") { onNavigate(Destinations.SLOTS) }
-        CasinoRealCatalog("live", "Популярное Live Casino") { onNavigate(Destinations.LIVE_CASINO) }
+        CasinoRealCatalog("slots", "Популярные слоты", active = true) { onNavigate(Destinations.SLOTS) }
+        CasinoRealCatalog("live", "Популярное Live Casino", active = liveActive) { onNavigate(Destinations.LIVE_CASINO) }
     }
 }
 
@@ -220,24 +230,30 @@ fun CasinoTournamentCard(model: CasinoTournament, onOpen: () -> Unit) {
 
 @Composable
 private fun CasinoCategoryTile(card: CasinoCategoryCard, onOpen: () -> Unit) {
-    val icon = when (card.id) {
-        "live" -> NextpariSectionIcons.Casino
-        "tv" -> NextpariWebIcons.Tv
-        "bingo" -> NextpariWebIcons.Trophy
-        else -> NextpariWebIcons.Dices
-    }
     Box(
         Modifier
             .width(148.dp)
             .height(108.dp)
             .vipNeonFrame(shape = RoundedCornerShape(18.dp), chrome = VipNeonChrome.PressOnly)
             .clip(RoundedCornerShape(18.dp))
-            .background(Brush.linearGradient(listOf(Color(card.startColor), Color(card.endColor))))
-            .clickable(onClick = onOpen)
-            .padding(12.dp),
+            .clickable(onClick = onOpen),
     ) {
-        Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.align(Alignment.TopEnd).size(28.dp))
-        Column(Modifier.align(Alignment.BottomStart)) {
+        Image(
+            painter = painterResource(card.imageRes),
+            contentDescription = card.name,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(card.startColor).copy(alpha = 0.18f), Color.Black.copy(alpha = 0.78f)),
+                    ),
+                ),
+        )
+        Column(Modifier.align(Alignment.BottomStart).padding(12.dp)) {
             Text("Casino", color = Color.White.copy(alpha = 0.75f), fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text(
                 card.name,

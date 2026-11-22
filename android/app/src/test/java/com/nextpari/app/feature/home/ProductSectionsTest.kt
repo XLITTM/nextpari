@@ -1,6 +1,7 @@
 package com.nextpari.app.feature.home
 
 import com.google.common.truth.Truth.assertThat
+import com.nextpari.app.core.navigation.Destinations
 import org.junit.Test
 
 class ProductSectionsTest {
@@ -67,6 +68,33 @@ class ProductSectionsTest {
             "Провайдеры",
         ).inOrder()
         assertThat(CasinoHomeCatalog.categories.map { it.id }).containsExactly("slots", "live", "categories", "providers").inOrder()
+        assertThat(CasinoHomeCatalog.categories.map { it.destination }).containsExactly(
+            Destinations.SLOTS,
+            Destinations.LIVE_CASINO,
+            Destinations.CASINO_CATEGORIES,
+            Destinations.CASINO_PROVIDERS,
+        ).inOrder()
+        assertThat(CasinoHomeCatalog.categories.map { it.drawableName }).containsExactly(
+            "game_pharaoh",
+            "game_blackjack",
+            "game_crystal",
+            "game_apples",
+        ).inOrder()
+    }
+
+    @Test
+    fun esportsDisciplineTilesUseCanonicalIdsAndArtwork() {
+        assertThat(EsportsCatalog.disciplines.map { it.discipline }).containsExactly("cs2", "dota2", "lol", "valorant").inOrder()
+        assertThat(EsportsCatalog.disciplines.map { it.destination }).containsExactly(
+            Destinations.championships("esports-cs2", "live"),
+            Destinations.championships("esports-dota2", "live"),
+            Destinations.championships("esports-lol", "live"),
+            Destinations.championships("esports-valorant", "live"),
+        ).inOrder()
+        EsportsCatalog.disciplines.forEach { item ->
+            assertThat(item.imageRes).isNotEqualTo(0)
+            assertThat(item.destination).doesNotContain("{")
+        }
     }
 
     @Test

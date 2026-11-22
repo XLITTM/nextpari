@@ -65,13 +65,18 @@ data class EsportsDiscipline(
     val name: String,
     val startColor: Long,
     val endColor: Long,
-)
+    val discipline: String,
+    val imageRes: Int,
+) {
+    val destination: String
+        get() = com.nextpari.app.core.navigation.Destinations.championships("esports-$discipline", "live")
+}
 
 object EsportsCatalog {
     val disciplines: List<EsportsDiscipline> = listOf(
-        EsportsDiscipline("d1", "CS 2", 0xFF475569, 0xFF0F172A),
-        EsportsDiscipline("d2", "Dota 2", 0xFFDC2626, 0xFF7F1D1D),
-        EsportsDiscipline("d3", "League of Legends", 0xFF06B6D4, 0xFF1E40AF),
-        EsportsDiscipline("d4", "Valorant", 0xFFEC4899, 0xFF9F1239),
+        EsportsDiscipline("cs2", "CS 2", 0xFF334155, 0xFF020617, "cs2", R.drawable.esports_cs2),
+        EsportsDiscipline("dota2", "Dota 2", 0xFF9F1239, 0xFF450A0A, "dota2", R.drawable.esports_dota2),
+        EsportsDiscipline("lol", "League of Legends", 0xFF1D4ED8, 0xFF0F172A, "lol", R.drawable.esports_lol),
+        EsportsDiscipline("valorant", "Valorant", 0xFFBE123C, 0xFF1C1917, "valorant", R.drawable.esports_valorant),
     )
 }

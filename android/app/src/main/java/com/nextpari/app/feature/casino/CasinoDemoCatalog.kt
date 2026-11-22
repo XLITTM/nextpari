@@ -1,7 +1,6 @@
 package com.nextpari.app.feature.casino
 
-import android.graphics.BitmapFactory
-import android.util.LruCache
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
@@ -32,8 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,15 +46,7 @@ import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runInterruptible
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.net.URI
-import java.util.concurrent.TimeUnit
 
 @Serializable
 data class CasinoDemoGame(
@@ -98,10 +89,13 @@ internal object CasinoCatalogLogic {
 
     fun emptyMessage(unauthorized: Boolean): String =
         if (unauthorized) "Войдите в аккаунт, чтобы открыть каталог" else "Игры не найдены"
+
+    fun preview(games: List<CasinoDemoGame>): List<CasinoDemoGame> =
+        games.filter(CasinoCatalogLogic::accept).distinctBy(CasinoDemoGame::id).take(12)
 }
 
 internal object CasinoRealCatalogClient {
-    suspend fun list(
+    suspend fun network(
         query: String,
         category: String,
         page: Int,
@@ -114,31 +108,57 @@ internal object CasinoRealCatalogClient {
         }
         val catalog = response.body()
         if (!response.isSuccessful || catalog?.ok != true) {
-            throw CasinoCatalogException(false, catalog?.let { "Casino catalog unavailable" } ?: "Casino catalog unavailable")
+            throw CasinoCatalogException(false, "Casino catalog unavailable")
         }
         return catalog.copy(
             games = catalog.games.filter(CasinoCatalogLogic::accept),
             nextPage = catalog.nextPage?.takeIf { it == page + 1 },
         )
     }
+
+    suspend fun list(
+        query: String,
+        category: String,
+        page: Int,
+    ): CasinoDemoPage = CasinoCatalogStore.list(query, category, page)
 }
 
 @Composable
-fun CasinoRealCatalog(category: String, title: String, onOpenCatalog: () -> Unit) {
+fun CasinoRealCatalog(
+    category: String,
+    title: String,
+    active: Boolean = true,
+    onOpenCatalog: () -> Unit,
+) {
     val colors = NextpariTheme.colors
     var retry by remember(category) { mutableStateOf(0) }
-    var games by remember(category) { mutableStateOf(emptyList<CasinoDemoGame>()) }
-    var loading by remember(category) { mutableStateOf(true) }
+    var games by remember(category) {
+        mutableStateOf(CasinoCatalogLogic.preview(CasinoCatalogStore.peek("", category, 1)?.games.orEmpty()))
+    }
+    var loading by remember(category) { mutableStateOf(games.isEmpty()) }
     var failed by remember(category) { mutableStateOf(false) }
     var unauthorized by remember(category) { mutableStateOf(false) }
 
-    LaunchedEffect(category, retry) {
-        loading = games.isEmpty()
-        failed = false
+    LaunchedEffect(category, retry, active) {
+        val cached = CasinoCatalogLogic.preview(CasinoCatalogStore.peek("", category, 1)?.games.orEmpty())
+        if (cached.isNotEmpty()) {
+            games = cached
+            loading = false
+            failed = false
+        }
+        val fresh = CasinoCatalogStore.peekFresh("", category, 1)
+        if (!active && retry == 0) {
+            if (fresh != null) return@LaunchedEffect
+            if (cached.isEmpty()) loading = true
+            return@LaunchedEffect
+        }
+        if (fresh != null && retry == 0) return@LaunchedEffect
+        if (games.isEmpty()) loading = true
         unauthorized = false
         try {
-            games = CasinoRealCatalogClient.list("", category, 1).games.distinctBy(CasinoDemoGame::id).take(12)
+            games = CasinoCatalogLogic.preview(CasinoRealCatalogClient.list("", category, 1).games)
             loading = false
+            failed = false
         } catch (error: CancellationException) {
             throw error
         } catch (error: CasinoCatalogException) {
@@ -159,19 +179,41 @@ fun CasinoRealCatalog(category: String, title: String, onOpenCatalog: () -> Unit
             ) {
                 items(games, key = CasinoDemoGame::id) { game -> CasinoRealTile(game, onOpenCatalog) }
             }
+        } else if (loading) {
+            CasinoCatalogSkeleton()
         }
         when {
-            loading -> Text("Загружаем каталог…", Modifier.padding(horizontal = 16.dp), color = colors.textSecondary)
+            loading && games.isEmpty() -> Unit
             failed -> Column(Modifier.padding(horizontal = 16.dp)) {
                 Text(CasinoCatalogLogic.emptyMessage(unauthorized), color = colors.textSecondary, fontSize = 13.sp)
                 TextButton(onClick = { retry++ }) { Text("Повторить") }
             }
-            games.isEmpty() -> Text(
+            !loading && games.isEmpty() -> Text(
                 CasinoCatalogLogic.emptyMessage(false),
                 Modifier.padding(horizontal = 16.dp),
                 color = colors.textSecondary,
                 fontSize = 13.sp,
             )
+        }
+    }
+}
+
+@Composable
+private fun CasinoCatalogSkeleton() {
+    val colors = NextpariTheme.colors
+    val shape = RoundedCornerShape(16.dp)
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(4) {
+            Column(
+                Modifier.width(154.dp).clip(shape).background(colors.surfaceSoft).border(1.dp, colors.border, shape),
+            ) {
+                Box(Modifier.fillMaxWidth().aspectRatio(4f / 3).background(colors.surfaceMuted))
+                Box(Modifier.padding(start = 9.dp, top = 10.dp, end = 9.dp).fillMaxWidth().height(14.dp).clip(RoundedCornerShape(6.dp)).background(colors.surfaceMuted))
+                Box(Modifier.padding(start = 9.dp, top = 8.dp, end = 36.dp, bottom = 12.dp).fillMaxWidth().height(10.dp).clip(RoundedCornerShape(6.dp)).background(colors.surfaceMuted))
+            }
         }
     }
 }
@@ -183,6 +225,7 @@ private fun CasinoRealTile(game: CasinoDemoGame, onOpen: () -> Unit) {
     val image by produceState(game.image?.let(CasinoArtwork::cached), game.image) {
         value = game.image?.let { CasinoArtwork.load(it) }
     }
+    val shown = animateFloatAsState(if (image != null) 1f else 0f, label = "casino-art")
     Column(
         Modifier.width(154.dp).vipNeonFrame(shape = shape, chrome = VipNeonChrome.PressOnly)
             .shadow(5.dp, shape).clip(shape)
@@ -190,69 +233,20 @@ private fun CasinoRealTile(game: CasinoDemoGame, onOpen: () -> Unit) {
             .border(1.dp, colors.border, shape).clickable(onClick = onOpen),
     ) {
         Box(Modifier.fillMaxWidth().aspectRatio(4f / 3).background(colors.surfaceMuted), contentAlignment = Alignment.Center) {
+            Icon(NextpariWebIcons.Dices, contentDescription = null, tint = colors.textMuted)
             val bitmap = image
             if (bitmap != null) {
-                Image(bitmap, null, Modifier.matchParentSize(), contentScale = ContentScale.Fit)
-            } else {
-                Icon(NextpariWebIcons.Dices, contentDescription = null, tint = colors.textMuted)
+                Image(
+                    bitmap,
+                    null,
+                    Modifier.matchParentSize().graphicsLayer { alpha = shown.value },
+                    contentScale = ContentScale.Crop,
+                )
             }
         }
         Text(game.title, Modifier.padding(start = 9.dp, top = 7.dp, end = 9.dp), color = colors.text,
             fontSize = 13.sp, fontWeight = FontWeight.Bold, minLines = 2, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        val category = when (game.category) {
-            "slots" -> "Слоты"
-            "live" -> "Лайв казино"
-            "table" -> "Настольные"
-            "instant" -> "Моментальные"
-            "fishing" -> "Рыбалка"
-            "bingo" -> "Бинго"
-            "keno" -> "Кено"
-            "crash" -> "Crash"
-            else -> "Другие"
-        }
-        Text("${game.studio} · $category", Modifier.padding(start = 9.dp, end = 9.dp, bottom = 8.dp),
+        Text("${game.studio} · ${CasinoCatalogLogic.categoryLabel(game.category)}", Modifier.padding(start = 9.dp, end = 9.dp, bottom = 8.dp),
             color = colors.textSecondary, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
-}
-
-internal fun casinoArtworkUrl(raw: String): String? {
-    val uri = runCatching { URI(raw) }.getOrNull() ?: return null
-    return raw.takeIf {
-        uri.scheme == "https" && uri.host == "cdn.imagesai.org" && uri.port == -1 &&
-            uri.userInfo == null && uri.rawQuery == null && uri.rawFragment == null
-    }
-}
-
-private object CasinoArtwork {
-    private const val byteLimit = 1024L * 1024
-    private val requests = Semaphore(3)
-    private val memory = object : LruCache<String, ImageBitmap>(12 * 1024 * 1024) {
-        override fun sizeOf(key: String, value: ImageBitmap) = value.width * value.height * 4
-    }
-    private val client = OkHttpClient.Builder().followRedirects(false).followSslRedirects(false)
-        .callTimeout(6, TimeUnit.SECONDS).build()
-
-    fun cached(url: String): ImageBitmap? = memory.get(url)
-
-    suspend fun load(raw: String): ImageBitmap? = requests.withPermit {
-        val url = casinoArtworkUrl(raw) ?: return@withPermit null
-        cached(url) ?: runInterruptible(Dispatchers.IO) {
-            try {
-                client.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                    val body = response.body ?: return@use null
-                    if (!response.isSuccessful || body.contentLength() > byteLimit) return@use null
-                    val source = body.source()
-                    if (source.request(byteLimit + 1)) return@use null
-                    val bytes = source.readByteArray()
-                    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-                    if (options.outWidth !in 1..1600 || options.outHeight !in 1..1600 ||
-                        options.outMimeType !in setOf("image/png", "image/jpeg", "image/webp")) return@use null
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()?.also { memory.put(url, it) }
-                }
-            } catch (_: java.io.IOException) {
-                null
-            }
-        }
     }
 }

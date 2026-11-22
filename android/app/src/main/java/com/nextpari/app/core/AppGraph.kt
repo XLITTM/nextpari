@@ -32,6 +32,8 @@ import com.nextpari.app.feature.favorites.SportsFavoritesStore
 import com.nextpari.app.feature.history.FakeHistoryRepository
 import com.nextpari.app.feature.history.HistoryRepository
 import com.nextpari.app.feature.history.RemoteHistoryRepository
+import com.nextpari.app.feature.casino.CasinoArtwork
+import com.nextpari.app.feature.casino.CasinoCatalogStore
 import com.nextpari.app.feature.home.FakeHomeCatalogRepository
 import com.nextpari.app.feature.home.HomeCatalogRepository
 import com.nextpari.app.feature.sportsbook.FootballRepository
@@ -117,6 +119,7 @@ object AppGraph {
 
     fun bindFromApplication(app: Application) {
         bindPreferences(DataStorePreferencesStorage(app))
+        CasinoArtwork.bind(app)
         val cookieJar = SecureCookieJar(EncryptedCookiePersistence(app))
         secureCookieJar = cookieJar
         val coordinatorHolder = arrayOfNulls<PlayerSessionCoordinator>(1)
@@ -134,7 +137,11 @@ object AppGraph {
             sessions = sessionRepository,
             store = playerStateStore,
             json = NetworkModule.json,
-            onSessionCleared = { WebSessionBridge.clear() },
+            onSessionCleared = {
+                WebSessionBridge.clear()
+                CasinoCatalogStore.clear()
+                CasinoArtwork.clearMemory()
+            },
         )
         coordinatorHolder[0] = coordinator
         sessionCoordinator = coordinator
