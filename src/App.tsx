@@ -40,6 +40,7 @@ import { PromoWelcomeScreen } from './screens/PromoWelcomeScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { PlayerVerificationNoticeBanner } from './components/player/PlayerVerificationNoticeBanner';
 import { InfoScreen } from './screens/InfoScreen';
+import { AndroidDownloadScreen } from './screens/AndroidDownloadScreen';
 import { PromoUnbeatableScreen } from './screens/PromoUnbeatableScreen';
 import { BlackjackGame } from './games/blackjack/BlackjackGame';
 import { AviatorGame } from './games/aviator/AviatorGame';
@@ -59,6 +60,7 @@ import { useToast } from './ToastContext';
 import { AppRoutes, currentStaffPortal } from './routes';
 import { leaguePath } from './lib/leagueRoute';
 import { casinoDemoPath, casinoRealPath, validCasinoDemoId } from './lib/casinoDemo';
+import { ANDROID_APK_PAGE_PATH } from './lib/androidApk';
 import { CasinoDemoBack, CasinoDemoCatalog } from './components/CasinoDemoCatalog';
 import { CasinoDemoGameScreen } from './screens/CasinoDemoGameScreen';
 
@@ -104,6 +106,7 @@ function screenFromPath(): Screen {
     return validCasinoDemoId(gameId) ? { name: 'casino-demo-game', gameId } : { name: 'casino-demo' };
   }
   if (path === VIP_CASHBACK_PATH) return { name: 'vip-cashback' };
+  if (path === ANDROID_APK_PAGE_PATH) return { name: 'android-download' };
   if (path === GAMES_PATH) return { name: 'games' };
   if (path.startsWith('/league/')) {
     const leagueId = decodeURIComponent(path.slice('/league/'.length));
@@ -123,6 +126,7 @@ function pathForScreen(screen: Screen): string {
   if (screen.name === 'dice') return DICE_PATH;
   if (screen.name === 'pharaoh') return PHARAOH_PATH;
   if (screen.name === 'vip-cashback') return VIP_CASHBACK_PATH;
+  if (screen.name === 'android-download') return ANDROID_APK_PAGE_PATH;
   if (screen.name === 'games') return GAMES_PATH;
   if (screen.name === 'league') return leaguePath(screen.leagueId);
   return '/';
@@ -184,6 +188,7 @@ function fallbackScreen(screen: Screen): Screen {
     case 'personal-data':
     case 'wallets':
     case 'info':
+    case 'android-download':
     case 'sports':
     case 'slots':
     case 'live-casino':
@@ -515,6 +520,8 @@ function AppContent() {
         );
       case 'info':
         return <InfoScreen onBack={goBack} />;
+      case 'android-download':
+        return <AndroidDownloadScreen onBack={goBack} />;
       case 'gamelist':
         return (
           <GameListScreen

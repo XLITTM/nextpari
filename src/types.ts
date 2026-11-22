@@ -347,6 +347,7 @@ export type Screen =
   | { name: 'promo-welcome' }
   | { name: 'settings' }
   | { name: 'info' }
+  | { name: 'android-download' }
   | { name: 'promo-unbeatable' }
   | { name: 'blackjack' }
   | { name: 'aviator' }

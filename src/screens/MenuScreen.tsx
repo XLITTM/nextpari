@@ -4,7 +4,7 @@ import {
   Ticket, Headphones, ShieldCheck, ChevronRight,
   Dices, Zap, Video, CheckCircle, Flag,
   Heart, Gift, Boxes, KeyRound, Target, TrendingUp, Wrench,
-  ScanLine, Bell, Info, Star, LogOut,
+  ScanLine, Bell, Info, Star, LogOut, Smartphone,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -64,6 +64,7 @@ const sections: Record<SubTabId, CardItem[]> = {
     { icon: Ticket, label: 'Промокоды', desc: 'Акции и бонусная программа', iconBg: '', iconColor: 'text-white', special: 'teal', route: { name: 'promo' } },
     { icon: Trophy, label: 'Непобедимый', desc: 'Экспрессы — розыгрыш $9,000', ...grayIcon, route: { name: 'promo-unbeatable' } },
     { icon: Headphones, label: 'Поддержка', desc: 'Помощь, правила и контакты', ...grayIcon, route: { name: 'info' } },
+    { icon: Smartphone, label: 'Скачать Android', desc: 'Тестовая версия — для тестирования.', ...grayIcon, route: { name: 'android-download' } },
     { icon: ShieldCheck, label: 'Аутентификатор', desc: 'Защити свой аккаунт', ...grayIcon, ...soon },
   ],
   sport: [
@@ -102,6 +103,7 @@ const sections: Record<SubTabId, CardItem[]> = {
     { icon: Bell, label: 'Уведомления', desc: 'Настройки оповещений', ...grayIcon, ...soon },
     { icon: Headphones, label: 'Поддержка', desc: 'Помощь, правила и контакты', ...grayIcon, route: { name: 'info' } },
     { icon: Info, label: 'Инфо', desc: 'О компании, правила, помощь', ...grayIcon, route: { name: 'info' } },
+    { icon: Smartphone, label: 'Скачать Android', desc: 'Тестовая версия — для тестирования.', ...grayIcon, route: { name: 'android-download' } },
   ],
 };
 
