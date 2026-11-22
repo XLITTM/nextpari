@@ -23,7 +23,7 @@ class OddsPapiAndroidTest {
     private val at="2026-11-21T02:00:00Z"
     private val epoch=Instant.parse(at).toEpochMilli()
     private fun group(line:String="2.5",id:String="1010",period:String="fulltime",book:String="1xbet",name:String="Тотал · $line") = OddsPapiGroupDto(
-        id="$fixture:market:$id",name=name,marketFamily="totals",bookmakerId=book,externalPeriodId=period,externalMarketId=id,
+        id="$fixture:market:$id",name=name,marketFamily="totals",bookmakerId=book,externalPeriodId=period,externalMarketId=id,line=JsonPrimitive(line),
         outcomes=listOf(OddsPapiOutcomeDto("ТБ",JsonPrimitive("1.925"),"${fixture.removePrefix("oddspapi-v5:")}:$book:$id:0",at),
             OddsPapiOutcomeDto("ТМ",JsonPrimitive("1.875"),"${fixture.removePrefix("oddspapi-v5:")}:$book:${id}1:0",at)))
     private fun event(sport:String="football",groups:List<OddsPapiGroupDto> = listOf(group())) = FootballEventDto(id=fixture,
@@ -183,7 +183,14 @@ class OddsPapiAndroidTest {
         assertEquals("shots",SportMarketStructure.describe("football",group(name="Удары").copy(marketFamily="totals-shotsongoal")).category)
         assertEquals("corners",SportMarketStructure.describe("football",group(name="Угловые").copy(marketFamily="totals-corners")).category)
         assertEquals("asian-handicap",SportMarketStructure.describe("football",group(line="0.25",name="Фора").copy(marketFamily="spreads")).family)
+        assertEquals("handicap",SportMarketStructure.describe("football",group(line="0.5",name="Фора").copy(marketFamily="spreads")).family)
+        assertEquals("totals",SportMarketStructure.describe("football",group(line="2.5",name="Тотал").copy(marketFamily="totals")).family)
+        assertEquals("asian-totals",SportMarketStructure.describe("football",group(line="2.25",name="Тотал").copy(marketFamily="totals")).family)
         assertEquals("european-handicap",SportMarketStructure.describe("football",group(line="0.25",name="Фора").copy(marketFamily="spreads-european")).family)
+        assertTrue(SportMarketStructure.footballFamilyOrder("totals") < SportMarketStructure.footballFamilyOrder("btts"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("totals") < SportMarketStructure.footballFamilyOrder("asian-totals"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("handicap") < SportMarketStructure.footballFamilyOrder("asian-handicap"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("asian-handicap") < SportMarketStructure.footballFamilyOrder("european-handicap"))
         val asian=group(line="0.25",id="501",name="Фора").copy(marketFamily="spreads")
         val european=group(line="0.25",id="502",name="Фора").copy(marketFamily="spreads-european",
             outcomes=group(line="0.25",id="502").outcomes.map { it.copy(odds=JsonPrimitive("1.25")) })

@@ -29,6 +29,10 @@ object Destinations {
     const val SLOTS = "slots"
     const val CASINO_STANDARD = "casino/standard/{category}"
     const val CASINO_DEMO_GAME = "casino/demo/{gameId}"
+    const val CASINO_CATEGORIES = "casino/categories"
+    const val CASINO_PROVIDERS = "casino/providers"
+    const val CASINO_MY = "casino/my"
+    const val CASINO_TOURNAMENTS = "casino/tournaments"
     const val LIVE_CASINO = "live-casino"
     const val PROVIDER_SPORTSBOOK = "provider-sportsbook"
     const val GAMES = "games"
@@ -64,7 +68,8 @@ object Destinations {
     val webPlayerRoutes = listOf(
         HOME, MATCH, BETSLIP, FAVORITES, HISTORY, BET_DETAILS, MENU, WALLET, PROMO,
         PERSONAL_DATA, WALLETS, GAMELIST_LIVE, GAMELIST_LINE, SPORTS_LIVE, SPORTS_LINE,
-        SPORTS_CYBERS, CHAMPIONSHIPS, SLOTS, LIVE_CASINO, PROVIDER_SPORTSBOOK, GAMES,
+        SPORTS_CYBERS, CHAMPIONSHIPS, SLOTS, LIVE_CASINO, CASINO_CATEGORIES, CASINO_PROVIDERS,
+        CASINO_MY, CASINO_TOURNAMENTS, PROVIDER_SPORTSBOOK, GAMES,
         PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, SETTINGS, INFO, PROMO_UNBEATABLE,
         BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK, LEAGUE,
     )
@@ -140,7 +145,8 @@ object Destinations {
     private val homeOwnedExact = setOf(
         GAMES, BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK,
         PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, PROMO_UNBEATABLE,
-        SLOTS, LIVE_CASINO, PROVIDER_SPORTSBOOK,
+        SLOTS, LIVE_CASINO, CASINO_CATEGORIES, CASINO_PROVIDERS, CASINO_MY, CASINO_TOURNAMENTS,
+        PROVIDER_SPORTSBOOK,
     )
 
     fun showsHeader(route: String?): Boolean =

@@ -234,9 +234,15 @@ object MarketTabs {
         MarketTabSpec("totals", "Карты / раунды"),
     )
 
+    fun modes(sport: String): List<MarketTabSpec> = if (sport == "football") listOf(
+        MarketTabSpec("all", "Все маркеты"),
+        MarketTabSpec("players", "Игроки"),
+        MarketTabSpec("popular", "Популярные"),
+    ) else emptyList()
+
     fun forSport(sport: String): List<MarketTabSpec> {
         val tabs=when(sport) {
-            "football" -> listOf("all" to "Все","main" to "Основные","totals" to "Тоталы","handicaps" to "Форы","double-chance" to "Двойной шанс","btts" to "Обе забьют","goals" to "Голы","1st-half" to "1-й тайм","2nd-half" to "2-й тайм","corners" to "Угловые","cards" to "Карточки","shots" to "Удары в створ","other" to "Другие")
+            "football" -> listOf("main" to "Основная игра","1st-half" to "1-й тайм","2nd-half" to "2-й тайм","corners" to "Угловые","cards" to "Жёлтые карточки","shots" to "Удары в створ","other" to "Другие")
             "basketball" -> listOf("all" to "Все","main" to "Победитель","totals" to "Тоталы очков","handicaps" to "Форы","quarters" to "Четверти","halves" to "Половины","players" to "Игроки","other" to "Другие")
             "tennis" -> listOf("all" to "Все","main" to "Победитель","totals" to "Тоталы геймов","handicaps" to "Форы","sets" to "Сеты","games" to "Геймы","tiebreaks" to "Тай-брейки","aces" to "Эйсы","other" to "Другие")
             "table-tennis" -> listOf("all" to "Все","main" to "Победитель","sets" to "Партии","totals" to "Тоталы очков","handicaps" to "Форы","other" to "Другие")
@@ -250,22 +256,35 @@ object MarketTabs {
 
     fun available(sport: String, markets: List<MarketGroup>): List<MarketTabSpec> {
         val configured = forSport(sport)
-        val shared = football.filter { it.id in setOf("totals", "handicaps") }
+        val shared = if (sport == "football") emptyList() else football.filter { it.id in setOf("totals", "handicaps") }
         return (configured + shared).distinctBy(MarketTabSpec::id)
-            .filter { tab -> tab.id == "all" || markets.any { matchesTab(it, tab.id) } }
+            .filter { tab -> tab.id == "all" || markets.any { matchesTab(it, tab.id, sport) } }
     }
 
-    fun matchesTab(market: MarketGroup, tab: String): Boolean {
+    fun isPopular(market: MarketGroup): Boolean =
+        market.family in setOf("result", "winner", "double-chance", "totals", "handicap", "team-totals", "btts")
+
+    fun isPlayerMarket(market: MarketGroup): Boolean =
+        market.category == "players" || market.family?.startsWith("players") == true
+
+    fun matchesTab(market: MarketGroup, tab: String, sport: String = ""): Boolean {
         if(market.family!=null) return when(tab) {
             "all" -> true
-            "main" -> market.category=="main" && market.periodId in setOf("fulltime","result","ft","match")
+            "main" -> if (sport == "football") {
+                market.periodId in setOf(null, "fulltime", "result", "ft", "match") &&
+                    market.category !in setOf("corners", "cards", "shots", "players") &&
+                    !isPlayerMarket(market)
+            } else {
+                market.category=="main" && market.periodId in setOf("fulltime","result","ft","match")
+            }
+            "other" -> sport == "football" && listOf("main", "1st-half", "2nd-half", "corners", "cards", "shots").none { matchesTab(market, it, sport) }
             "sets" -> market.category=="sets" || market.periodId?.matches(Regex("p[0-9]+"))==true
             "games" -> market.category=="games" || market.periodId?.matches(Regex("p[0-9]+g[0-9]+"))==true
             "periods" -> market.periodId !in setOf(null,"fulltime","result","ft","match")
             "quarters" -> market.periodId?.matches(Regex("p[0-9]+"))==true
             "halves" -> market.periodId in setOf("p1+p2","p3+p4","p3+p4+overtime") || market.periodId?.matches(Regex("h[0-9]+"))==true
-            "1st-half" -> market.periodId=="p1"
-            "2nd-half" -> market.periodId=="p2"
+            "1st-half" -> market.periodId=="p1" && market.category !in setOf("corners","cards","shots","players")
+            "2nd-half" -> market.periodId=="p2" && market.category !in setOf("corners","cards","shots","players")
             "maps" -> market.category=="maps" || market.periodId?.matches(Regex("p[0-9]+"))==true
             else -> market.category==tab || market.family==tab
         }
@@ -289,13 +308,20 @@ object MarketTabs {
             "games" -> name.contains("гейм")
             "quarters" -> market.category == "quarter" || name.contains("четверт")
             "halves" -> name.contains("половин") || (market.category == "half" && !Regex("1-й тайм|2-й тайм").containsMatchIn(name))
-            "main" -> (market.category == "main" || Regex("победитель|1x2|double chance|both teams|draw no bet").containsMatchIn(name)) &&
-                !Regex("тотал|фора|угл|under/over|handicap|corner|1st period|1st half|2nd period|2nd half").containsMatchIn(name)
+            "main" -> if (sport == "football") {
+                market.category !in setOf("corners", "cards", "shots", "players") &&
+                    !Regex("1-й тайм|2-й тайм|1st period|1st half|2nd period|2nd half").containsMatchIn(name)
+            } else {
+                (market.category == "main" || Regex("победитель|1x2|double chance|both teams|draw no bet").containsMatchIn(name)) &&
+                    !Regex("тотал|фора|угл|under/over|handicap|corner|1st period|1st half|2nd period|2nd half").containsMatchIn(name)
+            }
+            "other" -> sport == "football" && listOf("main", "1st-half", "2nd-half", "corners", "cards", "shots").none { matchesTab(market, it, sport) }
             else -> market.category==tab
         }
     }
 
-    fun filter(markets: List<MarketGroup>, tab: String): List<MarketGroup> = markets.filter { matchesTab(it, tab) }
+    fun filter(markets: List<MarketGroup>, tab: String, sport: String = ""): List<MarketGroup> =
+        markets.filter { matchesTab(it, tab, sport) }
 }
 
 object MarketAccordionLogic {
@@ -442,6 +468,8 @@ object GameListLayout {
 
 object HomeChampionships {
     const val TITLE = "Чемпионаты LIVE"
+    const val PREVIEW_DEFAULT = 4
+    const val PREVIEW_MAX = 5
 
     fun groups(
         live: List<MatchCardModel>,
@@ -449,6 +477,39 @@ object HomeChampionships {
     ): List<CountryGroup> {
         val source = if (excludeEsports) live.filterNot(FeaturedSports::isEsports) else live
         return CountryGrouping.groupByCountry(source)
+    }
+
+    fun preview(
+        live: List<MatchCardModel>,
+        excludeEsports: Boolean = false,
+    ): List<CountryGroup> {
+        val all = groups(live, excludeEsports)
+        if (all.isEmpty()) return emptyList()
+        val scored = all.map { group -> group to previewScore(group, live) }
+            .sortedWith(compareBy({ it.second }, { SportsRegions.name(it.first.country) }))
+        val prominent = scored.filter { it.second < 5_000 }
+        val take = when {
+            prominent.size >= PREVIEW_MAX -> PREVIEW_MAX
+            prominent.size >= PREVIEW_DEFAULT -> PREVIEW_DEFAULT
+            else -> minOf(PREVIEW_DEFAULT, scored.size)
+        }
+        return scored.take(take).map { it.first }
+    }
+
+    private fun previewScore(group: CountryGroup, live: List<MatchCardModel>): Int {
+        val matches = live.filter { it.country == group.country && !FeaturedSports.isEsports(it) }
+        val footballRank = matches.filter { it.sport == "football" }
+            .minOfOrNull(CompetitionOrder::rank) ?: Int.MAX_VALUE
+        if (footballRank != Int.MAX_VALUE) return footballRank
+        val major = setOf("tennis", "basketball", "hockey", "volleyball")
+        val other = matches.filter { it.sport in major }
+        if (other.isNotEmpty()) {
+            val sportIndex = other.minOf { FeaturedSports.sportPriority(it.sport) }
+            val rank = other.minOf { CompetitionOrder.rank(it).coerceAtMost(80) }
+            return 100 + sportIndex * 100 + rank
+        }
+        val leftover = matches.firstOrNull()?.sport
+        return 5_000 + FeaturedSports.sportPriority(leftover.orEmpty())
     }
 
     fun seeAllRoute(sportId: String): String {

@@ -63,10 +63,10 @@ class ProductSectionsTest {
         assertThat(CasinoHomeCatalog.categories.map { it.name }).containsExactly(
             "Слоты",
             "Лайв казино",
-            "TV игры",
-            "Бинго",
+            "Категории",
+            "Провайдеры",
         ).inOrder()
-        assertThat(CasinoHomeCatalog.categories.map { it.id }).containsExactly("slots", "live", "tv", "bingo").inOrder()
+        assertThat(CasinoHomeCatalog.categories.map { it.id }).containsExactly("slots", "live", "categories", "providers").inOrder()
     }
 
     @Test

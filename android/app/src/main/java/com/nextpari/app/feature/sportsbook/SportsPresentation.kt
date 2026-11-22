@@ -73,14 +73,29 @@ internal object FeaturedSports {
         return if (league in lowerFootball) 2 else 1
     }
 
+    fun sportPriority(sport: String): Int {
+        val index = SportsListCatalog.supported.indexOfFirst { it.id == sport }
+        return if (index < 0) SportsListCatalog.supported.size + 1 else index
+    }
+
+    fun prioritize(matches: List<MatchCardModel>): List<MatchCardModel> = matches.sortedWith(
+        compareBy<MatchCardModel> { sportPriority(it.sport) }
+            .thenBy { CompetitionOrder.rank(it) }
+            .thenBy(::tier)
+            .thenBy { if (it.isLive) Long.MIN_VALUE else it.kickoffEpochMs ?: Long.MAX_VALUE }
+            .thenBy { it.eventId },
+    )
+
     fun popularLive(matches: List<MatchCardModel>): List<MatchCardModel> =
-        ordered(matches.filter { it.isLive && !isEsports(it) })
+        prioritize(matches.filter { it.isLive && !isEsports(it) })
 
     fun popularLine(matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> =
-        matches.filter { match ->
-            !match.isLive && !isEsports(match) &&
-                match.kickoffEpochMs?.let { it > nowMs && it <= nowMs + FEATURED_LINE_WINDOW_MS } == true
-        }.sortedWith(compareBy<MatchCardModel>(::tier).thenBy { it.kickoffEpochMs })
+        prioritize(
+            matches.filter { match ->
+                !match.isLive && !isEsports(match) &&
+                    match.kickoffEpochMs?.let { it > nowMs && it <= nowMs + FEATURED_LINE_WINDOW_MS } == true
+            },
+        )
 
     fun ordered(matches: List<MatchCardModel>): List<MatchCardModel> {
         val ranks = matches.map(::tier)

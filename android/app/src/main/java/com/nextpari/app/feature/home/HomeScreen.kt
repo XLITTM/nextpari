@@ -173,7 +173,7 @@ fun HomeScreen(
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeChampionships.groups(state.filteredLive, excludeEsports = true).isNotEmpty()) {
+                if (HomeChampionships.preview(state.filteredLive, excludeEsports = true).isNotEmpty()) {
                     item(key = "champs") {
                         HomeChampionshipsAccordion(
                             live = state.filteredLive,
@@ -222,7 +222,7 @@ fun HomeScreen(
                         filterLabel = "Спорт",
                     )
                 }
-                if (HomeChampionships.groups(state.filteredLive, excludeEsports = true).isNotEmpty()) {
+                if (HomeChampionships.preview(state.filteredLive, excludeEsports = true).isNotEmpty()) {
                     item(key = "champs") {
                         HomeChampionshipsAccordion(
                             live = state.filteredLive,

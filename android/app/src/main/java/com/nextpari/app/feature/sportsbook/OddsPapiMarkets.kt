@@ -53,7 +53,7 @@ internal object SportMarketStructure {
         when (sport) {
             "football" -> {
                 add(listOf("Победитель", "Winner", "1X2", "Исход", "Full Time Result"), "result", "1X2", "main")
-                add(listOf("Тотал", "Over Under"), "totals", "Тотал голов", "totals")
+                add(listOf("Тотал", "Over Under"), "totals", "Тотал", "totals")
                 add(listOf("Asian Handicap", "Азиатская фора"), "asian-handicap", "Азиатская фора", "handicaps")
                 add(listOf("European Handicap", "Европейская фора"), "european-handicap", "Европейская фора", "handicaps")
                 add(listOf("Двойной шанс", "Double Chance"), "double-chance", "Двойной шанс", "double-chance")
@@ -151,13 +151,14 @@ internal object SportMarketStructure {
             "totals" -> return when(sport) {
                 "tennis","volleyball" -> spec("total-sets","Тотал сетов","sets")
                 "esports" -> spec("total-maps","Тотал карт","maps")
-                "football","basketball","hockey" -> spec("totals","Тотал $unit","totals")
+                "football" -> spec("totals","Тотал","totals")
+                "basketball","hockey" -> spec("totals","Тотал $unit","totals")
                 else -> null
             }
             "spreads" -> return when(sport) {
                 "tennis","volleyball" -> spec("set-handicap","Фора по сетам","handicaps")
                 "esports" -> spec("map-handicap","Фора по картам","handicaps")
-                "football" -> spec("asian-handicap","Азиатская фора","handicaps")
+                "football" -> spec("handicap","Фора","handicaps")
                 "basketball" -> spec("spread","Фора по очкам","handicaps")
                 "hockey" -> spec("handicap","Фора по шайбам","handicaps")
                 else -> null
@@ -207,6 +208,13 @@ internal object SportMarketStructure {
             "firstroshan" -> return spec(type,"Первый Рошан","kills")
             "firstbaron" -> return spec(type,"Первый Барон","kills")
         }
+        if (type.startsWith("players-")) {
+            val title = when {
+                "goalscorer" in type -> "Бомбардиры"
+                else -> "Игроки"
+            }
+            return spec(type, title, "players")
+        }
         // Race-to and player markets need an explicit target or participant identity.
         return null
     }
@@ -241,17 +249,57 @@ internal object SportMarketStructure {
             else (if(generic)typed?:named else named?:typed)
                 ?: return MarketPresentation("other","Неизвестный рынок · ${base.ifBlank { group.externalMarketId.orEmpty() }}","other","${group.externalMarketId}:$base")
 
-        val scope = if(sport == "hockey" && definition.family in setOf("result", "winner")) {
+        val scoped = if(sport == "hockey" && definition.family in setOf("result", "winner")) {
             if(group.externalPeriodId == "result") Definition("winner-ot", "Победитель с учётом ОТ и буллитов", "main")
             else if(group.externalPeriodId == "fulltime") Definition("regulation-result", "1X2 в основное время", "main")
             else Definition("period-result", "Исход периода", "main")
         } else definition
+        val scope = if (sport == "football") footballLadder(scoped, line(group)) else scoped
         return MarketPresentation(scope.family, scope.title, scope.category, "${scope.family}:${scope.entity}")
     }
-    fun familyRank(family: String?): Int = listOf("result", "regulation-result", "winner", "winner-ot", "draw-no-bet", "double-chance", "asian-handicap", "european-handicap", "spread", "handicap", "point-handicap", "set-handicap", "map-handicap", "totals", "team-totals", "total-sets", "total-maps", "btts", "correct-score", "set-score").indexOf(family).takeIf { it >= 0 } ?: 100
+    fun isQuarterLine(line: String?): Boolean {
+        val value = line?.replace(',', '.')?.toDoubleOrNull() ?: return false
+        val cents = kotlin.math.round(kotlin.math.abs(value) * 100.0).toInt() % 100
+        return cents == 25 || cents == 75
+    }
+    private fun footballLadder(definition: Definition, line: String?): Definition {
+        val quarter = isQuarterLine(line)
+        return when (definition.family) {
+            "totals" -> if (quarter) definition.copy(family = "asian-totals", title = "Азиатский тотал") else definition.copy(title = "Тотал")
+            "team-totals" -> if (quarter) definition.copy(family = "asian-team-totals", title = "Азиатский ${definition.title}") else definition
+            "handicap", "asian-handicap" -> if (quarter) {
+                definition.copy(family = "asian-handicap", title = "Азиатская фора")
+            } else {
+                definition.copy(family = "handicap", title = "Фора")
+            }
+            else -> definition
+        }
+    }
+    fun familyRank(family: String?): Int = listOf(
+        "result", "regulation-result", "winner", "winner-ot", "draw-no-bet", "double-chance",
+        "totals", "handicap", "team-totals", "btts", "correct-score",
+        "asian-totals", "asian-handicap", "asian-team-totals", "european-handicap",
+        "first-goal", "next-goal", "last-goal",
+        "spread", "point-handicap", "set-handicap", "map-handicap", "total-sets", "total-maps", "set-score",
+    ).indexOf(family).takeIf { it >= 0 } ?: 100
+    fun footballFamilyOrder(family: String?): Int = when (family) {
+        "result", "winner" -> 1
+        "double-chance" -> 2
+        "totals" -> 3
+        "handicap" -> 4
+        "team-totals" -> 5
+        "btts" -> 7
+        "correct-score" -> 8
+        "asian-totals" -> 9
+        "asian-handicap" -> 10
+        "asian-team-totals" -> 11
+        "european-handicap" -> 12
+        "next-goal", "first-goal", "last-goal" -> 13
+        else -> 50 + familyRank(family)
+    }
     fun categoryRank(sport: String, category: String): Int {
         val order = when(sport) {
-            "football" -> listOf("main", "double-chance", "handicaps", "totals", "btts", "goals", "corners", "cards", "shots")
+            "football" -> listOf("main", "double-chance", "totals", "handicaps", "btts", "goals", "corners", "cards", "shots", "players")
             "basketball" -> listOf("main", "handicaps", "totals", "players")
             "tennis" -> listOf("main", "sets", "handicaps", "totals", "games", "tiebreaks", "aces")
             "table-tennis", "volleyball" -> listOf("main", "sets", "handicaps", "totals")
@@ -341,7 +389,18 @@ internal fun FootballFixture.withOddsPapiMarkets(
             MarketGroup(key=(listOf(match.eventId)+identity).joinToString("|") { "${it?.length?:-1}:$it" },name=title,
                 marketId=first.dto.externalMarketId.orEmpty(),category=spec.category,lineCount=rows.size,outcomes=rows.flatMap(MarketLine::outcomes),
                 family=spec.family,periodId=first.dto.externalPeriodId,bookmakerId=first.dto.bookmakerId,rows=rows)
-        }.sortedWith(compareBy<MarketGroup> { SportMarketStructure.categoryRank(match.sport,it.category) }.thenBy { SportMarketStructure.periodRank(it.periodId) }.thenBy { SportMarketStructure.familyRank(it.family) }.thenBy { it.name })
+        }.sortedWith(
+            if (match.sport == "football") {
+                compareBy<MarketGroup> { SportMarketStructure.periodRank(it.periodId) }
+                    .thenBy { SportMarketStructure.footballFamilyOrder(it.family) }
+                    .thenBy { it.name }
+            } else {
+                compareBy<MarketGroup> { SportMarketStructure.categoryRank(match.sport, it.category) }
+                    .thenBy { SportMarketStructure.periodRank(it.periodId) }
+                    .thenBy { SportMarketStructure.familyRank(it.family) }
+                    .thenBy { it.name }
+            },
+        )
     val top=main.firstOrNull { it.marketFamily in setOf("1x2","moneyline") && it.externalPeriodId in setOf("fulltime","result") }
     val topOutcomes=grouped.flatMap(MarketGroup::outcomes).filter { it.marketId==top?.externalMarketId && it.periodId==top?.externalPeriodId && it.bookmakerId==top?.bookmakerId }
     val priceState=if(state==FootballPriceState.Open && grouped.none { g->g.outcomes.any { it.odds!=null } })FootballPriceState.Unpriced else state

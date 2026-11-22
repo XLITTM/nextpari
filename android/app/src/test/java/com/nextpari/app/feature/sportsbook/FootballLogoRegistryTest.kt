@@ -118,6 +118,29 @@ class FootballLogoRegistryTest {
     }
 
     @Test
+    fun ownerScreenshotNamesResolveOnlyVerifiedAssets() {
+        val premier = fixture("Premier League", "England", "Brighton & Hove Albion", "Liverpool FC")
+        assertEquals(R.drawable.logo_fb_brighton, BundledFootballBadges.team(premier, "Brighton & Hove Albion", home = true))
+        assertEquals(R.drawable.logo_fb_liverpool, BundledFootballBadges.team(premier, "Liverpool FC", home = false))
+        assertEquals(R.drawable.logo_fb_manchester_united, BundledFootballBadges.team(premier, "Manchester United", home = true))
+        val spain = fixture("LaLiga", "Spain", "Real Sociedad San Sebastian", "CA Osasuna")
+        assertEquals(R.drawable.logo_fb_real_sociedad, BundledFootballBadges.team(spain, "Real Sociedad San Sebastian", home = true))
+        assertEquals(R.drawable.logo_fb_osasuna, BundledFootballBadges.team(spain, "CA Osasuna", home = false))
+        assertEquals(R.drawable.logo_fb_barcelona, BundledFootballBadges.team(spain, "FC Barcelona", home = true))
+        assertEquals(R.drawable.logo_fb_villarreal, BundledFootballBadges.team(spain, "Villarreal CF", home = false))
+        assertEquals(R.drawable.logo_fb_atletico_madrid, BundledFootballBadges.team(spain, "Atletico Madrid", home = true))
+        assertEquals(R.drawable.logo_fb_getafe, BundledFootballBadges.team(spain, "Getafe CF", home = false))
+        val segunda = fixture("La Liga 2", "Spain", "Racing Santander", "Malaga CF")
+        assertEquals(R.drawable.logo_fb_racing, BundledFootballBadges.team(segunda, "Racing Santander", home = true))
+        assertEquals(R.drawable.logo_fb_malaga, BundledFootballBadges.team(segunda, "Malaga CF", home = false))
+        val championship = fixture("Championship", "England", "Hull City", "Sunderland")
+        assertEquals(R.drawable.logo_fb_hull_city, BundledFootballBadges.team(championship, "Hull City", home = true))
+        assertNull(BundledFootballBadges.team(spain, "Brighton Women", home = true))
+        assertNull(BundledFootballBadges.team(premier, "Osasuna U19", home = true))
+        assertNull(BundledFootballBadges.team(fixture("Primera Division", "Argentina"), "Racing Santander", home = true))
+    }
+
+    @Test
     fun livePrematchListsAndMatchDetailsUseTheSameArtworkHook() {
         val card = File("src/main/java/com/nextpari/app/feature/home/MatchCard.kt").readText()
         val artwork = card.substringAfter("fun MatchTeamArtwork")

@@ -56,18 +56,38 @@ class SportsPresentationTest {
         val nba = nations.copy(id = "201", eventId = "201", sport = "basketball", league = "NBA", serverTier = 0)
         val friendly = nations.copy(id = "202", eventId = "202", league = "Club Friendlies", serverTier = 2)
         val virtual = nations.copy(id = "203", eventId = "203", league = "Esoccer GT Leagues", serverTier = 1)
-        assertEquals(listOf(nba, nations, youth, friendly),
+        assertEquals(listOf(nations, youth, friendly, nba),
             FeaturedSports.popularLive(listOf(youth, nba, virtual, friendly, nations)))
 
         val early = friendly.copy(isLive = false, kickoffEpochMs = now + 1)
         val major = nba.copy(isLive = false, kickoffEpochMs = nextDay)
         val past = nations.copy(isLive = false, kickoffEpochMs = now)
         val later = nations.copy(isLive = false, kickoffEpochMs = nextDay + 1)
-        assertEquals(listOf(major, early), FeaturedSports.popularLine(
+        assertEquals(listOf(early, major), FeaturedSports.popularLine(
             listOf(early, past, major, later, nations, virtual.copy(isLive = false, kickoffEpochMs = now + 1),
                 youth.copy(isLive = false, kickoffEpochMs = null)),
             now,
         ))
+    }
+
+    @Test
+    fun homeLiveChampionshipPreviewShowsFourOrFiveBlocksAndKeepsFullDirectory() {
+        val premier = nations.copy(id = "pl", eventId = "pl", league = "Premier League", country = "England")
+        val laliga = nations.copy(id = "es", eventId = "es", league = "La Liga", country = "Spain")
+        val serie = nations.copy(id = "it", eventId = "it", league = "Serie A", country = "Italy")
+        val bund = nations.copy(id = "de", eventId = "de", league = "Bundesliga", country = "Germany")
+        val ligue = nations.copy(id = "fr", eventId = "fr", league = "Ligue 1", country = "France")
+        val nba = nations.copy(id = "nba", eventId = "nba", sport = "basketball", league = "NBA", country = "USA")
+        val china = nations.copy(id = "cn", eventId = "cn", league = "Super League", country = "China")
+        val tt = nations.copy(id = "tt", eventId = "tt", sport = "table-tennis", league = "TT Cup", country = "International")
+        val live = listOf(tt, china, nba, ligue, bund, serie, laliga, premier)
+        val preview = HomeChampionships.preview(live, excludeEsports = true)
+        assertTrue(preview.size in 4..5)
+        assertTrue(preview.size <= HomeChampionships.PREVIEW_MAX)
+        assertFalse(preview.any { group -> group.leagues.any { it.name == "TT Cup" } })
+        val full = HomeChampionships.groups(live, excludeEsports = true)
+        assertTrue(full.size > preview.size)
+        assertTrue(full.any { it.country == "International" || it.country == "China" })
     }
 
     @Test
@@ -158,7 +178,7 @@ class SportsPresentationTest {
         assertEquals("Ф1 0", outcome.label)
         assertEquals("1.904", outcome.odds)
         assertEquals("1_2", outcome.selection?.marketId)
-        assertEquals(listOf("all", "handicaps"), MarketTabs.available("football", fixture.markets).map { it.id })
+        assertEquals(listOf("main"), MarketTabs.available("football", fixture.markets).map { it.id })
         assertTrue(fixture.locked().markets.single().outcomes.all { it.selection == null && it.locked })
     }
 

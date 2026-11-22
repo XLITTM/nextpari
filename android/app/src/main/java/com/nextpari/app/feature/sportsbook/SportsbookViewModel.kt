@@ -406,8 +406,9 @@ class SportsbookViewModel(
     fun featured(live: Boolean, matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> {
         val feed = ui.value.feed
         val order = if (live) feed.featuredLive else feed.featuredLine
-        if (order == null) return if (live) FeaturedSports.popularLive(matches) else FeaturedSports.popularLine(matches, nowMs)
-        return orderedByIds(matches, order).orEmpty()
+        val fallback = if (live) FeaturedSports.popularLive(matches) else FeaturedSports.popularLine(matches, nowMs)
+        val selected = if (order.isNullOrEmpty()) fallback else orderedByIds(matches, order)?.takeIf { it.isNotEmpty() } ?: fallback
+        return FeaturedSports.prioritize(selected)
     }
 
     private fun orderedByIds(matches: List<MatchCardModel>, ids: List<String>?): List<MatchCardModel>? {

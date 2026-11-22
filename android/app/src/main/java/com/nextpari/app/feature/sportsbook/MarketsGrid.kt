@@ -44,45 +44,61 @@ fun MarketsGrid(
     onSelect: (MarketOutcome) -> Unit = {},
 ) {
     val colors = NextpariTheme.colors
+    val modes = MarketTabs.modes(sport)
     val tabs = MarketTabs.available(sport, markets)
-    var tab by rememberSaveable { mutableStateOf("all") }
+    var mode by rememberSaveable { mutableStateOf("all") }
+    var tab by rememberSaveable { mutableStateOf(if (sport == "football") "main" else "all") }
     var openKeys by rememberSaveable { mutableStateOf(setOf<String>()) }
     var pinned by rememberSaveable { mutableStateOf(initialPinned) }
     var initializedTabs by rememberSaveable { mutableStateOf(setOf<String>()) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
-    val activeTab = tab.takeIf { id -> tabs.any { it.id == id } } ?: "all"
-    val filtered = MarketAccordionLogic.sortPinnedFirst(MarketTabs.filter(markets, activeTab), pinned)
+    val activeMode = mode.takeIf { id -> modes.any { it.id == id } } ?: "all"
+    val scoped = when (activeMode) {
+        "players" -> markets.filter(MarketTabs::isPlayerMarket)
+        "popular" -> markets.filter { MarketTabs.isPopular(it) && MarketTabs.matchesTab(it, "main", sport) }
+        else -> markets.filterNot(MarketTabs::isPlayerMarket)
+    }
+    val sectionTabs = if (activeMode == "all" && modes.isNotEmpty()) tabs else emptyList()
+    val activeTab = tab.takeIf { id -> sectionTabs.any { it.id == id } }
+        ?: sectionTabs.firstOrNull()?.id
+        ?: "all"
+    val filtered = MarketAccordionLogic.sortPinnedFirst(
+        if (sectionTabs.isEmpty()) scoped else MarketTabs.filter(scoped, activeTab, sport),
+        pinned,
+    )
     val visible = if (query.isBlank()) filtered else filtered.filter { it.name.contains(query.trim(), ignoreCase = true) }
 
-    LaunchedEffect(activeTab, filtered.map { it.key }) {
-        if (filtered.isNotEmpty() && activeTab !in initializedTabs) {
-            initializedTabs = initializedTabs + activeTab
+    LaunchedEffect(activeMode, activeTab, filtered.map { it.key }) {
+        val key = "$activeMode:$activeTab"
+        if (filtered.isNotEmpty() && key !in initializedTabs) {
+            initializedTabs = initializedTabs + key
             openKeys = openKeys + MarketAccordionLogic.initialOpenKeys(filtered)
         }
     }
 
     Column(Modifier.fillMaxWidth().background(colors.surface).padding(bottom = 24.dp)) {
         if (markets.isNotEmpty()) {
+            if (modes.isNotEmpty()) {
+                LazyRow(
+                    Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 4.dp),
+                    contentPadding = PaddingValues(end = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items(modes, key = { it.id }) { spec ->
+                        MarketTabChip(spec.label, spec.id == activeMode) { mode = spec.id }
+                    }
+                }
+            }
             Row(
                 Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val chips = if (modes.isEmpty()) tabs else sectionTabs
                 LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(end = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(tabs, key = { it.id }) { spec ->
-                        val active = spec.id == activeTab
-                        val shape = RoundedCornerShape(12.dp)
-                        Box(
-                            Modifier.height(34.dp).clip(shape)
-                                .background(if (active) colors.surfaceMint else colors.surface)
-                                .border(1.dp, if (active) colors.accent else colors.border, shape)
-                                .clickable { tab = spec.id }.padding(horizontal = 12.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(spec.label, color = if (active) colors.accentInk else colors.textSecondary,
-                                fontSize = 12.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Medium)
-                        }
+                    items(chips, key = { it.id }) { spec ->
+                        MarketTabChip(spec.label, spec.id == activeTab) { tab = spec.id }
                     }
                 }
                 IconButton(onClick = {
@@ -125,5 +141,25 @@ fun MarketsGrid(
                 onSelect = onSelect,
             )
         }
+    }
+}
+
+@Composable
+private fun MarketTabChip(label: String, active: Boolean, onClick: () -> Unit) {
+    val colors = NextpariTheme.colors
+    val shape = RoundedCornerShape(12.dp)
+    Box(
+        Modifier.height(34.dp).clip(shape)
+            .background(if (active) colors.surfaceMint else colors.surface)
+            .border(1.dp, if (active) colors.accent else colors.border, shape)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            label,
+            color = if (active) colors.accentInk else colors.textSecondary,
+            fontSize = 12.sp,
+            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+        )
     }
 }

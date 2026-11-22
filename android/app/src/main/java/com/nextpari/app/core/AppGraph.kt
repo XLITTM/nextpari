@@ -83,6 +83,8 @@ object AppGraph {
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
     var footballRepository: FootballRepository? = null
         private set
+    var playerApi: PlayerApi? = null
+        private set
     private var sessionCoordinator: PlayerSessionCoordinator? = null
     private var secureCookieJar: SecureCookieJar? = null
     private val restorePhase = MutableStateFlow(SessionRestorePhase.Checking)
@@ -125,6 +127,7 @@ object AppGraph {
             },
         )
         val api: PlayerApi = NetworkModule.playerApi(client)
+        playerApi = api
         val coordinator = PlayerSessionCoordinator(
             api = api,
             cookieJar = cookieJar,

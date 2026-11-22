@@ -620,6 +620,32 @@ internal fun AuthenticatedShell(
             composable(Destinations.LIVE_CASINO) {
                 GameWebViewScreen("casino-live") { navController.popBackStack() }
             }
+            composable(Destinations.CASINO_CATEGORIES) {
+                com.nextpari.app.feature.casino.CasinoDirectoryScreen(
+                    kind = com.nextpari.app.feature.casino.CasinoDirectoryKind.Categories,
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
+            composable(Destinations.CASINO_PROVIDERS) {
+                com.nextpari.app.feature.casino.CasinoDirectoryScreen(
+                    kind = com.nextpari.app.feature.casino.CasinoDirectoryKind.Providers,
+                    onBack = { navController.popBackStack() },
+                    onNavigate = { navController.navigateTo(it) },
+                )
+            }
+            placeholder(
+                navController,
+                Destinations.CASINO_MY,
+                "Моё казино",
+                "Избранное и недавние игры появятся, когда аккаунт сохранит их на сервере.",
+            )
+            placeholder(
+                navController,
+                Destinations.CASINO_TOURNAMENTS,
+                "Турниры",
+                "Турниры казино сейчас недоступны: сервер не отдаёт турнирные данные.",
+            )
             composable(Destinations.CASINO_STANDARD) { entry ->
                 val category = entry.arguments?.getString("category").orEmpty()
                 val code = if (category == "live") "casino-live" else "casino-slots"

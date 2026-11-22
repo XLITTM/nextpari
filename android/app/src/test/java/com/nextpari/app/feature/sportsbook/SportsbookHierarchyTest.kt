@@ -45,6 +45,9 @@ class SportsbookHierarchyTest {
         assertThat(directory.countries.flatMap { it.leagues }.map { it.name }).containsExactly("Premier League")
         assertThat(directory.countries.flatMap { it.leagues }.map { it.name }).doesNotContain("UEFA Champions League")
         val listed = GameListLayout.entries(listOf(tennis, lebanon, england)).filterIsInstance<GameListEntry.Fixture>().map { it.match.eventId }
+        val nba = MatchCardModel("nba", eventId = "nba", sport = "basketball", league = "NBA", country = "USA", team1 = "Lakers", team2 = "Celtics")
+        val mixed = GameListLayout.entries(listOf(nba, tennis, england)).filterIsInstance<GameListEntry.Fixture>().map { it.match.eventId }
+        assertThat(mixed).containsExactly("epl", "nba", "tt").inOrder()
         assertThat(listed).containsExactly("epl", "leb", "tt").inOrder()
         assertThat(GameListLayout.entries(listOf(england, tennis)).filterIsInstance<GameListEntry.Heading>().map { it.title })
             .containsAtLeast("Футбол", "Premier League", "Настольный теннис", "TT Cup")
@@ -63,7 +66,8 @@ class SportsbookHierarchyTest {
 
     @Test
     fun marketTabsAreSpecificToEachSport() {
-        assertThat(MarketTabs.forSport("football").map { it.id }).containsAtLeast("corners", "cards", "btts", "double-chance")
+        assertThat(MarketTabs.forSport("football").map { it.id }).containsAtLeast("main", "1st-half", "2nd-half", "corners", "cards")
+        assertThat(MarketTabs.modes("football").map { it.id }).containsExactly("all", "players", "popular").inOrder()
         for(sport in listOf("tennis", "basketball", "hockey", "volleyball", "table-tennis", "esports")) {
             val ids=MarketTabs.forSport(sport).map { it.id }
             assertThat(ids).containsAtLeast("all", "main", "handicaps")

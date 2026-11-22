@@ -19,7 +19,7 @@ class HomeFeedVisibilityTest {
         assertThat(HomeFeedVisibility.alwaysVisibleSection(loading = true, count = 0))
             .isEqualTo(HomeSectionBody.Skeleton)
         assertThat(HomeFeedVisibility.alwaysVisibleSection(loading = false, count = 0, failed = true))
-            .isEqualTo(HomeSectionBody.Hidden)
+            .isEqualTo(HomeSectionBody.EmptyText)
         assertThat(HomeFeedVisibility.alwaysVisibleSection(loading = false, count = 3))
             .isEqualTo(HomeSectionBody.Data)
     }

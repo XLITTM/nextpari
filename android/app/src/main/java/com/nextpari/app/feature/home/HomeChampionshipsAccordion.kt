@@ -65,7 +65,7 @@ fun HomeChampionshipsAccordion(
     onNavigate: (String) -> Unit,
     excludeEsports: Boolean = false,
 ) {
-    val groups = HomeChampionships.groups(live, excludeEsports)
+    val groups = HomeChampionships.preview(live, excludeEsports)
     if (groups.isEmpty()) return
 
     val colors = NextpariTheme.colors

@@ -39,12 +39,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.AppGraph
 import com.nextpari.app.core.network.NetworkModule
+import com.nextpari.app.core.network.PlayerApi
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.neon.VipNeonChrome
 import com.nextpari.app.core.ui.neon.vipNeonFrame
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.feature.games.web.GameWebPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runInterruptible
@@ -74,15 +75,49 @@ data class CasinoDemoPage(
     val nextPage: Int? = null,
 )
 
-private object CasinoRealCatalogClient {
-    private val api by lazy { NetworkModule.playerApi(NetworkModule.okHttpClient()) }
+internal class CasinoCatalogException(
+    val unauthorized: Boolean,
+    message: String,
+) : IllegalStateException(message)
 
-    suspend fun list(query: String, category: String, page: Int): CasinoDemoPage {
-        val response = api.casinoRealCatalog(query, category, page)
+internal object CasinoCatalogLogic {
+    fun accept(game: CasinoDemoGame): Boolean =
+        game.id.isNotBlank() && game.title.isNotBlank() && game.mobile != false
+
+    fun categoryLabel(raw: String): String = when (raw.lowercase()) {
+        "slots" -> "Слоты"
+        "live" -> "Лайв казино"
+        "table" -> "Настольные"
+        "instant" -> "Моментальные"
+        "fishing" -> "Рыбалка"
+        "bingo" -> "Бинго"
+        "keno" -> "Кено"
+        "crash" -> "Crash"
+        else -> raw.ifBlank { "Другие" }
+    }
+
+    fun emptyMessage(unauthorized: Boolean): String =
+        if (unauthorized) "Войдите в аккаунт, чтобы открыть каталог" else "Игры не найдены"
+}
+
+internal object CasinoRealCatalogClient {
+    suspend fun list(
+        query: String,
+        category: String,
+        page: Int,
+        api: PlayerApi? = AppGraph.playerApi,
+    ): CasinoDemoPage {
+        val client = api ?: NetworkModule.playerApi(NetworkModule.okHttpClient())
+        val response = client.casinoRealCatalog(query, category, page)
+        if (response.code() == 401) {
+            throw CasinoCatalogException(true, "JWT_REQUIRED")
+        }
         val catalog = response.body()
-        if (!response.isSuccessful || catalog?.ok != true) throw IllegalStateException("Casino catalog unavailable")
+        if (!response.isSuccessful || catalog?.ok != true) {
+            throw CasinoCatalogException(false, catalog?.let { "Casino catalog unavailable" } ?: "Casino catalog unavailable")
+        }
         return catalog.copy(
-            games = catalog.games.filter { it.mobile != false && GameWebPolicy.isCasinoDemoId(it.id) && it.title.isNotBlank() },
+            games = catalog.games.filter(CasinoCatalogLogic::accept),
             nextPage = catalog.nextPage?.takeIf { it == page + 1 },
         )
     }
@@ -95,15 +130,21 @@ fun CasinoRealCatalog(category: String, title: String, onOpenCatalog: () -> Unit
     var games by remember(category) { mutableStateOf(emptyList<CasinoDemoGame>()) }
     var loading by remember(category) { mutableStateOf(true) }
     var failed by remember(category) { mutableStateOf(false) }
+    var unauthorized by remember(category) { mutableStateOf(false) }
 
     LaunchedEffect(category, retry) {
         loading = games.isEmpty()
         failed = false
+        unauthorized = false
         try {
             games = CasinoRealCatalogClient.list("", category, 1).games.distinctBy(CasinoDemoGame::id).take(12)
             loading = false
         } catch (error: CancellationException) {
             throw error
+        } catch (error: CasinoCatalogException) {
+            unauthorized = error.unauthorized
+            failed = games.isEmpty()
+            loading = false
         } catch (_: Exception) {
             failed = games.isEmpty()
             loading = false
@@ -121,7 +162,16 @@ fun CasinoRealCatalog(category: String, title: String, onOpenCatalog: () -> Unit
         }
         when {
             loading -> Text("Загружаем каталог…", Modifier.padding(horizontal = 16.dp), color = colors.textSecondary)
-            failed -> TextButton(onClick = { retry++ }, modifier = Modifier.padding(horizontal = 8.dp)) { Text("Повторить") }
+            failed -> Column(Modifier.padding(horizontal = 16.dp)) {
+                Text(CasinoCatalogLogic.emptyMessage(unauthorized), color = colors.textSecondary, fontSize = 13.sp)
+                TextButton(onClick = { retry++ }) { Text("Повторить") }
+            }
+            games.isEmpty() -> Text(
+                CasinoCatalogLogic.emptyMessage(false),
+                Modifier.padding(horizontal = 16.dp),
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+            )
         }
     }
 }
