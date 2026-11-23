@@ -25,8 +25,17 @@ object Destinations {
     const val SPORTS_LIVE = "sports/live"
     const val SPORTS_LINE = "sports/line"
     const val SPORTS_CYBERS = "sports/cybers"
+    const val EXPRESS = "sports/express"
+    const val RESULTS = "sports/results"
     const val CHAMPIONSHIPS = "championships/{sport}/{mode}"
     const val SLOTS = "slots"
+    const val CASINO_STANDARD = "casino/standard/{category}"
+    const val CASINO_DEMO_GAME = "casino/demo/{gameId}"
+    const val CASINO_CATEGORIES = "casino/categories"
+    const val CASINO_PROVIDERS = "casino/providers"
+    const val CASINO_PROVIDER_GAMES = "casino/provider/{providerId}"
+    const val CASINO_MY = "casino/my"
+    const val CASINO_TOURNAMENTS = "casino/tournaments"
     const val LIVE_CASINO = "live-casino"
     const val PROVIDER_SPORTSBOOK = "provider-sportsbook"
     const val GAMES = "games"
@@ -62,7 +71,8 @@ object Destinations {
     val webPlayerRoutes = listOf(
         HOME, MATCH, BETSLIP, FAVORITES, HISTORY, BET_DETAILS, MENU, WALLET, PROMO,
         PERSONAL_DATA, WALLETS, GAMELIST_LIVE, GAMELIST_LINE, SPORTS_LIVE, SPORTS_LINE,
-        SPORTS_CYBERS, CHAMPIONSHIPS, SLOTS, LIVE_CASINO, PROVIDER_SPORTSBOOK, GAMES,
+        SPORTS_CYBERS, EXPRESS, RESULTS, CHAMPIONSHIPS, SLOTS, LIVE_CASINO, CASINO_CATEGORIES, CASINO_PROVIDERS,
+        CASINO_MY, CASINO_TOURNAMENTS, PROVIDER_SPORTSBOOK, GAMES,
         PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, SETTINGS, INFO, PROMO_UNBEATABLE,
         BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK, LEAGUE,
     )
@@ -131,14 +141,15 @@ object Destinations {
         if (route == LEAGUE || route.startsWith("league/")) return true
         if (route == CHAMPIONSHIPS || route.startsWith("championships/")) return true
         if (route.startsWith("gamelist/")) return true
-        if (route.startsWith("sports/")) return true
+        if (route.startsWith("sports/") || route.startsWith("casino/demo/") || route.startsWith("casino/standard/") || route.startsWith("casino/provider/")) return true
         return route in homeOwnedExact
     }
 
     private val homeOwnedExact = setOf(
         GAMES, BLACKJACK, AVIATOR, APPLES, CRYSTAL, DICE, PHARAOH, VIP_CASHBACK,
         PROMO_DETAILS, PROMO_MARATHON, PROMO_WELCOME, PROMO_UNBEATABLE,
-        SLOTS, LIVE_CASINO, PROVIDER_SPORTSBOOK,
+        SLOTS, LIVE_CASINO, CASINO_CATEGORIES, CASINO_PROVIDERS, CASINO_MY, CASINO_TOURNAMENTS,
+        PROVIDER_SPORTSBOOK,
     )
 
     fun showsHeader(route: String?): Boolean =
@@ -146,6 +157,12 @@ object Destinations {
 
     fun showsMainTabs(route: String?): Boolean = route == HOME
 
+    fun casinoStandard(category: String) = "casino/standard/$category"
+    fun casinoDemoGame(gameId: String) = "casino/demo/$gameId"
+    fun casinoProvider(providerId: String): String {
+        val encoded = java.net.URLEncoder.encode(providerId, Charsets.UTF_8.name()).replace("+", "%20")
+        return "casino/provider/$encoded"
+    }
     fun match(matchId: String) = "match/$matchId"
     fun betDetails(betId: String) = "bet-details/$betId"
     fun championships(sport: String, mode: String) = "championships/$sport/$mode"

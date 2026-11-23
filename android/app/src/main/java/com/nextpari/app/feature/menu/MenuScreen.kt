@@ -304,7 +304,7 @@ private fun menuRowGlyph(label: String, tab: String, special: Boolean): MenuGlyp
         "Стрим" -> MenuGlyph(NextpariWebIcons.video(stroke), tint)
         "Результаты" -> MenuGlyph(NextpariWebIcons.checkCircle(stroke), tint)
         "Ставь на своих" -> MenuGlyph(NextpariWebIcons.flag(stroke), tint)
-        "My casino" -> MenuGlyph(NextpariWebIcons.heart(stroke), tint)
+        "Моё казино", "My casino" -> MenuGlyph(NextpariWebIcons.heart(stroke), tint)
         "Категории" -> MenuGlyph(NextpariWebIcons.layoutGrid(stroke), tint)
         "Промо" -> MenuGlyph(NextpariWebIcons.gift(stroke), tint)
         "Провайдеры" -> MenuGlyph(NextpariWebIcons.boxes(stroke), tint)

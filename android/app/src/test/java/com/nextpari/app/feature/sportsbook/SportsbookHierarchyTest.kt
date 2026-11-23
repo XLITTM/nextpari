@@ -17,14 +17,42 @@ class SportsbookHierarchyTest {
     @Test
     fun countryGroupingCountsAndFirstExpanded() {
         val groups = CountryGrouping.groupByCountry(listOf(spainA, spainB, england, copa))
-        assertThat(groups.map { it.country }).containsExactly("Испания", "Англия").inOrder()
-        assertThat(groups.first().count).isEqualTo(3)
-        assertThat(groups.first().leagues.map { it.name to it.count }).containsExactly("Ла Лига" to 2, "Кубок" to 1).inOrder()
-        assertThat(groups[1].count).isEqualTo(1)
-        assertThat(CountryGrouping.initialExpanded(groups)).isEqualTo("Испания")
+        assertThat(groups.map { it.country }).containsExactly("Англия", "Испания").inOrder()
+        assertThat(groups.first().count).isEqualTo(1)
+        assertThat(groups[1].leagues.map { it.name to it.count }).containsExactly("Кубок" to 1, "Ла Лига" to 2).inOrder()
+        assertThat(groups[1].count).isEqualTo(3)
+        assertThat(CountryGrouping.initialExpanded(groups)).isEqualTo("Англия")
         assertThat(CountryGrouping.nextExpanded(groups, "Испания")).isEqualTo("Испания")
-        assertThat(CountryGrouping.nextExpanded(groups, "Франция")).isEqualTo("Испания")
+        assertThat(CountryGrouping.nextExpanded(groups, "Франция")).isEqualTo("Англия")
         assertThat(CountryGrouping.initialExpanded(emptyList())).isEmpty()
+    }
+
+    @Test
+    fun verifiedCompetitionIdentityRanksEnglandAheadOfAnotherPremierLeague() {
+        val england = MatchCardModel(id = "epl", eventId = "epl", sport = "football", provider = "oddspapi-v5",
+            league = "Premier League", country = "England", team1 = "Arsenal", team2 = "Manchester City")
+        val lebanon = england.copy(id = "leb", eventId = "leb", country = "Lebanon", team1 = "A", team2 = "B")
+        val champions = england.copy(id = "ucl", eventId = "ucl", league = "UEFA Champions League", country = "International", team1 = "C", team2 = "D")
+        val tennis = england.copy(id = "tt", eventId = "tt", sport = "table-tennis", league = "TT Cup", country = "International", team1 = "E", team2 = "F")
+        assertThat(CompetitionOrder.rank(england)).isLessThan(CompetitionOrder.rank(lebanon))
+        assertThat(CompetitionOrder.rank(lebanon)).isEqualTo(Int.MAX_VALUE)
+        assertThat(FeaturedSports.tier(england)).isEqualTo(0)
+        assertThat(FeaturedSports.tier(lebanon)).isEqualTo(1)
+        val groups = CountryGrouping.groupByCountry(listOf(lebanon, tennis, champions, england))
+        val directory = CompetitionDirectory.organize(groups, setOf(CompetitionOrder.leagueKey(england)))
+        assertThat(directory.favorites.map { it.name }).containsExactly("Premier League")
+        assertThat(directory.top.map { it.name }).containsExactly("UEFA Champions League")
+        assertThat(directory.countries.map { it.country }).containsAtLeast("England", "Lebanon")
+        assertThat(directory.countries.first { it.country == "England" }.leagues.map { it.name }).containsExactly("Premier League")
+        assertThat(directory.countries.flatMap { it.leagues }.map { it.name }).doesNotContain("UEFA Champions League")
+        assertThat(directory.international.map { it.name }).containsExactly("TT Cup")
+        val listed = GameListLayout.entries(listOf(tennis, lebanon, england)).filterIsInstance<GameListEntry.Fixture>().map { it.match.eventId }
+        val nba = MatchCardModel("nba", eventId = "nba", sport = "basketball", league = "NBA", country = "USA", team1 = "Lakers", team2 = "Celtics")
+        val mixed = GameListLayout.entries(listOf(nba, tennis, england)).filterIsInstance<GameListEntry.Fixture>().map { it.match.eventId }
+        assertThat(mixed).containsExactly("epl", "nba", "tt").inOrder()
+        assertThat(listed).containsExactly("epl", "leb", "tt").inOrder()
+        assertThat(GameListLayout.entries(listOf(england, tennis)).filterIsInstance<GameListEntry.Heading>().map { it.title })
+            .containsAtLeast("Футбол", "Premier League", "Настольный теннис", "TT Cup")
     }
 
     @Test
@@ -39,22 +67,17 @@ class SportsbookHierarchyTest {
     }
 
     @Test
-    fun marketTabsPerSportMatchWeb() {
-        assertThat(MarketTabs.forSport("football").map { it.label }).containsExactly(
-            "Все", "Основная игра", "Тоталы", "Форы", "1-й тайм", "2-й тайм", "Угловые", "Голы",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("tennis").map { it.label }).containsExactly(
-            "Все рынки", "Победитель", "Сеты", "Геймы",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("basketball").map { it.label }).containsExactly(
-            "Все рынки", "Победитель", "Тотал очков", "Четверти", "Половины",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("hockey").map { it.label }).containsExactly(
-            "Все рынки", "Основная игра", "Тоталы", "Форы",
-        ).inOrder()
-        assertThat(MarketTabs.forSport("esports").map { it.label }).containsExactly(
-            "Все рынки", "Победитель", "Карты / раунды",
-        ).inOrder()
+    fun marketTabsAreSpecificToEachSport() {
+        assertThat(MarketTabs.forSport("football").map { it.id }).containsAtLeast("main", "1st-half", "2nd-half", "corners", "cards")
+        assertThat(MarketTabs.modes("football").map { it.id }).containsExactly("all", "players", "popular").inOrder()
+        for(sport in listOf("tennis", "basketball", "hockey", "volleyball", "table-tennis", "esports")) {
+            val ids=MarketTabs.forSport(sport).map { it.id }
+            assertThat(ids).containsAtLeast("all", "main", "handicaps")
+            assertThat(ids).containsNoneOf("corners", "cards", "1st-half", "2nd-half")
+        }
+        assertThat(MarketTabs.forSport("basketball").map { it.id }).containsAtLeast("quarters", "halves", "players")
+        assertThat(MarketTabs.forSport("tennis").map { it.id }).containsAtLeast("sets", "games", "tiebreaks", "aces")
+        assertThat(MarketTabs.forSport("esports").map { it.id }).containsAtLeast("maps", "rounds", "kills")
     }
 
     @Test
@@ -80,6 +103,13 @@ class SportsbookHierarchyTest {
         assertThat(MarketAccordionLogic.columns(moneyline)).isEqualTo(3)
         assertThat(MarketAccordionLogic.columns(totals)).isEqualTo(2)
         assertThat(MarketAccordionLogic.columns(handicap)).isEqualTo(2)
+        assertThat(CompactMarketLayout.buttonLabel(totals, "2.5", totals.outcomes[0])).isEqualTo("(2.5) Б")
+        assertThat(CompactMarketLayout.buttonLabel(totals, "2.5", totals.outcomes[1])).isEqualTo("(2.5) М")
+        assertThat(CompactMarketLayout.hideLineColumn(totals)).isTrue()
+        assertThat(CompactMarketLayout.buttonLabel(handicap, "-0.5", handicap.outcomes[0])).isEqualTo("1 (-0.5)")
+        assertThat(CompactMarketLayout.buttonLabel(handicap, "-0.5", handicap.outcomes[1])).isEqualTo("2 (0.5)")
+        assertThat(CompactMarketLayout.hideLineColumn(handicap)).isTrue()
+        assertThat(btts.outcomes.map { it.label }).containsExactly("Да", "Нет").inOrder()
         assertThat(btts.outcomes.first { it.outcomeId == "no" }.locked).isTrue()
         assertThat(moneyline.outcomes.first { it.label == "1" }.movement).isEqualTo(OddsMovement.Up)
         assertThat(moneyline.outcomes.first { it.label == "2" }.movement).isEqualTo(OddsMovement.Down)
@@ -126,6 +156,8 @@ class SportsbookHierarchyTest {
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_LIVE)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_LINE)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.SPORTS_CYBERS)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.EXPRESS)).isEqualTo(Destinations.HOME)
+        assertThat(Destinations.bottomNavActiveRoute(Destinations.RESULTS)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.CHAMPIONSHIPS)).isEqualTo(Destinations.HOME)
         assertThat(Destinations.bottomNavActiveRoute(Destinations.championships("football", "live"))).isEqualTo(Destinations.HOME)
         assertThat(Destinations.showsHeader(Destinations.SPORTS_LIVE)).isFalse()
@@ -136,13 +168,30 @@ class SportsbookHierarchyTest {
     }
 
     @Test
-    fun sportsListFeaturedAlwaysVisibleWithRepositoryCounts() {
-        val live = listOf(spainA, MatchCardModel(id = "t", sport = "tennis", league = "ATP", country = "Мир", team1 = "X", team2 = "Y"))
-        val rows = SportsListCatalog.rows("live", live, emptyList())
-        assertThat(rows.map { it.id }.take(5)).containsExactly("football", "tennis", "basketball", "hockey", "esports").inOrder()
-        assertThat(rows.first { it.id == "football" }.count).isEqualTo(1)
-        assertThat(rows.first { it.id == "tennis" }.count).isEqualTo(1)
-        assertThat(rows.first { it.id == "basketball" }.count).isEqualTo(0)
-        assertThat(SportsListCatalog.rows("cybers", live, emptyList()).map { it.id }).containsExactly("esports")
+    fun sportSelectorAndListsShowObservedSportsInCatalogOrder() {
+        val tennis = spainA.copy(id="4",eventId="4",sport="tennis",league="ATP")
+        val handball = spainA.copy(id="5",eventId="5",sport="handball")
+        val virtual = spainA.copy(id="6",eventId="6",sport="esports")
+        val live=listOf(tennis,virtual,spainA)
+        val line=listOf(handball)
+        assertThat(SportsListCatalog.selector(emptyList(),emptyList()).map { it.id }).containsExactly("all")
+        assertThat(SportsListCatalog.selector(live,line).map { it.id }).containsExactly("all","football","tennis","esports","handball").inOrder()
+        assertThat(SportsListCatalog.rows("live",live,line).map { it.id to it.count }).containsExactly("football" to 1,"tennis" to 1).inOrder()
+        assertThat(SportsListCatalog.rows("line",live,line).map { it.id }).containsExactly("handball")
+        assertThat(SportsListCatalog.rows("cybers",live,line).map { it.id }).containsExactly("esports")
+        assertThat(SportsListCatalog.rows("cybers",emptyList(),emptyList())).isEmpty()
+    }
+
+    @Test
+    fun searchKeepsExactFixtureIdentityAndFindsDomesticLeagues() {
+        val match = spainA.copy(id = "betsapi:13:1", eventId = "betsapi:13:1", team1 = "Barcelona")
+        assertThat(SportsbookCatalog.search(listOf(match, england), " barcelona ").single().eventId)
+            .isEqualTo("betsapi:13:1")
+        assertThat(SportsbookCatalog.search(listOf(match, england), "ла лига")).containsExactly(match)
+        val groups = CountryGrouping.groupByCountry(listOf(spainA, england, copa))
+        assertThat(CountryGrouping.search(groups, "лига", countryOnly = false).single().leagues.map { it.name })
+            .containsExactly("Ла Лига")
+        assertThat(CountryGrouping.search(groups, "испания", countryOnly = true).single().count).isEqualTo(2)
+        assertThat(CountryGrouping.search(groups, "ла лига", countryOnly = true)).isEmpty()
     }
 }

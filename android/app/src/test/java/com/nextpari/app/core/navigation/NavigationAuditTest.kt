@@ -24,7 +24,7 @@ class NavigationAuditTest {
     }
 
     @Test
-    fun intentionalPlaceholdersRemainRegistered() {
+    fun couponCasinoAndIntentionalPlaceholdersRemainRegistered() {
         val root = moduleFile("src/main/java/com/nextpari/app/core/navigation/NextpariRoot.kt").readText()
         listOf(
             Destinations.FAVORITES,
@@ -43,10 +43,19 @@ class NavigationAuditTest {
         ).forEach { route ->
             assertThat(root).contains(routeConstant(route))
         }
-        assertThat(root).contains("FavoritesScreen()")
-        assertThat(root).contains("Купон пуст. Приём ставок выключен")
-        assertThat(root).contains("placeholder(navController, Destinations.SLOTS")
-        assertThat(root).contains("placeholder(navController, Destinations.LIVE_CASINO")
+        assertThat(root).contains("FavoritesScreen(")
+        assertThat(root).contains("SportsCouponScreen(")
+        assertThat(root).doesNotContain("Купон пуст. Приём ставок выключен")
+        assertThat(root).contains("composable(Destinations.SLOTS)")
+        assertThat(root).contains("composable(Destinations.LIVE_CASINO)")
+        assertThat(root).contains("CasinoBrowseScreen(")
+        assertThat(root).contains("CasinoMyScreen(")
+        assertThat(root).contains("CasinoTournamentsScreen(")
+        assertThat(root).contains("Destinations.CASINO_DEMO_GAME")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.CASINO_MY")
+        assertThat(root).doesNotContain("placeholder(navController, Destinations.CASINO_TOURNAMENTS")
+        assertThat(root).doesNotContain("CasinoDemoCatalog(")
+        assertThat(root).doesNotContain("Демо-игры")
         assertThat(root).contains("placeholder(navController, Destinations.PROVIDER_SPORTSBOOK")
         assertThat(root).contains("composable(Destinations.INBOX_PLACEHOLDER)")
         assertThat(root).doesNotContain("placeholder(navController, Destinations.BLACKJACK")
@@ -103,6 +112,8 @@ class NavigationAuditTest {
             "src/main/java/com/nextpari/app/feature/sportsbook/LeagueScreen.kt",
             "src/main/java/com/nextpari/app/feature/sportsbook/GameListScreen.kt",
             "src/main/java/com/nextpari/app/feature/sportsbook/MatchDetailsScreen.kt",
+            "src/main/java/com/nextpari/app/feature/express/ExpressOfDayScreen.kt",
+            "src/main/java/com/nextpari/app/feature/results/ResultsScreen.kt",
         )
         val blob = files.joinToString("\n") { moduleFile(it).readText() }
         assertThat(blob).doesNotContain("navigateTo(Destinations.MATCH)")
@@ -178,8 +189,14 @@ class NavigationAuditTest {
         "sports/live" -> "SPORTS_LIVE"
         "sports/line" -> "SPORTS_LINE"
         "sports/cybers" -> "SPORTS_CYBERS"
+        "sports/express" -> "EXPRESS"
+        "sports/results" -> "RESULTS"
         "slots" -> "SLOTS"
         "live-casino" -> "LIVE_CASINO"
+        "casino/categories" -> "CASINO_CATEGORIES"
+        "casino/providers" -> "CASINO_PROVIDERS"
+        "casino/my" -> "CASINO_MY"
+        "casino/tournaments" -> "CASINO_TOURNAMENTS"
         "provider-sportsbook" -> "PROVIDER_SPORTSBOOK"
         "games" -> "GAMES"
         "promo-details" -> "PROMO_DETAILS"

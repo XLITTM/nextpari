@@ -63,7 +63,17 @@ data class CasinoCategoryCard(
     val destination: String,
     val startColor: Long,
     val endColor: Long,
-)
+    val drawableName: String,
+) {
+    val imageRes: Int
+        get() = when (drawableName) {
+            "game_pharaoh" -> R.drawable.game_pharaoh
+            "game_blackjack" -> R.drawable.game_blackjack
+            "game_crystal" -> R.drawable.game_crystal
+            "game_apples" -> R.drawable.game_apples
+            else -> R.drawable.game_pharaoh
+        }
+}
 
 object CasinoHomeCatalog {
     val features: List<CasinoFeatureCard> = listOf(
@@ -78,42 +88,25 @@ object CasinoHomeCatalog {
         CasinoFeatureCard(
             id = "feat-slots",
             title = "Слоты",
-            subtitle = "Игры появятся после подключения провайдера",
+            subtitle = "Каталог слотов NextPari",
             drawableName = "game_pharaoh",
             destination = Destinations.SLOTS,
         ),
         CasinoFeatureCard(
             id = "feat-live",
             title = "Лайв казино",
-            subtitle = "Столы появятся после подключения провайдера",
+            subtitle = "Каталог Live Casino",
             drawableName = "game_dice",
             destination = Destinations.LIVE_CASINO,
         ),
     )
 
-    val tournaments: List<CasinoTournament> = listOf(
-        CasinoTournament(
-            id = "soon-slots",
-            title = "Турниры слотов",
-            prizePool = null,
-            status = CasinoTournamentStatus.SOON,
-            countdown = null,
-            drawableName = "promo_tiger",
-        ),
-        CasinoTournament(
-            id = "soon-live",
-            title = "Турниры лайв казино",
-            prizePool = null,
-            status = CasinoTournamentStatus.SOON,
-            countdown = null,
-            drawableName = "game_crystal",
-        ),
-    )
+    val tournaments: List<CasinoTournament> = emptyList()
 
     val categories: List<CasinoCategoryCard> = listOf(
-        CasinoCategoryCard("slots", "Слоты", Destinations.SLOTS, 0xFF8B5CF6, 0xFF6D28D9),
-        CasinoCategoryCard("live", "Лайв казино", Destinations.LIVE_CASINO, 0xFFEF4444, 0xFFBE123C),
-        CasinoCategoryCard("tv", "TV игры", Destinations.GAMES, 0xFF3B82F6, 0xFF1E3A8A),
-        CasinoCategoryCard("bingo", "Бинго", Destinations.SLOTS, 0xFF22C55E, 0xFF047857),
+        CasinoCategoryCard("slots", "Слоты", Destinations.SLOTS, 0xFF8B5CF6, 0xFF6D28D9, "game_pharaoh"),
+        CasinoCategoryCard("live", "Лайв казино", Destinations.LIVE_CASINO, 0xFFEF4444, 0xFFBE123C, "game_blackjack"),
+        CasinoCategoryCard("categories", "Категории", Destinations.CASINO_CATEGORIES, 0xFF3B82F6, 0xFF1E3A8A, "game_crystal"),
+        CasinoCategoryCard("providers", "Провайдеры", Destinations.CASINO_PROVIDERS, 0xFF22C55E, 0xFF047857, "game_apples"),
     )
 }

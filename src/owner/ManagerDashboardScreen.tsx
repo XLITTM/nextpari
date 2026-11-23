@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Ban, Banknote, BarChart3, Building2, CheckCircle2, Download, Landmark,
   LayoutDashboard, LogOut, Mail, RefreshCw, Scale, Shield, Snowflake,
-  TrendingUp, User, UserCog, Users, Wallet, X,
+  TrendingUp, User, UserCog, Users, Wallet, X, Zap,
 } from 'lucide-react';
 import { useOwnerAuth } from './auth/OwnerAuthProvider';
 import { isOperationalAccountActive } from '../shared/staff/financeGate';
 import { MessagesPanel } from './MessagesPanel';
+import { ExpressOfDayPanel } from './ExpressOfDayPanel';
 import { OwnerManagersPanel } from './OwnerManagersPanel';
 import { OwnerSecurityTeamPanel } from './OwnerSecurityTeamPanel';
 import { OwnerWinPatternPanel } from './OwnerWinPatternPanel';
@@ -77,7 +78,7 @@ import {
   requireOwnerSecurityAccountReason,
 } from './securityAccountActions';
 
-type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'risk' | 'winPattern' | 'withdrawalReviews';
+type CabinetTab = 'finance' | 'providerSettlements' | 'managers' | 'securityTeam' | 'agents' | 'players' | 'messages' | 'express' | 'risk' | 'winPattern' | 'withdrawalReviews';
 
 export function ManagerDashboardScreen() {
   const { loading, staff, deniedMessage, signOut } = useOwnerAuth();
@@ -220,6 +221,7 @@ function BackofficeShell({
           <NavBtn active={tab === 'agents'} onClick={() => setTab('agents')} icon={Building2} label="Все кассы" />
           <NavBtn active={tab === 'players'} onClick={() => setTab('players')} icon={Users} label="Игроки" />
           <NavBtn active={tab === 'messages'} onClick={() => setTab('messages')} icon={Mail} label="Сообщения" />
+          <NavBtn active={tab === 'express'} onClick={() => setTab('express')} icon={Zap} label="Экспресс дня" />
           <NavBtn active={tab === 'risk'} onClick={() => setTab('risk')} icon={AlertTriangle} label="Риски" />
           <NavBtn active={tab === 'winPattern'} onClick={() => setTab('winPattern')} icon={TrendingUp} label="Анализ выигрышей" />
           <NavBtn
@@ -250,6 +252,7 @@ function BackofficeShell({
         {tab === 'agents' && <AgentsPanel />}
         {tab === 'players' && <PlayersPanel />}
         {tab === 'messages' && <MessagesPanel />}
+        {tab === 'express' && <ExpressOfDayPanel />}
         {tab === 'risk' && <RiskPanel />}
         {tab === 'winPattern' && <OwnerWinPatternPanel />}
         {tab === 'withdrawalReviews' && (

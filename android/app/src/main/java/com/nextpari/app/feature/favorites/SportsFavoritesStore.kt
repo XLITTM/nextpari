@@ -4,10 +4,11 @@ import com.nextpari.app.core.storage.PreferencesStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 
 data class SportsFavorites(
@@ -20,36 +21,43 @@ class SportsFavoritesStore(
     private val preferences: PreferencesStorage,
     private val playerId: () -> String = { "" },
 ) {
+    private val mutex = Mutex()
     private val state = MutableStateFlow(SportsFavorites())
     val favorites: StateFlow<SportsFavorites> = state.asStateFlow()
 
-    suspend fun load() {
-        state.value = read(key())
+    suspend fun load() = mutex.withLock {
+        val storageKey = key()
+        val saved = read(storageKey)
+        if (storageKey == key()) state.value = saved
     }
 
-    suspend fun toggleLeague(id: String) = toggle(id, { it.leagueIds }) { current, next -> current.copy(leagueIds = next) }
+    suspend fun matchIds(owner: String): Set<String> = mutex.withLock { read(key(owner)).matchIds }
 
-    suspend fun toggleSport(id: String) = toggle(id, { it.sportIds }) { current, next -> current.copy(sportIds = next) }
+    suspend fun toggleMatch(id: String, owner: String): Set<String> =
+        toggle(id, key(owner), { it.matchIds }) { current, next -> current.copy(matchIds = next) }.matchIds
+
+    suspend fun toggleLeague(id: String) = toggle(id, key(), { it.leagueIds }) { current, next -> current.copy(leagueIds = next) }
+
+    suspend fun toggleSport(id: String) = toggle(id, key(), { it.sportIds }) { current, next -> current.copy(sportIds = next) }
 
     private suspend fun toggle(
         id: String,
+        storageKey: String,
         readSet: (SportsFavorites) -> Set<String>,
         write: (SportsFavorites, Set<String>) -> SportsFavorites,
-    ) {
-        val key = id.trim()
-        if (key.isEmpty()) return
-        val current = read(key())
+    ): SportsFavorites = mutex.withLock {
+        val item = id.trim()
+        val current = read(storageKey)
+        if (item.isEmpty()) return@withLock current
         val source = readSet(current)
-        val next = if (key in source) source - key else source + key
+        val next = if (item in source) source - item else source + item
         val updated = write(current, next)
-        preferences.putString(key(), encode(updated))
-        state.value = updated
+        preferences.putString(storageKey, encode(updated))
+        if (storageKey == key()) state.value = updated
+        updated
     }
 
-    private fun key(): String {
-        val id = playerId().trim().ifBlank { "device" }
-        return "$STORAGE_KEY:$id"
-    }
+    private fun key(owner: String = playerId()): String = "$STORAGE_KEY:${owner.trim().ifBlank { "device" }}"
 
     private suspend fun read(storageKey: String): SportsFavorites {
         val raw = preferences.getString(storageKey).orEmpty()

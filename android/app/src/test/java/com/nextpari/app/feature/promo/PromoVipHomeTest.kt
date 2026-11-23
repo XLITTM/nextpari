@@ -61,6 +61,7 @@ class PromoVipHomeTest {
     @Test
     fun promoScreenHasNoDuplicateCarouselAndExactSixRows() {
         assertThat(PromoCatalog.menuItems.map { it.label }).containsExactly(
+            "Приветственный пакет",
             "Бонусные игры",
             "Проверка промокода",
             "Кешбэк",
@@ -69,16 +70,18 @@ class PromoVipHomeTest {
             "Бонусы",
         ).inOrder()
         assertThat(PromoCatalog.menuItems.map { it.desc }).containsExactly(
-            "Играйте и получайте призы",
+            "Условия будущей бонусной программы",
+            "Появятся после подключения бонусной системы",
             "Промокоды появятся после подключения бонусной системы",
             "Информация о будущей программе кешбэка",
             "Информация о VIP-программе",
-            "Турниры и конкурсы прогнозов",
-            "Подарки и поощрения для игроков",
+            "Турниры и конкурсы прогнозов появятся после подключения бонусной системы",
+            "Подарки и поощрения появятся после подключения бонусной системы",
         ).inOrder()
         assertThat(PromoCatalog.heroSummary).isEqualTo("Акции и бонусы появятся после подключения бонусной системы")
         assertThat(PromoCatalog.menuItems.first { it.label == "Кешбэк" }.route).isEqualTo(Destinations.VIP_CASHBACK)
         assertThat(PromoCatalog.menuItems.first { it.label == "VIP кешбэк" }.route).isEqualTo(Destinations.VIP_CASHBACK)
+        assertThat(PromoCatalog.menuItems.first { it.label == "Приветственный пакет" }.route).isEqualTo(Destinations.PROMO_WELCOME)
         assertThat(PromoCatalog.menuItems.filter { it.soon }.map { it.label }).containsExactly(
             "Бонусные игры", "Проверка промокода", "Участие в акциях", "Бонусы",
         ).inOrder()
@@ -108,14 +111,14 @@ class PromoVipHomeTest {
             "sports", "promos", "live", "line", "champs",
             "esports-disciplines", "esports-live", "esports-line",
         ).inOrder()
-        assertThat(HomeSectionOrder.sport).containsExactly("sports", "live", "line", "champs").inOrder()
+        assertThat(HomeSectionOrder.sport).containsExactly("sports", "promos", "live", "line", "champs").inOrder()
 
         val accordion = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeChampionshipsAccordion.kt").readText()
         assertThat(accordion).doesNotContain("HomeModeTab")
         assertThat(accordion).doesNotContain("Чемпионаты Линия")
         assertThat(accordion).doesNotContain("Сейчас событий нет")
         assertThat(accordion).doesNotContain("mutableStateOf(\"live\")")
-        assertThat(accordion).contains("if (groups.isEmpty()) return")
+        assertThat(accordion).contains("if (preview.isEmpty()) return")
         assertThat(accordion).contains("AnimatedVisibility")
         assertThat(accordion).contains("Destinations.league")
 
@@ -144,17 +147,17 @@ class PromoVipHomeTest {
             MatchCardModel(id = "4", sport = "esports", league = "CS2", country = "World", team1 = "X", team2 = "Y"),
         )
         val groups = HomeChampionships.groups(live)
-        assertThat(groups.first().country).isEqualTo("Англия")
+        assertThat(groups.first().country).isEqualTo("World")
         assertThat(groups.map { it.country }).containsExactly("Англия", "Испания", "World")
-        assertThat(groups.first().count).isEqualTo(2)
-        assertThat(groups.first().leagues.first().count).isEqualTo(2)
+        assertThat(groups.first().count).isEqualTo(1)
+        assertThat(groups.first().leagues.first().count).isEqualTo(1)
         assertThat(HomeChampionships.groups(live, excludeEsports = true).map { it.country })
             .containsExactly("Англия", "Испания").inOrder()
         assertThat(HomeChampionships.groups(emptyList())).isEmpty()
-        assertThat(HomeAccordionExpansion.resolve(groups, "", userInteracted = false)).isEqualTo("Англия")
+        assertThat(HomeAccordionExpansion.resolve(groups, "", userInteracted = false)).isEqualTo("World")
         assertThat(HomeAccordionExpansion.resolve(groups, "", userInteracted = true)).isEmpty()
         assertThat(HomeAccordionExpansion.resolve(groups, "Испания", userInteracted = true)).isEqualTo("Испания")
-        val leagueId = LeagueIds.toLeagueId(groups.first().country, groups.first().leagues.first().name)
+        val leagueId = LeagueIds.toLeagueId(groups.first { it.country=="Англия" }.country,groups.first { it.country=="Англия" }.leagues.first().name)
         assertThat(leagueId).isEqualTo("Англия|Премьер-лига")
         assertThat(Destinations.league(leagueId)).startsWith("league/")
     }

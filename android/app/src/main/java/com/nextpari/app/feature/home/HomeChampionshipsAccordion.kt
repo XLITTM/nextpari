@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariSportMark
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -51,6 +52,9 @@ import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.sportsbook.CountPill
 import com.nextpari.app.feature.sportsbook.CountryGroup
 import com.nextpari.app.feature.sportsbook.HomeAccordionExpansion
+import com.nextpari.app.feature.sportsbook.CompetitionArtwork
+import com.nextpari.app.feature.sportsbook.SportsFlag
+import com.nextpari.app.feature.sportsbook.SportsRegions
 import com.nextpari.app.feature.sportsbook.HomeChampionships
 import com.nextpari.app.feature.sportsbook.LeagueIds
 import com.nextpari.app.feature.sportsbook.LeagueRow
@@ -62,8 +66,11 @@ fun HomeChampionshipsAccordion(
     onNavigate: (String) -> Unit,
     excludeEsports: Boolean = false,
 ) {
-    val groups = HomeChampionships.groups(live, excludeEsports)
-    if (groups.isEmpty()) return
+    val preview = HomeChampionships.preview(live, excludeEsports)
+    if (preview.isEmpty()) return
+    val catalog = HomeChampionships.groups(live, excludeEsports)
+    var showAll by rememberSaveable { mutableStateOf(false) }
+    val groups = if (showAll) catalog else preview
 
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
@@ -83,7 +90,13 @@ fun HomeChampionshipsAccordion(
             title = HomeChampionships.TITLE,
             filterLabel = "Спорт",
             onFilter = { onNavigate(HomeChampionships.seeAllRoute(sportId)) },
-            onSeeAll = { onNavigate(HomeChampionships.seeAllRoute(sportId)) },
+            onSeeAll = {
+                if (!showAll && catalog.size > preview.size) {
+                    showAll = true
+                } else {
+                    onNavigate(HomeChampionships.seeAllRoute(sportId))
+                }
+            },
         )
         groups.forEach { group ->
             HomeCountryCard(
@@ -96,7 +109,7 @@ fun HomeChampionshipsAccordion(
                     expanded = if (expanded == group.country) "" else group.country
                 },
                 onLeague = { league ->
-                    onNavigate(Destinations.league(LeagueIds.toLeagueId(league.country, league.name)))
+                    onNavigate(Destinations.league(league.id))
                 },
                 onFavorite = { name ->
                     favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleLeague(name) }
@@ -136,10 +149,12 @@ private fun HomeCountryCard(
                 .padding(horizontal = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(NextpariWebIcons.Globe, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            SportsFlag(SportsRegions.code(group.country), Modifier.size(20.dp)) {
+                Icon(NextpariWebIcons.Trophy, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(20.dp))
+            }
             Spacer(Modifier.width(10.dp))
             Text(
-                group.country.ifBlank { "Международные" },
+                SportsRegions.name(group.country),
                 color = colors.text,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -163,9 +178,13 @@ private fun HomeCountryCard(
                         Modifier
                             .fillMaxWidth()
                             .clickable { onLeague(league) }
-                            .padding(start = 44.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+                            .padding(start = 20.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        CompetitionArtwork(league.badge?.url, league.badgeRes, league.country, Modifier.size(18.dp)) {
+                            NextpariSportMark(league.sport, size = 18.dp)
+                        }
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             league.name,
                             color = colors.text,
@@ -176,13 +195,13 @@ private fun HomeCountryCard(
                         )
                         CountPill(league.count)
                         Box(
-                            Modifier.size(32.dp).clickable { onFavorite(league.name) },
+                            Modifier.size(32.dp).clickable { onFavorite(league.id) },
                             contentAlignment = Alignment.Center,
                         ) {
                             Icon(
-                                if (league.name in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
+                                if (league.id in favorites) NextpariWebIcons.Star else NextpariWebIcons.Star,
                                 contentDescription = "Добавить чемпионат в избранное",
-                                tint = if (league.name in favorites) Color(0xFF16A34A) else colors.textSecondary,
+                                tint = if (league.id in favorites) Color(0xFF16A34A) else colors.textSecondary,
                                 modifier = Modifier.size(18.dp),
                             )
                         }

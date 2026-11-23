@@ -1,6 +1,7 @@
 package com.nextpari.app.feature.home
 
 import com.google.common.truth.Truth.assertThat
+import com.nextpari.app.core.navigation.Destinations
 import org.junit.Test
 
 class ProductSectionsTest {
@@ -16,7 +17,7 @@ class ProductSectionsTest {
             "esports-live",
             "esports-line",
         ).inOrder()
-        assertThat(HomeSectionOrder.sport).containsExactly("sports", "live", "line", "champs").inOrder()
+        assertThat(HomeSectionOrder.sport).containsExactly("sports", "promos", "live", "line", "champs").inOrder()
         assertThat(HomeSectionOrder.esports).containsExactly(
             "esports-disciplines",
             "esports-live",
@@ -63,10 +64,52 @@ class ProductSectionsTest {
         assertThat(CasinoHomeCatalog.categories.map { it.name }).containsExactly(
             "Слоты",
             "Лайв казино",
-            "TV игры",
-            "Бинго",
+            "Категории",
+            "Провайдеры",
         ).inOrder()
-        assertThat(CasinoHomeCatalog.categories.map { it.id }).containsExactly("slots", "live", "tv", "bingo").inOrder()
+        assertThat(CasinoHomeCatalog.categories.map { it.id }).containsExactly("slots", "live", "categories", "providers").inOrder()
+        assertThat(CasinoHomeCatalog.categories.map { it.destination }).containsExactly(
+            Destinations.SLOTS,
+            Destinations.LIVE_CASINO,
+            Destinations.CASINO_CATEGORIES,
+            Destinations.CASINO_PROVIDERS,
+        ).inOrder()
+        assertThat(CasinoHomeCatalog.categories.map { it.drawableName }).containsExactly(
+            "game_pharaoh",
+            "game_blackjack",
+            "game_crystal",
+            "game_apples",
+        ).inOrder()
+    }
+
+    @Test
+    fun esportsDisciplineTilesUseCanonicalIdsAndArtwork() {
+        assertThat(EsportsCatalog.disciplines.map { it.discipline }).containsExactly("cs2", "dota2", "lol", "valorant").inOrder()
+        assertThat(EsportsCatalog.disciplines.map { it.destination }).containsExactly(
+            Destinations.championships("esports-cs2", "live"),
+            Destinations.championships("esports-dota2", "live"),
+            Destinations.championships("esports-lol", "live"),
+            Destinations.championships("esports-valorant", "live"),
+        ).inOrder()
+        EsportsCatalog.disciplines.forEach { item ->
+            assertThat(item.imageRes).isNotEqualTo(0)
+            assertThat(item.destination).doesNotContain("{")
+        }
+        assertThat(EsportsCatalog.disciplines.filter { it.bakedInTitle }.map { it.id })
+            .containsExactly("cs2", "dota2").inOrder()
+        assertThat(EsportsCatalog.disciplines.filterNot { it.bakedInTitle }.map { it.id })
+            .containsExactly("lol", "valorant").inOrder()
+        listOf("esports_cs2", "esports_dota2", "esports_lol", "esports_valorant").forEach { name ->
+            val webp = moduleFile("src/main/res/drawable-nodpi/$name.webp")
+            val png = moduleFile("src/main/res/drawable-nodpi/$name.png")
+            assertThat(webp.exists()).isTrue()
+            assertThat(png.exists()).isFalse()
+        }
+        val home = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
+        assertThat(home).contains("clip(RoundedCornerShape(16.dp))")
+        assertThat(home).contains("contentScale = ContentScale.Crop")
+        assertThat(home).contains("if (!item.bakedInTitle)")
+        assertThat(home).contains("item.name")
     }
 
     @Test
@@ -124,5 +167,14 @@ class ProductSectionsTest {
         listOf("YOHOHO", "Yohoho", "YohohoGames").forEach { token ->
             assertThat(blob).doesNotContain(token)
         }
+    }
+
+    private fun moduleFile(relative: String): java.io.File {
+        val candidates = listOf(
+            java.io.File(relative),
+            java.io.File("app/$relative"),
+            java.io.File("android/app/$relative"),
+        )
+        return candidates.firstOrNull { it.exists() } ?: java.io.File(relative)
     }
 }

@@ -1,0 +1,573 @@
+{
+  "feedEvents": 196,
+  "footballEvents": 39,
+  "teamSlots": 78,
+  "matchedSlots": 23,
+  "coveragePercent": 29.5,
+  "uniqueFeedTeams": 78,
+  "uniqueMatchedTeams": 23,
+  "competitions": {
+    "England|Premier League": {
+      "drawable": "badge_premier_league",
+      "reason": "competition-context",
+      "count": 2
+    },
+    "Spain|LaLiga": {
+      "drawable": "logo_comp_la_liga",
+      "reason": "competition-context",
+      "count": 2
+    },
+    "Italy|Serie A": {
+      "drawable": "logo_comp_serie_a",
+      "reason": "competition-context",
+      "count": 2
+    },
+    "Germany|Bundesliga": {
+      "drawable": "logo_comp_bundesliga",
+      "reason": "competition-context",
+      "count": 2
+    },
+    "Hungary|NB III": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Lebanon|Premier League": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Zambia|Super League": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Algeria|Ligue 2": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Malawi|Super League": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Brazil|U20 Copa Goias, 1. Divisao": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "South Africa|SAFA Second Division": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Sweden|Allsvenskan": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Germany Amateur|Regionalliga North": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Sweden|Superettan": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Italy|Serie B": {
+      "drawable": null,
+      "reason": "competition-crest-not-in-collection",
+      "count": 1
+    },
+    "Croatia|HNL": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "France|Ligue 1": {
+      "drawable": "logo_comp_ligue_1",
+      "reason": "competition-context",
+      "count": 1
+    },
+    "USA|MLS": {
+      "drawable": "logo_comp_mls",
+      "reason": "competition-context",
+      "count": 1
+    },
+    "Serbia|Superliga": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Ukraine|Premier League": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Portugal|Taca de Portugal": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Slovenia|2. Liga": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain|Segunda Federacion": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Bosnia & Herzegovina|Prva Liga, Fed BiH": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Andorra|Primera Divisio": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain|Primera Division Women": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Hungary|NB II": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Jordan|Jordan Cup": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Austria Amateur|Bundesliga, Women": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain Amateur|Tercera Federacion, Group 1": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain Amateur|Tercera Federacion, Group 3": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain Amateur|Tercera Federacion, Group 4": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain Amateur|Tercera Federacion, Group 10": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain Amateur|Tercera Federacion, Group 11": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    },
+    "Spain Amateur|Tercera Federacion, Group 12": {
+      "drawable": null,
+      "reason": "competition-context-not-verified",
+      "count": 1
+    }
+  },
+  "unmatched": [
+    {
+      "name": "AC Goianiense GO",
+      "league": "U20 Copa Goias, 1. Divisao",
+      "country": "Brazil",
+      "reason": "restricted-name",
+      "count": 1
+    },
+    {
+      "name": "AD Ceuta FC B",
+      "league": "Tercera Federacion, Group 10",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "AIK",
+      "league": "Allsvenskan",
+      "country": "Sweden",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "AL Mabarrah",
+      "league": "Premier League",
+      "country": "Lebanon",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Al Faisaly (JOR)",
+      "league": "Jordan Cup",
+      "country": "Jordan",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Al-Ahly Amman",
+      "league": "Jordan Cup",
+      "country": "Jordan",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Aqvital FC Csakvar",
+      "league": "NB II",
+      "country": "Hungary",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Atletico Madrid",
+      "league": "Primera Division Women",
+      "country": "Spain",
+      "reason": "restricted-name",
+      "count": 1
+    },
+    {
+      "name": "Atletico Onubense",
+      "league": "Tercera Federacion, Group 10",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "CD Bezana",
+      "league": "Tercera Federacion, Group 3",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "CD Constancia",
+      "league": "Tercera Federacion, Group 11",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "CD Laredo",
+      "league": "Tercera Federacion, Group 3",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "CD San Ignacio",
+      "league": "Tercera Federacion, Group 4",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "CD Tenerife C",
+      "league": "Tercera Federacion, Group 12",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "CF Platges de Calvia",
+      "league": "Tercera Federacion, Group 11",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Club Marino de Luanco",
+      "league": "Segunda Federacion",
+      "country": "Spain",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Coruxo FC",
+      "league": "Segunda Federacion",
+      "country": "Spain",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Creck SC",
+      "league": "Super League",
+      "country": "Malawi",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Degerfors IF",
+      "league": "Allsvenskan",
+      "country": "Sweden",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "ETO Akademia",
+      "league": "NB III",
+      "country": "Hungary",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "FC Felgueiras 1932",
+      "league": "Taca de Portugal",
+      "country": "Portugal",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "FC Muza",
+      "league": "Super League",
+      "country": "Zambia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "FC Rangers",
+      "league": "Primera Divisio",
+      "country": "Andorra",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "FC Zorya Luhansk",
+      "league": "Premier League",
+      "country": "Ukraine",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "FK Novi Pazar",
+      "league": "Superliga",
+      "country": "Serbia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "FK Rudar Kakanj",
+      "league": "Prva Liga, Fed BiH",
+      "country": "Bosnia & Herzegovina",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "FK Sloboda Tuzla",
+      "league": "Prva Liga, Fed BiH",
+      "country": "Bosnia & Herzegovina",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Fehervar FC Szekesfehervar",
+      "league": "NB II",
+      "country": "Hungary",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Goias EC GO",
+      "league": "U20 Copa Goias, 1. Divisao",
+      "country": "Brazil",
+      "reason": "restricted-name",
+      "count": 1
+    },
+    {
+      "name": "HNK Hajduk Split",
+      "league": "HNL",
+      "country": "Croatia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Hannover 96 II",
+      "league": "Regionalliga North",
+      "country": "Germany Amateur",
+      "reason": "restricted-name",
+      "count": 1
+    },
+    {
+      "name": "JS Djidjel",
+      "league": "Ligue 2",
+      "country": "Algeria",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Karpaty Lviv",
+      "league": "Premier League",
+      "country": "Ukraine",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "LASK",
+      "league": "Bundesliga, Women",
+      "country": "Austria Amateur",
+      "reason": "restricted-name",
+      "count": 1
+    },
+    {
+      "name": "Leruma United",
+      "league": "SAFA Second Division",
+      "country": "South Africa",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Lunds BK",
+      "league": "Superettan",
+      "country": "Sweden",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Malawi Armed Forces College FC",
+      "league": "Super League",
+      "country": "Malawi",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Mike 1 Stars FC",
+      "league": "SAFA Second Division",
+      "country": "South Africa",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "NK Krsko Posavje",
+      "league": "2. Liga",
+      "country": "Slovenia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "NK Lokomotiva Zagreb",
+      "league": "HNL",
+      "country": "Croatia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Nejmeh SC",
+      "league": "Premier League",
+      "country": "Lebanon",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Nkana FC",
+      "league": "Super League",
+      "country": "Zambia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Norrby IF",
+      "league": "Superettan",
+      "country": "Sweden",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Nrb Teleghma",
+      "league": "Ligue 2",
+      "country": "Algeria",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "OFK Beograd",
+      "league": "Superliga",
+      "country": "Serbia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Primorje Ajdovscina",
+      "league": "2. Liga",
+      "country": "Slovenia",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Real Union de Tenerife Santa Cruz",
+      "league": "Tercera Federacion, Group 12",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "SC Sopron",
+      "league": "NB III",
+      "country": "Hungary",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "SCR Altach",
+      "league": "Bundesliga, Women",
+      "country": "Austria Amateur",
+      "reason": "restricted-name",
+      "count": 1
+    },
+    {
+      "name": "SD Eibar",
+      "league": "Primera Division Women",
+      "country": "Spain",
+      "reason": "restricted-name",
+      "count": 1
+    },
+    {
+      "name": "SD Leioa",
+      "league": "Tercera Federacion, Group 4",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "SD Sarriana",
+      "league": "Tercera Federacion, Group 1",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "SV Drochtersen/Assel",
+      "league": "Regionalliga North",
+      "country": "Germany Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Silva SD",
+      "league": "Tercera Federacion, Group 1",
+      "country": "Spain Amateur",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    },
+    {
+      "name": "Sporting Club DE Escaldes",
+      "league": "Primera Divisio",
+      "country": "Andorra",
+      "reason": "no-unambiguous-logo",
+      "count": 1
+    }
+  ]
+}

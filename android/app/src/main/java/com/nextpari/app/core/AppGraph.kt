@@ -32,8 +32,18 @@ import com.nextpari.app.feature.favorites.SportsFavoritesStore
 import com.nextpari.app.feature.history.FakeHistoryRepository
 import com.nextpari.app.feature.history.HistoryRepository
 import com.nextpari.app.feature.history.RemoteHistoryRepository
+import com.nextpari.app.feature.casino.CasinoArtwork
+import com.nextpari.app.feature.casino.CasinoCatalogStore
 import com.nextpari.app.feature.home.FakeHomeCatalogRepository
 import com.nextpari.app.feature.home.HomeCatalogRepository
+import com.nextpari.app.feature.express.EmptyExpressRepository
+import com.nextpari.app.feature.express.ExpressRepository
+import com.nextpari.app.feature.express.RemoteExpressRepository
+import com.nextpari.app.feature.results.EmptyResultsRepository
+import com.nextpari.app.feature.results.RemoteResultsRepository
+import com.nextpari.app.feature.results.ResultsRepository
+import com.nextpari.app.feature.sportsbook.FootballRepository
+import com.nextpari.app.feature.sportsbook.RemoteFootballRepository
 import com.nextpari.app.feature.profile.FakePersonalDataRepository
 import com.nextpari.app.feature.profile.PersonalDataRepository
 import com.nextpari.app.feature.profile.RemotePersonalDataRepository
@@ -79,6 +89,14 @@ object AppGraph {
     var sportsFavorites: SportsFavoritesStore = SportsFavoritesStore(preferencesStorage)
         private set
     val homeCatalogRepository: HomeCatalogRepository = FakeHomeCatalogRepository()
+    var footballRepository: FootballRepository? = null
+        private set
+    var expressRepository: ExpressRepository = EmptyExpressRepository()
+        private set
+    var resultsRepository: ResultsRepository = EmptyResultsRepository()
+        private set
+    var playerApi: PlayerApi? = null
+        private set
     private var sessionCoordinator: PlayerSessionCoordinator? = null
     private var secureCookieJar: SecureCookieJar? = null
     private val restorePhase = MutableStateFlow(SessionRestorePhase.Checking)
@@ -97,6 +115,8 @@ object AppGraph {
     fun bindPreferences(storage: PreferencesStorage) {
         preferencesStorage = storage
         sportsFavorites = SportsFavoritesStore(storage) { playerStateStore.me()?.playerPublicId.orEmpty() }
+        com.nextpari.app.feature.casino.CasinoLibraryStore.preferences = { storage }
+        com.nextpari.app.feature.casino.CasinoLibraryStore.playerId = { playerStateStore.me()?.playerPublicId.orEmpty() }
     }
 
     fun sessionCookies(): List<Cookie> {
@@ -109,11 +129,9 @@ object AppGraph {
         appScope.launch { coordinator.refreshPlayerState() }
     }
 
-    fun applyServerBalance(balanceAfter: Double, walletId: String = ""): Boolean =
-        sessionCoordinator?.applyBalanceAfter(balanceAfter, walletId) ?: false
-
     fun bindFromApplication(app: Application) {
         bindPreferences(DataStorePreferencesStorage(app))
+        CasinoArtwork.bind(app)
         val cookieJar = SecureCookieJar(EncryptedCookiePersistence(app))
         secureCookieJar = cookieJar
         val coordinatorHolder = arrayOfNulls<PlayerSessionCoordinator>(1)
@@ -124,13 +142,19 @@ object AppGraph {
             },
         )
         val api: PlayerApi = NetworkModule.playerApi(client)
+        playerApi = api
         val coordinator = PlayerSessionCoordinator(
             api = api,
             cookieJar = cookieJar,
             sessions = sessionRepository,
             store = playerStateStore,
             json = NetworkModule.json,
-            onSessionCleared = { WebSessionBridge.clear() },
+            onSessionCleared = {
+                WebSessionBridge.clear()
+                CasinoCatalogStore.clear()
+                CasinoArtwork.clearMemory()
+                com.nextpari.app.feature.casino.CasinoLibraryStore.clearMemory()
+            },
         )
         coordinatorHolder[0] = coordinator
         sessionCoordinator = coordinator
@@ -144,9 +168,13 @@ object AppGraph {
             api = api,
             json = NetworkModule.json,
             hasSession = { cookieJar.hasPlayerSessionCookies() },
+            onUnauthorized = coordinator::onUnauthorized,
         )
         personalDataRepository = RemotePersonalDataRepository(playerStateStore, api, NetworkModule.json, sessionReady)
         gameRepository = RemoteGameRepository(api, NetworkModule.json)
+        footballRepository = RemoteFootballRepository(api, NetworkModule.json)
+        expressRepository = RemoteExpressRepository(api, NetworkModule.json)
+        resultsRepository = RemoteResultsRepository(api)
         sessionRepository.setReady(false)
         restorePhase.value = SessionRestorePhase.Checking
         restoreDetail.value = null

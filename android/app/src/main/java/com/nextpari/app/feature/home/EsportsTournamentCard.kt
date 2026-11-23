@@ -1,6 +1,5 @@
 package com.nextpari.app.feature.home
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,12 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariSportMark
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.LiveBadge
 import com.nextpari.app.core.ui.components.ProductSectionHeader
@@ -77,11 +76,12 @@ fun EsportsTournamentCard(
             .padding(14.dp),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painterResource(SportIconRes.drawable(model.iconSport)),
-                contentDescription = null,
-                modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)).padding(4.dp),
-            )
+            Box(
+                modifier = Modifier.size(28.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                NextpariSportMark(model.iconSport, size = 20.dp)
+            }
             Text(
                 model.game,
                 color = Color.White.copy(alpha = 0.8f),

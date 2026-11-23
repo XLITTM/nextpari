@@ -13,12 +13,12 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        // versionCode 2 is the first owner-signed release.
+        versionCode = 11
+        // versionCode 11 equalizes promo viewports, shared green sport pictograms, and football crest fallback.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.0"
+        versionName = "0.2.9"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true
 
         buildConfigField("String", "API_BASE_URL", "\"https://nextpari.net/\"")

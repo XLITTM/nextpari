@@ -1,0 +1,303 @@
+{
+  "reviewedAt": "2026-11-21",
+  "note": "Existing downloaded assets inspected and privately rasterized; no new restricted artwork bundled. Canonical identity keys are catalog targets, not a provider crosswalk. Release requires commercial permission and verified provider IDs. Existing starter resources are unchanged.",
+  "assets": [
+    {
+      "canonicalIdentity": "football:fra:ligue-1",
+      "kind": "competition",
+      "sourceFile": "france_ligue-1.football-logos.cc.svg",
+      "sha256": "d7490368d95f65b91939f0c98df7117ed916406584fc4172fcffb2dc9553d59a",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:fra:paris-saint-germain",
+      "kind": "participant",
+      "sourceFile": "france_paris-saint-germain.football-logos.cc.svg",
+      "sha256": "d7defabb8b908d3e4da36e222e221e2c96b90124aabbe2b05cad814befda8d7a",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:chelsea",
+      "kind": "participant",
+      "sourceFile": "england_chelsea.football-logos.cc.svg",
+      "sha256": "af405ac1becdb4b8a2f84207f520df6d887b4bc1089ff3cac0f0424585588f79",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:ita:napoli",
+      "kind": "participant",
+      "sourceFile": "italy_napoli.football-logos.cc.svg",
+      "sha256": "884713252e1d92881ae51068e8716e180e5dad7cdc198de2e823da335e086d6a",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:int:uefa-conference-league",
+      "kind": "competition",
+      "sourceFile": "tournaments_uefa-conference-league.football-logos.cc.svg",
+      "sha256": "bf335430cc6d417ae19ce2bcad8fe01f78961fbab07f9273d8fa29a756ee675a",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:bra:serie-a",
+      "kind": "competition",
+      "sourceFile": "brazil_brazilian-serie-a.football-logos.cc.svg",
+      "sha256": "699adfde398be508938cd62080d0781624069066fa108140e11ae11feec97ed4",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:ita:serie-a",
+      "kind": "competition",
+      "sourceFile": "italy_serie-a.football-logos.cc.svg",
+      "sha256": "b5d34668f313001562ec725cf3a6786f3580adeb25dee60a503403b766176d69",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:ita:inter",
+      "kind": "participant",
+      "sourceFile": "italy_inter.football-logos.cc.svg",
+      "sha256": "a4288a47c206ca2e5e9ecce2dabe9a1b4651256495c1b37f8039cda0d50dec92",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:liverpool",
+      "kind": "participant",
+      "sourceFile": "england_liverpool.football-logos.cc.svg",
+      "sha256": "78260d460358b26ba250828f0532f85d5cfde872f6e2da3d2d05048312d81f50",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:ger:bayern-munich",
+      "kind": "participant",
+      "sourceFile": "germany_bayern-munchen.football-logos.cc.svg",
+      "sha256": "2b44c46cc373907056087cc0161586b0cc6522833795e131a47a95cdd233eca3",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:efl-championship",
+      "kind": "competition",
+      "sourceFile": "england_efl-championship.football-logos.cc.svg",
+      "sha256": "e2ee6bbe5dd612c0f5e09500d787443541df506d0ded73613d4fe2f1675921c3",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:esp:barcelona",
+      "kind": "participant",
+      "sourceFile": "spain_barcelona.football-logos.cc.svg",
+      "sha256": "1b2d34696c967d70d395dd8cff3d2377561e5e24a33eb6a197a8534ce878975f",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:ita:juventus",
+      "kind": "participant",
+      "sourceFile": "italy_juventus.football-logos.cc.svg",
+      "sha256": "d869a0a38f0a14eb9f6cfe866547011a6e96832c3e554ac7b091d8b3aff32c82",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:arsenal",
+      "kind": "participant",
+      "sourceFile": "england_arsenal.football-logos.cc.svg",
+      "sha256": "989d17d1e433539659e6ef18caa5fc6d9512bd590b6a918ba48d5386cf9d68cc",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:manchester-city",
+      "kind": "participant",
+      "sourceFile": "england_manchester-city.football-logos.cc.svg",
+      "sha256": "0b03355f6b46d13d45c3958aae44e9df369204c7b60dd2ae8f114b5102ee1096",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:arg:primera-division",
+      "kind": "competition",
+      "sourceFile": "argentina_argentina-primera-division.football-logos.cc.svg",
+      "sha256": "824f5a7fdfb797433507fd6cdfcac61529ed22bd8c041a12a20a83df22f73fb3",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:int:uefa-europa-league",
+      "kind": "competition",
+      "sourceFile": "tournaments_uefa-europa-league.football-logos.cc.svg",
+      "sha256": "dfa9a55d367cbaedb6edfe1464bf332dd45a0444e3c28022d5ea42748a73e9b1",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:esp:la-liga",
+      "kind": "competition",
+      "sourceFile": "spain_la-liga.football-logos.cc.svg",
+      "sha256": "17380fc2dd5e3627c585dd7908572f73234d96b40e39204d6ca3138bfec4a908",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:usa:mls",
+      "kind": "competition",
+      "sourceFile": "usa_mls.football-logos.cc.svg",
+      "sha256": "3f6dda397efb36e34edb1b2a6f5fc16d82d2e493a8d555d6a077be021e13ac8f",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:ger:borussia-dortmund",
+      "kind": "participant",
+      "sourceFile": "germany_borussia-dortmund.football-logos.cc.svg",
+      "sha256": "d2a61f022b0bc40d208a4c34d7ca7ec27d6e41e1e6cfe248f867df1e2335fb4a",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:int:uefa-champions-league",
+      "kind": "competition",
+      "sourceFile": "tournaments_uefa-champions-league.football-logos.cc.svg",
+      "sha256": "d98ed3549e677cfd9f958ddf34040d20694aa313a7cb0baf669c98d9a0f90d94",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:esp:real-madrid",
+      "kind": "participant",
+      "sourceFile": "spain_real-madrid.football-logos.cc.svg",
+      "sha256": "5e0087bac1f4bca17d878d4debd88d5de2c0f0189c3d6fedeeb6e32918613fc1",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:ger:bundesliga",
+      "kind": "competition",
+      "sourceFile": "germany_bundesliga.football-logos.cc.svg",
+      "sha256": "72aca762f705d23c75c2163fbc4188940b59cd8dc7f66cfc8f50d90460decab8",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:tur:galatasaray",
+      "kind": "participant",
+      "sourceFile": "turkey_galatasaray.football-logos.cc.svg",
+      "sha256": "63590e669eaea9f7b85293345049ab9111dabc075820332c7b1503f9e12291b5",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:manchester-united",
+      "kind": "participant",
+      "sourceFile": "england_manchester-united.football-logos.cc.svg",
+      "sha256": "869e47d9f270a4fbc86aee928f77316af4d8efefea4c9180debd24ad51559a83",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:premier-league",
+      "kind": "competition",
+      "sourceFile": "england_english-premier-league.football-logos.cc.svg",
+      "sha256": "07f696da9163655ffc7c0cfb537812abcbe5cc6deac8d3895cf873c68dfc4e43",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    },
+    {
+      "canonicalIdentity": "football:eng:tottenham",
+      "kind": "participant",
+      "sourceFile": "england_tottenham.football-logos.cc.svg",
+      "sha256": "d58973c840e32b5840ca9912035da3e5d0ad6707d7cc5cd9afa570a8b4cc3ee0",
+      "inspected": true,
+      "source": "https://football-logos.cc/license/",
+      "commercialUseApproved": false,
+      "resource": null,
+      "providerIdentityMapping": "not supplied by current sports feed"
+    }
+  ]
+}

@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
@@ -33,11 +34,12 @@ fun ProductSectionHeader(
     onFilter: (() -> Unit)? = null,
     count: Int? = null,
     onSeeAll: (() -> Unit)? = null,
+    verticalPadding: Dp = 8.dp,
 ) {
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
     Row(
-        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = verticalPadding),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(title, color = colors.text, fontWeight = FontWeight.Bold, fontSize = 14.sp)

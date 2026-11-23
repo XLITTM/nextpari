@@ -110,12 +110,39 @@ fun NextpariSportIconBadge(
             modifier = modifier.size(iconSize),
             contentDescription = contentDescription,
         )
-        NextpariIconVariant.Premium -> NextpariReferenceIcon(
-            key = NextpariSportIcons.referenceKey(sportId),
-            modifier = modifier,
-            contentDescription = contentDescription,
-            size = iconSize,
-            active = active,
-        )
+        NextpariIconVariant.Premium -> {
+            val isDark = NextpariTheme.colors.bg == NextpariColors.Dark.bg
+            val green = NextpariSportIconTint
+            Box(
+                modifier
+                    .size(containerSize)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(NextpariIconPalette.container(green, isDark)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = NextpariSportIcons.vector(sportId),
+                    contentDescription = contentDescription,
+                    modifier = Modifier.size(iconSize),
+                    tint = green.copy(alpha = if (active) 1f else 0.55f),
+                )
+            }
+        }
     }
+}
+
+/** Shared green sport pictogram used on match lists, championships, and other sportsbook rows. */
+@Composable
+fun NextpariSportMark(
+    sportId: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    size: Dp = 20.dp,
+) {
+    Icon(
+        imageVector = NextpariSportIcons.vector(sportId),
+        contentDescription = contentDescription,
+        modifier = modifier.size(size),
+        tint = NextpariSportIconTint,
+    )
 }
