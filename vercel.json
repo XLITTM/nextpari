@@ -35,6 +35,15 @@
       ]
     },
     {
+      "source": "/downloads/NextPari-0.2.6-debug-CC9C1926.apk",
+      "headers": [
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"NextPari-0.2.6-debug-CC9C1926.apk\""
+        }
+      ]
+    },
+    {
       "source": "/downloads/NextPari-0.2.5-debug-810135C8.apk",
       "headers": [
         {
