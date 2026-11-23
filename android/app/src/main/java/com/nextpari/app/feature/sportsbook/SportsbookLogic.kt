@@ -14,6 +14,7 @@ data class LeagueRow(
     val id: String = LeagueIds.toLeagueId(country,name),
     val canonicalId: String? = null,
     val rank: Int = Int.MAX_VALUE,
+    val sport: String = "football",
 )
 
 data class CountryGroup(
@@ -106,7 +107,7 @@ object CountryGrouping {
             countryRow.count += 1
             val id=CompetitionOrder.leagueKey(match)
             val league = countryRow.leagues.getOrPut(id) { LeagueRow(name=name,country=country,count=0,id=id,
-                canonicalId=match.competitionId,rank=CompetitionOrder.rank(match)) }
+                canonicalId=match.competitionId,rank=CompetitionOrder.rank(match),sport=match.sport) }
             val badge = match.competitionBadge.takeIf { league.count == 0 || league.badge == it }
             val bundledBadge = BundledFootballBadges.competition(match).takeIf { league.count == 0 || league.badgeRes == it }
             countryRow.leagues[id] = league.copy(count = league.count + 1, badge = badge, badgeRes = bundledBadge)

@@ -1,6 +1,5 @@
 package com.nextpari.app.feature.sportsbook
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -28,17 +27,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariSportMark
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
-import com.nextpari.app.feature.home.SportIconRes
 
 @Composable
 fun SportsListScreen(
@@ -104,7 +102,7 @@ fun SportsListScreen(
                         .padding(horizontal = 16.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Image(painterResource(SportIconRes.drawable(row.id)), contentDescription = null, modifier = Modifier.size(24.dp))
+                    NextpariSportMark(row.id, size = 24.dp)
                     Spacer(Modifier.width(12.dp))
                     Text(
                         row.name,

@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nextpari.app.core.ui.icons.NextpariSportMark
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
@@ -105,7 +106,7 @@ fun NextpariMatchCard(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             MatchCompetitionArtwork(model, Modifier.size(20.dp)) {
-                Image(painterResource(SportIconRes.drawable(model.sport)), null, Modifier.size(20.dp))
+                NextpariSportMark(model.sport, size = 20.dp)
             }
             Text(model.league, color = colors.textSecondary, fontWeight = FontWeight.SemiBold,
                 fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))

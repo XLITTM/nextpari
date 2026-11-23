@@ -349,6 +349,39 @@ class NextpariIconsTest {
     }
 
     @Test
+    fun everySupportedSportHasAnExplicitGreenPictogram() {
+        val defaultName = NextpariSportIcons.vector("unknown-sport").name
+        assertThat(defaultName).isEqualTo("professional.SportDefault")
+        com.nextpari.app.feature.sportsbook.SportsListCatalog.supported.forEach { sport ->
+            assertThat(SportIconRes.drawable(sport.id)).isNotEqualTo(R.drawable.ic_sport_default)
+            assertThat(NextpariSportIcons.vector(sport.id).name).isNotEqualTo(defaultName)
+        }
+        assertThat(SportIconRes.drawable("mma")).isEqualTo(R.drawable.ic_sport_ufc)
+        assertThat(NextpariSportIcons.vector("mma").name).isEqualTo(NextpariSportIcons.vector("ufc").name)
+        assertThat(NextpariSportIcons.vector("hockey").name).isEqualTo("professional.SportHockey")
+        assertThat(NextpariSportIcons.vector("football").name).isEqualTo("professional.SportFootball")
+        assertThat(NextpariSportIcons.vector("tennis").name).isEqualTo("professional.SportTennis")
+        assertThat(NextpariSportIcons.vector("basketball").name).isEqualTo("professional.SportBasketball")
+        assertThat(NextpariSportIcons.vector("volleyball").name).isEqualTo("professional.SportVolleyball")
+        assertThat(NextpariSportIcons.vector("table-tennis").name).isEqualTo("professional.SportTableTennis")
+        assertThat(NextpariSportIcons.vector("esports-cs2").name).isEqualTo("professional.SportEsports")
+        val matchCard = moduleFile("src/main/java/com/nextpari/app/feature/home/MatchCard.kt").readText()
+        val home = moduleFile("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
+        val list = moduleFile("src/main/java/com/nextpari/app/feature/sportsbook/SportsListScreen.kt").readText()
+        val champs = moduleFile("src/main/java/com/nextpari/app/feature/sportsbook/ChampionshipsScreen.kt").readText()
+        val tracker = moduleFile("src/main/java/com/nextpari/app/feature/sportsbook/MatchTracker.kt").readText()
+        assertThat(home).contains("NextpariSportIconBadge(")
+        assertThat(matchCard).contains("NextpariSportMark(model.sport")
+        assertThat(list).contains("NextpariSportMark(row.id")
+        assertThat(champs).contains("NextpariSportMark(sport")
+        assertThat(champs).contains("NextpariSportMark(league.sport")
+        assertThat(tracker).contains("NextpariSportMark(match.sport")
+        assertThat(matchCard).doesNotContain("SportIconRes.drawable")
+        assertThat(list).doesNotContain("SportIconRes.drawable")
+        assertThat(champs).doesNotContain("SportIconRes.drawable")
+    }
+
+    @Test
     fun premiumUsesProfessionalPhosphorPackNotCursorDrawnGeometry() {
         assertThat(NextpariIcons.pack(NextpariIconVariant.Premium))
             .isSameInstanceAs(NextpariProfessionalIcons)

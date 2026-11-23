@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -55,6 +54,7 @@ import com.nextpari.app.feature.home.HomePromoLayout
 import com.nextpari.app.feature.home.HomeSport
 import com.nextpari.app.feature.home.MatchCardModel
 import com.nextpari.app.feature.home.MatchCarousel
+import com.nextpari.app.feature.home.NextpariMatchCard
 import com.nextpari.app.feature.sportsbook.CompetitionDirectory
 import com.nextpari.app.feature.sportsbook.CountryGrouping
 import com.nextpari.app.feature.sportsbook.FeaturedSports
@@ -82,7 +82,7 @@ class HomeChromeCheckActivity : ComponentActivity() {
 @Composable
 private fun HomeChromeGallery(widthDp: Int) {
     val colors = NextpariTheme.colors
-    val sports = listOf(HomeSport("all", "Все")) + SportsListCatalog.supported.take(8)
+    val sports = listOf(HomeSport("all", "Все")) + SportsListCatalog.supported
     var selected by rememberSaveable { mutableStateOf("all") }
     val live = liveFixtures
     val popular = FeaturedSports.selectFeatured(
@@ -171,13 +171,8 @@ private fun HomeChromeGallery(widthDp: Int) {
                     modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
                 )
             }
-            items(GameListLayout.entries(popular).filterIsInstance<GameListEntry.Fixture>(), key = { it.match.id }) { row ->
-                Text(
-                    "${row.match.league}: ${row.match.team1} — ${row.match.team2}",
-                    color = colors.text,
-                    fontSize = 13.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
+            items(GameListLayout.entries(live).filterIsInstance<GameListEntry.Fixture>(), key = { it.match.id }) { row ->
+                NextpariMatchCard(row.match, carousel = false, onOpen = {})
             }
             item(key = "champs") {
                 Text(
@@ -236,13 +231,13 @@ private fun CompactPromoRow() {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
-                        Modifier.fillMaxWidth().aspectRatio(HomePromoLayout.ImageAspect)
+                        Modifier.fillMaxWidth().height(HomePromoLayout.ImageHeight)
                             .clip(RoundedCornerShape(10.dp)).background(colors.surfaceMuted),
                     ) {
                         Image(
                             painter = painterResource(promo.imageRes),
                             contentDescription = promo.title,
-                            modifier = Modifier.matchParentSize(),
+                            modifier = Modifier.matchParentSize().padding(HomePromoLayout.imageInset(promo.drawableName)),
                             contentScale = ContentScale.Fit,
                         )
                     }
@@ -306,6 +301,39 @@ private val liveFixtures = listOf(
         country = "England",
         team1 = "Arsenal",
         team2 = "Chelsea",
+        isLive = true,
+        provider = "oddspapi-v5",
+    ),
+    MatchCardModel(
+        id = "nhl-1",
+        eventId = "nhl-1",
+        sport = "hockey",
+        league = "NHL",
+        country = "USA",
+        team1 = "Boston Bruins",
+        team2 = "Toronto Maple Leafs",
+        isLive = true,
+        provider = "oddspapi-v5",
+    ),
+    MatchCardModel(
+        id = "nba-1",
+        eventId = "nba-1",
+        sport = "basketball",
+        league = "NBA",
+        country = "USA",
+        team1 = "Boston Celtics",
+        team2 = "Los Angeles Lakers",
+        isLive = true,
+        provider = "oddspapi-v5",
+    ),
+    MatchCardModel(
+        id = "atp-1",
+        eventId = "atp-1",
+        sport = "tennis",
+        league = "ATP",
+        country = "International",
+        team1 = "Alcaraz",
+        team2 = "Sinner",
         isLive = true,
         provider = "oddspapi-v5",
     ),

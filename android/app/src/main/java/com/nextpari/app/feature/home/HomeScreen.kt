@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -373,13 +372,13 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
-                        Modifier.fillMaxWidth().aspectRatio(HomePromoLayout.ImageAspect)
+                        Modifier.fillMaxWidth().height(HomePromoLayout.ImageHeight)
                             .clip(RoundedCornerShape(10.dp)).background(colors.surfaceMuted),
                     ) {
                         Image(
                             painter = painterResource(promo.imageRes),
                             contentDescription = null,
-                            modifier = Modifier.matchParentSize(),
+                            modifier = Modifier.matchParentSize().padding(HomePromoLayout.imageInset(promo.drawableName)),
                             contentScale = ContentScale.Fit,
                         )
                         Box(Modifier.matchParentSize().background(reflection))

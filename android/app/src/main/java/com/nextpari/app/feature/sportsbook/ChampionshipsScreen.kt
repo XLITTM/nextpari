@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,18 +39,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariSportMark
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.theme.NextpariColors
 import com.nextpari.app.core.ui.theme.NextpariTheme
 import com.nextpari.app.feature.home.MatchSkeletonCarousel
-import com.nextpari.app.feature.home.SportIconRes
 
 @Composable
 fun ChampionshipsScreen(
@@ -118,7 +116,7 @@ fun ChampionshipsScreen(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Image(painterResource(SportIconRes.drawable(sport)), contentDescription = null, modifier = Modifier.size(24.dp))
+            NextpariSportMark(sport, size = 24.dp)
             Spacer(Modifier.width(8.dp))
             Text(sportName.uppercase(), color = if (dark) Color(0xFFD1D5DB) else Color(0xFF4B5563), fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
@@ -229,7 +227,7 @@ private fun CompetitionCard(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         CompetitionArtwork(league.badge?.url, league.badgeRes, league.country, Modifier.size(22.dp)) {
-            Icon(NextpariWebIcons.Trophy, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(22.dp))
+            NextpariSportMark(league.sport, size = 22.dp)
         }
         Spacer(Modifier.width(10.dp))
         Text(
@@ -316,7 +314,7 @@ private fun CountryAccordion(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CompetitionArtwork(league.badge?.url, league.badgeRes, league.country, Modifier.size(18.dp)) {
-                            Icon(NextpariWebIcons.Trophy, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(18.dp))
+                            NextpariSportMark(league.sport, size = 18.dp)
                         }
                         Spacer(Modifier.width(6.dp))
                         Text(

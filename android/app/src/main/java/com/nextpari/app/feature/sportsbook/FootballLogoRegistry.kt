@@ -4,6 +4,7 @@ import com.nextpari.app.R
 import com.nextpari.app.feature.home.MatchCardModel
 import java.text.Normalizer
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Local football marks imported from the owner-authorized collection.
@@ -1275,7 +1276,18 @@ internal object FootballLogoRegistry {
     )
     private val aliases = mapOf(
         "ac milan" to "milan",
+        "al ahli" to "al-ahli",
+        "al ahli saudi" to "al-ahli",
+        "al hilal" to "al-hilal",
+        "al ittihad" to "al-ittihad",
+        "al ittihad club" to "al-ittihad",
+        "al nassr" to "al-nassr",
+        "al nassr club" to "al-nassr",
         "alaves" to "deportivo",
+        "basaksehir fk" to "basaksehir",
+        "corum fk" to "corum",
+        "istanbul basaksehir" to "basaksehir",
+        "istanbul basaksehir fk" to "basaksehir",
         "arsenal" to "arsenal",
         "as roma" to "roma",
         "ascoli calcio 1898" to "ascoli",
@@ -2766,6 +2778,7 @@ internal object FootballLogoRegistry {
         CompetitionLogos("la-liga", setOf("es", "spain"), setOf("la liga", "laliga"), false),
         CompetitionLogos("turkey-2-lig", setOf("tr", "turkey", "turkiye"), setOf("2nd lig", "tff 2 lig", "2 lig"), false),
         CompetitionLogos("super-lig", setOf("tr", "turkey", "turkiye"), setOf("super lig", "super lig", "turkish super lig"), false),
+        CompetitionLogos("afc-champions-league-elite", setOf("international", "asia", "afc", "international clubs"), setOf("afc champions league elite", "afc champions league", "acl elite"), false),
         CompetitionLogos("champions-league", setOf("international", "europe", "uefa"), setOf("uefa champions league", "champions league"), false),
         CompetitionLogos("conference-league", setOf("international", "europe", "uefa"), setOf("uefa conference league", "uefa europa conference league", "conference league"), false),
         CompetitionLogos("europa-league", setOf("international", "europe", "uefa"), setOf("uefa europa league", "europa league"), false),
@@ -2777,29 +2790,77 @@ internal object FootballLogoRegistry {
     private val restrictedTeam = Regex("\\b(women|woman|ladies|feminine|female|wfc|reserves?|youth|academy|amateur|primavera|ii|iii|u ?\\d{2})\\b")
     private val restrictedCompetition = Regex("\\b(women|woman|ladies|feminine|female|wfc|reserves?|youth|academy|amateur|primavera|u ?\\d{2})\\b")
 
-    fun team(match: MatchCardModel, name: String, home: Boolean? = null): Int? {
-        if (match.sport != "football") return null
-        val participant = if (home == true) match.homeParticipantId else if (home == false) match.awayParticipantId else null
-        if (!participant.isNullOrBlank()) return byCanonical[participant]
-        val normalized = normalize(name)
-        if (restrictedTeam.containsMatchIn(normalized) || restrictedCompetition.containsMatchIn(normalize(match.league))) return null
-        val context = context(match)
-        if (context?.national == true) {
-            nationalAliases[normalized]?.let { return teams[it] }
-            slugFor(keys(normalized), context.id)?.let { return teams[it] }
-        }
-        context?.let { slugFor(keys(normalized), it.id)?.let { slug -> return teams[slug] } }
-        val slug = slugFor(keys(normalized), null) ?: return null
-        val country = countryKey(match.country)
-        if (country.isNotEmpty() && country !in teamCountries[slug].orEmpty()) return null
-        return teams[slug]
+    private val teamHits = ConcurrentHashMap<String, BadgeHit>()
+    private val competitionHits = ConcurrentHashMap<String, BadgeHit>()
+
+    fun team(match: MatchCardModel, name: String, home: Boolean? = null): Int? = teamHit(match, name, home).drawable
+
+    fun teamHit(match: MatchCardModel, name: String, home: Boolean? = null): BadgeHit {
+        if (match.sport != "football") return BadgeHit(null, "not-football")
+        val participant = if (home == true) match.homeParticipantId else if (home == false) match.awayParticipantId else ""
+        val cacheKey = listOf(
+            match.country,
+            match.league,
+            match.competitionId.orEmpty(),
+            participant.orEmpty(),
+            name,
+            home?.toString().orEmpty(),
+        ).joinToString("\u0001")
+        teamHits[cacheKey]?.let { return it }
+        val hit = resolveTeam(match, name, home)
+        if (hit.drawable != null) teamHits[cacheKey] = hit
+        return hit
     }
 
-    fun competition(match: MatchCardModel): Int? {
-        if (match.sport != "football") return null
+    fun competition(match: MatchCardModel): Int? = competitionHit(match).drawable
+
+    fun competitionHit(match: MatchCardModel): BadgeHit {
+        if (match.sport != "football") return BadgeHit(null, "not-football")
         val canonical = match.competitionId ?: match.competitionBadge?.canonicalId
-        if (!canonical.isNullOrBlank()) return byCanonical[canonical]
-        return context(match)?.let { competitions[it.id] }
+        val cacheKey = listOf(match.country, match.league, canonical.orEmpty()).joinToString("\u0001")
+        competitionHits[cacheKey]?.let { return it }
+        val hit = resolveCompetition(match, canonical)
+        if (hit.drawable != null) competitionHits[cacheKey] = hit
+        return hit
+    }
+
+    private fun resolveTeam(match: MatchCardModel, name: String, home: Boolean?): BadgeHit {
+        val participant = if (home == true) match.homeParticipantId else if (home == false) match.awayParticipantId else null
+        if (!participant.isNullOrBlank()) {
+            byCanonical[participant]?.let { return BadgeHit(it, "canonical-id") }
+            val identity = normalize(participant.substringAfterLast(':'))
+            if (restrictedTeam.containsMatchIn(identity) || restrictedTeam.containsMatchIn(normalize(participant))) {
+                return BadgeHit(null, "restricted")
+            }
+        }
+        val normalized = normalize(name)
+        if (restrictedTeam.containsMatchIn(normalized) || restrictedCompetition.containsMatchIn(normalize(match.league))) {
+            return BadgeHit(null, "restricted")
+        }
+        val context = context(match)
+        if (context?.national == true) {
+            nationalAliases[normalized]?.let { slug -> return BadgeHit(teams[slug], "national-alias") }
+            slugFor(keys(normalized), context.id)?.let { slug -> return BadgeHit(teams[slug], "national-context") }
+        }
+        context?.let { current ->
+            slugFor(keys(normalized), current.id)?.let { slug -> return BadgeHit(teams[slug], "competition-membership") }
+        }
+        val slug = slugFor(keys(normalized), null) ?: return BadgeHit(null, "missing")
+        val country = countryKey(match.country)
+        val international = CompetitionOrder.isInternationalCountry(match.country) ||
+            CompetitionOrder.isInternationalLeague(match.league, match.country, match.competitionId)
+        if (!international && country.isNotEmpty() && country !in teamCountries[slug].orEmpty()) {
+            return BadgeHit(null, "country-mismatch")
+        }
+        return BadgeHit(teams[slug], "name-unique")
+    }
+
+    private fun resolveCompetition(match: MatchCardModel, canonical: String?): BadgeHit {
+        if (!canonical.isNullOrBlank()) {
+            byCanonical[canonical]?.let { return BadgeHit(it, "canonical-id") }
+        }
+        val found = context(match)?.let { competitions[it.id] }
+        return if (found != null) BadgeHit(found, "competition-context") else BadgeHit(null, "missing")
     }
 
     private fun context(match: MatchCardModel): CompetitionLogos? {

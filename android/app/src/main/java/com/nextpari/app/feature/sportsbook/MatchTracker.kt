@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.R
+import com.nextpari.app.core.ui.icons.NextpariSportMark
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.feature.home.MatchCardModel
 import com.nextpari.app.feature.home.MatchTeamArtwork
@@ -89,7 +90,9 @@ internal fun MatchTracker(
                 IconButton(onClick = onBack) {
                     Icon(NextpariWebIcons.ArrowLeft, contentDescription = "Назад", tint = Color.White)
                 }
-                MatchCompetitionArtwork(match, Modifier.size(20.dp))
+                MatchCompetitionArtwork(match, Modifier.size(20.dp)) {
+                    NextpariSportMark(match.sport, size = 20.dp)
+                }
                 Text(
                     "$sportLabel · ${match.league}",
                     color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,

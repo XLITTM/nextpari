@@ -49,8 +49,9 @@ class FootballLogoRegistryTest {
         )
         assertEquals(R.drawable.badge_arsenal, BundledFootballBadges.team(identified, "Manchester City", home = true))
         assertEquals(R.drawable.logo_fb_real_madrid, BundledFootballBadges.team(identified, "Fulham FC", home = false))
-        assertNull(BundledFootballBadges.team(identified.copy(homeParticipantId = "unverified"), "Arsenal", home = true))
-        assertNull(BundledFootballBadges.competition(identified.copy(competitionId = "football:lb:premier-league")))
+        assertEquals(R.drawable.badge_arsenal, BundledFootballBadges.team(identified.copy(homeParticipantId = "unverified"), "Arsenal", home = true))
+        assertEquals(R.drawable.badge_premier_league, BundledFootballBadges.competition(identified.copy(competitionId = "football:lb:premier-league")))
+        assertNull(BundledFootballBadges.competition(identified.copy(competitionId = "football:lb:premier-league", league = "Lebanese Premier League", country = "Lebanon")))
     }
 
     @Test
@@ -150,6 +151,77 @@ class FootballLogoRegistryTest {
         assertTrue(File("src/main/java/com/nextpari/app/feature/sportsbook/GameListScreen.kt").readText().contains("NextpariMatchCard"))
         assertTrue(File("src/main/java/com/nextpari/app/feature/sportsbook/MatchTracker.kt").readText().contains("MatchTeamArtwork"))
         assertTrue(File("src/main/java/com/nextpari/app/feature/sportsbook/ChampionshipsScreen.kt").readText().contains("CompetitionArtwork"))
+    }
+
+    @Test
+    fun unmappedParticipantIdsFallBackToVerifiedNamesWithoutGuessing() {
+        val premier = fixture("Premier League", "England", "Arsenal", "Chelsea").copy(homeParticipantId = "oddspapi-v5:unknown-arsenal")
+        assertEquals(R.drawable.badge_arsenal, BundledFootballBadges.team(premier, "Arsenal", home = true))
+        assertTrue(FootballLogoRegistry.teamHit(premier, "Arsenal", home = true).source in setOf("name-unique", "competition-membership"))
+        val identified = premier.copy(homeParticipantId = "football:eng:arsenal", team1 = "Manchester City")
+        assertEquals(R.drawable.badge_arsenal, BundledFootballBadges.team(identified, "Manchester City", home = true))
+        assertEquals("canonical-id", FootballLogoRegistry.teamHit(identified, "Manchester City", home = true).source)
+        assertNull(BundledFootballBadges.team(premier.copy(homeParticipantId = "football:eng:arsenal-women"), "Arsenal", home = true))
+        assertNull(BundledFootballBadges.team(premier.copy(team1 = "Arsenal Women"), "Arsenal Women", home = true))
+        assertNull(BundledFootballBadges.team(premier.copy(team1 = "Arsenal U21"), "Arsenal U21", home = true))
+        val afc = fixture("AFC Champions League Elite", "International Clubs", "Al-Ittihad Club", "Pakhtakor")
+            .copy(homeParticipantId = "oddspapi-v5:missing-ittihad", awayParticipantId = "oddspapi-v5:missing-pakhtakor")
+        assertEquals(R.drawable.logo_fb_al_ittihad, BundledFootballBadges.team(afc, "Al-Ittihad Club", home = true))
+        assertNull(BundledFootballBadges.team(afc, "Pakhtakor", home = false))
+        assertNull(BundledFootballBadges.competition(afc))
+        val turkey = fixture("Super Lig", "Turkey", "Istanbul Basaksehir", "Corum FK")
+        assertEquals(R.drawable.logo_fb_basaksehir, BundledFootballBadges.team(turkey, "Istanbul Basaksehir", home = true))
+        assertEquals(R.drawable.logo_fb_corum, BundledFootballBadges.team(turkey, "Corum FK", home = false))
+    }
+
+    @Test
+    fun bundledLogoInventoryStaysMappedAndCoverageAuditCoversTopLeagues() {
+        val nodpi = File("src/main/res/drawable-nodpi")
+        val clubs = nodpi.listFiles { file -> file.name.startsWith("logo_fb_") && file.extension == "png" }!!
+        val national = clubs.filter { it.name.contains("national_team") }
+        val competitions = nodpi.listFiles { file ->
+            file.extension == "png" && (file.name.startsWith("logo_comp_") || file.name.startsWith("badge_"))
+        }!!
+        assertTrue(clubs.size >= 600)
+        assertTrue(national.size >= 20)
+        assertTrue(competitions.size >= 14)
+        val registry = File("src/main/java/com/nextpari/app/feature/sportsbook/FootballLogoRegistry.kt").readText()
+        val teamEntries = Regex("\"[a-z0-9-]+\" to R\\.drawable\\.logo_fb_").findAll(registry).count()
+        val canonicalEntries = Regex("\"football:[a-z0-9-]+:[a-z0-9-]+\" to R\\.drawable\\.").findAll(registry).count()
+        val aliasEntries = Regex("\"[^\"]+\" to \"[a-z0-9-]+\"").findAll(
+            registry.substringAfter("private val aliases = mapOf(").substringBefore("private val nationalAliases"),
+        ).count()
+        assertTrue(teamEntries >= 600)
+        assertTrue(canonicalEntries >= 600)
+        assertTrue(aliasEntries >= 80)
+        val catalog = listOf(
+            fixture("Premier League", "England", "Arsenal", "Chelsea"),
+            fixture("Championship", "England", "Hull City", "Sunderland"),
+            fixture("LaLiga", "Spain", "Real Madrid", "Barcelona"),
+            fixture("Bundesliga", "Germany", "Bayern Munich", "Bayer Leverkusen"),
+            fixture("Serie A", "Italy", "Inter Milan", "AC Milan"),
+            fixture("Ligue 1", "France", "Paris Saint Germain", "OGC Nice"),
+            fixture("UEFA Champions League", "Europe", "Real Madrid", "Manchester City"),
+            fixture("UEFA Europa League", "Europe", "Roma", "Ajax"),
+            fixture("UEFA Conference League", "Europe", "Fiorentina", "Chelsea"),
+            fixture("UEFA Nations League", "Europe", "Türkiye", "Belgium"),
+            fixture("AFC Champions League Elite", "International Clubs", "Al-Ittihad Club", "Al-Hilal"),
+            fixture("Saudi Pro League", "Saudi Arabia", "Al-Nassr Club", "Al-Ittihad Club"),
+            fixture("Super Lig", "Turkey", "Istanbul Basaksehir", "Galatasaray"),
+            fixture("MLS", "USA", "Inter Miami", "Atlanta United"),
+        )
+        val report = FootballLogoCoverage.audit(catalog)
+        assertEquals(14, report.matches)
+        assertEquals(28, report.teamSlots)
+        assertEquals(14, report.competitionSlots)
+        assertTrue(report.resolvedTeams >= 22)
+        assertTrue(report.resolvedCompetitions >= 10)
+        val unresolved = report.unresolvedTeams.map { "${it.homeTeam} vs ${it.awayTeam} (${it.competitionName})" }
+        assertTrue(unresolved.joinToString(), report.missingTeams <= 6)
+        assertNull(BundledFootballBadges.team(fixture("MLS", "USA", "Inter Miami", "Atlanta United"), "Inter Miami", home = true))
+        assertEquals(R.drawable.logo_comp_mls, BundledFootballBadges.competition(fixture("MLS", "USA")))
+        assertEquals(R.drawable.logo_fb_al_hilal, BundledFootballBadges.team(fixture("AFC Champions League Elite", "International Clubs"), "Al-Hilal", home = true))
+        assertEquals(R.drawable.logo_fb_al_nassr, BundledFootballBadges.team(fixture("Saudi Pro League", "Saudi Arabia"), "Al-Nassr Club", home = true))
     }
 
     private fun fixture(

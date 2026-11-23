@@ -17,36 +17,53 @@ val NextpariSportIconTint = Color(0xFF4ADE80)
 object NextpariSportIcons {
     val requiredIds: List<String> = SportIconRes.knownIds
 
-    fun canonicalId(sportId: String): String = when (sportId) {
-        "futsal" -> "football"
-        "beach-volleyball" -> "volleyball"
+    fun canonicalId(sportId: String): String = when {
+        sportId.startsWith("esports") -> "esports"
+        sportId == "futsal" -> "football"
+        sportId == "beach-volleyball" -> "volleyball"
+        sportId == "mma" -> "ufc"
+        sportId == "rugby-league" -> "rugby"
         else -> sportId
     }
 
-    fun vector(sportId: String): ImageVector = when (sportId) {
-        "all" -> ProfessionalPremiumIcons.SportAll
-        "football" -> ProfessionalPremiumIcons.SportFootball
-        "futsal" -> ProfessionalPremiumIcons.SportFutsal
-        "tennis" -> ProfessionalPremiumIcons.SportTennis
-        "basketball" -> ProfessionalPremiumIcons.SportBasketball
-        "hockey" -> ProfessionalPremiumIcons.SportHockey
-        "volleyball" -> ProfessionalPremiumIcons.SportVolleyball
-        "beach-volleyball" -> ProfessionalPremiumIcons.SportBeachVolleyball
-        "esports" -> ProfessionalPremiumIcons.SportEsports
-        "table-tennis" -> ProfessionalPremiumIcons.SportTableTennis
-        "badminton" -> ProfessionalPremiumIcons.SportBadminton
-        "baseball" -> ProfessionalPremiumIcons.SportBaseball
-        "cricket" -> ProfessionalPremiumIcons.SportCricket
-        "polo" -> ProfessionalPremiumIcons.SportPolo
-        "snooker" -> ProfessionalPremiumIcons.SportSnooker
-        "pickleball" -> ProfessionalPremiumIcons.SportPickleball
-        "ufc", "mma" -> ProfessionalPremiumIcons.SportUfc
-        "fifa" -> ProfessionalPremiumIcons.SportFifa
-        "mk" -> ProfessionalPremiumIcons.SportMk
-        "polybet" -> ProfessionalPremiumIcons.SportPolybet
-        "elections" -> ProfessionalPremiumIcons.SportElections
-        "filter" -> ProfessionalPremiumIcons.SportFilter
-        else -> ProfessionalPremiumIcons.SportDefault
+    fun vector(sportId: String): ImageVector = when {
+        sportId.startsWith("esports") -> ProfessionalPremiumIcons.SportEsports
+        else -> when (sportId) {
+            "all" -> ProfessionalPremiumIcons.SportAll
+            "football" -> ProfessionalPremiumIcons.SportFootball
+            "futsal" -> ProfessionalPremiumIcons.SportFutsal
+            "tennis" -> ProfessionalPremiumIcons.SportTennis
+            "basketball" -> ProfessionalPremiumIcons.SportBasketball
+            "hockey" -> ProfessionalPremiumIcons.SportHockey
+            "volleyball" -> ProfessionalPremiumIcons.SportVolleyball
+            "beach-volleyball" -> ProfessionalPremiumIcons.SportBeachVolleyball
+            "table-tennis" -> ProfessionalPremiumIcons.SportTableTennis
+            "badminton" -> ProfessionalPremiumIcons.SportBadminton
+            "baseball" -> ProfessionalPremiumIcons.SportBaseball
+            "cricket" -> ProfessionalPremiumIcons.SportCricket
+            "polo" -> ProfessionalPremiumIcons.SportPolo
+            "snooker" -> ProfessionalPremiumIcons.SportSnooker
+            "pickleball" -> ProfessionalPremiumIcons.SportPickleball
+            "ufc", "mma" -> ProfessionalPremiumIcons.SportUfc
+            "fifa" -> ProfessionalPremiumIcons.SportFifa
+            "mk" -> ProfessionalPremiumIcons.SportMk
+            "polybet" -> ProfessionalPremiumIcons.SportPolybet
+            "elections" -> ProfessionalPremiumIcons.SportElections
+            "filter" -> ProfessionalPremiumIcons.SportFilter
+            "handball" -> CatalogSportIcons.Handball
+            "darts" -> CatalogSportIcons.Darts
+            "american-football" -> CatalogSportIcons.AmericanFootball
+            "rugby", "rugby-league" -> CatalogSportIcons.Rugby
+            "aussie-rules" -> CatalogSportIcons.AussieRules
+            "boxing" -> CatalogSportIcons.Boxing
+            "horse-racing" -> CatalogSportIcons.HorseRacing
+            "greyhounds" -> CatalogSportIcons.Greyhounds
+            "bowls" -> CatalogSportIcons.Bowls
+            "squash" -> CatalogSportIcons.Squash
+            "floorball" -> CatalogSportIcons.Floorball
+            "gaelic-sports" -> CatalogSportIcons.Gaelic
+            else -> ProfessionalPremiumIcons.SportDefault
+        }
     }
 
     fun premiumTint(sportId: String, isDark: Boolean = true): Color = NextpariIconPalette.Sport.of(sportId)

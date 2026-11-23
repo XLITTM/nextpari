@@ -44,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nextpari.app.core.navigation.Destinations
+import com.nextpari.app.core.ui.icons.NextpariSportMark
 import com.nextpari.app.core.ui.icons.NextpariWebIcons
 import com.nextpari.app.core.ui.components.ProductSectionHeader
 import com.nextpari.app.core.ui.theme.NextpariColors
@@ -181,7 +182,7 @@ private fun HomeCountryCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         CompetitionArtwork(league.badge?.url, league.badgeRes, league.country, Modifier.size(18.dp)) {
-                            Icon(NextpariWebIcons.Trophy, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(18.dp))
+                            NextpariSportMark(league.sport, size = 18.dp)
                         }
                         Spacer(Modifier.width(6.dp))
                         Text(

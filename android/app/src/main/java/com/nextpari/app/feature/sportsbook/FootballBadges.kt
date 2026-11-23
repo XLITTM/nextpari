@@ -137,9 +137,7 @@ internal fun CompetitionArtwork(
         Image(painterResource(badgeRes), contentDescription = null, modifier = modifier, contentScale = ContentScale.Fit)
         return
     }
-    FootballBadge(url, modifier) {
-        SportsFlag(SportsRegions.code(country), modifier, placeholder)
-    }
+    FootballBadge(url, modifier, placeholder)
 }
 
 @Composable

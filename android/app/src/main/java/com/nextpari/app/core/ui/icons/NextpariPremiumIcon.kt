@@ -130,3 +130,19 @@ fun NextpariSportIconBadge(
         }
     }
 }
+
+/** Shared green sport pictogram used on match lists, championships, and other sportsbook rows. */
+@Composable
+fun NextpariSportMark(
+    sportId: String,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    size: Dp = 20.dp,
+) {
+    Icon(
+        imageVector = NextpariSportIcons.vector(sportId),
+        contentDescription = contentDescription,
+        modifier = modifier.size(size),
+        tint = NextpariSportIconTint,
+    )
+}

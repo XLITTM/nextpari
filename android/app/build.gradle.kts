@@ -13,10 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 10
-        // versionCode 10 ranks AFC Elite, compact promo cards, and green sport pictograms.
+        versionCode = 11
+        // versionCode 11 equalizes promo viewports, shared green sport pictograms, and football crest fallback.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.8"
+        versionName = "0.2.9"
 
         testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true
