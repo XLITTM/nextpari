@@ -25,6 +25,7 @@ private val nationalCompetitions = setOf(
 )
 private val internationalClubCompetitions = setOf(
     "uefa champions league", "uefa europa league", "uefa conference league", "uefa europa conference league",
+    "afc champions league elite", "acl elite", "afc cl elite",
 )
 private val majorDomestic = mapOf(
     "england premier league" to "eng", "premier league" to "eng",
@@ -100,6 +101,17 @@ internal object FeaturedSports {
     fun popularLive(matches: List<MatchCardModel>): List<MatchCardModel> =
         prioritize(matches.filter { it.isLive && !isEsports(it) })
 
+    fun selectFeatured(
+        matches: List<MatchCardModel>,
+        live: Boolean,
+        featuredIds: List<String>?,
+        nowMs: Long,
+    ): List<MatchCardModel> {
+        val ranked = if (live) popularLive(matches) else popularLine(matches, nowMs)
+        val boosted = featuredIds.orEmpty().mapNotNull { id -> matches.firstOrNull { it.eventId == id } }
+        return prioritize((boosted + ranked).distinctBy(MatchCardModel::eventId))
+    }
+
     fun popularLine(matches: List<MatchCardModel>, nowMs: Long): List<MatchCardModel> {
         val upcoming = matches.filter { match -> !match.isLive && !isEsports(match) }
         val football = upcoming.filter { match ->
@@ -138,6 +150,7 @@ internal object SportsRegions {
         "europe" to "eu", "европа" to "eu", "eu" to "eu", "uefa" to "eu",
         "international" to "international", "международные" to "international",
         "world" to "international", "fifa" to "international",
+        "international clubs" to "international", "asia" to "international", "afc" to "international",
     )
     private val localNames = mapOf(
         "eng" to "Англия", "sco" to "Шотландия", "wal" to "Уэльс", "nir" to "Северная Ирландия",

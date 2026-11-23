@@ -1,6 +1,18 @@
 package com.nextpari.app.feature.home
 
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import com.nextpari.app.R
+
+object HomePromoLayout {
+    val MinWidth = 105.dp
+    val MaxWidth = 118.dp
+    val Gap = 8.dp
+    val Corner = 12.dp
+    val Shadow = 2.dp
+    val ImageAspect = 1.02f
+    fun cardWidth(available: Dp): Dp = (available * 0.28f).coerceIn(MinWidth, MaxWidth)
+}
 
 object SportIconRes {
     val knownIds = listOf(

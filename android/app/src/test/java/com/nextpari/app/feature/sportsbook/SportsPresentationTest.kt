@@ -5,6 +5,7 @@ import com.nextpari.app.R
 import com.nextpari.app.core.storage.InMemoryPreferencesStorage
 import com.nextpari.app.feature.favorites.SportsFavoritesStore
 import com.nextpari.app.feature.home.MatchCardModel
+import com.nextpari.app.feature.home.HomePromoLayout
 import com.nextpari.app.feature.home.carouselCardWidth
 import java.io.File
 import kotlinx.coroutines.test.runTest
@@ -70,6 +71,48 @@ class SportsPresentationTest {
         assertEquals("football", FeaturedSports.popularLine(listOf(major, later), now).first().sport)
         assertTrue(FeaturedSports.featuredSportBucket("football") < FeaturedSports.featuredSportBucket("basketball"))
         assertTrue(FeaturedSports.featuredSportBucket("basketball") < FeaturedSports.featuredSportBucket("tennis"))
+
+        val afc = nations.copy(
+            id = "oddspapi-v5:id1000046373835908",
+            eventId = "oddspapi-v5:id1000046373835908",
+            league = "AFC Champions League Elite",
+            country = "International Clubs",
+            team1 = "Al-Ittihad Club",
+            team2 = "Pakhtakor",
+            provider = "oddspapi-v5",
+            isLive = true,
+        )
+        val superLig = nations.copy(
+            id = "oddspapi-v5:id1000005272723326",
+            eventId = "oddspapi-v5:id1000005272723326",
+            league = "Super Lig",
+            country = "Turkey",
+            team1 = "Istanbul Basaksehir",
+            team2 = "Corum FK",
+            provider = "oddspapi-v5",
+            isLive = true,
+        )
+        val two = afc.copy(
+            id = "oddspapi-v5:id1000066873835252",
+            eventId = "oddspapi-v5:id1000066873835252",
+            league = "AFC Champions League Two",
+            team1 = "East Bengal FC",
+            team2 = "Al Hussein Irbid",
+        )
+        val missing = afc.copy(id = "missing-afc", eventId = "missing-afc", league = "AFC Champions League Elite", isLive = false)
+        assertEquals(0, FeaturedSports.tier(afc))
+        assertEquals(0, FeaturedSports.tier(superLig))
+        assertEquals(1, FeaturedSports.tier(two))
+        val featured = FeaturedSports.selectFeatured(
+            listOf(superLig, two, afc, virtual),
+            live = true,
+            featuredIds = listOf(superLig.eventId),
+            nowMs = now,
+        )
+        assertEquals(listOf(afc.eventId, superLig.eventId, two.eventId), featured.map { it.eventId })
+        assertEquals(emptyList<String>(), FeaturedSports.selectFeatured(listOf(missing), true, null, now).map { it.eventId })
+        assertEquals(listOf(afc), FeaturedSports.popularLive(listOf(afc, virtual)))
+        assertEquals("Международные", SportsRegions.name("International Clubs"))
     }
 
     @Test
@@ -169,6 +212,18 @@ class SportsPresentationTest {
         assertEquals(320.dp, carouselCardWidth(390.dp))
         assertEquals(320.dp, carouselCardWidth(430.dp))
         assertEquals(320.dp, carouselCardWidth(412.dp))
+        assertEquals(105.dp, HomePromoLayout.cardWidth(360.dp))
+        assertEquals(118.dp, HomePromoLayout.cardWidth(430.dp))
+        val promo390 = HomePromoLayout.cardWidth(390.dp).value
+        assertTrue(promo390 in 108f..112f)
+        assertTrue(HomePromoLayout.cardWidth(360.dp) in HomePromoLayout.MinWidth..HomePromoLayout.MaxWidth)
+        assertTrue(HomePromoLayout.cardWidth(390.dp) in HomePromoLayout.MinWidth..HomePromoLayout.MaxWidth)
+        assertTrue(HomePromoLayout.cardWidth(430.dp) in HomePromoLayout.MinWidth..HomePromoLayout.MaxWidth)
+        val homePromo = File("src/main/java/com/nextpari/app/feature/home/HomeScreen.kt").readText()
+        assertTrue(homePromo.contains("HomePromoLayout.cardWidth"))
+        assertFalse(homePromo.contains("coerceIn(110.dp, 168.dp)"))
+        assertTrue(homePromo.contains("maxLines = 2"))
+        assertTrue(homePromo.contains("onNavigate(promo.route)"))
         val source = File("src/main/java/com/nextpari/app/feature/home/MatchCard.kt").readText()
         assertEquals(0, Regex("heightIn\\(min = MatchCardHeight\\)").findAll(source).count())
         assertEquals(0, Regex("MatchCardHeight").findAll(source).count())

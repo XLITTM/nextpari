@@ -13,10 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        // versionCode 9 restores championships country accordions and international shortcuts.
+        versionCode = 10
+        // versionCode 10 ranks AFC Elite, compact promo cards, and green sport pictograms.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.7"
+        versionName = "0.2.8"
 
         testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true

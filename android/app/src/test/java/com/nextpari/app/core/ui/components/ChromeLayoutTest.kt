@@ -86,6 +86,7 @@ class ChromeLayoutTest {
         assertThat(selector).doesNotContain("NextpariWebIcons")
         assertThat(selector).doesNotContain("NextpariSectionIcons")
         assertThat(selector).doesNotContain("SportIconRes.drawable")
+        assertThat(selector).doesNotContain("NextpariReferenceIcon")
     }
 
     private fun moduleFile(relative: String): File {

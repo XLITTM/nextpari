@@ -341,7 +341,7 @@ private fun SportsSelector(
 private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
     val colors = NextpariTheme.colors
     val dark = colors.bg == NextpariColors.Dark.bg
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(HomePromoLayout.Corner)
     val face = remember(colors) {
         Brush.verticalGradient(listOf(colors.surfaceElevated, colors.surfaceSoft))
     }
@@ -357,24 +357,24 @@ private fun PromoRow(promos: List<HomePromo>, onNavigate: (String) -> Unit) {
         Brush.verticalGradient(0f to Color.White.copy(alpha = if (dark) .15f else .18f), .37f to Color.Transparent)
     }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val cardWidth = (maxWidth * .42f).coerceIn(110.dp, 168.dp)
+        val cardWidth = HomePromoLayout.cardWidth(maxWidth)
         LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(HomePromoLayout.Gap),
         ) {
             items(promos, key = { it.route }) { promo ->
                 Column(
                     modifier = Modifier.width(cardWidth)
                         .vipNeonFrame(shape = shape, chrome = VipNeonChrome.PressOnly)
-                        .shadow(5.dp, shape, clip = false, spotColor = if (dark) colors.accent else colors.text)
+                        .shadow(HomePromoLayout.Shadow, shape, clip = false, spotColor = if (dark) colors.accent else colors.text)
                         .clip(shape).background(face).border(1.dp, rim, shape)
                         .clickable(onClickLabel = promo.title) { onNavigate(promo.route) }
-                        .padding(3.dp),
+                        .padding(2.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
-                        Modifier.fillMaxWidth().aspectRatio(1.36f)
-                            .clip(RoundedCornerShape(13.dp)).background(colors.surfaceMuted),
+                        Modifier.fillMaxWidth().aspectRatio(HomePromoLayout.ImageAspect)
+                            .clip(RoundedCornerShape(10.dp)).background(colors.surfaceMuted),
                     ) {
                         Image(
                             painter = painterResource(promo.imageRes),

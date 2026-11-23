@@ -7,7 +7,7 @@ import java.util.Locale
 object CompetitionOrder {
     private val priorities = mapOf(
         "football" to listOf("football:int:uefa-champions-league","football:int:uefa-europa-league","football:int:uefa-conference-league",
-            "football:int:uefa-nations-league",
+            "football:int:uefa-nations-league","football:int:afc-champions-league-elite",
             "football:eng:premier-league","football:esp:la-liga","football:ita:serie-a","football:ger:bundesliga","football:fra:ligue-1",
             "football:por:primeira-liga","football:ned:eredivisie","football:tur:super-lig","football:bra:serie-a","football:arg:primera-division","football:usa:mls"),
         "basketball" to listOf("basketball:usa:nba","basketball:int:euroleague","basketball:int:eurocup","basketball:usa:ncaa","basketball:int:fiba-world-cup","basketball:int:eurobasket"),
@@ -30,6 +30,7 @@ object CompetitionOrder {
         DisplayRule("football", setOf("international", "europe", "uefa", "world"), setOf("uefa conference league", "uefa europa conference league"), "football:int:uefa-conference-league", ignoreCountry = true),
         DisplayRule("football", setOf("international", "europe", "uefa", "world"), setOf("uefa nations league"), "football:int:uefa-nations-league", ignoreCountry = true),
         DisplayRule("football", setOf("international", "europe", "uefa", "world"), setOf("nations league"), "football:int:uefa-nations-league"),
+        DisplayRule("football", setOf("international", "asia", "afc", "world"), setOf("afc champions league elite", "acl elite", "afc cl elite"), "football:int:afc-champions-league-elite", ignoreCountry = true),
         DisplayRule("football", setOf("eng", "england"), setOf("premier league"), "football:eng:premier-league"),
         DisplayRule("football", setOf("es", "spain"), setOf("laliga", "la liga"), "football:esp:la-liga"),
         DisplayRule("football", setOf("it", "italy"), setOf("serie a"), "football:ita:serie-a"),
@@ -67,7 +68,7 @@ object CompetitionOrder {
         val canonical = canonicalId?.lowercase(Locale.ROOT).orEmpty()
         if (canonical.contains(":int:")) return true
         val league = label(name)
-        if (league.startsWith("uefa ") || league.startsWith("fifa ")) return true
+        if (league.startsWith("uefa ") || league.startsWith("fifa ") || league.startsWith("afc ")) return true
         return league in internationalNames
     }
 
@@ -80,7 +81,7 @@ object CompetitionOrder {
 
     private val internationalCountries = setOf(
         "international", "europe", "world", "uefa", "fifa", "eu", "atp", "wta",
-        "международные", "европа",
+        "международные", "европа", "asia", "afc", "international clubs",
     )
     private val internationalCodes = setOf("eu", "international")
     private val internationalNames = setOf(
@@ -88,6 +89,7 @@ object CompetitionOrder {
         "uefa europa conference league", "uefa nations league", "nations league",
         "uefa european championship", "uefa euro", "fifa world cup",
         "copa america", "copa américa",
+        "afc champions league elite", "acl elite", "afc cl elite",
     )
 
     fun top(groups: List<CountryGroup>): List<LeagueRow> = groups.flatMap { it.leagues }.filter { it.rank != Int.MAX_VALUE }.sortedBy { it.rank }

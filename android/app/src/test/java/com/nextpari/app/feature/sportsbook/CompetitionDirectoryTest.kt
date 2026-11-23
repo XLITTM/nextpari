@@ -79,6 +79,24 @@ class CompetitionDirectoryTest {
         assertThat(directory.top.map { it.name }).containsAtLeast("UEFA Champions League", "UEFA Nations League")
         assertThat(directory.international.map { it.name }).containsExactly("Club Friendlies")
         assertThat(directory.countries.map { it.country }).containsExactly("England")
+        val afcLive = match(
+            "oddspapi-v5:id1000046373835908",
+            "AFC Champions League Elite",
+            "International Clubs",
+        )
+        val afcTwo = match("acl-two", "AFC Champions League Two", "International Clubs")
+        val afcGroups = CountryGrouping.groupByCountry(listOf(afcLive, afcTwo, match("pl", "Premier League", "England")))
+        val afcDirectory = CompetitionDirectory.organize(afcGroups, emptySet())
+        assertThat(CompetitionOrder.rank(afcLive)).isEqualTo(CompetitionOrder.rank("football", "football:int:afc-champions-league-elite"))
+        assertThat(CompetitionOrder.rank(afcTwo)).isEqualTo(Int.MAX_VALUE)
+        assertThat(CompetitionOrder.isInternationalLeague(afcLive.league, afcLive.country, null)).isTrue()
+        assertThat(CompetitionOrder.isInternationalCountry("International Clubs")).isTrue()
+        assertThat(afcDirectory.top.map { it.name }).contains("AFC Champions League Elite")
+        assertThat(afcDirectory.international.map { it.name }).contains("AFC Champions League Two")
+        assertThat(afcDirectory.countries.map { it.country }).containsExactly("England")
+        assertThat(afcDirectory.top.single { it.name == "AFC Champions League Elite" }.count).isEqualTo(1)
+        assertThat(LeagueMatches.filter(listOf(afcLive, afcTwo), afcDirectory.top.single { it.name.contains("Elite") }.id).map { it.eventId })
+            .containsExactly("oddspapi-v5:id1000046373835908")
         assertThat(CompetitionDirectory.organize(emptyList(), emptySet()).international).isEmpty()
         assertThat(CompetitionDirectory.organize(emptyList(), emptySet()).countries).isEmpty()
     }
