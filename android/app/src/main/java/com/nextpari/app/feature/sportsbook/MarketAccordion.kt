@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -85,21 +86,56 @@ fun MarketAccordion(
         }
         AnimatedVisibility(visible = open, enter = expandVertically(), exit = shrinkVertically()) {
             Column(Modifier.padding(start = 10.dp, end = 10.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                val table=market.rows.takeIf { it.isNotEmpty() }
-                if(table!=null) table.forEach { line ->
-                    line.outcomes.chunked(if(line.outcomes.size==3)3 else 2).forEach { cells ->
-                        Row(horizontalArrangement=Arrangement.spacedBy(6.dp),modifier=Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically) {
-                            if(!line.line.isNullOrBlank()) Text(line.line,color=colors.textSecondary,fontSize=13.sp,fontWeight=FontWeight.SemiBold,modifier=Modifier.weight(.65f),maxLines=1)
-                            cells.forEach { outcome -> MarketOutcomeButton(outcome,false,Modifier.weight(1f)) { onSelect(outcome) } }
+                val table = market.rows.takeIf { it.isNotEmpty() }
+                if (table != null) table.forEach { line ->
+                    val hideLine = CompactMarketLayout.hideLineColumn(market)
+                    val european = CompactMarketLayout.showEuropeanLine(market)
+                    val cells = CompactMarketLayout.ordered(market, line.outcomes)
+                    val span = if (european || cells.size == 3) 3 else 2
+                    cells.chunked(span).forEach { row ->
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (european && !line.line.isNullOrBlank()) {
+                                Text(
+                                    CompactMarketLayout.formatLine(line.line) ?: line.line,
+                                    color = colors.textSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.width(36.dp),
+                                    maxLines = 1,
+                                )
+                            } else if (!hideLine && !european && !line.line.isNullOrBlank()) {
+                                Text(
+                                    line.line,
+                                    color = colors.textSecondary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.weight(.65f),
+                                    maxLines = 1,
+                                )
+                            }
+                            row.forEach { outcome ->
+                                MarketOutcomeButton(
+                                    outcome,
+                                    outcomeIdentity(outcome) in selectedKeys,
+                                    Modifier.weight(1f),
+                                    CompactMarketLayout.buttonLabel(market, line.line, outcome),
+                                ) { onSelect(outcome) }
+                            }
+                            repeat((span - row.size).coerceAtLeast(0)) { Spacer(Modifier.weight(1f)) }
                         }
                     }
-                } else market.outcomes.chunked(columns).forEach { row ->
+                } else CompactMarketLayout.ordered(market, market.outcomes).chunked(columns).forEach { row ->
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
                         row.forEach { outcome ->
                             MarketOutcomeButton(
                                 outcome = outcome,
                                 selected = outcomeIdentity(outcome) in selectedKeys,
                                 modifier = Modifier.weight(1f),
+                                label = CompactMarketLayout.buttonLabel(market, outcome.line, outcome),
                                 onClick = { onSelect(outcome) },
                             )
                         }
@@ -119,6 +155,7 @@ fun MarketOutcomeButton(
     outcome: MarketOutcome,
     selected: Boolean,
     modifier: Modifier = Modifier,
+    label: String = outcome.label,
     onClick: () -> Unit,
 ) {
     val colors = NextpariTheme.colors
@@ -152,8 +189,8 @@ fun MarketOutcomeButton(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(outcome.label, color = if (highlighted) colors.accentInk else colors.textSecondary,
-            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        Text(label, color = if (highlighted) colors.accentInk else colors.textSecondary,
+            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(end = 4.dp))
         if (locked && (!observed || outcome.odds == null)) {
             Icon(NextpariWebIcons.Lock, contentDescription = null, tint = colors.textMuted, modifier = Modifier.size(14.dp))

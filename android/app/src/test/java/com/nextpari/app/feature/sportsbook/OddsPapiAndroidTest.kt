@@ -188,10 +188,11 @@ class OddsPapiAndroidTest {
         assertEquals("asian-totals",SportMarketStructure.describe("football",group(line="2.25",name="Тотал").copy(marketFamily="totals")).family)
         assertEquals("european-handicap",SportMarketStructure.describe("football",group(line="0.25",name="Фора").copy(marketFamily="spreads-european")).family)
         assertTrue(SportMarketStructure.footballFamilyOrder("totals") < SportMarketStructure.footballFamilyOrder("btts"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("btts") < SportMarketStructure.footballFamilyOrder("handicap"))
         assertTrue(SportMarketStructure.footballFamilyOrder("totals") < SportMarketStructure.footballFamilyOrder("asian-totals"))
         assertTrue(SportMarketStructure.footballFamilyOrder("handicap") < SportMarketStructure.footballFamilyOrder("asian-handicap"))
         assertTrue(SportMarketStructure.footballFamilyOrder("asian-handicap") < SportMarketStructure.footballFamilyOrder("european-handicap"))
-        assertTrue(SportMarketStructure.footballFamilyOrder("european-handicap") < SportMarketStructure.footballFamilyOrder("btts"))
+        assertTrue(SportMarketStructure.footballFamilyOrder("btts") < SportMarketStructure.footballFamilyOrder("european-handicap"))
         assertTrue(SportMarketStructure.footballFamilyOrder("odd-even") < SportMarketStructure.footballFamilyOrder("european-handicap"))
         assertTrue(SportMarketStructure.footballFamilyOrder("team-totals", "Индивидуальный тотал 1") <
             SportMarketStructure.footballFamilyOrder("team-totals", "Индивидуальный тотал 2"))
@@ -202,6 +203,44 @@ class OddsPapiAndroidTest {
         val split=event(groups=listOf(asian,european)).toFixture(epoch,1000,checkMarketAge=true)!!
         assertEquals(setOf("asian-handicap","european-handicap"),split.markets.map { it.family }.toSet())
         assertEquals(listOf("shots"),MarketTabs.available("football",event(groups=listOf(group(name="Створ").copy(marketFamily="totals-shotsongoal"))).toFixture(epoch,1000,checkMarketAge=true)!!.markets).map { it.id }.filter { it=="shots" || it=="totals" })
+    }
+    @Test fun footballMatchDetailsUseOwnerOrderAndCompactHandicapTotals() {
+        fun named(name: String, id: String, family: String, line: String?, home: String, away: String): OddsPapiGroupDto {
+            val base = if (line == null) group(id = id, name = name).copy(line = null) else group(line = line, id = id, name = name)
+            return base.copy(
+                marketFamily = family,
+                outcomes = listOf(
+                    OddsPapiOutcomeDto(home, JsonPrimitive("1.90"), "id1000000872478708:1xbet:$id:0", at),
+                    OddsPapiOutcomeDto(away, JsonPrimitive("1.95"), "id1000000872478708:1xbet:${id}1:0", at),
+                ),
+            )
+        }
+        val mapped = event(groups = listOf(
+            named("Фора", "20", "spreads", "-1.5", "П1", "П2"),
+            named("Обе забьют", "30", "bothteamsscore", null, "Да", "Нет"),
+            named("Тотал", "10", "totals", "2.5", "ТБ", "ТМ"),
+            named("1X2", "1", "1x2", null, "П1", "П2").copy(
+                outcomes = listOf(
+                    OddsPapiOutcomeDto("П1", JsonPrimitive("1.90"), "id1000000872478708:1xbet:1:0", at),
+                    OddsPapiOutcomeDto("X", JsonPrimitive("3.40"), "id1000000872478708:1xbet:2:0", at),
+                    OddsPapiOutcomeDto("П2", JsonPrimitive("4.10"), "id1000000872478708:1xbet:3:0", at),
+                ),
+            ),
+            named("Двойной шанс", "11", "doublechance", null, "1X", "12"),
+        )).toFixture(epoch, 1000, checkMarketAge = true)!!
+        assertEquals(listOf("result", "double-chance", "totals", "btts", "handicap"), mapped.markets.map { it.family })
+        val totals = mapped.markets.first { it.family == "totals" }
+        val handicap = mapped.markets.first { it.family == "handicap" }
+        val over = totals.rows.single().outcomes.first { it.label.contains("ТБ") }
+        val under = totals.rows.single().outcomes.first { it.label.contains("ТМ") }
+        assertEquals("(2.5) Б", CompactMarketLayout.buttonLabel(totals, "2.5", over))
+        assertEquals("(2.5) М", CompactMarketLayout.buttonLabel(totals, "2.5", under))
+        assertEquals("1 (-1.5)", CompactMarketLayout.buttonLabel(handicap, "-1.5", handicap.rows.single().outcomes.first { it.label == "П1" }))
+        assertEquals("2 (1.5)", CompactMarketLayout.buttonLabel(handicap, "-1.5", handicap.rows.single().outcomes.first { it.label == "П2" }))
+        assertEquals("-1.5", handicap.rows.single().line)
+        assertEquals(listOf("Да", "Нет"), mapped.markets.first { it.family == "btts" }.outcomes.map { it.label })
+        assertTrue(CompactMarketLayout.hideLineColumn(totals))
+        assertTrue(CompactMarketLayout.hideLineColumn(handicap))
     }
     @Test fun esportsDisciplineUsesTheVerifiedNameRatherThanTheRawFeedLabel() {
         val match=event("esports",emptyList()).copy(discipline="Dota 2").toFixture()!!.match

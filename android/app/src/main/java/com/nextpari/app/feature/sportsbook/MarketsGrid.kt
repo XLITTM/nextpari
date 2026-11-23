@@ -11,9 +11,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -79,24 +82,19 @@ fun MarketsGrid(
 
     Column(Modifier.fillMaxWidth().background(colors.surface).padding(bottom = 24.dp)) {
         if (markets.isNotEmpty()) {
-            if (modes.isNotEmpty()) {
-                LazyRow(
-                    Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, top = 4.dp),
-                    contentPadding = PaddingValues(end = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    items(modes, key = { it.id }) { spec ->
-                        MarketTabChip(spec.label, spec.id == activeMode) { mode = spec.id }
-                    }
-                }
-            }
             Row(
                 Modifier.fillMaxWidth().padding(start = 10.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (modes.isNotEmpty()) {
+                    MarketModeControl(modes, activeMode) { mode = it }
+                }
                 val chips = if (modes.isEmpty()) tabs else sectionTabs
-                LazyRow(Modifier.weight(1f), contentPadding = PaddingValues(end = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                LazyRow(
+                    Modifier.weight(1f),
+                    contentPadding = PaddingValues(start = if (modes.isEmpty()) 0.dp else 6.dp, end = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     items(chips, key = { it.id }) { spec ->
                         MarketTabChip(spec.label, spec.id == activeTab) { tab = spec.id }
                     }
@@ -140,6 +138,50 @@ fun MarketsGrid(
                 onPin = { pinned = MarketAccordionLogic.togglePin(pinned, market.key) },
                 onSelect = onSelect,
             )
+        }
+    }
+}
+
+@Composable
+private fun MarketModeControl(
+    modes: List<MarketTabSpec>,
+    activeId: String,
+    onSelect: (String) -> Unit,
+) {
+    val colors = NextpariTheme.colors
+    val shape = RoundedCornerShape(12.dp)
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val active = modes.firstOrNull { it.id == activeId } ?: modes.first()
+    Box {
+        Row(
+            Modifier.height(34.dp).clip(shape)
+                .background(colors.surfaceMint)
+                .border(1.dp, colors.accent, shape)
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(NextpariWebIcons.LayoutGrid, contentDescription = active.label, tint = colors.accentInk, modifier = Modifier.size(16.dp))
+            Text(
+                if (active.id == "all") "Все" else active.label,
+                color = colors.accentInk,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+            )
+            Icon(NextpariWebIcons.ChevronDown, contentDescription = null, tint = colors.accentInk, modifier = Modifier.size(14.dp))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            modes.forEach { spec ->
+                DropdownMenuItem(
+                    text = { Text(spec.label, fontWeight = if (spec.id == activeId) FontWeight.Bold else FontWeight.Medium) },
+                    onClick = {
+                        onSelect(spec.id)
+                        expanded = false
+                    },
+                )
+            }
         }
     }
 }

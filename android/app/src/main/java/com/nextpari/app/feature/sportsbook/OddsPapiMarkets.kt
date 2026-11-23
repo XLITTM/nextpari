@@ -286,20 +286,22 @@ internal object SportMarketStructure {
         "result", "winner" -> 1
         "double-chance" -> 2
         "totals" -> 3
-        "handicap" -> 4
-        "team-totals" -> if (name.contains("2") && !name.contains("1")) 6 else 5
-        "correct-score" -> 7
-        "asian-totals" -> 8
-        "asian-handicap" -> 9
-        "asian-team-totals" -> 10
-        "odd-even" -> 11
-        "european-handicap" -> 12
-        "btts" -> 13
+        "btts" -> 4
+        "handicap" -> 5
+        "team-totals" -> if (secondTeamTotal(name)) 7 else 6
+        "correct-score" -> 8
+        "asian-totals" -> 9
+        "asian-handicap" -> 10
+        "asian-team-totals" -> 11
+        "odd-even" -> 12
+        "european-handicap" -> 13
         "first-goal" -> 14
         "last-goal" -> 15
         "next-goal" -> 16
         else -> 50 + familyRank(family)
     }
+    private fun secondTeamTotal(name: String): Boolean =
+        Regex("""(?:тотал(?:а)?(?:\s+команды)?|team(?:\s+totals?)?)\s*2\b""", RegexOption.IGNORE_CASE).containsMatchIn(name)
     fun categoryRank(sport: String, category: String): Int {
         val order = when(sport) {
             "football" -> listOf("main", "double-chance", "totals", "handicaps", "btts", "goals", "corners", "cards", "shots", "players")

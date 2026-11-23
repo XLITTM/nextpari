@@ -13,10 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        // versionCode 7 keeps match-card height stable when team names are long.
+        versionCode = 8
+        // versionCode 8 applies the owner football market layout: 1 (-1.5) / (2.5) Б.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.5"
+        versionName = "0.2.6"
 
         testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true

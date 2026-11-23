@@ -14,7 +14,9 @@ class VipNeonDevicePreviewTest {
         assertThat(mainManifest).doesNotContain("VipNeonDevicePreviewActivity")
         assertThat(debugManifest).contains(".debug.VipNeonDevicePreviewActivity")
         assertThat(debugManifest).contains(".debug.MatchCardHeightCheckActivity")
+        assertThat(debugManifest).contains(".debug.MarketLayoutCheckActivity")
         assertThat(mainManifest).doesNotContain("MatchCardHeightCheckActivity")
+        assertThat(mainManifest).doesNotContain("MarketLayoutCheckActivity")
         assertThat(preview).contains("BottomNavSpec")
         assertThat(preview).contains("MainTabsSpec")
         assertThat(preview).contains("NextpariBottomNav(")
@@ -30,6 +32,12 @@ class VipNeonDevicePreviewTest {
         assertThat(heightCheck).contains("FC Polissya Zhytomyr")
         assertThat(heightCheck).doesNotContain("heightIn(min")
         assertThat(heightCheck).doesNotContain("minHeight")
+        val layoutCheck = moduleFile("src/debug/java/com/nextpari/app/debug/MarketLayoutCheckActivity.kt").readText()
+        assertThat(layoutCheck).contains("MarketsGrid(")
+        assertThat(layoutCheck).contains("Тотал")
+        assertThat(layoutCheck).contains("Фора")
+        assertThat(layoutCheck).doesNotContain("K1")
+        assertThat(layoutCheck).doesNotContain("Ф1")
     }
 
     private fun moduleFile(relative: String): File {

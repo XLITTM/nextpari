@@ -46,9 +46,19 @@ object SportsbookPreviewData {
             marketId = "2",
             category = "totals",
             lineCount = 1,
+            family = "totals",
             outcomes = listOf(
                 MarketOutcome(MATCH_ID, "2", "total", line = "2.5", outcomeId = "over", label = "ТБ 2.5", odds = "1.85"),
                 MarketOutcome(MATCH_ID, "2", "total", line = "2.5", outcomeId = "under", label = "ТМ 2.5", odds = "1.95"),
+            ),
+            rows = listOf(
+                MarketLine(
+                    "2.5",
+                    listOf(
+                        MarketOutcome(MATCH_ID, "2", "total", line = "2.5", outcomeId = "over", label = "ТБ 2.5", odds = "1.85"),
+                        MarketOutcome(MATCH_ID, "2", "total", line = "2.5", outcomeId = "under", label = "ТМ 2.5", odds = "1.95"),
+                    ),
+                ),
             ),
         ),
         MarketGroup(
@@ -57,16 +67,27 @@ object SportsbookPreviewData {
             marketId = "3",
             category = "handicaps",
             lineCount = 1,
+            family = "handicap",
             outcomes = listOf(
                 MarketOutcome(MATCH_ID, "3", "ah", line = "-0.5", outcomeId = "home", label = "П1 (-0.5)", odds = "1.72"),
                 MarketOutcome(MATCH_ID, "3", "ah", line = "-0.5", outcomeId = "away", label = "П2 (+0.5)", odds = "2.10"),
+            ),
+            rows = listOf(
+                MarketLine(
+                    "-0.5",
+                    listOf(
+                        MarketOutcome(MATCH_ID, "3", "ah", line = "-0.5", outcomeId = "home", label = "П1 (-0.5)", odds = "1.72"),
+                        MarketOutcome(MATCH_ID, "3", "ah", line = "-0.5", outcomeId = "away", label = "П2 (+0.5)", odds = "2.10"),
+                    ),
+                ),
             ),
         ),
         MarketGroup(
             key = "btts",
             name = "Обе забьют",
             marketId = "btts",
-            category = "specials",
+            category = "btts",
+            family = "btts",
             lineCount = 1,
             outcomes = listOf(
                 MarketOutcome(MATCH_ID, "btts", "btts", outcomeId = "yes", label = "Да", odds = "1.80"),
