@@ -13,10 +13,10 @@ android {
         applicationId = "com.nextpari.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        // versionCode 6 sizes match cards to their content instead of a 210.dp floor.
+        versionCode = 7
+        // versionCode 7 keeps match-card height stable when team names are long.
         // Each published release increments versionCode by 1 and never reuses it.
-        versionName = "0.2.4"
+        versionName = "0.2.5"
 
         testInstrumentationRunner = "com.nextpari.app.feature.sportsbook.SportsSmokeInstrumentation"
         vectorDrawables.useSupportLibrary = true

@@ -26,7 +26,8 @@ class VipNeonDevicePreviewTest {
         assertThat(preview).doesNotContain("setActiveWallet")
         val heightCheck = moduleFile("src/debug/java/com/nextpari/app/debug/MatchCardHeightCheckActivity.kt").readText()
         assertThat(heightCheck).contains("NextpariMatchCard(")
-        assertThat(heightCheck).contains("LEGACY_MIN_HEIGHT = 210.dp")
+        assertThat(heightCheck).contains("Borussia Mönchengladbach")
+        assertThat(heightCheck).contains("FC Polissya Zhytomyr")
         assertThat(heightCheck).doesNotContain("heightIn(min")
         assertThat(heightCheck).doesNotContain("minHeight")
     }

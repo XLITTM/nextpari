@@ -63,6 +63,7 @@ private val MatchCardOddsBottom = 10.dp
 private val MatchCardLogoSize = 36.dp
 private val MatchCardScoreWidth = 76.dp
 private val MatchCardHeaderHeight = 28.dp
+private val MatchCardTeamNameHeight = 18.dp
 
 internal fun carouselCardWidth(available: Dp): Dp =
     (available - 32.dp).coerceIn(0.dp, MatchCardWidth)
@@ -123,7 +124,7 @@ fun NextpariMatchCard(
                 .fillMaxWidth()
                 .wrapContentHeight()
                 .padding(horizontal = 10.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             TeamSide(model, home = true, modifier = Modifier.weight(1f))
             Column(
@@ -143,7 +144,7 @@ fun NextpariMatchCard(
                         color = if (model.isLive) colors.accentInk else colors.textSecondary,
                         fontSize = 11.sp,
                         fontWeight = if (model.isLive) FontWeight.SemiBold else FontWeight.Normal,
-                        maxLines = 2,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
                     )
@@ -201,11 +202,21 @@ private fun TeamSide(model: MatchCardModel, home: Boolean, modifier: Modifier) {
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
         MatchTeamArtwork(model, home, Modifier.size(MatchCardLogoSize))
-        Text(
-            name, color = NextpariTheme.colors.text, fontWeight = FontWeight.Bold, fontSize = 12.sp,
-            maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().wrapContentHeight(),
-        )
+        Box(
+            Modifier.fillMaxWidth().height(MatchCardTeamNameHeight),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                name,
+                color = NextpariTheme.colors.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
     }
 }
 
