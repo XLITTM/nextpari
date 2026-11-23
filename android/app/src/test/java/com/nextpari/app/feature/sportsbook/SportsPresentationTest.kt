@@ -134,6 +134,9 @@ class SportsPresentationTest {
         assertEquals("Аргентина", SportsRegions.name("AR"))
         assertEquals("Португалия", SportsRegions.name("PT"))
         assertEquals("Англия", SportsRegions.name("GB-ENG"))
+        assertEquals("Международные", SportsRegions.name("World"))
+        assertEquals("Европа", SportsRegions.name("UEFA"))
+        assertEquals("Германия", SportsRegions.name("Германия"))
         assertEquals("🇹🇷", SportsRegions.emoji("tr"))
     }
 

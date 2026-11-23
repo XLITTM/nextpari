@@ -131,8 +131,13 @@ internal object SportsRegions {
         "scotland" to "sco", "шотландия" to "sco", "gb-sct" to "sco",
         "wales" to "wal", "уэльс" to "wal", "gb-wls" to "wal",
         "northern ireland" to "nir", "северная ирландия" to "nir", "gb-nir" to "nir",
-        "uk" to "gb", "spain" to "es", "испания" to "es", "germany" to "de", "france" to "fr",
-        "italy" to "it", "turkey" to "tr", "türkiye" to "tr", "czechia" to "cz",
+        "uk" to "gb", "spain" to "es", "испания" to "es", "germany" to "de", "германия" to "de",
+        "france" to "fr", "франция" to "fr", "italy" to "it", "италия" to "it",
+        "portugal" to "pt", "португалия" to "pt", "netherlands" to "nl", "нидерланды" to "nl",
+        "turkey" to "tr", "türkiye" to "tr", "turkiye" to "tr", "турция" to "tr", "czechia" to "cz",
+        "europe" to "eu", "европа" to "eu", "eu" to "eu", "uefa" to "eu",
+        "international" to "international", "международные" to "international",
+        "world" to "international", "fifa" to "international",
     )
     private val localNames = mapOf(
         "eng" to "Англия", "sco" to "Шотландия", "wal" to "Уэльс", "nir" to "Северная Ирландия",

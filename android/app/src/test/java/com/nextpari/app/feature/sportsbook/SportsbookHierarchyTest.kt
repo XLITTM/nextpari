@@ -42,8 +42,10 @@ class SportsbookHierarchyTest {
         val directory = CompetitionDirectory.organize(groups, setOf(CompetitionOrder.leagueKey(england)))
         assertThat(directory.favorites.map { it.name }).containsExactly("Premier League")
         assertThat(directory.top.map { it.name }).containsExactly("UEFA Champions League")
-        assertThat(directory.countries.flatMap { it.leagues }.map { it.name }).containsExactly("Premier League")
+        assertThat(directory.countries.map { it.country }).containsAtLeast("England", "Lebanon")
+        assertThat(directory.countries.first { it.country == "England" }.leagues.map { it.name }).containsExactly("Premier League")
         assertThat(directory.countries.flatMap { it.leagues }.map { it.name }).doesNotContain("UEFA Champions League")
+        assertThat(directory.international.map { it.name }).containsExactly("TT Cup")
         val listed = GameListLayout.entries(listOf(tennis, lebanon, england)).filterIsInstance<GameListEntry.Fixture>().map { it.match.eventId }
         val nba = MatchCardModel("nba", eventId = "nba", sport = "basketball", league = "NBA", country = "USA", team1 = "Lakers", team2 = "Celtics")
         val mixed = GameListLayout.entries(listOf(nba, tennis, england)).filterIsInstance<GameListEntry.Fixture>().map { it.match.eventId }

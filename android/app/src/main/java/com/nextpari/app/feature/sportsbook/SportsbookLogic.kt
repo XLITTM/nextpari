@@ -401,26 +401,24 @@ data class CompetitionDirectory(
     val countries: List<CountryGroup>,
 ) {
     companion object {
-        private val internationalCountries = setOf("international", "europe", "world", "uefa", "fifa", "atp", "wta", "eu")
-
         fun organize(groups: List<CountryGroup>, favoriteIds: Set<String>): CompetitionDirectory {
-            val claimed = linkedSetOf<String>()
-            fun take(rows: List<LeagueRow>) = rows.filter { claimed.add(it.id) }
-            val leagues = groups.flatMap { it.leagues }
-            val favorites = take(leagues.filter { it.id in favoriteIds })
-            val top = take(CompetitionOrder.top(groups))
-            val international = take(groups.filter { isInternational(it.country) }.flatMap { it.leagues })
+            val leagues = groups.flatMap(CountryGroup::leagues).distinctBy(LeagueRow::id)
+            val favorites = leagues.filter { it.id in favoriteIds }
+            val favoriteIdsPresent = favorites.map(LeagueRow::id).toSet()
+            val top = CompetitionOrder.top(groups).filter { it.id !in favoriteIdsPresent }
+            val shortcutIds = (favoriteIdsPresent + top.map(LeagueRow::id)).toSet()
+            val international = leagues.filter { league ->
+                CompetitionOrder.isInternationalLeague(league.name, league.country, league.canonicalId) &&
+                    league.id !in shortcutIds
+            }
             val countries = groups.mapNotNull { group ->
-                if (isInternational(group.country)) return@mapNotNull null
-                val remaining = group.leagues.filter { it.id !in claimed }
-                if (remaining.isEmpty()) null else group.copy(count = remaining.sumOf(LeagueRow::count), leagues = remaining)
+                val domestic = group.leagues.filterNot { league ->
+                    CompetitionOrder.isInternationalLeague(league.name, league.country, league.canonicalId)
+                }
+                if (domestic.isEmpty()) null
+                else group.copy(count = domestic.sumOf(LeagueRow::count), leagues = domestic)
             }
             return CompetitionDirectory(favorites, top, international, countries)
-        }
-
-        private fun isInternational(country: String): Boolean {
-            val key = country.trim().lowercase(java.util.Locale.ROOT)
-            return key.isEmpty() || key in internationalCountries || SportsRegions.code(country) == "eu"
         }
     }
 }

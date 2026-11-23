@@ -6,20 +6,23 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -35,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -128,50 +132,126 @@ fun ChampionshipsScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 32.dp),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
-            else -> LazyColumn(Modifier.fillMaxSize().background(if (dark) Color(0xFF1E293B) else Color.White)) {
-                if(directory.favorites.isNotEmpty()) item {
-                    CompetitionSection("Избранное",directory.favorites,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
-                }
-                if(directory.top.isNotEmpty()) item {
-                    CompetitionSection("Топ-чемпионаты",directory.top,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
-                }
-                if(directory.international.isNotEmpty()) item {
-                    CompetitionSection("Международные",directory.international,dark) { league -> viewModel.rememberMode(tab);onNavigate(Destinations.league(league.id)) }
-                }
-                items(directory.countries, key = { it.country.ifEmpty { it.leagues.firstOrNull()?.name.orEmpty() } }) { group ->
-                    CountryAccordion(
-                        group = group,
-                        expanded = expanded == group.country,
-                        dark = dark,
-                        favorites = favorites,
-                        onToggle = { expanded = if (expanded == group.country) "" else group.country },
-                        onLeague = { league ->
-                            viewModel.rememberMode(tab)
-                            onNavigate(Destinations.league(league.id))
-                        },
-                        onFavorite = { name ->
-                            favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleLeague(name) }
-                        },
-                    )
-                }
-            }
+            else -> ChampionshipsDirectory(
+                directory = directory,
+                dark = dark,
+                favorites = favorites,
+                expanded = expanded,
+                onToggle = { country -> expanded = if (expanded == country) "" else country },
+                onLeague = { league ->
+                    viewModel.rememberMode(tab)
+                    onNavigate(Destinations.league(league.id))
+                },
+                onFavorite = { id ->
+                    favoriteScope.launch { com.nextpari.app.core.AppGraph.sportsFavorites.toggleLeague(id) }
+                },
+            )
         }
     }
 }
 
 @Composable
-private fun CompetitionSection(title: String,leagues: List<LeagueRow>,dark: Boolean,onLeague: (LeagueRow)->Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal=16.dp,vertical=8.dp)) {
-        Text(title,color=if(dark)Color(0xFFE5E7EB) else Color(0xFF1F2937),fontSize=14.sp,fontWeight=FontWeight.SemiBold)
-        leagues.forEach { league ->
-            Row(Modifier.fillMaxWidth().clickable { onLeague(league) }.padding(vertical=10.dp),verticalAlignment=Alignment.CenterVertically) {
-                CompetitionArtwork(league.badge?.url,league.badgeRes,league.country,Modifier.size(20.dp)) {
-                    Icon(NextpariWebIcons.Trophy,null,tint=Color(0xFF9CA3AF),modifier=Modifier.size(20.dp))
-                }
-                Spacer(Modifier.width(8.dp))
-                Text(league.name,color=if(dark)Color(0xFFD1D5DB) else Color(0xFF374151),fontSize=14.sp,modifier=Modifier.weight(1f),maxLines=1,overflow=TextOverflow.Ellipsis)
-                CountPill(league.count)
+fun ChampionshipsDirectory(
+    directory: CompetitionDirectory,
+    dark: Boolean,
+    favorites: Set<String>,
+    expanded: String,
+    onToggle: (String) -> Unit,
+    onLeague: (LeagueRow) -> Unit,
+    onFavorite: (String) -> Unit,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        if (directory.favorites.isNotEmpty()) {
+            item(key = "section-favorites") { DirectorySectionTitle("Избранное", dark) }
+            items(directory.favorites, key = { "fav:${it.id}" }) { league ->
+                CompetitionCard(league, dark, league.id in favorites, onLeague, onFavorite)
             }
+        }
+        if (directory.top.isNotEmpty()) {
+            item(key = "section-top") { DirectorySectionTitle("Топ-чемпионаты", dark) }
+            items(directory.top, key = { "top:${it.id}" }) { league ->
+                CompetitionCard(league, dark, league.id in favorites, onLeague, onFavorite)
+            }
+        }
+        if (directory.international.isNotEmpty()) {
+            item(key = "section-international") { DirectorySectionTitle("Международные", dark) }
+            items(directory.international, key = { "int:${it.id}" }) { league ->
+                CompetitionCard(league, dark, league.id in favorites, onLeague, onFavorite)
+            }
+        }
+        items(directory.countries, key = { "country:${it.country.ifEmpty { it.leagues.firstOrNull()?.id.orEmpty() }}" }) { group ->
+            CountryAccordion(
+                group = group,
+                expanded = expanded == group.country,
+                dark = dark,
+                favorites = favorites,
+                onToggle = { onToggle(group.country) },
+                onLeague = onLeague,
+                onFavorite = onFavorite,
+            )
+        }
+    }
+}
+
+@Composable
+private fun DirectorySectionTitle(title: String, dark: Boolean) {
+    Text(
+        title,
+        color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937),
+        fontSize = 14.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 8.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun CompetitionCard(
+    league: LeagueRow,
+    dark: Boolean,
+    favorite: Boolean,
+    onLeague: (LeagueRow) -> Unit,
+    onFavorite: (String) -> Unit,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .shadow(2.dp, shape)
+            .clip(shape)
+            .border(1.dp, if (dark) Color(0xFF374151) else Color(0xFFE5E7EB), shape)
+            .background(if (dark) Color(0xFF1E293B) else Color.White)
+            .clickable { onLeague(league) }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CompetitionArtwork(league.badge?.url, league.badgeRes, league.country, Modifier.size(22.dp)) {
+            Icon(NextpariWebIcons.Trophy, null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            league.name,
+            color = if (dark) Color(0xFFE5E7EB) else Color(0xFF1F2937),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        CountPill(league.count)
+        Box(
+            Modifier.size(32.dp).clickable { onFavorite(league.id) },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                NextpariWebIcons.Star,
+                contentDescription = "Добавить чемпионат в избранное",
+                tint = if (favorite) Color(0xFF16A34A) else Color(0xFF9CA3AF),
+                modifier = Modifier.size(18.dp),
+            )
         }
     }
 }
@@ -187,12 +267,20 @@ private fun CountryAccordion(
     onFavorite: (String) -> Unit,
 ) {
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, label = "country-chevron")
-    Column(Modifier.fillMaxWidth().background(if (dark) Color(0xFF1E293B) else Color.White)) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .shadow(2.dp, shape)
+            .clip(shape)
+            .border(1.dp, if (dark) Color(0xFF374151) else Color(0xFFE5E7EB), shape)
+            .background(if (dark) Color(0xFF1E293B) else Color.White),
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
                 .clickable(onClick = onToggle)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 14.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SportsFlag(SportsRegions.code(group.country), Modifier.size(20.dp)) {
@@ -217,7 +305,6 @@ private fun CountryAccordion(
                 Icon(NextpariWebIcons.ChevronDown, contentDescription = null, tint = Color(0xFF9CA3AF), modifier = Modifier.size(16.dp).rotate(rotation))
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(if (dark) Color(0xFF1F2937) else Color(0xFFF3F4F6)))
         AnimatedVisibility(visible = expanded && group.leagues.isNotEmpty(), enter = expandVertically(), exit = shrinkVertically()) {
             Column(Modifier.background(if (dark) Color(0xFF151E2B) else Color(0xFFF9FAFB))) {
                 group.leagues.forEach { league ->

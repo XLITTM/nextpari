@@ -15,8 +15,10 @@ class VipNeonDevicePreviewTest {
         assertThat(debugManifest).contains(".debug.VipNeonDevicePreviewActivity")
         assertThat(debugManifest).contains(".debug.MatchCardHeightCheckActivity")
         assertThat(debugManifest).contains(".debug.MarketLayoutCheckActivity")
+        assertThat(debugManifest).contains(".debug.ChampionshipsDirectoryCheckActivity")
         assertThat(mainManifest).doesNotContain("MatchCardHeightCheckActivity")
         assertThat(mainManifest).doesNotContain("MarketLayoutCheckActivity")
+        assertThat(mainManifest).doesNotContain("ChampionshipsDirectoryCheckActivity")
         assertThat(preview).contains("BottomNavSpec")
         assertThat(preview).contains("MainTabsSpec")
         assertThat(preview).contains("NextpariBottomNav(")
@@ -38,6 +40,12 @@ class VipNeonDevicePreviewTest {
         assertThat(layoutCheck).contains("Фора")
         assertThat(layoutCheck).doesNotContain("K1")
         assertThat(layoutCheck).doesNotContain("Ф1")
+        val champsCheck = moduleFile("src/debug/java/com/nextpari/app/debug/ChampionshipsDirectoryCheckActivity.kt").readText()
+        assertThat(champsCheck).contains("ChampionshipsDirectory(")
+        assertThat(champsCheck).contains("UEFA Champions League")
+        assertThat(champsCheck).contains("Premier League")
+        assertThat(champsCheck).contains("Bundesliga")
+        assertThat(champsCheck).contains("LaLiga")
     }
 
     private fun moduleFile(relative: String): File {
