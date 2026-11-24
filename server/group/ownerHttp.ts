@@ -1,3 +1,5 @@
+import { handleGroupProviderRoute, isGroupProviderPath } from '../providerOffice/http.js';
+import type { ReportingSource } from '../providerOffice/reportingSource.js';
 import { parseStaffChange, staffChangeRefusal, ROLE_PERMISSIONS } from './access.js';
 import { GroupControlError } from './errors.js';
 import { sanitizeAuthAudit, type GroupAuthAudit } from './ownerAudit.js';
@@ -232,11 +234,13 @@ export async function handleGroupOwnerRequest(
   input: {
     method: string;
     pathname: string;
+    search?: string;
     cookie?: string;
     secure?: boolean;
     body?: unknown;
   },
   ports: GroupOwnerPorts,
+  options?: { reporting?: ReportingSource },
 ): Promise<GroupOwnerHttpResult> {
   const path = input.pathname.replace(/\/$/, '') || '/';
   const method = input.method.toUpperCase();
@@ -491,6 +495,23 @@ export async function handleGroupOwnerRequest(
           backend: brand?.status === 'active' ? 'catalog_only' : 'not_connected',
         },
         headers: { 'Cache-Control': 'no-store' },
+      };
+    }
+
+    if (isGroupProviderPath(path)) {
+      await requireOwner(ports, input.cookie, 'reports.read');
+      const providerRoute = await handleGroupProviderRoute(
+        { method, pathname: path, search: input.search },
+        options?.reporting,
+      );
+      if (!providerRoute) return fail(404, 'NOT_FOUND');
+      const body = providerRoute.body;
+      if (typeof body === 'string') return fail(404, 'NOT_FOUND');
+      return {
+        status: providerRoute.status,
+        body,
+        cookies: providerRoute.cookies,
+        headers: providerRoute.headers,
       };
     }
 

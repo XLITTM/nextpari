@@ -1,6 +1,7 @@
 import { writeStaffJson, type StaffJsonResponse } from '../../server/staff/httpHandler.js';
 import { handleGroupOwnerRequest, type GroupOwnerPorts } from '../../server/group/ownerHttp.js';
 import { liveGroupOwnerPorts } from '../../server/group/ownerLive.js';
+import { liveReportingSource } from '../../server/providerOffice/liveReport.js';
 import { requestIsSecure } from '../../server/staff/ownerCookies.js';
 
 type GroupOwnerRequest = {
@@ -20,14 +21,17 @@ export async function handleVercelGroupOwner(
   res: StaffJsonResponse,
   ports: GroupOwnerPorts = liveGroupOwnerPorts(),
 ): Promise<void> {
-  const pathname = (req.url ?? '/api/group-owner').split('?')[0] || '/api/group-owner';
+  const raw = req.url ?? '/api/group-owner';
+  const pathname = raw.split('?')[0] || '/api/group-owner';
+  const search = raw.includes('?') ? `?${raw.slice(raw.indexOf('?') + 1)}` : '';
   const result = await handleGroupOwnerRequest({
     method: req.method ?? 'GET',
     pathname,
+    search,
     cookie: header(req.headers, 'cookie'),
     secure: requestIsSecure(req.headers),
     body: req.body,
-  }, ports);
+  }, ports, { reporting: liveReportingSource() });
   writeStaffJson(res, result);
 }
 
