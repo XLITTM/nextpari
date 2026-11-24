@@ -7,7 +7,7 @@ export const WRITE_DISABLED = 'Запись отключена. Казначей
 export const ACCOUNT_NOT_CREATED = 'Учётная запись не создана. Приглашение не отправлено.';
 export const NOT_CONNECTED = 'Не подключено';
 
-export const PAGES = ['overview', 'brands', 'employees', 'players', 'finance', 'access', 'audit'] as const;
+export const PAGES = ['overview', 'brands', 'employees', 'players', 'finance', 'providers', 'access', 'audit'] as const;
 export type GroupOwnerPage = (typeof PAGES)[number];
 
 export type BrandFilter = 'all' | BrandCode;

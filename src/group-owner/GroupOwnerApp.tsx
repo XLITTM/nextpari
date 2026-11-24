@@ -41,6 +41,7 @@ import {
   type EmployeeField,
   type GroupOwnerPage,
 } from './viewModel.ts';
+import { ProvidersPanel } from './ProvidersPanel.tsx';
 
 export interface GroupDashboardPlayer {
   brandCode: BrandCode;
@@ -77,6 +78,7 @@ const NAV: Array<{ id: GroupOwnerPage; label: string; icon: typeof LayoutDashboa
   { id: 'employees', label: 'Сотрудники', icon: Users },
   { id: 'players', label: 'Игроки', icon: UserRound },
   { id: 'finance', label: 'Финансы', icon: Landmark },
+  { id: 'providers', label: 'Провайдеры', icon: Shield },
   { id: 'access', label: 'Доступ', icon: Shield },
   { id: 'audit', label: 'Журнал', icon: ScrollText },
 ];
@@ -210,6 +212,7 @@ export function GroupOwnerApp({
           {page === 'employees' ? <Employees filter={brand} brands={assigned} grants={snapshot?.grants ?? []} /> : null}
           {page === 'players' ? <Players filter={brand} brands={assigned} players={snapshot?.players ?? []} /> : null}
           {page === 'finance' ? <Finance rows={visible} /> : null}
+          {page === 'providers' ? <ProvidersPanel /> : null}
           {page === 'access' ? (
             <Access
               filter={brand}
